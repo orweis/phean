@@ -1,5 +1,6 @@
 /**
- * Creates a demo account that owns two workspaces, and issues fresh agent tokens for the first.
+ * Creates a demo account that owns two workspaces, issues fresh agent tokens for the first, and
+ * fills the second with three weeks of backdated sample work.
  * Safe to re-run: existing users and workspaces are reused, and new tokens are issued each time.
  *
  *   pnpm db:seed
@@ -15,6 +16,7 @@ import { getDb } from "../src/server/db/client";
 import { user } from "../src/server/db/schema";
 import { createAgent } from "../src/server/domain/agents";
 import { findTenantBySlug, listMemberships, userContext } from "../src/server/domain/tenants";
+import { seedSampleHistory } from "./sample-history";
 
 const DEMO_USER = { name: "Dana Demo", email: "demo@phean.dev", password: "phean-demo-password" };
 const WORKSPACES = [
@@ -22,6 +24,8 @@ const WORKSPACES = [
   { name: "Globex", slug: "globex" },
 ];
 const AGENT_NAMES = ["Inbox sweeper", "Calendar planner"];
+/** Gets backdated sample history so the timeline has something to draw on first run. */
+const SAMPLE_HISTORY_SLUG = "globex";
 
 const db = getDb();
 
@@ -48,8 +52,12 @@ const ctx = userContext(db, primary, owner);
 const tokens = [];
 for (const name of AGENT_NAMES) tokens.push(await createAgent(ctx, { name }));
 
+const history = memberships.find((membership) => membership.tenant.slug === SAMPLE_HISTORY_SLUG);
+const sampled = history ? await seedSampleHistory(db, history.tenant, owner) : 0;
+
 console.log(`Sign in as ${DEMO_USER.email} / ${DEMO_USER.password}`);
 console.log(`Workspaces: ${memberships.map((membership) => `/w/${membership.tenant.slug}`).join(", ")}`);
+if (sampled) console.log(`Added ${sampled} sample tasks with three weeks of history to /w/${SAMPLE_HISTORY_SLUG}`);
 console.log(`Agent tokens for /w/${primary.tenant.slug} (shown once):`);
 for (const { agent, token } of tokens) console.log(`  ${agent.name}: ${token}`);
 process.exit(0);
