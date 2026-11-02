@@ -75,6 +75,13 @@ export const MEMORY_KIND_META: Record<MemoryKind, EnumMeta> = {
   note: { label: "Note", tone: "neutral" },
 };
 
+export const ROLE_META: Record<MemberRole | "platform_admin", EnumMeta> = {
+  owner: { label: "Owner", tone: "accent" },
+  admin: { label: "Admin", tone: "info" },
+  member: { label: "Member", tone: "neutral" },
+  platform_admin: { label: "Read-only", tone: "warning" },
+};
+
 export function isOpenTaskStatus(status: TaskStatus): boolean {
   return (OPEN_TASK_STATUSES as readonly TaskStatus[]).includes(status);
 }

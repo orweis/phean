@@ -1,7 +1,6 @@
 import "server-only";
 
 import { headers } from "next/headers";
-import type { z } from "zod";
 
 import type { Tenant } from "../domain/context";
 import { recordEvent } from "../domain/events";
@@ -21,7 +20,7 @@ import { auth } from "./auth";
  * rules (and messages) match the rest of the app.
  */
 
-export async function createWorkspace(input: z.input<typeof CreateWorkspaceInput>): Promise<Tenant> {
+export async function createWorkspace(input: unknown): Promise<Tenant> {
   const { name, slug } = parseInput(CreateWorkspaceInput, input);
   const created = await auth.api.createOrganization({ body: { name, slug }, headers: await headers() });
   if (!created) throw new Error("Better Auth did not return the new organization");
@@ -59,7 +58,7 @@ export const removeMember = service(MemberRefInput, async (ctx, { memberId }) =>
 });
 
 /** Joins the invited workspace; Better Auth checks the invitation is pending and addressed to this user. */
-export async function acceptInvitation(input: z.input<typeof InvitationRefInput>): Promise<{ organizationId: string }> {
+export async function acceptInvitation(input: unknown): Promise<{ organizationId: string }> {
   const { invitationId } = parseInput(InvitationRefInput, input);
   const result = await auth.api.acceptInvitation({ body: { invitationId }, headers: await headers() });
   if (!result) throw new Error("Better Auth did not return the accepted invitation");

@@ -34,6 +34,15 @@ export function formatDueDate(isoDate: string): string {
   return dateFormat.format(new Date(`${isoDate}T00:00:00Z`));
 }
 
+/** Today's calendar date in UTC, matching how the database compares due dates. */
+export function todayIso(now = new Date()): string {
+  return now.toISOString().slice(0, 10);
+}
+
+export function isPastDue(dueDate: string | null, now = new Date()): boolean {
+  return dueDate !== null && dueDate < todayIso(now);
+}
+
 export function percent(fraction: number): string {
   return `${Math.round(fraction * 100)}%`;
 }
