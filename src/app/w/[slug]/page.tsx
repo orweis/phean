@@ -96,7 +96,15 @@ export default async function DashboardPage({ params }: PageProps<"/w/[slug]">) 
               }
             />
             <CardBody className="py-1">
-              <GoalTree goals={goals.filter((goal) => goal.status !== "proposed")} slug={slug} />
+              <GoalTree
+                goals={goals.filter((goal) => goal.status !== "proposed")}
+                slug={slug}
+                empty={
+                  proposed.length > 0
+                    ? { title: "No approved goals yet", hint: "Approve a proposed goal above and it will show up here with its progress." }
+                    : undefined
+                }
+              />
             </CardBody>
           </Card>
 

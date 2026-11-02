@@ -1,6 +1,10 @@
+import type { Metadata } from "next";
+
 import { LogoMark } from "@/components/logo";
 import { ButtonLink } from "@/components/ui/button";
 import { routes } from "@/lib/routes";
+
+export const metadata: Metadata = { title: "Not found" };
 
 export default function NotFound() {
   return (

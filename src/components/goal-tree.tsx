@@ -11,11 +11,20 @@ import { MetaBadge } from "./ui/badge";
 import { EmptyState, ProgressBar } from "./ui/stat";
 
 /** Goals in depth-first order, indented by depth, with progress rolled up from sub-goals. */
-export function GoalTree({ goals, slug, baseDepth = 0 }: { goals: readonly GoalWithProgress[]; slug: string; baseDepth?: number }) {
+interface GoalTreeProps {
+  goals: readonly GoalWithProgress[];
+  slug: string;
+  baseDepth?: number;
+  empty?: { title: string; hint: string };
+}
+
+const DEFAULT_EMPTY = { title: "No goals yet", hint: "Create one, or let an agent propose goals while it triages the inbox." };
+
+export function GoalTree({ goals, slug, baseDepth = 0, empty = DEFAULT_EMPTY }: GoalTreeProps) {
   if (goals.length === 0) {
     return (
-      <EmptyState icon={<Target />} title="No goals yet">
-        Create one, or let an agent propose goals while it triages the inbox.
+      <EmptyState icon={<Target />} title={empty.title}>
+        {empty.hint}
       </EmptyState>
     );
   }

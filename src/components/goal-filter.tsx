@@ -12,20 +12,21 @@ export function GoalFilter({ goals }: { goals: readonly GoalOption[] }) {
   const params = useSearchParams();
 
   return (
-    <Select
-      aria-label="Filter by goal"
-      className="w-64"
-      value={params.get("goal") ?? ""}
-      onChange={(event) => {
-        const next = new URLSearchParams(params);
-        if (event.target.value) next.set("goal", event.target.value);
-        else next.delete("goal");
-        const query = next.toString();
-        router.push(query ? `${pathname}?${query}` : pathname);
-      }}
-    >
-      <option value="">All goals</option>
-      <GoalOptions goals={goals} />
-    </Select>
+    <div className="w-64">
+      <Select
+        aria-label="Filter by goal"
+        value={params.get("goal") ?? ""}
+        onChange={(event) => {
+          const next = new URLSearchParams(params);
+          if (event.target.value) next.set("goal", event.target.value);
+          else next.delete("goal");
+          const query = next.toString();
+          router.push(query ? `${pathname}?${query}` : pathname);
+        }}
+      >
+        <option value="">All goals</option>
+        <GoalOptions goals={goals} />
+      </Select>
+    </div>
   );
 }

@@ -2,6 +2,7 @@ import type { ComponentProps, ReactNode } from "react";
 
 import { cx } from "@/lib/cx";
 
+/** Controls fill their container (class order cannot override `w-full`), so size the wrapper instead. */
 const CONTROL =
   "w-full rounded-lg border border-zinc-200 bg-white px-3 text-sm text-zinc-900 shadow-xs placeholder:text-zinc-400 focus:border-violet-400 focus:ring-2 focus:ring-violet-100 focus:outline-none disabled:bg-zinc-50";
 
