@@ -21,6 +21,8 @@
     "check": "pnpm typecheck && pnpm lint && pnpm test",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx scripts/migrate.ts",
+    "db:seed": "tsx scripts/seed.ts",
+    "demo:agents": "tsx scripts/demo-agents.ts",
     "auth:schema": "auth generate --config src/server/auth/auth.ts --output src/server/db/schema/auth.ts --yes"
   },
   "dependencies": {
