@@ -1,94 +1,117 @@
 # Phean
 
-**A Sisyphean-proof task & goal management MCP server.** You point at the hill; your agent rolls the boulder.
+**A Sisyphean-proof task and goal ledger for AI agents.** You point at the hill; your agents roll the boulder.
 
-Phean is a task/goal management system designed to be operated by an AI agent on behalf of a human. The human defines and approves goals; the connected agent collects tasks from its own connectors (email, Slack, calendar, ...), categorizes them into goals, tracks progress, and completes tasks where it can.
+Phean is a hosted, multi-tenant service where people set direction and AI agents do the legwork. Each workspace (a team or a customer) has its own goals, tasks, and long-term memory. Any number of agents connect to a workspace over MCP and share them: they sweep their own connectors (email, Slack, calendar, chat) for work, capture it, group it under goals, claim tasks so they don't collide, and complete what they can. People sign in to a web app to see status per workspace, approve the goals agents propose, and step in where needed.
 
-Phean itself ships **no connectors**. It is the brain and the ledger:
+- **Remote MCP server** at `/mcp`: 21 tools and 4 prompts, plus operating instructions that teach agents the loop and the multi-agent rules.
+- **Web app**: status across workspaces, a dashboard per workspace, a kanban board, goal pages, shared memory, search, agent tokens, and members.
+- **Storage**: Postgres (Neon on Vercel), with hierarchical goals, full-text search, and an activity log, all scoped to the workspace.
 
-- **Guidance** - MCP server instructions and prompts that teach the connected agent the Phean loop: *scan -> capture -> triage -> review -> execute*.
-- **Tools** - CRUD and full-text search for tasks and goals, goal planning scaffolds, next-action suggestions, and Mermaid visualizations (goal tree, kanban, timeline) rendered directly in chat.
-
-See [docs/PRD.md](docs/PRD.md), [docs/UX.md](docs/UX.md), and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full product and design docs.
+Docs: [PRD](docs/PRD.md) · [UX](docs/UX.md) · [Architecture](docs/ARCHITECTURE.md) · [Deployment](docs/DEPLOYMENT.md) · [Hosted multi-tenant plan](docs/plans/hosted-multi-tenant.md)
 
 ## Quickstart
 
-Requires Python 3.10+ and [uv](https://docs.astral.sh/uv/) (recommended).
+Requires Node.js 22 and pnpm 10 (`corepack enable`). Locally, Phean uses an embedded PGlite database in `.data/`, so there is nothing else to install.
 
 ```bash
 git clone https://github.com/orweis/phean.git
 cd phean
-uv run phean          # starts the MCP server over stdio
+pnpm install
+pnpm db:seed      # demo account, two workspaces, two agent tokens
+pnpm dev          # applies migrations, then serves http://localhost:3000
 ```
 
-Data is stored in a single SQLite file at `~/.phean/phean.db` (override with the `PHEAN_DB` environment variable).
+Sign in as `demo@phean.dev` / `phean-demo-password`. To watch two agents share the Acme workspace, run this in another terminal with the two tokens the seed printed:
 
-## Connect to an MCP client
+```bash
+pnpm demo:agents http://localhost:3000 phn_first_token phn_second_token
+```
 
-### Cursor
+The demo captures tasks (one duplicate is skipped), proposes goals, races two claims on one task (one is refused), completes work, and saves shared memory. The dashboard updates within 15 seconds, with the proposed goals waiting for your approval.
 
-Add to `~/.cursor/mcp.json` (or project `.cursor/mcp.json`):
+PGlite allows one process at a time, so stop `pnpm dev` before running `pnpm db:seed`. To use a real Postgres instead, set `DATABASE_URL` (see [`.env.example`](.env.example)).
+
+## Connect an agent
+
+On a workspace's **Agents** page, an owner or admin issues a token. It is shown once, with ready-made setup for Cursor, Claude Code, and VS Code. For Cursor (`~/.cursor/mcp.json`):
 
 ```json
 {
   "mcpServers": {
-    "phean": {
-      "command": "uv",
-      "args": ["run", "--directory", "/path/to/phean", "phean"]
+    "phean-acme": {
+      "url": "https://<your-domain>/mcp",
+      "headers": { "Authorization": "Bearer phn_..." }
     }
   }
 }
 ```
 
-### Claude Desktop
+For Claude Code:
 
-Add to `claude_desktop_config.json`:
-
-```json
-{
-  "mcpServers": {
-    "phean": {
-      "command": "uv",
-      "args": ["run", "--directory", "/path/to/phean", "phean"]
-    }
-  }
-}
+```bash
+claude mcp add --transport http phean-acme https://<your-domain>/mcp --header "Authorization: Bearer phn_..."
 ```
 
-## The Phean loop
+The token identifies both the agent and its workspace. Each agent gets its own token, so its work is attributed to it and it can be revoked on its own.
 
-1. **Scan** - the agent sweeps its own connectors (email, Slack, calendar) for actionable items.
-2. **Capture** - findings are bulk-captured into Phean's inbox with source metadata.
-3. **Triage** - the agent proposes goal groupings and priorities; the human approves.
-4. **Review** - "where do I stand?" produces Mermaid kanban / goal-tree / timeline views.
-5. **Execute** - the agent surfaces next actions, completes what it can, and marks the rest.
+## The loop
 
-## Tools
+1. **Sync up**: see what other agents and people did since last time.
+2. **Scan and capture**: sweep the agent's own connectors and capture tasks with their source. Items any agent already captured are skipped.
+3. **Triage**: file tasks under goals, set priorities and due dates, propose new goals.
+4. **Approve**: a person approves or rejects proposed goals in the web app. Agents cannot.
+5. **Execute**: claim a task, do it, complete it with a note. Claims keep agents from colliding.
+6. **Review**: status summaries and Mermaid views (goal tree, kanban, timeline) in chat, or the dashboard.
+7. **Remember**: durable facts, preferences, and decisions go into memory that every agent in the workspace can recall.
 
-| Tool | Purpose |
+## MCP tools
+
+| Area | Tools |
 | --- | --- |
-| `create_goal` / `update_goal` / `list_goals` | Manage goals (human approves before a goal becomes active) |
-| `capture_tasks` | Bulk-capture tasks into the inbox with source metadata |
-| `update_task` / `complete_task` | Edit and finish tasks |
-| `assign_tasks_to_goal` | Group triaged tasks under a goal |
-| `search` | Full-text search (SQLite FTS5) across tasks and goals |
-| `plan_goal` | Structured breakdown scaffold for detailed goal planning |
-| `suggest_next_actions` | Prioritized list of what to do next |
-| `visualize` | Mermaid goal tree, kanban board, or due-date timeline |
-| `get_status_summary` | Counts and highlights across the whole system |
+| Identity | `whoami` |
+| Goals | `create_goal`, `update_goal`, `list_goals`, `get_goal` |
+| Tasks | `capture_tasks`, `list_tasks`, `update_task`, `assign_tasks_to_goal` |
+| Coordination | `claim_task`, `release_task`, `complete_task`, `suggest_next_actions`, `get_activity` |
+| Memory | `remember`, `recall`, `forget` |
+| Search and planning | `search`, `plan_goal` |
+| Views | `visualize` (goal tree, kanban, timeline), `get_status_summary` |
 
-## Prompts
+Prompts: `sync_up`, `scan_sources`, `triage_inbox`, `daily_review`.
 
-- `triage_inbox` - walk the inbox, propose groupings, get human approval.
-- `daily_review` - morning sweep: status summary, today's dues, next actions.
-- `scan_sources` - checklist for sweeping the agent's connectors for new tasks.
+## Web app
+
+| Page | What it shows |
+| --- | --- |
+| `/workspaces` | Status per workspace: open, inbox, overdue, due this week, done, awaiting approval, active agents, last activity |
+| `/w/:slug` | Dashboard: headline numbers, goals awaiting approval, goal tree, next actions, overdue, activity, agents |
+| `/w/:slug/board` | Kanban by status, filterable by goal, with quick task actions |
+| `/w/:slug/goals/:id` | One goal: decisions, progress, tasks, sub-goals, memory, activity |
+| `/w/:slug/memory` | Shared long-term memory, by kind and text |
+| `/w/:slug/search` | Full-text search across goals, tasks, and memory |
+| `/w/:slug/agents` | Issue and revoke agent tokens, with MCP client setup |
+| `/w/:slug/members` | Members, roles, and invitations |
+
+Pages refresh every 15 seconds while open. Owners and admins manage agents and members; members can do everything else, including approving goals. Emails listed in `PHEAN_PLATFORM_ADMINS` get read-only access to every workspace.
 
 ## Development
 
-```bash
-uv sync
-uv run pytest
-```
+| Command | Purpose |
+| --- | --- |
+| `pnpm dev` | Apply migrations and start the dev server |
+| `pnpm check` | Typecheck, lint, and run the tests |
+| `pnpm test` | Vitest: domain services, policy, tenant isolation, and MCP over HTTP, against in-memory PGlite |
+| `pnpm build` | Production build (never connects to the database) |
+| `pnpm db:generate` | Generate a SQL migration from schema changes in `src/server/db/schema` |
+| `pnpm db:migrate` | Apply pending migrations |
+| `pnpm db:seed` | Create the demo account, workspaces, and agent tokens |
+| `pnpm demo:agents <url> <token> <token>` | Run two agents against a deployment |
+
+Code layout and conventions are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [AGENTS.md](AGENTS.md).
+
+## Deployment
+
+Phean deploys to Vercel as one Next.js app with a Neon Postgres database. The `vercel-build` script applies migrations before building. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for setup, environment variables, and smoke testing.
 
 ## License
 

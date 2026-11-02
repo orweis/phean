@@ -1,114 +1,204 @@
 # Phean - UX Design
 
-Phean has no screens. The UX is **conversational and agent-mediated**: the human talks to their agent, the agent operates Phean's MCP tools, and visual output arrives as Mermaid diagrams rendered inline in the chat. This document defines the four core loops, the conversation patterns for each, and the visual language of the views.
+Phean has two surfaces, each built for one side of the work:
+
+- **The conversation.** Agents connect over MCP, and people talk to their agents. The agent captures, triages, executes, and reports. Visual answers arrive as Mermaid diagrams in chat.
+- **The web app.** People sign in to see status per workspace, approve or reject goals, step in on tasks, manage agents, and invite teammates. It refreshes itself while open, so agent work shows up without reloading.
+
+The two meet in one shared ledger per workspace. Anything an agent does appears in the web app within seconds, and anything a person decides in the web app is what agents see next.
 
 ## Design principles
 
-1. **The agent is the interface.** Every Phean interaction must work as a natural chat exchange. Tool names and IDs stay backstage; the human sees titles, summaries, and diagrams.
-2. **Human authority, agent labor.** The agent never activates a goal or mass-drops tasks without an explicit human "yes" in conversation.
-3. **Always show, then tell.** Status questions are answered with a diagram first, followed by a short prose summary and a suggested next step.
-4. **Zero data entry for the human.** The human should never dictate task fields. They speak intent ("that email thread about the audit - track it"), the agent structures it.
+1. **Agents do the labor, people make the decisions.** Agents propose goals; only a person can approve, complete, or abandon one. This is enforced on the server, not just in the guidance, and the web app is where the decision happens.
+2. **One ledger, many agents.** Several agents work in the same workspace. They coordinate through Phean (claims, duplicate detection, the activity log, shared memory) instead of through the human.
+3. **Show, then tell.** Status answers lead with a picture (a diagram in chat, a stat row on the dashboard), then a short read, then one suggested next step.
+4. **Zero data entry for people.** People state intent ("track that audit thread"); agents structure it. The web forms exist for corrections and quick additions, not as the main way work gets in.
+5. **Every hand-off is a link.** Agents return deep links (`reviewUrl` from `create_goal`, `dashboardUrl` from `whoami` and `get_status_summary`) so a person can go straight from the chat to the decision.
+6. **Read-only means read-only.** Platform admins see every workspace with a banner that says so, and the controls they cannot use are not rendered.
 
-## The four loops
+## The loops
 
 ```mermaid
 flowchart LR
-    Intake[1 Intake] --> Triage[2 Triage]
-    Triage --> Review[3 Review]
-    Review --> Execution[4 Execution]
-    Execution -->|new work discovered| Intake
+    Sync[0 Sync up] --> Intake[1 Intake]
+    Intake --> Triage[2 Triage]
+    Triage --> Approve["3 Approve (web app)"]
+    Approve --> Execute[4 Execute]
+    Execute --> Review[5 Review]
+    Review -->|new work discovered| Intake
+    Memory[(Shared memory)] -.-> Intake
+    Memory -.-> Triage
+    Memory -.-> Execute
 ```
+
+### Loop 0: Sync up
+
+**Trigger:** the start of every agent session, via the `sync_up` prompt.
+
+**Flow:** `whoami` (identity, workspace, permissions, dashboard link), then `get_activity` to see what other agents and people did, then `list_tasks` with `claimed="mine"` to decide whether to continue or release held work, then `get_status_summary` for pending approvals and overdue tasks.
+
+> **Agent:** Since yesterday: Calendar planner captured 4 tasks and finished "Book auditor call"; you approved **Close Q3 books**. I still hold "Send contract redlines" and will finish it now. 1 goal is waiting for your approval: [Board pack sent](https://phean.example/w/acme/goals/...).
 
 ### Loop 1: Intake
 
-**Trigger:** human asks for a sweep ("check my email and Slack for anything actionable"), or the agent runs the `scan_sources` prompt proactively at session start.
+**Trigger:** "sweep my email and Slack", or the `scan_sources` prompt.
 
-**Flow:** the agent sweeps its own connectors, extracts actionable items, and calls `capture_tasks` once with the whole batch. Every item records its `source` and a `source_ref` (message link, thread subject, event title) so the human can trace it back. Captured tasks land in **inbox** status - capture is deliberately separated from triage so sweeps stay fast and lossless.
-
-**Conversation pattern:**
+**Flow:** the agent sweeps its own connectors (Phean has none), searches Phean before capturing, then records everything in one `capture_tasks` call with `source` and a stable `sourceRef`. Phean skips anything any agent in the workspace already captured from the same source and reference, and reports those as duplicates. New tasks land in the **inbox**.
 
 > **Human:** Morning sweep, please.
-> **Agent:** Scanned email (14 threads), Slack (3 channels), calendar (this week). Captured 6 new items into the inbox - 2 look urgent (contract redlines due Thursday, prod incident follow-up). Want to triage now?
+> **Agent:** Scanned 14 email threads and 3 Slack channels. Captured 6 tasks, 2 urgent (contract redlines due Thursday, incident follow-up). 1 was already captured by Calendar planner, so I skipped it. Want to triage?
 
 ### Loop 2: Triage
 
-**Trigger:** inbox is non-empty; human agrees to triage, or invokes the `triage_inbox` prompt.
+**Trigger:** the inbox is non-empty, or the `triage_inbox` prompt.
 
-**Flow:** the agent lists inbox items grouped by its *proposed* goal assignment, proposes priorities and due dates, and asks for approval in one shot. On "yes", it calls `assign_tasks_to_goal` / `update_task` for the batch. New goals it invents stay `proposed` until the human approves them (then `update_goal` sets them active). Noise gets `dropped` - but only named items the human confirmed.
+**Flow:** the agent groups inbox tasks under existing goals, drafts new goals where nothing fits, and asks for approval of the whole proposal in one question. On "yes" it files tasks with `assign_tasks_to_goal` (which also moves them to **to do**), sets priority and due dates with `update_task`, and calls `create_goal` for new goals. Those goals start as **proposed**, and the agent shares their review links.
 
-**Conversation pattern:**
+> **Agent:** 6 inbox items: 3 fit **Close Q3 books**, 2 need a new goal **Website relaunch**, 1 looks like a newsletter. OK to file them and propose the relaunch goal?
+> **Human:** Yes, and make the relaunch high priority.
+> **Agent:** Filed 5 tasks and dropped the newsletter. **Website relaunch** is proposed; approve it here: [review](https://phean.example/w/acme/goals/...).
 
-> **Agent:** 6 inbox items. Proposal: 3 under **Close Q3 audit** (existing), 2 under a new goal **Website relaunch** (needs your approval), 1 looks like noise (newsletter). Approve all, or adjust?
-> **Human:** Approve, but the relaunch is P1.
-> **Agent:** Done - Website relaunch is now an active P1 goal with 2 tasks; newsletter dropped.
+### Loop 3: Approve (web app)
 
-### Loop 3: Review
+**Trigger:** a proposed goal. The dashboard shows an amber "N goals awaiting your approval" card at the top, and the workspaces table highlights the count in amber.
 
-**Trigger:** "where do I stand?", "show me the board", "what's this week look like?", or the `daily_review` prompt.
+**Flow:** a person clicks **Approve** or **Reject** in the card, or opens the goal for context first (its tasks, memories, and the agent that proposed it). Approved goals join the goal tree with their progress; rejected ones become **abandoned**. Agents that try to approve a goal get a clear refusal that tells them to ask a person.
 
-**Flow:** the agent picks the right view via `visualize` and `get_status_summary`, renders the diagram, then gives a 2-3 sentence read of it with one suggested action.
+Goal decisions available in the web app:
 
-**The three views:**
+| From | Decisions |
+| --- | --- |
+| Proposed | Approve, Reject |
+| Active | Mark achieved, Abandon (asks for confirmation) |
+| Achieved | Reopen |
+| Abandoned | Reactivate |
 
-**Goal tree** - "how does everything ladder up?"
+### Loop 4: Execute
+
+**Trigger:** "what should I do next?", "handle what you can", or the `daily_review` prompt.
+
+**Flow:** `suggest_next_actions` ranks open tasks by priority, then due date, then age, and skips tasks other agents hold. The agent calls `claim_task` before starting (which moves the task to **in progress**), does the work with its own tools, and calls `complete_task` with a one or two sentence note. If another agent got there first, the claim fails with that agent's name and the agent picks something else. Work it cannot finish goes back with `release_task`.
+
+> **Human:** Handle what you can.
+> **Agent:** Took 3: drafted the redlines reply (in your drafts), booked the auditor call for Tuesday 10:00, filed the incident report. "Prepare board pack" is claimed by Calendar planner, so I left it. 2 need you: sign the contract and approve the relaunch budget.
+
+### Loop 5: Review
+
+**Trigger:** "where do we stand?", or the dashboard.
+
+**In chat:** `get_status_summary` plus `visualize` with one of three views:
+
+- **Goal tree**: how everything ladders up, with progress rolled up from sub-goals.
+- **Kanban**: tasks by status (done shows the most recent).
+- **Timeline**: a Gantt chart of due dates.
 
 ```mermaid
 flowchart TD
-    g1["Close Q3 audit (active)"]
-    g1 --> t1["Send contract redlines - in progress"]
-    g1 --> t2["Book auditor call - todo"]
-    g2["Website relaunch (active)"]
-    g2 --> t3["Copy review - todo"]
-    g2 --> t4["DNS cutover - todo"]
-    inbox["Inbox (untriaged)"]
-    inbox --> t5["Reply to Dana re: offsite"]
+    g1["Close Q3 books (active, 60%)"]
+    g1 --> g2["Board pack sent (proposed)"]
+    g1 --> t1["Send contract redlines - in progress (Inbox sweeper)"]
+    g1 --> t2["Book auditor call - done"]
 ```
 
-**Kanban** - "what's moving?"
+**In the web app:** the same information as the dashboard and board, described below.
+
+### Planning a goal
+
+"Plan out the relaunch" calls `plan_goal`, which returns the goal's sub-goals, tasks, and memories plus a scaffold: definition of done, milestones, dependencies, first actions, and open questions. The agent works through it with the person, then records the result as sub-goals (`create_goal` with a parent) and tasks (`capture_tasks` straight into **to do**). The tasks are the plan; nothing is stored elsewhere.
+
+### Memory
+
+Agents call `remember` for durable facts, preferences, and decisions ("the CFO signs anything over $10k", "prefers Tuesday meetings"), optionally linked to a goal or task, and `recall` before asking a person something another agent may already know. People see and curate the same memory in the web app.
+
+## Multi-agent etiquette
+
+These rules are in the server instructions every agent receives at connection time, and the server enforces the ones marked *enforced*.
+
+| Rule | How |
+| --- | --- |
+| Know who you are | `whoami` at the start of each session |
+| Catch up before acting | `sync_up`, or `get_activity` with the previous `latestAt` as `since` |
+| Do not duplicate | `search` before capturing; identical `source` and `sourceRef` are skipped (*enforced*) |
+| Claim before working | `claim_task`; agents cannot change a task another agent holds (*enforced*) |
+| Let go cleanly | `release_task` returns the task to **to do** |
+| People decide goals | goal approval, completion, and abandonment are human-only (*enforced*) |
+| Share what you learn | `remember` and `recall` |
+| Do not bulk-drop | drop only items a person confirmed by name |
+
+People can always step in: on the board, anyone with write access can release an agent's claim, move a task, or drop it.
+
+## Web app
+
+### Information architecture
 
 ```mermaid
-kanban
-  colInbox[Inbox]
-    k1[Reply to Dana re: offsite]
-  colTodo[To Do]
-    k2[Book auditor call]
-    k3[Copy review]
-  colDoing[In Progress]
-    k4[Send contract redlines]
-  colDone[Done]
-    k5[File incident report]
+flowchart TD
+    Home["/ landing"] --> SignIn["/sign-in, /sign-up"]
+    SignIn --> Workspaces["/workspaces: status per workspace"]
+    Invite["/invite/:id"] --> Workspaces
+    Workspaces --> Overview["/w/:slug overview"]
+    Overview --- Board["/w/:slug/board"]
+    Overview --- Goal["/w/:slug/goals/:id"]
+    Overview --- MemoryPage["/w/:slug/memory"]
+    Overview --- SearchPage["/w/:slug/search"]
+    Overview --- AgentsPage["/w/:slug/agents"]
+    Overview --- Members["/w/:slug/members"]
 ```
 
-**Timeline** - "what's due when?"
+Each workspace has a tab bar: **Overview, Board, Memory, Search, Agents, Members**. The header has a workspace switcher and the account menu. A workspace slug the viewer cannot see returns the same 404 as one that does not exist, so slugs do not leak.
 
-```mermaid
-gantt
-    title Due dates
-    dateFormat YYYY-MM-DD
-    section Close Q3 audit
-    Send contract redlines :2026-09-03, 1d
-    Book auditor call      :2026-09-05, 1d
-    section Website relaunch
-    DNS cutover            :2026-09-10, 1d
-```
+### Screens
 
-### Loop 4: Execution
+**Workspaces** (`/workspaces`): the status-per-customer view. One row per workspace with open, inbox, overdue, due this week, done in the last 7 days, awaiting approval, agents active in the last 24 hours out of those connected, and last activity. Overdue counts are red and pending approvals amber; zeros are faded so the rows that need attention stand out. Totals sit above the table, and a form below it creates a new workspace (the creator becomes its owner). Platform admins see every workspace, marked **Read-only**.
 
-**Trigger:** "what should I do next?", or the human delegates ("handle what you can").
+**Overview** (`/w/:slug`): the workspace dashboard.
 
-**Flow:** `suggest_next_actions` returns open tasks ranked by priority, then due date, then age. For each, the agent either executes it directly with its own capabilities (draft the reply, book the meeting) and calls `complete_task` with a note, or flags it as human-only. Work discovered during execution feeds back into Loop 1.
+- A stat row: open tasks, inbox (amber above 10), overdue (red), due this week, done in the last 7 days, active agents.
+- The approval card, shown only when goals are proposed.
+- The goal tree with rolled-up progress, and a **New goal** popover.
+- Next actions (the same ranking agents get) and an overdue card when anything is late.
+- Right column: the activity feed (people and agents, newest first) and the connected agents.
+- A **Connect an agent** button when no agent is connected yet.
 
-**Conversation pattern:**
+**Board** (`/w/:slug/board`): a kanban with Inbox, To do, In progress, Done (the 20 most recent), and Dropped. It can be filtered to one goal and its sub-goals. A one-line add-task form sits above it. Each card shows priority, due date, goal, source, and the agent holding it, plus one next-step button (Accept, Start, Done, Reopen, Restore), Release when it is claimed, and Drop while it is open.
 
-> **Human:** Handle what you can.
-> **Agent:** Took 3: drafted the redlines reply (in your drafts folder - marked in progress until you send), booked the auditor call for Tue 10:00, filed the incident report. 2 remain that need you: sign the contract, approve relaunch budget.
+**Goal detail** (`/w/:slug/goals/:id`): a breadcrumb of ancestor goals, the status badge and decision buttons, progress, the goal's tasks with an add-task form locked to the goal, sub-goals, linked memories with a remember form, and the goal's activity. Edit and move controls let a person retitle the goal or move it under another one; the parent picker excludes the goal's own subtree, goals already at maximum depth, and abandoned goals.
 
-## Detailed planning UX
+**Memory** (`/w/:slug/memory`): everything agents and people have remembered, filtered by kind (fact, preference, decision, context, note) or text. Each entry shows its kind, tags, linked goal, author, and age. A form adds a memory, and Forget asks for confirmation.
 
-For a big goal, "plan out the relaunch" invokes `plan_goal`, which returns the goal, its current tasks, and a breakdown scaffold (milestones, dependencies, first actions, open questions). The agent fills the scaffold conversationally with the human, then captures the agreed subtasks via `capture_tasks` directly into `todo` under that goal. The plan is not stored as a document - the tasks *are* the plan.
+**Search** (`/w/:slug/search`): full-text search across goals, tasks, and memory, grouped by type and ranked by relevance. Prefix matching means "audit" finds "auditor".
+
+**Agents** (`/w/:slug/agents`): owners and admins name an agent and issue its token. The token is shown **once**, with a copy button and setup tabs for Cursor, Claude Code, and VS Code that already contain the workspace's MCP URL and the token. The list shows each agent as Active (seen in the last 24 hours), Idle, or Revoked, with its token prefix, when it was last seen, and when it was connected. Revoking asks for confirmation and cuts the agent off on its next request; its past work stays attributed to it.
+
+**Members** (`/w/:slug/members`): members with their roles, an invite form (email and role) that produces a link to send, and pending invitations. Admins manage members and agent tokens; members can do everything else, including approving goals.
+
+**Invitation** (`/invite/:id`): signed-out visitors are sent to sign in or sign up and come back. Accepting requires being signed in with the invited email; a different account sees "Wrong account" with a sign-out option, and an expired or used link says so.
+
+### Live refresh
+
+Workspace pages and the workspaces table re-render every 15 seconds while the tab is visible, and every change made in the web app refreshes all of that workspace's pages immediately. There is no reload button to remember.
+
+### Status color language
+
+One table per concept (`src/lib/domain.ts`) maps each value to a label and a tone, and every badge, stat, and table cell reads from it, so a status looks the same everywhere.
+
+| Tone | Color | Used for |
+| --- | --- | --- |
+| Danger | red | overdue, urgent priority, revoked agents |
+| Warning | amber | proposed goals and pending approvals, high priority, a full inbox, read-only access |
+| Info | sky | in-progress tasks, active goals, agent claims, admin role, facts |
+| Success | emerald | done tasks, achieved goals, active agents, decisions |
+| Accent | violet | inbox, owner role, preferences |
+| Neutral | zinc | everything else |
+
+### Forms and feedback
+
+Every mutation is a server action with the same behavior: fields are validated with the same schema the MCP tools use, errors show inline under the form, and successful actions refresh the page or show their result in place (such as the token reveal or the invite link). Destructive actions (abandon goal, forget memory, revoke agent, remove member) ask for confirmation.
 
 ## Voice and tone (agent guidance)
 
-- Lead with counts and outcomes, not tool mechanics ("Captured 6, 2 urgent" - never "I called capture_tasks").
-- One question per turn during triage; batch approvals rather than item-by-item interrogation.
-- Surface inbox rot: if the inbox exceeds ~10 items or holds anything older than a week, say so unprompted.
+- Lead with outcomes and counts ("Captured 6, 2 urgent, 1 duplicate skipped"), never tool mechanics.
+- Name the other agents when their work matters ("claimed by Calendar planner").
+- Batch questions for the person into one message, and include the review link when a decision is needed.
+- Never say a goal is approved until a person has approved it.
+- Mention inbox rot unprompted: more than 10 items, or anything older than a week.

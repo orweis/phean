@@ -258,3 +258,21 @@ Workspace pages auto-refresh every 15 seconds, so humans watch agents work in ne
 - Email delivery for invitations; notifications and digests.
 - Permit.io-backed fine-grained authorization behind `can()`.
 - Billing and plans.
+
+## 12. Execution notes (as built)
+
+The plan was implemented as written, with these refinements:
+
+- **Status per customer** is a table rather than cards: one row per workspace with open, inbox, overdue, due this week, done (7 days), awaiting approval, active agents, and last activity. Overdue cells are red and approvals amber, with totals above.
+- **Invitation page** lives under the `(auth)` route group to share the centered layout, and `proxy.ts` sends signed-out visitors to sign in and back. Accepting requires the invited email; other states (already a member, expired, wrong account) get their own messages.
+- **Agents page** includes setup for VS Code alongside Cursor and Claude Code (`src/lib/mcp-config.ts`).
+- **Goal decisions** are one transition table (`GoalStatusActions`) used by the dashboard's approval card and the goal page: approve or reject a proposed goal, achieve or abandon an active one, reopen or reactivate.
+- **Build without a database**: Better Auth gets a lazy database handle (`lazyDb`), so `next build` (locally and on Vercel) never connects.
+- **Sign-in rate limiting** uses Better Auth's database storage (migration `0001_auth_rate_limit`), so limits hold across serverless instances.
+- **Scripts**: `pnpm db:seed` creates a demo account with two workspaces and two agent tokens; `pnpm demo:agents <url> <token> <token>` drives two agents over real HTTP MCP and doubles as a deployment smoke test. Scripts load `.env` files through `@next/env`, so they resolve the same database as `next dev`.
+- **Health check**: `GET /api/health` reports database reachability and latency, returning 503 when the database is down.
+
+### Deployment status
+
+- The `phean` project exists under the Permit team. Deployment protection was changed to **preview deployments only** (production must be public for customer sign-in and `/mcp`), and Node.js is pinned to 22.x. `BETTER_AUTH_SECRET` is set for production and preview.
+- Two steps need a person with dashboard access, because the available tooling cannot link a Git repository to an existing project or provision Marketplace storage: connect `orweis/phean` under Settings → Git (the Vercel GitHub app currently has access to selected repositories only), and add Neon Postgres under Storage with preview branching. After that, a push to `main` deploys. See [DEPLOYMENT.md](../DEPLOYMENT.md).
