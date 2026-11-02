@@ -16,6 +16,7 @@ export const routes = {
   workspaces: () => "/workspaces",
   workspace: (slug: string) => `/w/${slug}`,
   board: (slug: string, goalId?: string) => withQuery(`/w/${slug}/board`, { goal: goalId }),
+  timeline: (slug: string, filters?: { goal?: string; days?: string }) => withQuery(`/w/${slug}/timeline`, filters),
   goal: (slug: string, goalId: string) => `/w/${slug}/goals/${goalId}`,
   memory: (slug: string, filters?: { kind?: string; q?: string }) => withQuery(`/w/${slug}/memory`, filters),
   search: (slug: string, query?: string) => withQuery(`/w/${slug}/search`, { q: query }),

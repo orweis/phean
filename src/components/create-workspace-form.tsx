@@ -41,7 +41,7 @@ export function CreateWorkspaceForm() {
         />
       </Field>
       <Field label="URL" htmlFor="workspace-slug">
-        <div className="flex items-center rounded-lg border border-zinc-200 bg-zinc-50 pl-3 text-sm text-zinc-400 focus-within:border-violet-400 focus-within:ring-2 focus-within:ring-violet-100">
+        <div className="flex h-9 items-center rounded-md border border-edge bg-sunken pl-3 text-sm text-muted hover:border-ink-2 focus-within:border-focus focus-within:outline-2 focus-within:outline-focus">
           /w/
           <input
             id="workspace-slug"
@@ -55,7 +55,7 @@ export function CreateWorkspaceForm() {
               setSlugEdited(true);
               setSlug(event.target.value.toLowerCase());
             }}
-            className="h-9 min-w-0 flex-1 rounded-r-lg bg-white px-1 text-zinc-900 focus:outline-none"
+            className="h-full min-w-0 flex-1 rounded-r-md bg-panel px-1 text-ink placeholder:text-muted focus:outline-none"
           />
         </div>
       </Field>

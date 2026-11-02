@@ -1,8 +1,9 @@
 import { Bot, CalendarClock, Target } from "lucide-react";
 import Link from "next/link";
+import type { ReactNode } from "react";
 
 import { completeTaskAction, releaseTaskAction, updateTaskAction } from "@/app/w/[slug]/actions";
-import { isOpenTaskStatus, PRIORITY_META, SOURCE_META, type TaskStatus } from "@/lib/domain";
+import { isOpenTaskStatus, PRIORITY_META, SOURCE_META, TASK_STATUS_META, type TaskStatus } from "@/lib/domain";
 import { cx } from "@/lib/cx";
 import { formatDueDate, isPastDue } from "@/lib/format";
 import { routes } from "@/lib/routes";
@@ -21,86 +22,125 @@ const NEXT_STEP: Partial<Record<TaskStatus, { label: string; status: TaskStatus 
   dropped: { label: "Restore", status: "todo" },
 };
 
-interface TaskCardProps {
+const isLate = (task: TaskView) => isOpenTaskStatus(task.status) && isPastDue(task.dueDate);
+
+/** Next step, release and drop, as compact buttons. */
+function TaskActions({ task, slug }: { task: TaskView; slug: string }) {
+  const next = NEXT_STEP[task.status];
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {next &&
+        (next.status === "done" ? (
+          <ActionForm action={completeTaskAction} workspace={slug} quiet>
+            <input type="hidden" name="taskId" value={task.id} />
+            <SubmitButton size="sm" variant="primary">
+              {next.label}
+            </SubmitButton>
+          </ActionForm>
+        ) : (
+          <ActionForm action={updateTaskAction} workspace={slug} quiet>
+            <input type="hidden" name="taskId" value={task.id} />
+            <input type="hidden" name="status" value={next.status} />
+            <SubmitButton size="sm">{next.label}</SubmitButton>
+          </ActionForm>
+        ))}
+      {task.claimedByName && (
+        <ActionForm action={releaseTaskAction} workspace={slug} quiet>
+          <input type="hidden" name="taskId" value={task.id} />
+          <SubmitButton size="sm" variant="ghost">
+            Release
+          </SubmitButton>
+        </ActionForm>
+      )}
+      {isOpenTaskStatus(task.status) && (
+        <ActionForm action={updateTaskAction} workspace={slug} quiet>
+          <input type="hidden" name="taskId" value={task.id} />
+          <input type="hidden" name="status" value="dropped" />
+          <SubmitButton size="sm" variant="ghost">
+            Drop
+          </SubmitButton>
+        </ActionForm>
+      )}
+    </div>
+  );
+}
+
+/** Goal, due date, source and claimant: the facts every task listing shows. */
+function TaskMeta({ task, slug, showGoal, showDue = true }: { task: TaskView; slug: string; showGoal: boolean; showDue?: boolean }) {
+  const late = isLate(task);
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
+      {showGoal && task.goalId && task.goalTitle && (
+        <Link href={routes.goal(slug, task.goalId)} className="inline-flex max-w-56 items-center gap-1 hover:text-ink hover:underline">
+          <Target className="size-3 shrink-0" aria-hidden />
+          <span className="truncate">{task.goalTitle}</span>
+        </Link>
+      )}
+      {showDue && task.dueDate && (
+        <span className={cx("inline-flex items-center gap-1", late && "font-semibold text-late-ink")}>
+          <CalendarClock className="size-3" aria-hidden />
+          {late ? `Late, due ${formatDueDate(task.dueDate)}` : `Due ${formatDueDate(task.dueDate)}`}
+        </span>
+      )}
+      {task.source !== "manual" && <span>From {SOURCE_META[task.source].label.toLowerCase()}</span>}
+      {task.claimedByName && (
+        <Badge tone="info">
+          <Bot aria-hidden />
+          {task.claimedByName}
+        </Badge>
+      )}
+    </div>
+  );
+}
+
+function TaskTitle({ task }: { task: TaskView }) {
+  return (
+    <div className="flex items-start gap-2">
+      <p className={cx("min-w-0 flex-1 text-sm font-semibold text-ink", task.status === "dropped" && "text-muted line-through")}>{task.title}</p>
+      {task.priority !== "medium" && <MetaBadge meta={PRIORITY_META} value={task.priority} />}
+    </div>
+  );
+}
+
+interface TaskViewProps {
   task: TaskView;
   slug: string;
   canWrite: boolean;
-  /** Hide the goal link when the card is already shown under its goal. */
+  /** Hide the goal link when the task is already shown under its goal. */
   showGoal?: boolean;
 }
 
-export function TaskCard({ task, slug, canWrite, showGoal = true }: TaskCardProps) {
-  const overdue = isOpenTaskStatus(task.status) && isPastDue(task.dueDate);
-  const next = NEXT_STEP[task.status];
-
+/** A task on a board lane. */
+export function TaskCard({ task, slug, canWrite, showGoal = true }: TaskViewProps) {
   return (
-    <article className="group rounded-lg border border-zinc-200 bg-white p-3 shadow-xs">
-      <div className="flex items-start gap-2">
-        <p className={cx("min-w-0 flex-1 text-sm font-medium text-zinc-900", task.status === "dropped" && "line-through")}>
-          {task.title}
-        </p>
-        {task.priority !== "medium" && <MetaBadge meta={PRIORITY_META} value={task.priority} />}
+    <article data-task={task.id} className={cx("rounded-md border bg-panel p-3", isLate(task) ? "border-late/45" : "border-rule")}>
+      <TaskTitle task={task} />
+      {task.description && <p className="mt-1 line-clamp-2 text-xs whitespace-pre-line text-muted">{task.description}</p>}
+      <div className="mt-2">
+        <TaskMeta task={task} slug={slug} showGoal={showGoal} />
       </div>
-      {task.description && <p className="mt-1 line-clamp-2 text-xs whitespace-pre-line text-zinc-500">{task.description}</p>}
-
-      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-zinc-500">
-        {showGoal && task.goalId && task.goalTitle && (
-          <Link href={routes.goal(slug, task.goalId)} className="inline-flex max-w-48 items-center gap-1 hover:text-zinc-900">
-            <Target className="size-3 shrink-0" aria-hidden />
-            <span className="truncate">{task.goalTitle}</span>
-          </Link>
-        )}
-        {task.dueDate && (
-          <span className={cx("inline-flex items-center gap-1", overdue && "font-medium text-red-600")}>
-            <CalendarClock className="size-3" aria-hidden />
-            {overdue ? "Overdue · " : ""}
-            {formatDueDate(task.dueDate)}
-          </span>
-        )}
-        {task.source !== "manual" && <span>{SOURCE_META[task.source].label}</span>}
-        {task.claimedByName && (
-          <Badge tone="info">
-            <Bot aria-hidden />
-            {task.claimedByName}
-          </Badge>
-        )}
-      </div>
-
-      {canWrite && next && (
-        <div className="mt-2.5 flex flex-wrap gap-1.5 border-t border-zinc-100 pt-2.5">
-          {next.status === "done" ? (
-            <ActionForm action={completeTaskAction} workspace={slug} quiet>
-              <input type="hidden" name="taskId" value={task.id} />
-              <SubmitButton size="sm" variant="primary">
-                {next.label}
-              </SubmitButton>
-            </ActionForm>
-          ) : (
-            <ActionForm action={updateTaskAction} workspace={slug} quiet>
-              <input type="hidden" name="taskId" value={task.id} />
-              <input type="hidden" name="status" value={next.status} />
-              <SubmitButton size="sm">{next.label}</SubmitButton>
-            </ActionForm>
-          )}
-          {task.claimedByName && (
-            <ActionForm action={releaseTaskAction} workspace={slug} quiet>
-              <input type="hidden" name="taskId" value={task.id} />
-              <SubmitButton size="sm" variant="ghost">
-                Release
-              </SubmitButton>
-            </ActionForm>
-          )}
-          {isOpenTaskStatus(task.status) && (
-            <ActionForm action={updateTaskAction} workspace={slug} quiet>
-              <input type="hidden" name="taskId" value={task.id} />
-              <input type="hidden" name="status" value="dropped" />
-              <SubmitButton size="sm" variant="ghost">
-                Drop
-              </SubmitButton>
-            </ActionForm>
-          )}
+      {canWrite && NEXT_STEP[task.status] && (
+        <div className="mt-2.5 border-t border-rule pt-2.5">
+          <TaskActions task={task} slug={slug} />
         </div>
       )}
     </article>
+  );
+}
+
+/** A task as one line of a list, with an optional leading column such as its due date. */
+export function TaskRow({ task, slug, canWrite, showGoal = true, lead, showDue = !lead }: TaskViewProps & { lead?: ReactNode; showDue?: boolean }) {
+  return (
+    <li data-task={task.id} className="flex flex-wrap items-start gap-x-4 gap-y-2 border-b border-rule py-3 last:border-b-0">
+      {lead && <div className="w-20 shrink-0">{lead}</div>}
+      <div className="min-w-0 flex-1 basis-56">
+        <TaskTitle task={task} />
+        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+          <MetaBadge meta={TASK_STATUS_META} value={task.status} />
+          <TaskMeta task={task} slug={slug} showGoal={showGoal} showDue={showDue} />
+        </div>
+      </div>
+      {canWrite && <TaskActions task={task} slug={slug} />}
+    </li>
   );
 }

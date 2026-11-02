@@ -35,7 +35,7 @@ export function ConnectAgentForm({ slug, mcpUrl }: { slug: string; mcpUrl: strin
                 Issue token
               </SubmitButton>
             </div>
-            <p className="mt-1.5 text-xs text-zinc-500">
+            <p className="mt-1.5 text-xs text-muted">
               The name appears next to everything the agent does. Issue one token per agent so each can be revoked on its own.
             </p>
             {issued && <TokenReveal {...issued} slug={slug} mcpUrl={mcpUrl} key={issued.token} />}
@@ -52,18 +52,18 @@ function TokenReveal({ token, agentName, slug, mcpUrl }: { token: string; agentN
   const setup = setups.find((candidate) => candidate.id === selected) ?? setups[0]!;
 
   return (
-    <div className="mt-4 space-y-4 rounded-xl border border-emerald-200 bg-emerald-50/50 p-4">
+    <div className="mt-4 space-y-4 rounded-lg border border-arrive/40 bg-arrive-tint p-4">
       <div>
-        <p className="flex items-center gap-1.5 text-sm font-medium text-zinc-900">
-          <KeyRound className="size-4 text-emerald-600" aria-hidden />
+        <p className="flex items-center gap-1.5 text-sm font-semibold text-ink">
+          <KeyRound className="size-4 text-arrive-ink" aria-hidden />
           Token for {agentName}
         </p>
-        <p className="mt-1 flex items-center gap-1 text-xs text-amber-800">
+        <p className="mt-1 flex items-center gap-1 text-xs font-semibold text-wait-ink">
           <TriangleAlert className="size-3.5" aria-hidden />
           Copy it now. Phean only keeps a hash, so it cannot be shown again.
         </p>
         <div className="mt-2 flex items-center gap-2">
-          <code className="min-w-0 flex-1 truncate rounded-md border border-zinc-200 bg-white px-2.5 py-1.5 font-mono text-xs text-zinc-800">
+          <code className="min-w-0 flex-1 truncate rounded-md border border-rule bg-panel px-2.5 py-2 font-mono text-xs text-ink">
             {token}
           </code>
           <CopyButton value={token} />
@@ -80,8 +80,8 @@ function TokenReveal({ token, agentName, slug, mcpUrl }: { token: string; agentN
               aria-selected={candidate.id === setup.id}
               onClick={() => setSelected(candidate.id)}
               className={cx(
-                "rounded-md px-2.5 py-1 text-xs font-medium",
-                candidate.id === setup.id ? "bg-zinc-900 text-white" : "text-zinc-600 hover:bg-white",
+                "rounded-sm px-2.5 py-1.5 text-xs font-semibold transition-colors duration-(--dur-micro)",
+                candidate.id === setup.id ? "bg-shell text-shell-ink" : "text-ink-2 hover:bg-panel hover:text-ink",
               )}
             >
               {candidate.label}
@@ -90,10 +90,10 @@ function TokenReveal({ token, agentName, slug, mcpUrl }: { token: string; agentN
         </div>
         <div role="tabpanel" className="mt-2">
           <div className="mb-1 flex items-center justify-between gap-2">
-            <p className="text-xs text-zinc-500">{setup.where}</p>
+            <p className="text-xs text-ink-2">{setup.where}</p>
             <CopyButton value={setup.code} variant="ghost" />
           </div>
-          <pre className="overflow-x-auto rounded-lg bg-zinc-900 p-3 font-mono text-xs leading-relaxed text-zinc-100">{setup.code}</pre>
+          <pre className="overflow-x-auto rounded-md bg-shell p-3 font-mono text-xs leading-relaxed text-shell-ink">{setup.code}</pre>
         </div>
       </div>
     </div>

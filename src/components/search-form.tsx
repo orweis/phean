@@ -16,7 +16,7 @@ export function SearchForm({ action, defaultValue, placeholder, keep = {}, autoF
   return (
     <form action={action} role="search" className="relative w-full max-w-md">
       {Object.entries(keep).map(([name, value]) => value && <input key={name} type="hidden" name={name} value={value} />)}
-      <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-zinc-400" aria-hidden />
+      <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted" aria-hidden />
       <label htmlFor="search-query" className="sr-only">
         Search
       </label>

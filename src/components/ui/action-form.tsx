@@ -36,7 +36,7 @@ export function ActionForm({ action, workspace, confirm, children, className, qu
       {showMessage && (
         <p
           role={state.status === "error" ? "alert" : "status"}
-          className={cx("mt-2 text-xs", state.status === "error" ? "text-red-600" : "text-emerald-700")}
+          className={cx("mt-2 text-xs font-medium", state.status === "error" ? "text-late-ink" : "text-arrive-ink")}
         >
           {state.message}
         </p>

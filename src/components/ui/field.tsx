@@ -4,7 +4,9 @@ import { cx } from "@/lib/cx";
 
 /** Controls fill their container (class order cannot override `w-full`), so size the wrapper instead. */
 const CONTROL =
-  "w-full rounded-lg border border-zinc-200 bg-white px-3 text-sm text-zinc-900 shadow-xs placeholder:text-zinc-400 focus:border-violet-400 focus:ring-2 focus:ring-violet-100 focus:outline-none disabled:bg-zinc-50";
+  "w-full rounded-md border border-edge bg-panel px-3 text-sm text-ink placeholder:text-muted hover:border-ink-2 " +
+  "focus:border-focus focus:outline-2 focus:outline-offset-0 focus:outline-focus " +
+  "disabled:cursor-not-allowed disabled:bg-sunken disabled:text-muted";
 
 export function Input({ className, ...props }: ComponentProps<"input">) {
   return <input className={cx(CONTROL, "h-9", className)} {...props} />;
@@ -29,11 +31,11 @@ interface FieldProps {
 export function Field({ label, htmlFor, hint, children, className }: FieldProps) {
   return (
     <div className={cx("space-y-1.5", className)}>
-      <label htmlFor={htmlFor} className="block text-xs font-medium text-zinc-700">
+      <label htmlFor={htmlFor} className="block text-xs font-semibold text-ink-2">
         {label}
       </label>
       {children}
-      {hint && <p className="text-xs text-zinc-500">{hint}</p>}
+      {hint && <p className="text-xs text-muted">{hint}</p>}
     </div>
   );
 }

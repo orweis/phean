@@ -4,19 +4,19 @@ import type { Tone } from "@/lib/domain";
 import { cx } from "@/lib/cx";
 
 const TONES: Record<Tone, string> = {
-  neutral: "bg-zinc-100 text-zinc-700 ring-zinc-200",
-  info: "bg-sky-50 text-sky-700 ring-sky-200",
-  success: "bg-emerald-50 text-emerald-700 ring-emerald-200",
-  warning: "bg-amber-50 text-amber-800 ring-amber-200",
-  danger: "bg-red-50 text-red-700 ring-red-200",
-  accent: "bg-violet-50 text-violet-700 ring-violet-200",
+  neutral: "bg-sunken text-ink-2",
+  info: "bg-move-tint text-move-ink",
+  success: "bg-arrive-tint text-arrive-ink",
+  warning: "bg-wait-tint text-wait-ink",
+  danger: "bg-late-tint text-late-ink",
+  accent: "bg-signal-tint text-signal-ink",
 };
 
 export function Badge({ tone = "neutral", children, className }: { tone?: Tone; children: ReactNode; className?: string }) {
   return (
     <span
       className={cx(
-        "inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] leading-4 font-medium whitespace-nowrap ring-1 ring-inset [&_svg]:size-3",
+        "inline-flex h-5 items-center gap-1 rounded-sm px-1.5 text-xs font-semibold whitespace-nowrap ring-1 ring-current/15 ring-inset [&_svg]:size-3",
         TONES[tone],
         className,
       )}

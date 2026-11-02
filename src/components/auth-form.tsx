@@ -61,10 +61,10 @@ export function AuthForm({ mode, next, providers }: AuthFormProps) {
               </Button>
             ))}
           </div>
-          <div className="flex items-center gap-3 text-xs text-zinc-400">
-            <span className="h-px flex-1 bg-zinc-200" />
+          <div className="flex items-center gap-3 text-xs text-muted">
+            <span className="h-px flex-1 bg-rule" />
             or
-            <span className="h-px flex-1 bg-zinc-200" />
+            <span className="h-px flex-1 bg-rule" />
           </div>
         </>
       )}
@@ -89,21 +89,21 @@ export function AuthForm({ mode, next, providers }: AuthFormProps) {
           />
         </Field>
         {error && (
-          <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+          <p role="alert" className="rounded-md border border-late/30 bg-late-tint px-3 py-2 text-sm text-late-ink">
             {error}
           </p>
         )}
         <Button type="submit" variant="primary" className="w-full" disabled={pending}>
-          {pending && <LoaderCircle className="animate-spin" aria-hidden />}
+          {pending && <LoaderCircle className="motion-safe:animate-spin" aria-hidden />}
           {signingUp ? "Create account" : "Sign in"}
         </Button>
       </form>
 
-      <p className="text-center text-sm text-zinc-500">
+      <p className="text-center text-sm text-muted">
         {signingUp ? "Already have an account? " : "New to Phean? "}
         <Link
           href={signingUp ? routes.signIn(next) : routes.signUp(next)}
-          className="font-medium text-zinc-900 hover:underline"
+          className="font-semibold text-ink underline decoration-rule hover:decoration-ink"
         >
           {signingUp ? "Sign in" : "Create an account"}
         </Link>

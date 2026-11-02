@@ -1,73 +1,101 @@
-import { Activity, AlertTriangle, Bot, ListTodo, Plus, Target } from "lucide-react";
+import { Bot, CalendarClock, Plus } from "lucide-react";
 
 import { ActivityFeed } from "@/components/activity-feed";
-import { AgentList } from "@/components/agent-list";
+import { AgentWorkload } from "@/components/agent-list";
+import { CumulativeFlow } from "@/components/charts/cumulative-flow";
+import { FlowLegend } from "@/components/charts/flow-bar";
 import { GoalTree } from "@/components/goal-tree";
 import { NewGoalForm } from "@/components/goal-forms";
 import { PageHeader } from "@/components/page-header";
 import { PendingApprovals } from "@/components/pending-approvals";
-import { TaskCard } from "@/components/task-card";
+import { TaskRow } from "@/components/task-card";
+import { TodayStrip } from "@/components/today-strip";
 import { ButtonLink } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Popover } from "@/components/ui/popover";
-import { EmptyState, Stat } from "@/components/ui/stat";
-import { pluralize } from "@/lib/format";
+import { EmptyState } from "@/components/ui/stat";
+import { formatDueDate, pluralize, relativeDue } from "@/lib/format";
 import { routes } from "@/lib/routes";
+import { cumulativeFlow } from "@/lib/timeline";
 import { requireWorkspace } from "@/server/auth/session";
-import { listAgents } from "@/server/domain/agents";
 import { listActivity } from "@/server/domain/events";
 import { listGoals } from "@/server/domain/goals";
-import { getStatusSummary } from "@/server/domain/overview";
+import { getAgentWorkload, getJourneys, getStatusSummary, type WorkspaceStats } from "@/server/domain/overview";
 import { can } from "@/server/domain/policy";
-import { suggestNextActions } from "@/server/domain/tasks";
+
+const list = new Intl.ListFormat("en", { type: "conjunction" });
+
+/** The one sentence an owner needs first: what waits on them, what is late, how much is moving. */
+function statusSentence(stats: WorkspaceStats): string {
+  const parts = [
+    stats.pendingApprovals > 0 && `${pluralize(stats.pendingApprovals, "goal")} ${stats.pendingApprovals === 1 ? "awaits" : "await"} your decision`,
+    stats.overdue > 0 && `${pluralize(stats.overdue, "task")} ${stats.overdue === 1 ? "is" : "are"} late`,
+    stats.openTasks > 0 && `${pluralize(stats.openTasks, "task")} ${stats.openTasks === 1 ? "is" : "are"} open`,
+  ].filter((part): part is string => Boolean(part));
+  return parts.length ? `${list.format(parts).replace(/^./, (first) => first.toUpperCase())}.` : "Nothing is waiting on you.";
+}
+
+function DueLead({ dueDate, late }: { dueDate: string; late?: boolean }) {
+  return (
+    <>
+      <span className="block text-md font-bold font-stretch-condensed text-ink">{formatDueDate(dueDate)}</span>
+      <span className={late ? "text-xs font-semibold text-late-ink" : "text-xs text-muted"}>{relativeDue(dueDate)}</span>
+    </>
+  );
+}
 
 export default async function DashboardPage({ params }: PageProps<"/w/[slug]">) {
   const { slug } = await params;
   const { ctx } = await requireWorkspace(slug);
-  const [summary, goals, nextActions, activity, agents] = await Promise.all([
+  const [summary, goals, activity, workload, { window, journeys }] = await Promise.all([
     getStatusSummary(ctx, {}),
     listGoals(ctx, {}),
-    suggestNextActions(ctx, { limit: 6 }),
-    listActivity(ctx, { limit: 40 }),
-    listAgents(ctx, {}),
+    listActivity(ctx, { limit: 30 }),
+    getAgentWorkload(ctx, {}),
+    getJourneys(ctx, { days: 14 }),
   ]);
   const proposed = goals.filter((goal) => goal.status === "proposed");
   const canWrite = can(ctx.actor, "task:write");
-  const liveAgents = agents.filter((agent) => !agent.revokedAt);
+  const newGoal = can(ctx.actor, "goal:write") && (
+    <Popover
+      label={
+        <>
+          <Plus aria-hidden />
+          New goal
+        </>
+      }
+    >
+      <NewGoalForm slug={slug} goals={goals} />
+    </Popover>
+  );
 
   return (
     <>
       <PageHeader
         title={ctx.tenant.name}
-        description="What your agents are working on, what needs a decision, and what is slipping."
+        description={statusSentence(summary)}
         actions={
-          liveAgents.length === 0 &&
-          can(ctx.actor, "agent:manage") && (
+          workload.length === 0 && can(ctx.actor, "agent:manage") ? (
             <ButtonLink href={routes.agents(slug)} variant="primary">
               <Bot aria-hidden />
               Connect an agent
             </ButtonLink>
+          ) : (
+            newGoal
           )
         }
       />
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-        <Stat label="Open tasks" value={summary.openTasks} href={routes.board(slug)} />
-        <Stat label="Inbox" value={summary.inbox} hint="waiting for triage" tone={summary.inbox > 10 ? "warning" : undefined} href={routes.board(slug)} />
-        <Stat label="Overdue" value={summary.overdue} tone={summary.overdue ? "danger" : undefined} />
-        <Stat label="Due this week" value={summary.dueThisWeek} />
-        <Stat label="Done, last 7 days" value={summary.doneLast7Days} tone={summary.doneLast7Days ? "success" : undefined} />
-        <Stat label="Active agents" value={summary.activeAgents} hint={`of ${summary.agents} connected`} href={routes.agents(slug)} />
-      </div>
+      <TodayStrip stats={summary} slug={slug} />
 
       <div className="mt-6 grid gap-6 lg:grid-cols-3">
-        <div className="space-y-6 lg:col-span-2">
+        <div className="min-w-0 space-y-6 lg:col-span-2">
           {proposed.length > 0 && (
-            <Card className="border-amber-200 bg-amber-50/40">
+            <Card tone="wait">
               <CardHeader
-                title={`${pluralize(proposed.length, "goal")} awaiting your approval`}
+                tone="wait"
+                title={`${pluralize(proposed.length, "goal")} awaiting your decision`}
                 description="Agents can propose goals; only people can approve them."
-                icon={<AlertTriangle className="text-amber-500" />}
               />
               <CardBody className="py-1">
                 <PendingApprovals goals={proposed} slug={slug} canDecide={can(ctx.actor, "goal:decide")} />
@@ -77,24 +105,47 @@ export default async function DashboardPage({ params }: PageProps<"/w/[slug]">) 
 
           <Card>
             <CardHeader
-              title="Goals"
-              description="Progress rolls up from sub-goals."
-              icon={<Target />}
+              title="How the work moved"
+              description="Tasks at each status at the end of each day, over the last 14 days."
               action={
-                can(ctx.actor, "goal:write") && (
-                  <Popover
-                    label={
-                      <>
-                        <Plus aria-hidden />
-                        New goal
-                      </>
-                    }
-                  >
-                    <NewGoalForm slug={slug} goals={goals} />
-                  </Popover>
-                )
+                <ButtonLink href={routes.timeline(slug)} size="sm" variant="ghost">
+                  Open timeline
+                </ButtonLink>
               }
             />
+            <CardBody>
+              <CumulativeFlow flow={cumulativeFlow(journeys, window)} />
+              <FlowLegend className="mt-4" stations={["inbox", "todo", "in_progress", "done"]} />
+            </CardBody>
+          </Card>
+
+          <Card>
+            <CardHeader
+              title="Coming due"
+              description="Open tasks with a due date, soonest first."
+              action={
+                <ButtonLink href={routes.board(slug)} size="sm" variant="ghost">
+                  Open board
+                </ButtonLink>
+              }
+            />
+            <CardBody className="py-1">
+              {summary.dueSoonTasks.length === 0 ? (
+                <EmptyState icon={<CalendarClock />} title="Nothing coming due">
+                  Tasks with a due date show up here, soonest first.
+                </EmptyState>
+              ) : (
+                <ul>
+                  {summary.dueSoonTasks.map((task) => (
+                    <TaskRow key={task.id} task={task} slug={slug} canWrite={canWrite} lead={<DueLead dueDate={task.dueDate!} />} />
+                  ))}
+                </ul>
+              )}
+            </CardBody>
+          </Card>
+
+          <Card>
+            <CardHeader title="Goal map" description="Each goal with its tasks by status, rolled up from its sub-goals." action={newGoal} />
             <CardBody className="py-1">
               <GoalTree
                 goals={goals.filter((goal) => goal.status !== "proposed")}
@@ -107,56 +158,25 @@ export default async function DashboardPage({ params }: PageProps<"/w/[slug]">) 
               />
             </CardBody>
           </Card>
+        </div>
 
-          <Card>
-            <CardHeader
-              title="Next actions"
-              description="Most urgent first: priority, then due date, then age."
-              icon={<ListTodo />}
-              action={
-                <ButtonLink href={routes.board(slug)} size="sm" variant="ghost">
-                  Open board
-                </ButtonLink>
-              }
-            />
-            <CardBody>
-              {nextActions.length === 0 ? (
-                <EmptyState icon={<ListTodo />} title="Nothing to do right now">
-                  Tasks move here once they are triaged out of the inbox.
-                </EmptyState>
-              ) : (
-                <div className="grid gap-2 sm:grid-cols-2">
-                  {nextActions.map((task) => (
-                    <TaskCard key={task.id} task={task} slug={slug} canWrite={canWrite} />
-                  ))}
-                </div>
-              )}
-            </CardBody>
-          </Card>
-
+        <div className="min-w-0 space-y-6">
           {summary.overdueTasks.length > 0 && (
-            <Card className="border-red-200">
-              <CardHeader title="Overdue" icon={<AlertTriangle className="text-red-500" />} />
-              <CardBody className="grid gap-2 sm:grid-cols-2">
-                {summary.overdueTasks.map((task) => (
-                  <TaskCard key={task.id} task={task} slug={slug} canWrite={canWrite} />
-                ))}
+            <Card tone="late">
+              <CardHeader tone="late" title="Late" description="Past their due date and still open." />
+              <CardBody className="py-1">
+                <ul>
+                  {summary.overdueTasks.map((task) => (
+                    <TaskRow key={task.id} task={task} slug={slug} canWrite={canWrite} lead={<DueLead dueDate={task.dueDate!} late />} />
+                  ))}
+                </ul>
               </CardBody>
             </Card>
           )}
-        </div>
-
-        <div className="space-y-6">
-          <Card>
-            <CardHeader title="Activity" description="Humans and agents, newest first." icon={<Activity />} />
-            <CardBody className="max-h-[36rem] overflow-y-auto">
-              <ActivityFeed events={activity} slug={slug} />
-            </CardBody>
-          </Card>
           <Card>
             <CardHeader
               title="Agents"
-              icon={<Bot />}
+              description="What each holds now and finished this week."
               action={
                 <ButtonLink href={routes.agents(slug)} size="sm" variant="ghost">
                   Manage
@@ -164,13 +184,13 @@ export default async function DashboardPage({ params }: PageProps<"/w/[slug]">) 
               }
             />
             <CardBody>
-              {liveAgents.length === 0 ? (
-                <EmptyState icon={<Bot />} title="No agents connected">
-                  Issue a token on the Agents page and add Phean to your MCP client.
-                </EmptyState>
-              ) : (
-                <AgentList agents={liveAgents} />
-              )}
+              <AgentWorkload loads={workload} />
+            </CardBody>
+          </Card>
+          <Card>
+            <CardHeader title="Activity" description="Humans and agents, newest first." />
+            <CardBody className="max-h-[36rem] overflow-y-auto">
+              <ActivityFeed events={activity} slug={slug} />
             </CardBody>
           </Card>
         </div>

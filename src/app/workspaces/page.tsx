@@ -4,11 +4,13 @@ import Link from "next/link";
 
 import { AppHeader } from "@/components/app-header";
 import { AutoRefresh } from "@/components/auto-refresh";
+import { FlowBar } from "@/components/charts/flow-bar";
 import { CreateWorkspaceForm } from "@/components/create-workspace-form";
+import { PageHeader } from "@/components/page-header";
 import { MetaBadge } from "@/components/ui/badge";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
-import { EmptyState, Stat } from "@/components/ui/stat";
-import { ROLE_META } from "@/lib/domain";
+import { EmptyState, Stat, StatStrip } from "@/components/ui/stat";
+import { OPEN_TASK_STATUSES, ROLE_META } from "@/lib/domain";
 import { cx } from "@/lib/cx";
 import { timeAgo } from "@/lib/format";
 import { routes } from "@/lib/routes";
@@ -18,14 +20,15 @@ import { getWorkspaceOverviews, type WorkspaceOverview } from "@/server/domain/t
 
 export const metadata: Metadata = { title: "Workspaces" };
 
-const COLUMNS: { label: string; value: (row: WorkspaceOverview) => number; alert?: "danger" | "warning" }[] = [
-  { label: "Open", value: (row) => row.openTasks },
-  { label: "Inbox", value: (row) => row.inbox },
-  { label: "Overdue", value: (row) => row.overdue, alert: "danger" },
+const COLUMNS: { label: string; value: (row: WorkspaceOverview) => number; alert?: "late" | "wait" }[] = [
+  { label: "Late", value: (row) => row.overdue, alert: "late" },
   { label: "Due this week", value: (row) => row.dueThisWeek },
-  { label: "Done (7d)", value: (row) => row.doneLast7Days },
-  { label: "Awaiting approval", value: (row) => row.pendingApprovals, alert: "warning" },
+  { label: "Done, 7 days", value: (row) => row.doneLast7Days },
+  { label: "Awaiting decision", value: (row) => row.pendingApprovals, alert: "wait" },
 ];
+
+const ALERT_TEXT = { late: "font-bold text-late-ink", wait: "font-bold text-wait-ink" } as const;
+const TH = "px-3 py-2.5 text-xs font-semibold whitespace-nowrap text-muted";
 
 function sum(rows: readonly WorkspaceOverview[], pick: (row: WorkspaceOverview) => number): number {
   return rows.reduce((total, row) => total + pick(row), 0);
@@ -34,36 +37,33 @@ function sum(rows: readonly WorkspaceOverview[], pick: (row: WorkspaceOverview) 
 export default async function WorkspacesPage() {
   const viewer = await getViewer();
   const rows = await getWorkspaceOverviews(getDb(), await visibleWorkspaces(viewer));
+  const late = sum(rows, (row) => row.overdue);
 
   return (
     <>
       <AppHeader user={viewer.user} />
       <AutoRefresh />
-      <main className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6">
-        <div>
-          <h1 className="text-xl font-semibold text-zinc-900">Workspaces</h1>
-          <p className="mt-1 text-sm text-zinc-500">
-            {viewer.platformAdmin
+      <main className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6 sm:py-8">
+        <PageHeader
+          title="Workspaces"
+          description={
+            viewer.platformAdmin
               ? "Status across every customer workspace. You have read-only access to workspaces you are not a member of."
-              : "Status across every workspace you belong to. Each workspace has its own goals, tasks, memory, and agents."}
-          </p>
-        </div>
+              : "Status across every workspace you belong to. Each workspace has its own goals, tasks, memory, and agents."
+          }
+        />
 
         {rows.length > 0 && (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <StatStrip className="grid-cols-2 sm:grid-cols-4">
             <Stat label="Workspaces" value={rows.length} />
             <Stat label="Open tasks" value={sum(rows, (row) => row.openTasks)} />
-            <Stat label="Overdue" value={sum(rows, (row) => row.overdue)} tone={sum(rows, (row) => row.overdue) ? "danger" : undefined} />
-            <Stat
-              label="Active agents (24h)"
-              value={sum(rows, (row) => row.activeAgents)}
-              hint={`of ${sum(rows, (row) => row.agents)} connected`}
-            />
-          </div>
+            <Stat label="Late" value={late} tone={late ? "danger" : undefined} hint="past due, still open" />
+            <Stat label="Agents active" value={sum(rows, (row) => row.activeAgents)} hint={`of ${sum(rows, (row) => row.agents)} connected, last 24 hours`} />
+          </StatStrip>
         )}
 
         <Card>
-          <CardHeader title="Status per workspace" description="Refreshes automatically every 15 seconds." icon={<Building2 />} />
+          <CardHeader title="Status per workspace" description="Open work by status, then what is late and what waits on a decision. Refreshes every 15 seconds." />
           {rows.length === 0 ? (
             <EmptyState icon={<Building2 />} title="No workspaces yet">
               Create your first workspace below, then connect an agent to it.
@@ -72,50 +72,55 @@ export default async function WorkspacesPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-zinc-100 text-left text-xs text-zinc-500">
-                    <th className="px-5 py-2.5 font-medium">Workspace</th>
+                  <tr className="border-b border-rule">
+                    <th className={cx(TH, "pl-5 text-left")}>Workspace</th>
+                    <th className={cx(TH, "min-w-48 text-left")}>Open work</th>
                     {COLUMNS.map((column) => (
-                      <th key={column.label} className="px-3 py-2.5 text-right font-medium whitespace-nowrap">
+                      <th key={column.label} className={cx(TH, "text-right")}>
                         {column.label}
                       </th>
                     ))}
-                    <th className="px-3 py-2.5 text-right font-medium">Agents</th>
-                    <th className="px-5 py-2.5 text-right font-medium whitespace-nowrap">Last activity</th>
+                    <th className={cx(TH, "text-right")}>Agents</th>
+                    <th className={cx(TH, "pr-5 text-right")}>Last activity</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-zinc-100">
+                <tbody className="divide-y divide-rule">
                   {rows.map((row) => (
-                    <tr key={row.tenant.id} className="hover:bg-zinc-50">
-                      <td className="px-5 py-3">
-                        <Link href={routes.workspace(row.tenant.slug)} className="font-medium text-zinc-900 hover:underline">
+                    <tr key={row.tenant.id} className="transition-colors duration-(--dur-micro) hover:bg-sunken/60">
+                      <td className="py-3 pr-3 pl-5">
+                        <Link href={routes.workspace(row.tenant.slug)} className="font-semibold text-ink hover:underline">
                           {row.tenant.name}
                         </Link>
-                        <div className="mt-0.5 flex items-center gap-1.5 text-xs text-zinc-400">
+                        <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted">
                           /w/{row.tenant.slug}
                           <MetaBadge meta={ROLE_META} value={row.role} />
+                        </div>
+                      </td>
+                      <td className="px-3 py-3">
+                        <div className="flex items-center gap-2.5">
+                          <FlowBar
+                            counts={row.tasksByStatus}
+                            stations={OPEN_TASK_STATUSES}
+                            size="md"
+                            label={`${row.tenant.name} open work`}
+                            className="flex-1"
+                          />
+                          <span className="w-6 text-right font-semibold text-ink">{row.openTasks}</span>
                         </div>
                       </td>
                       {COLUMNS.map((column) => {
                         const value = column.value(row);
                         return (
-                          <td
-                            key={column.label}
-                            className={cx(
-                              "px-3 py-3 text-right tabular-nums",
-                              value === 0 && "text-zinc-300",
-                              value > 0 && column.alert === "danger" && "font-semibold text-red-600",
-                              value > 0 && column.alert === "warning" && "font-semibold text-amber-600",
-                            )}
-                          >
+                          <td key={column.label} className={cx("px-3 py-3 text-right", value === 0 ? "text-muted" : column.alert ? ALERT_TEXT[column.alert] : "text-ink")}>
                             {value}
                           </td>
                         );
                       })}
-                      <td className="px-3 py-3 text-right whitespace-nowrap tabular-nums">
-                        <span className={row.activeAgents ? "text-emerald-600" : "text-zinc-400"}>{row.activeAgents}</span>
-                        <span className="text-zinc-400"> / {row.agents}</span>
+                      <td className="px-3 py-3 text-right whitespace-nowrap">
+                        <span className={row.activeAgents ? "font-semibold text-arrive-ink" : "text-muted"}>{row.activeAgents}</span>
+                        <span className="text-muted"> of {row.agents}</span>
                       </td>
-                      <td className="px-5 py-3 text-right text-xs whitespace-nowrap text-zinc-500">{timeAgo(row.lastActivityAt)}</td>
+                      <td className="py-3 pr-5 pl-3 text-right text-xs whitespace-nowrap text-muted">{timeAgo(row.lastActivityAt)}</td>
                     </tr>
                   ))}
                 </tbody>

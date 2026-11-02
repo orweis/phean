@@ -41,14 +41,14 @@ export function InviteMemberForm({ slug, origin }: { slug: string; origin: strin
               </SubmitButton>
             </div>
             {invitation && link && (
-              <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50/50 p-4">
-                <p className="flex items-center gap-1.5 text-sm font-medium text-zinc-900">
-                  <Link2 className="size-4 text-emerald-600" aria-hidden />
+              <div className="mt-4 rounded-lg border border-arrive/40 bg-arrive-tint p-4">
+                <p className="flex items-center gap-1.5 text-sm font-semibold text-ink">
+                  <Link2 className="size-4 text-arrive-ink" aria-hidden />
                   Send this link to {invitation.email}
                 </p>
-                <p className="mt-1 text-xs text-zinc-500">They join by signing in or signing up with that address.</p>
+                <p className="mt-1 text-xs text-ink-2">They join by signing in or signing up with that address.</p>
                 <div className="mt-2 flex items-center gap-2">
-                  <code className="min-w-0 flex-1 truncate rounded-md border border-zinc-200 bg-white px-2.5 py-1.5 font-mono text-xs text-zinc-800">
+                  <code className="min-w-0 flex-1 truncate rounded-md border border-rule bg-panel px-2.5 py-2 font-mono text-xs text-ink">
                     {link}
                   </code>
                   <CopyButton value={link} />

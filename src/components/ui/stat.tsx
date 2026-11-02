@@ -5,17 +5,22 @@ import type { Tone } from "@/lib/domain";
 import { cx } from "@/lib/cx";
 
 const VALUE_TONES: Partial<Record<Tone, string>> = {
-  danger: "text-red-600",
-  warning: "text-amber-600",
-  success: "text-emerald-600",
-  accent: "text-violet-600",
+  danger: "text-late-ink",
+  warning: "text-wait-ink",
+  success: "text-arrive-ink",
+  info: "text-move-ink",
 };
+
+/** A row of figures separated by hairlines; each cell is a `Stat`. */
+export function StatStrip({ children, className }: { children: ReactNode; className?: string }) {
+  return <div className={cx("grid gap-px overflow-hidden rounded-lg border border-rule bg-rule", className)}>{children}</div>;
+}
 
 interface StatProps {
   label: string;
   value: number | string;
   hint?: ReactNode;
-  /** Highlights the value, e.g. danger when something is overdue. */
+  /** Highlights the value, e.g. danger when something is late. */
   tone?: Tone;
   href?: string;
 }
@@ -23,14 +28,16 @@ interface StatProps {
 export function Stat({ label, value, hint, tone, href }: StatProps) {
   const body = (
     <>
-      <p className="text-xs font-medium text-zinc-500">{label}</p>
-      <p className={cx("mt-1 text-2xl font-semibold tabular-nums", (tone && VALUE_TONES[tone]) || "text-zinc-900")}>{value}</p>
-      {hint && <p className="mt-0.5 truncate text-xs text-zinc-500">{hint}</p>}
+      <span className="block text-xs text-muted">{label}</span>
+      <span className={cx("mt-0.5 block text-xl font-bold font-stretch-condensed", (tone && VALUE_TONES[tone]) || "text-ink")}>
+        {value}
+      </span>
+      {hint && <span className="block truncate text-xs text-muted">{hint}</span>}
     </>
   );
-  const className = "block rounded-xl border border-zinc-200 bg-white px-4 py-3 shadow-xs";
+  const className = "block min-w-0 bg-panel px-4 py-3";
   return href ? (
-    <Link href={href} className={cx(className, "transition-colors hover:border-zinc-300")}>
+    <Link href={href} className={cx(className, "transition-colors duration-(--dur-micro) hover:bg-sunken")}>
       {body}
     </Link>
   ) : (
@@ -38,17 +45,18 @@ export function Stat({ label, value, hint, tone, href }: StatProps) {
   );
 }
 
-export function ProgressBar({ value, className }: { value: number; className?: string }) {
+export function ProgressBar({ value, className, label }: { value: number; className?: string; label?: string }) {
   const pct = Math.round(Math.min(1, Math.max(0, value)) * 100);
   return (
     <div
       role="progressbar"
+      aria-label={label}
       aria-valuenow={pct}
       aria-valuemin={0}
       aria-valuemax={100}
-      className={cx("h-1.5 overflow-hidden rounded-full bg-zinc-100", className)}
+      className={cx("h-1.5 overflow-hidden rounded-xs bg-sunken", className)}
     >
-      <div className={cx("h-full rounded-full", pct === 100 ? "bg-emerald-500" : "bg-violet-500")} style={{ width: `${pct}%` }} />
+      <div className={cx("h-full", pct === 100 ? "bg-arrive" : "bg-shell")} style={{ width: `${pct}%` }} />
     </div>
   );
 }
@@ -56,9 +64,9 @@ export function ProgressBar({ value, className }: { value: number; className?: s
 export function EmptyState({ icon, title, children }: { icon?: ReactNode; title: string; children?: ReactNode }) {
   return (
     <div className="flex flex-col items-center px-6 py-8 text-center">
-      {icon && <div className="mb-2 text-zinc-300 [&_svg]:size-6">{icon}</div>}
-      <p className="text-sm font-medium text-zinc-700">{title}</p>
-      {children && <div className="mt-1 max-w-sm text-xs text-zinc-500">{children}</div>}
+      {icon && <div className="mb-2 text-faint [&_svg]:size-6">{icon}</div>}
+      <p className="text-sm font-semibold text-ink">{title}</p>
+      {children && <div className="mt-1 max-w-sm text-xs text-muted">{children}</div>}
     </div>
   );
 }

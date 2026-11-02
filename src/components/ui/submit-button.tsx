@@ -11,7 +11,7 @@ export function SubmitButton({ children, disabled, ...props }: ComponentProps<ty
   const { pending } = useFormStatus();
   return (
     <Button type="submit" disabled={pending || disabled} aria-busy={pending} {...props}>
-      {pending && <LoaderCircle className="animate-spin" aria-hidden />}
+      {pending && <LoaderCircle className="motion-safe:animate-spin" aria-hidden />}
       {children}
     </Button>
   );

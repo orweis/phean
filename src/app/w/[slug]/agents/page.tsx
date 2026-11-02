@@ -1,4 +1,4 @@
-import { Bot, Plug } from "lucide-react";
+import { Bot } from "lucide-react";
 import type { Metadata } from "next";
 
 import { revokeAgentAction } from "@/app/w/[slug]/actions";
@@ -16,15 +16,20 @@ import { timeAgo } from "@/lib/format";
 import { routes } from "@/lib/routes";
 import { requireWorkspace } from "@/server/auth/session";
 import { listAgents } from "@/server/domain/agents";
+import { getAgentWorkload } from "@/server/domain/overview";
 import { can } from "@/server/domain/policy";
 import { absoluteUrl } from "@/server/web";
 
 export const metadata: Metadata = { title: "Agents" };
 
+const TH = "px-3 py-2.5 text-left text-xs font-semibold whitespace-nowrap text-muted";
+const TD = "px-3 py-3 text-xs whitespace-nowrap text-muted";
+
 export default async function AgentsPage({ params }: PageProps<"/w/[slug]/agents">) {
   const { slug } = await params;
   const { ctx } = await requireWorkspace(slug);
-  const [agents, mcpUrl] = await Promise.all([listAgents(ctx, {}), absoluteUrl(routes.mcp())]);
+  const [agents, workload, mcpUrl] = await Promise.all([listAgents(ctx, {}), getAgentWorkload(ctx, {}), absoluteUrl(routes.mcp())]);
+  const loadById = new Map(workload.map((load) => [load.agent.id, load]));
   const canManage = can(ctx.actor, "agent:manage");
 
   return (
@@ -36,7 +41,7 @@ export default async function AgentsPage({ params }: PageProps<"/w/[slug]/agents
 
       {canManage && (
         <Card className="mb-6">
-          <CardHeader title="Connect an agent" description="Issue a token, then paste the snippet into your MCP client." icon={<Plug />} />
+          <CardHeader title="Connect an agent" description="Issue a token, then paste the snippet into your MCP client." />
           <CardBody>
             <ConnectAgentForm slug={slug} mcpUrl={mcpUrl} />
           </CardBody>
@@ -44,8 +49,8 @@ export default async function AgentsPage({ params }: PageProps<"/w/[slug]/agents
       )}
 
       <div className="grid gap-6 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
-          <CardHeader title="Connected agents" icon={<Bot />} />
+        <Card className="min-w-0 lg:col-span-2">
+          <CardHeader title="Connected agents" description="Holding counts open tasks an agent has claimed; done counts the last 7 days." />
           {agents.length === 0 ? (
             <EmptyState icon={<Bot />} title="No agents yet">
               {canManage ? "Issue a token to connect your first agent." : "Ask a workspace admin to connect an agent."}
@@ -54,28 +59,37 @@ export default async function AgentsPage({ params }: PageProps<"/w/[slug]/agents
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-zinc-100 text-left text-xs text-zinc-500">
-                    <th className="px-5 py-2.5 font-medium">Agent</th>
-                    <th className="px-3 py-2.5 font-medium">Status</th>
-                    <th className="px-3 py-2.5 font-medium whitespace-nowrap">Last seen</th>
-                    <th className="px-3 py-2.5 font-medium">Connected</th>
-                    {canManage && <th className="px-5 py-2.5" aria-label="Actions" />}
+                  <tr className="border-b border-rule">
+                    <th className={cx(TH, "pl-5")}>Agent</th>
+                    <th className={TH}>Status</th>
+                    <th className={cx(TH, "text-right")}>Holding</th>
+                    <th className={cx(TH, "text-right")}>Done</th>
+                    <th className={TH}>Last seen</th>
+                    <th className={TH}>Connected</th>
+                    {canManage && (
+                      <th className="px-5 py-2.5">
+                        <span className="sr-only">Actions</span>
+                      </th>
+                    )}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-zinc-100">
+                <tbody className="divide-y divide-rule">
                   {agents.map((agent) => {
                     const status = agentStatus(agent);
+                    const load = loadById.get(agent.id);
                     return (
-                      <tr key={agent.id} className={cx(status === "revoked" && "text-zinc-400")}>
-                        <td className="px-5 py-3">
-                          <p className={cx("font-medium", status !== "revoked" && "text-zinc-900")}>{agent.name}</p>
-                          <p className="font-mono text-xs text-zinc-400">{agent.tokenPrefix}…</p>
+                      <tr key={agent.id} className={cx(status === "revoked" && "text-muted")}>
+                        <td className="py-3 pr-3 pl-5">
+                          <p className={cx("font-semibold", status !== "revoked" && "text-ink")}>{agent.name}</p>
+                          <p className="font-mono text-xs text-muted">{agent.tokenPrefix}…</p>
                         </td>
                         <td className="px-3 py-3">
                           <MetaBadge meta={AGENT_STATUS_META} value={status} />
                         </td>
-                        <td className="px-3 py-3 text-xs whitespace-nowrap text-zinc-500">{timeAgo(agent.lastSeenAt)}</td>
-                        <td className="px-3 py-3 text-xs whitespace-nowrap text-zinc-500">{timeAgo(agent.createdAt)}</td>
+                        <td className="px-3 py-3 text-right font-semibold text-ink">{load?.claimed ?? 0}</td>
+                        <td className="px-3 py-3 text-right font-semibold text-ink">{load?.completedLast7Days ?? 0}</td>
+                        <td className={TD}>{timeAgo(agent.lastSeenAt)}</td>
+                        <td className={TD}>{timeAgo(agent.createdAt)}</td>
                         {canManage && (
                           <td className="px-5 py-3 text-right">
                             {status !== "revoked" && (
@@ -102,26 +116,24 @@ export default async function AgentsPage({ params }: PageProps<"/w/[slug]/agents
           )}
         </Card>
 
-        <div className="space-y-6">
+        <div className="min-w-0 space-y-6">
           <Card>
-            <CardHeader title="MCP endpoint" description="Streamable HTTP, authenticated with a bearer token." icon={<Plug />} />
+            <CardHeader title="MCP endpoint" description="Streamable HTTP, authenticated with a bearer token." />
             <CardBody className="flex items-center gap-2">
-              <code className="min-w-0 flex-1 truncate rounded-md border border-zinc-200 bg-zinc-50 px-2.5 py-1.5 font-mono text-xs text-zinc-800">
-                {mcpUrl}
-              </code>
+              <code className="min-w-0 flex-1 truncate rounded-md border border-rule bg-sunken px-2.5 py-2 font-mono text-xs text-ink">{mcpUrl}</code>
               <CopyButton value={mcpUrl} />
             </CardBody>
           </Card>
           <Card>
             <CardHeader title="What agents get" />
             <CardBody>
-              <ul className="list-disc space-y-1.5 pl-4 text-xs text-zinc-600">
+              <ul className="list-disc space-y-1.5 pl-4 text-xs text-ink-2 marker:text-faint">
                 <li>An operating guide and prompts for syncing, scanning sources, and triage.</li>
                 <li>Tools to capture, claim, and complete tasks, and to propose and plan goals.</li>
                 <li>Shared memory, so one agent&apos;s findings are every agent&apos;s context.</li>
                 <li>Mermaid views of the goal tree, board, and timeline.</li>
               </ul>
-              <p className="mt-3 text-xs text-zinc-500">Agents can propose goals but only people can approve, complete, or abandon them.</p>
+              <p className="mt-3 text-xs text-muted">Agents can propose goals but only people can approve, complete, or abandon them.</p>
             </CardBody>
           </Card>
         </div>

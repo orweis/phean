@@ -2,28 +2,44 @@ import type { ComponentProps, ReactNode } from "react";
 
 import { cx } from "@/lib/cx";
 
-export function Card({ className, ...props }: ComponentProps<"section">) {
-  return <section className={cx("rounded-xl border border-zinc-200 bg-white shadow-xs", className)} {...props} />;
+export type PanelTone = "plain" | "wait" | "late";
+
+const PANEL_TONES: Record<PanelTone, string> = {
+  plain: "border-rule",
+  wait: "border-wait/60",
+  late: "border-late/40",
+};
+
+const HEADER_TONES: Record<PanelTone, string> = {
+  plain: "border-rule",
+  wait: "border-wait/40 bg-wait-tint",
+  late: "border-late/25 bg-late-tint",
+};
+
+export function Card({ className, tone = "plain", ...props }: ComponentProps<"section"> & { tone?: PanelTone }) {
+  return <section data-tone={tone} className={cx("rounded-lg border bg-panel", PANEL_TONES[tone], className)} {...props} />;
 }
 
 interface CardHeaderProps {
   title: ReactNode;
   description?: ReactNode;
   action?: ReactNode;
-  icon?: ReactNode;
+  tone?: PanelTone;
 }
 
-export function CardHeader({ title, description, action, icon }: CardHeaderProps) {
+export function CardHeader({ title, description, action, tone = "plain" }: CardHeaderProps) {
   return (
-    <header className="flex items-start justify-between gap-4 border-b border-zinc-100 px-5 py-4">
-      <div className="flex min-w-0 items-start gap-2.5">
-        {icon && <span className="mt-0.5 text-zinc-400 [&_svg]:size-4">{icon}</span>}
-        <div className="min-w-0">
-          <h2 className="text-sm font-semibold text-zinc-900">{title}</h2>
-          {description && <p className="mt-0.5 text-xs text-zinc-500">{description}</p>}
-        </div>
+    <header
+      className={cx(
+        "flex items-start justify-between gap-4 rounded-t-[calc(var(--radius-lg)-1px)] border-b px-5 py-3.5",
+        HEADER_TONES[tone],
+      )}
+    >
+      <div className="min-w-0">
+        <h2 className="text-md font-bold">{title}</h2>
+        {description && <p className="mt-0.5 text-xs text-muted">{description}</p>}
       </div>
-      {action}
+      {action && <div className="flex shrink-0 items-center gap-2">{action}</div>}
     </header>
   );
 }

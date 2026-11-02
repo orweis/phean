@@ -1,20 +1,171 @@
-@import "tailwindcss";
+/* Hallmark · shape: app screen · genre: modern-minimal · theme: custom · redesign: full
+ * idea: "work runs on a line, set like a railway timetable" · vibe: "station board navy over a timetable sheet"
+ * paper: oklch(97.4% 0.007 255) · accent: oklch(86% 0.165 93) · display: Archivo (semi-condensed) · body: Archivo
+ * nav: station-board header with a tab rail · signature: the timetable, every task a track on one time axis · states: loading, empty, error, full
+ * axes: light/grotesk-sans/chromatic-yellow · posture: committed shell, full palette for the four stations · contrast: pass · v2.0.0 */
+/* Hallmark · pre-emit critique: P4 H4 E4 S5 R4 V5 · weakest: E, many screens share one system; every surface goes through the same primitives and tokens */
 
-@theme inline {
-  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+@import "tailwindcss";
+@import "@fontsource-variable/archivo/wdth.css";
+
+@theme {
+  --color-*: initial;
+
+  /* The timetable sheet and its rules. */
+  --color-paper: oklch(97.4% 0.007 255);
+  --color-panel: oklch(99.6% 0.002 255);
+  --color-sunken: oklch(94.6% 0.011 255);
+  --color-rule: oklch(90% 0.012 260);
+  --color-edge: oklch(60% 0.025 262);
+
+  --color-ink: oklch(24% 0.05 266);
+  --color-ink-2: oklch(37% 0.04 265);
+  --color-muted: oklch(49% 0.03 262);
+  --color-faint: oklch(70% 0.02 262);
+
+  /* The station board: header, tab rail and the primary action. */
+  --color-shell: oklch(29% 0.085 266);
+  --color-shell-2: oklch(36% 0.09 266);
+  --color-shell-ink: oklch(98.5% 0.005 265);
+  --color-shell-muted: oklch(81% 0.035 265);
+
+  /* Signal yellow marks where you are and what is new. */
+  --color-signal: oklch(86% 0.165 93);
+  --color-signal-ink: oklch(30% 0.06 90);
+  --color-signal-tint: oklch(95.5% 0.055 95);
+
+  /* State: late and now, awaiting a decision, moving, arrived. */
+  --color-late: oklch(56% 0.21 27);
+  --color-late-ink: oklch(47% 0.18 27);
+  --color-late-tint: oklch(96.2% 0.025 25);
+  --color-wait: oklch(72% 0.15 68);
+  --color-wait-ink: oklch(47% 0.11 60);
+  --color-wait-tint: oklch(96.5% 0.04 82);
+  --color-move: oklch(53% 0.15 256);
+  --color-move-ink: oklch(45% 0.14 258);
+  --color-move-tint: oklch(95.6% 0.028 255);
+  --color-arrive: oklch(57% 0.12 155);
+  --color-arrive-ink: oklch(43% 0.1 155);
+  --color-arrive-tint: oklch(95.6% 0.035 155);
+
+  /* The four stations a task passes through, in chart order. */
+  --color-station-inbox: oklch(82% 0.15 90);
+  --color-station-todo: oklch(76% 0.03 262);
+  --color-station-progress: var(--color-move);
+  --color-station-done: var(--color-arrive);
+  /* Darker cuts of the waiting stations for thin timetable lines, at 3:1 on the sheet. */
+  --color-line-inbox: oklch(62% 0.13 78);
+  --color-line-todo: oklch(57% 0.035 262);
+
+  --color-focus: oklch(53% 0.15 256);
+
+  --font-sans: "Archivo Variable", ui-sans-serif, sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", Menlo, monospace;
+
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: 1rem;
+  --text-xs: 0.75rem;
+  --text-xs--line-height: 1.1rem;
+  --text-sm: 0.875rem;
+  --text-sm--line-height: 1.35rem;
+  --text-md: 1rem;
+  --text-md--line-height: 1.55rem;
+  --text-lg: 1.1875rem;
+  --text-lg--line-height: 1.6rem;
+  --text-xl: 1.4375rem;
+  --text-xl--line-height: 1.85rem;
+  --text-2xl: 1.75rem;
+  --text-2xl--line-height: 2.15rem;
+
+  --radius-xs: 2px;
+  --radius-sm: 3px;
+  --radius-md: 4px;
+  --radius-lg: 6px;
+  --radius-xl: 8px;
+
+  --shadow-pop: 0 10px 28px -10px oklch(24% 0.05 266 / 0.35), 0 2px 6px -2px oklch(24% 0.05 266 / 0.18);
+
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-micro: 120ms;
+  --dur-short: 220ms;
+}
+
+@utility font-stretch-condensed {
+  font-stretch: 82%;
+}
+
+@utility font-stretch-tight {
+  font-stretch: 90%;
+}
+
+@utility font-stretch-wordmark {
+  font-stretch: 66%;
 }
 
 @layer base {
   html {
     color-scheme: light;
+    scrollbar-color: var(--color-faint) var(--color-paper);
+  }
+
+  html,
+  body {
+    overflow-x: clip;
   }
 
   body {
-    @apply bg-zinc-50 text-zinc-900 antialiased;
+    background: var(--color-paper);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-size: var(--text-sm);
+    line-height: var(--text-sm--line-height);
+    font-synthesis: none;
+    font-variant-numeric: tabular-nums;
+    -webkit-font-smoothing: antialiased;
+    caret-color: var(--color-move);
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-stretch: 86%;
+    overflow-wrap: break-word;
+    min-width: 0;
+    text-wrap: balance;
+  }
+
+  ::selection {
+    background: var(--color-signal-tint);
+    color: var(--color-ink);
   }
 
   :focus-visible {
-    @apply outline-2 outline-offset-2 outline-violet-500;
+    outline: 2px solid var(--color-focus);
+    outline-offset: 2px;
+  }
+
+  [data-shell] :focus-visible {
+    outline-color: var(--color-signal);
+  }
+
+  a {
+    text-underline-offset: 0.18em;
+    text-decoration-thickness: 1px;
+  }
+
+  button:not(:disabled),
+  summary,
+  [role="button"] {
+    cursor: pointer;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }

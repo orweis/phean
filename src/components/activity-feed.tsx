@@ -2,6 +2,7 @@ import { Activity as ActivityIcon, Bot, User } from "lucide-react";
 import Link from "next/link";
 
 import { groupActivity } from "@/lib/activity";
+import { cx } from "@/lib/cx";
 import { timeAgo } from "@/lib/format";
 import { routes } from "@/lib/routes";
 import type { Activity } from "@/server/domain/events";
@@ -26,22 +27,25 @@ export function ActivityFeed({ events, slug }: { events: readonly Activity[]; sl
         return (
           <li key={key} className="flex gap-2.5">
             <span
-              className={`mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full ${isAgent ? "bg-sky-50 text-sky-600" : "bg-violet-50 text-violet-600"}`}
+              className={cx(
+                "mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md",
+                isAgent ? "bg-move-tint text-move-ink" : "bg-sunken text-ink-2",
+              )}
             >
               <Icon className="size-3.5" aria-label={isAgent ? "Agent" : "Person"} />
             </span>
             <div className="min-w-0 text-sm">
-              <p className="text-zinc-700">
-                <span className="font-medium text-zinc-900">{latest.actorName}</span>{" "}
+              <p className="text-ink-2">
+                <span className="font-semibold text-ink">{latest.actorName}</span>{" "}
                 {goalLink ? (
-                  <Link href={goalLink} className="hover:underline">
+                  <Link href={goalLink} className="hover:text-ink hover:underline">
                     {summary}
                   </Link>
                 ) : (
                   summary
                 )}
               </p>
-              <time dateTime={latest.createdAt.toISOString()} className="text-xs text-zinc-400">
+              <time dateTime={latest.createdAt.toISOString()} className="text-xs text-muted">
                 {timeAgo(latest.createdAt)}
               </time>
             </div>

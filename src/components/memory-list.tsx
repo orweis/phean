@@ -30,29 +30,30 @@ export function MemoryList({ memories, slug, canWrite, goalTitles, empty = "Noth
     );
   }
   return (
-    <ul className="divide-y divide-zinc-100">
+    <ul className="divide-y divide-rule">
       {memories.map((memory) => {
         const goalTitle = memory.goalId ? goalTitles?.get(memory.goalId) : undefined;
         const AuthorIcon = memory.createdByType === "agent" ? Bot : User;
         return (
           <li key={memory.id} className="flex gap-3 py-3">
             <div className="min-w-0 flex-1">
-              <p className="text-sm whitespace-pre-line text-zinc-800">{memory.content}</p>
-              <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-zinc-500">
+              <p className="text-sm whitespace-pre-line text-ink">{memory.content}</p>
+              <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
                 <MetaBadge meta={MEMORY_KIND_META} value={memory.kind} />
                 {memory.tags.map((tag) => (
                   <Badge key={tag}>#{tag}</Badge>
                 ))}
                 {memory.goalId && goalTitle && (
-                  <Link href={routes.goal(slug, memory.goalId)} className="inline-flex max-w-56 items-center gap-1 hover:text-zinc-900">
+                  <Link href={routes.goal(slug, memory.goalId)} className="inline-flex max-w-56 items-center gap-1 hover:text-ink hover:underline">
                     <Target className="size-3 shrink-0" aria-hidden />
                     <span className="truncate">{goalTitle}</span>
                   </Link>
                 )}
                 <span className="inline-flex items-center gap-1">
                   <AuthorIcon className="size-3" aria-hidden />
-                  {memory.createdByName} · {timeAgo(memory.updatedAt)}
+                  {memory.createdByName}
                 </span>
+                <span>{timeAgo(memory.updatedAt)}</span>
               </div>
             </div>
             {canWrite && (

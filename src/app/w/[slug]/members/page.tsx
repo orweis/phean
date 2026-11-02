@@ -1,4 +1,3 @@
-import { Mail, UserPlus, Users } from "lucide-react";
 import type { Metadata } from "next";
 
 import { cancelInvitationAction, removeMemberAction } from "@/app/w/[slug]/actions";
@@ -38,7 +37,6 @@ export default async function MembersPage({ params }: PageProps<"/w/[slug]/membe
           <CardHeader
             title="Invite someone"
             description="Admins can manage members and agent tokens. Members can do everything else, including approving goals."
-            icon={<UserPlus />}
           />
           <CardBody>
             <InviteMemberForm slug={slug} origin={origin} />
@@ -48,22 +46,23 @@ export default async function MembersPage({ params }: PageProps<"/w/[slug]/membe
 
       <div className="grid gap-6 lg:grid-cols-3">
         <Card className="lg:col-span-2">
-          <CardHeader title="Members" icon={<Users />} />
-          <ul className="divide-y divide-zinc-100">
+          <CardHeader title="People" description={`${members.length} with access to this workspace.`} />
+          <ul className="divide-y divide-rule">
             {members.map((person) => {
               const isSelf = person.userId === ctx.actor.id;
               return (
                 <li key={person.id} className="flex items-center gap-3 px-5 py-3">
-                  <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-violet-50 text-xs font-semibold text-violet-700 uppercase">
+                  <span aria-hidden className="flex size-8 shrink-0 items-center justify-center rounded-md bg-shell text-xs font-bold text-shell-ink uppercase">
                     {person.name.slice(0, 1)}
                   </span>
                   <div className="min-w-0 flex-1">
-                    <p className="flex items-center gap-2 text-sm font-medium text-zinc-900">
+                    <p className="flex items-center gap-2 text-sm font-semibold text-ink">
                       <span className="truncate">{person.name}</span>
                       {isSelf && <Badge>You</Badge>}
                     </p>
-                    <p className="truncate text-xs text-zinc-500">
-                      {person.email} · joined {timeAgo(person.joinedAt)}
+                    <p className="flex flex-wrap gap-x-3 text-xs text-muted">
+                      <span className="truncate">{person.email}</span>
+                      <span>Joined {timeAgo(person.joinedAt)}</span>
                     </p>
                   </div>
                   <MetaBadge meta={ROLE_META} value={person.role} />
@@ -83,21 +82,21 @@ export default async function MembersPage({ params }: PageProps<"/w/[slug]/membe
 
         {canManage && (
           <Card className="h-fit">
-            <CardHeader title="Pending invitations" icon={<Mail />} />
+            <CardHeader title="Pending invitations" />
             {invitations.length === 0 ? (
               <CardBody>
-                <p className="text-xs text-zinc-500">No open invitations.</p>
+                <p className="text-xs text-muted">No open invitations.</p>
               </CardBody>
             ) : (
-              <ul className="divide-y divide-zinc-100">
+              <ul className="divide-y divide-rule">
                 {invitations.map((invitation) => (
                   <li key={invitation.id} className="space-y-2 px-5 py-3">
                     <div className="flex items-center gap-2">
-                      <p className="min-w-0 flex-1 truncate text-sm text-zinc-900">{invitation.email}</p>
+                      <p className="min-w-0 flex-1 truncate text-sm text-ink">{invitation.email}</p>
                       <MetaBadge meta={ROLE_META} value={toMemberRole(invitation.role ?? "member")} />
                     </div>
                     <div className="flex items-center gap-1.5">
-                      <span className="flex-1 text-xs text-zinc-400">Expires {timeAgo(invitation.expiresAt)}</span>
+                      <span className="flex-1 text-xs text-muted">Expires {timeAgo(invitation.expiresAt)}</span>
                       <CopyButton value={new URL(routes.invite(invitation.id), origin).toString()} label="Copy link" variant="ghost" />
                       <ActionForm action={cancelInvitationAction} workspace={slug} quiet>
                         <input type="hidden" name="invitationId" value={invitation.id} />

@@ -19,8 +19,8 @@ export const metadata: Metadata = { title: "Invitation" };
 function Message({ title, children }: { title: string; children: ReactNode }) {
   return (
     <>
-      <h1 className="text-lg font-semibold text-zinc-900">{title}</h1>
-      <div className="mt-2 space-y-4 text-sm text-zinc-600">{children}</div>
+      <h1 className="text-xl font-extrabold text-ink">{title}</h1>
+      <div className="mt-2 space-y-4 text-sm text-ink-2">{children}</div>
     </>
   );
 }
@@ -57,8 +57,8 @@ export default async function InvitePage({ params }: PageProps<"/invite/[id]">) 
     return (
       <Message title="Wrong account">
         <p>
-          This invitation to <strong className="text-zinc-900">{tenant.name}</strong> is for{" "}
-          <strong className="text-zinc-900">{invitation.email}</strong>, but you are signed in as {viewer.user.email}.
+          This invitation to <strong className="text-ink">{tenant.name}</strong> is for{" "}
+          <strong className="text-ink">{invitation.email}</strong>, but you are signed in as {viewer.user.email}.
         </p>
         <SignOutButton redirectTo={routes.signIn(routes.invite(id))} label={`Sign in as ${invitation.email}`} variant="secondary" />
       </Message>
@@ -69,7 +69,7 @@ export default async function InvitePage({ params }: PageProps<"/invite/[id]">) 
     <Message title={`Join ${tenant.name}`}>
       <p>
         {invitation.inviterName} invited you to join as{" "}
-        <strong className="text-zinc-900">{ROLE_META[toMemberRole(invitation.role ?? "member")].label.toLowerCase()}</strong>. You will
+        <strong className="text-ink">{ROLE_META[toMemberRole(invitation.role ?? "member")].label.toLowerCase()}</strong>. You will
         see the workspace&apos;s goals, tasks, memory, and agents.
       </p>
       <ActionForm action={acceptInvitationAction}>

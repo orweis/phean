@@ -1,4 +1,3 @@
-import { Brain, Plus } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 
@@ -45,9 +44,8 @@ export default async function MemoryPage({ params, searchParams }: PageProps<"/w
           <CardHeader
             title={filtered ? pluralize(memories.length, "match", "matches") : "Everything remembered"}
             description={memories.length === MEMORY_PAGE_SIZE ? `Showing the ${MEMORY_PAGE_SIZE} most relevant.` : undefined}
-            icon={<Brain />}
           />
-          <CardBody className="space-y-3 border-b border-zinc-100">
+          <CardBody className="space-y-3 border-b border-rule">
             <SearchForm action={routes.memory(slug)} defaultValue={q} placeholder="Search memory…" keep={{ kind }} />
             <nav aria-label="Filter by kind" className="flex flex-wrap gap-1.5">
               {[undefined, ...MEMORY_KINDS].map((option) => (
@@ -56,10 +54,8 @@ export default async function MemoryPage({ params, searchParams }: PageProps<"/w
                   href={routes.memory(slug, { kind: option, q })}
                   aria-current={option === kind ? "page" : undefined}
                   className={cx(
-                    "rounded-full border px-2.5 py-0.5 text-xs font-medium",
-                    option === kind
-                      ? "border-zinc-900 bg-zinc-900 text-white"
-                      : "border-zinc-200 text-zinc-600 hover:border-zinc-300 hover:text-zinc-900",
+                    "rounded-sm border px-2.5 py-1 text-xs font-semibold transition-colors duration-(--dur-micro)",
+                    option === kind ? "border-shell bg-shell text-shell-ink" : "border-rule text-ink-2 hover:border-edge hover:text-ink",
                   )}
                 >
                   {option ? MEMORY_KIND_META[option].label : "All"}
@@ -79,7 +75,7 @@ export default async function MemoryPage({ params, searchParams }: PageProps<"/w
         </Card>
         {canWrite && (
           <Card className="h-fit">
-            <CardHeader title="Remember something" description="Agents recall this before they act." icon={<Plus />} />
+            <CardHeader title="Remember something" description="Agents recall this before they act." />
             <CardBody>
               <RememberForm slug={slug} goals={goals.filter((goal) => goal.status !== "abandoned")} />
             </CardBody>
