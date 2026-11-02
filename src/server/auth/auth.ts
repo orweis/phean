@@ -4,7 +4,7 @@ import { nextCookies } from "better-auth/next-js";
 import { organization } from "better-auth/plugins/organization";
 
 import { appUrl, oauthProviders, trustedOrigins } from "../config";
-import { getDb } from "../db/client";
+import { lazyDb } from "../db/client";
 import * as authSchema from "../db/schema/auth";
 
 const SEVEN_DAYS_IN_SECONDS = 60 * 60 * 24 * 7;
@@ -21,7 +21,7 @@ export const auth = betterAuth({
   appName: "Phean",
   baseURL: appUrl(),
   trustedOrigins: trustedOrigins(),
-  database: drizzleAdapter(getDb(), { provider: "pg", schema: authSchema }),
+  database: drizzleAdapter(lazyDb, { provider: "pg", schema: authSchema }),
   emailAndPassword: { enabled: true, minPasswordLength: 8, autoSignIn: true },
   socialProviders: socialProviders(),
   // Serverless instances do not share memory, so limits are counted in Postgres.

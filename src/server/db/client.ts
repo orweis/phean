@@ -35,3 +35,15 @@ export function getDb(): Db {
   globalForDb.__pheanDb ??= createDb(resolveDatabaseUrl());
   return globalForDb.__pheanDb;
 }
+
+/**
+ * The shared database, opened on first use. For module-level singletons (like the auth
+ * instance) that `next build` evaluates in several workers, where no connection should be made.
+ */
+export const lazyDb: Db = new Proxy({} as Db, {
+  get(_target, property) {
+    const db = getDb();
+    const value: unknown = Reflect.get(db, property, db);
+    return typeof value === "function" ? value.bind(db) : value;
+  },
+});
