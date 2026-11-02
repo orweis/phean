@@ -6,6 +6,8 @@
  *
  * With the default on-disk PGlite database, stop `pnpm dev` first (PGlite is single-process).
  */
+import "./env";
+
 import { eq } from "drizzle-orm";
 
 import { auth } from "../src/server/auth/auth";

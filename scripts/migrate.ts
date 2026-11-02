@@ -1,3 +1,5 @@
+import "./env";
+
 import { migrateDatabase } from "../src/server/db/migrate";
 import { resolveDatabaseUrl } from "../src/server/db/url";
 
