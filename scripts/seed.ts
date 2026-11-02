@@ -16,16 +16,10 @@ import { getDb } from "../src/server/db/client";
 import { user } from "../src/server/db/schema";
 import { createAgent } from "../src/server/domain/agents";
 import { findTenantBySlug, listMemberships, userContext } from "../src/server/domain/tenants";
+import { DEMO_USER, DEMO_WORKSPACES as WORKSPACES, SAMPLE_HISTORY_SLUG } from "./demo-account";
 import { seedSampleHistory } from "./sample-history";
 
-const DEMO_USER = { name: "Dana Demo", email: "demo@phean.dev", password: "phean-demo-password" };
-const WORKSPACES = [
-  { name: "Acme Corp", slug: "acme" },
-  { name: "Globex", slug: "globex" },
-];
 const AGENT_NAMES = ["Inbox sweeper", "Calendar planner"];
-/** Gets backdated sample history so the timeline has something to draw on first run. */
-const SAMPLE_HISTORY_SLUG = "globex";
 
 const db = getDb();
 

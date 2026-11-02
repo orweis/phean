@@ -5,7 +5,7 @@
  *   pnpm demo:agents <base-url> <token-a> <token-b>
  *   pnpm demo:agents http://localhost:3000 phn_... phn_...
  */
-import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
+import { connectAgent, type ToolArgs as Data } from "./mcp-agent";
 
 const [baseUrl, tokenA, tokenB] = process.argv.slice(2);
 if (!baseUrl || !tokenA || !tokenB) {
@@ -13,7 +13,6 @@ if (!baseUrl || !tokenA || !tokenB) {
   process.exit(1);
 }
 
-type Data = Record<string, unknown>;
 interface Task {
   id: string;
   title: string;
@@ -21,22 +20,8 @@ interface Task {
 
 const day = (offset: number) => new Date(Date.now() + offset * 86_400_000).toISOString().slice(0, 10);
 
-async function connect(token: string, name: string) {
-  const client = new Client({ name, version: "1.0.0" });
-  await client.connect(
-    new StreamableHTTPClientTransport(new URL("/mcp", baseUrl), { requestInit: { headers: { Authorization: `Bearer ${token}` } } }),
-  );
-  const call = async <T = Data>(tool: string, args: Data = {}): Promise<T> => {
-    const result = await client.callTool({ name: tool, arguments: args });
-    const text = (result.content as { text?: string }[]).map((block) => block.text ?? "").join("\n");
-    if (result.isError) throw new Error(`${name} → ${tool} failed: ${text}`);
-    return result.structuredContent as T;
-  };
-  return { client, call };
-}
-
-const sweeper = await connect(tokenA, "inbox-sweeper");
-const planner = await connect(tokenB, "calendar-planner");
+const sweeper = await connectAgent(baseUrl, tokenA, "inbox-sweeper");
+const planner = await connectAgent(baseUrl, tokenB, "calendar-planner");
 const [a, b] = await Promise.all([sweeper.call<Data>("whoami"), planner.call<Data>("whoami")]);
 console.log(`Connected as ${JSON.stringify(a.agent)} and ${JSON.stringify(b.agent)} in ${JSON.stringify(a.workspace)}`);
 
