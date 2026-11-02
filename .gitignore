@@ -1,22 +1,24 @@
-# Python
-__pycache__/
-*.py[cod]
-*.egg-info/
-dist/
-build/
-.venv/
-venv/
+# Dependencies
+node_modules/
 
-# Tooling
-.pytest_cache/
-.ruff_cache/
-.mypy_cache/
-uv.lock
+# Next.js / build output
+.next/
+out/
+next-env.d.ts
+*.tsbuildinfo
 
-# Phean data
-*.db
-*.db-journal
-*.sqlite3
+# Environment
+.env
+.env*.local
+
+# Vercel
+.vercel/
+
+# Local PGlite database
+.data/
+
+# Test / tooling
+coverage/
 
 # OS / editor
 .DS_Store
