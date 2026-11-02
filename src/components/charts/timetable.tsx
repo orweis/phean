@@ -62,11 +62,12 @@ function Track({ journey, window }: { journey: Journey<TaskView>; window: TimeWi
   const late = isLate(task, window.now);
 
   return (
-    <div className="relative h-6">
+    <div aria-hidden data-end={end.kind} className="relative h-6">
       {due !== null && due < finish && <span className="absolute inset-y-1 rounded-xs bg-late/15" style={span(due, finish)} />}
       {segments.map((segment) => (
         <span
           key={`${segment.status}-${segment.from}`}
+          data-segment={segment.status}
           className={cx("absolute top-1/2 -translate-y-1/2", SEGMENT_FORM[segment.status])}
           style={span(segment.from, segment.to)}
         />
@@ -93,6 +94,7 @@ function TrackRow({ journey, window }: { journey: Journey<TaskView>; window: Tim
   const dropped = task.status === "dropped";
   return (
     <li
+      data-task={task.id}
       className={cx(
         "relative grid grid-cols-1 items-center gap-x-4 gap-y-0.5 py-1.5 sm:grid-cols-[var(--label)_minmax(0,1fr)]",
         "group-has-[li:hover]/tt:opacity-45 hover:opacity-100! motion-safe:transition-opacity motion-safe:duration-(--dur-short)",
@@ -216,7 +218,7 @@ export function Timetable({ window, groups, empty }: TimetableProps) {
       ))}
 
       <div aria-hidden className="pointer-events-none absolute inset-y-0 right-0 left-0 sm:left-[calc(var(--label)+1rem)]">
-        <div className="absolute top-0 bottom-0 w-0.5 -translate-x-1/2 bg-late" style={at(now)}>
+        <div data-now className="absolute top-0 bottom-0 w-0.5 -translate-x-1/2 bg-late" style={at(now)}>
           <span className="absolute top-1 left-1.5 rounded-xs bg-late-ink px-1 text-2xs font-bold text-panel">Now</span>
         </div>
       </div>

@@ -19,6 +19,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "check": "pnpm typecheck && pnpm lint && pnpm test",
+    "test:e2e": "next build && playwright test",
+    "e2e:serve": "rm -rf .data/e2e && pnpm db:seed && next start --port 3200",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx scripts/migrate.ts",
     "db:seed": "pnpm db:migrate && tsx scripts/seed.ts",
@@ -42,8 +44,10 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.14.0",
     "@modelcontextprotocol/client": "2.4.0",
     "@next/env": "16.4.4",
+    "@playwright/test": "^1.64.1",
     "@tailwindcss/postcss": "^4.3.3",
     "@types/node": "^22.20.5",
     "@types/pg": "^8.23.1",
