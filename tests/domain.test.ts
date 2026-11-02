@@ -4,7 +4,7 @@ import type { Ctx } from "@/server/domain/context";
 import { listActivity } from "@/server/domain/events";
 import { createGoal, findGoal, listGoals, setGoalStatus, updateGoal } from "@/server/domain/goals";
 import { forget, recall, remember } from "@/server/domain/memory";
-import { getBoard, getGoalDetail, getStatusSummary, getTimeline } from "@/server/domain/overview";
+import { getAgentWorkload, getBoard, getGoalDetail, getJourneys, getStatusSummary, getTimeline } from "@/server/domain/overview";
 import { search } from "@/server/domain/search";
 import {
   assignTasksToGoal,
@@ -288,5 +288,42 @@ describe("read models", () => {
     const forGoal = await listActivity(closer, { goalId: goal.id });
     expect(forGoal).toHaveLength(2);
     expect((await findGoal(closer, goal.id)).status).toBe("proposed");
+  });
+
+  it("replays each task's journey from the activity log", async () => {
+    const goal = await createGoal(human, { title: "Website refresh" });
+    const sub = await createGoal(human, { title: "Copy", parentGoalId: goal.id });
+    const { created } = await captureTasks(scout, {
+      tasks: [
+        { title: "Rewrite the pricing page", goalId: sub.id },
+        { title: "Pick a hero photo", goalId: goal.id, status: "todo" },
+      ],
+    });
+    const [pricing, photo] = created;
+    await updateTask(human, { taskId: pricing!.id, status: "todo" });
+    await claimTask(closer, { taskId: pricing!.id });
+    await completeTask(closer, { taskId: pricing!.id });
+    await updateTask(human, { taskId: photo!.id, status: "dropped" });
+
+    const { journeys, window, truncated } = await getJourneys(human, { goalId: goal.id, days: 14 });
+    expect(truncated).toBe(false);
+    expect(window.days).toHaveLength(14 + 7);
+    const stops = Object.fromEntries(journeys.map(({ task, stops }) => [task.title, stops.map((stop) => stop.status)]));
+    expect(stops).toEqual({
+      "Rewrite the pricing page": ["inbox", "todo", "in_progress", "done"],
+      "Pick a hero photo": ["todo", "dropped"],
+    });
+    await expect(getJourneys(human, { days: 7 as 14 })).rejects.toMatchObject({ code: "invalid" });
+  });
+
+  it("reports each agent's workload", async () => {
+    const workload = await getAgentWorkload(human, {});
+    const byName = Object.fromEntries(workload.map((load) => [load.agent.name, load]));
+    const { created } = await captureTasks(scout, { tasks: [{ title: "Book the movers", status: "todo" }] });
+    await claimTask(scout, { taskId: created[0]!.id });
+
+    const after = Object.fromEntries((await getAgentWorkload(human, {})).map((load) => [load.agent.name, load]));
+    expect(after.Scout!.claimed).toBe(byName.Scout!.claimed + 1);
+    expect(after.Closer!.completedLast7Days).toBeGreaterThan(0);
   });
 });

@@ -7,6 +7,7 @@ import {
   SOURCES,
   TASK_STATUSES,
 } from "@/lib/domain";
+import { TIMELINE_WINDOWS } from "@/lib/timeline";
 
 const goalId = z.string().trim().min(1).describe("Goal id (g_...)");
 const taskId = z.string().trim().min(1).describe("Task id (t_...)");
@@ -91,6 +92,12 @@ export const GoalScopeInput = z.object({
   goalId: goalId.optional().describe("Only this goal and its sub-goals"),
 });
 export const BoardInput = GoalScopeInput.extend({ doneLimit: limit(100, 20) });
+export const JourneysInput = GoalScopeInput.extend({
+  days: z
+    .literal(TIMELINE_WINDOWS)
+    .default(14)
+    .describe("How many days of history to replay, ending today"),
+});
 
 // Memory
 export const RememberInput = z.object({

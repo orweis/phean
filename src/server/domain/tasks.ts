@@ -120,7 +120,7 @@ export const captureTasks = service(CaptureTasksInput, async (ctx, { tasks: draf
         entityType: "task" as const,
         entityId: task.id,
         summary: `captured "${task.title}" from ${SOURCE_META[task.source].label.toLowerCase()}`,
-        data: { goalId: task.goalId, source: task.source },
+        data: { goalId: task.goalId, source: task.source, status: task.status },
       })),
     );
 
@@ -170,7 +170,8 @@ export const updateTask = service(UpdateTaskInput, async (ctx, input): Promise<T
       summary: statusChange
         ? `moved "${task!.title}" to ${TASK_STATUS_META[statusChange].label}`
         : `updated "${task!.title}" (${changed.join(", ")})`,
-      data: { changed, goalId: task!.goalId },
+      // The status lets the timeline replay where a task stood on each day.
+      data: { changed, goalId: task!.goalId, ...(statusChange && { status: statusChange }) },
     });
     return task!;
   });

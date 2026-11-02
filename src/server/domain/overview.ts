@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNotNull, max, ne, sql, type Column, type SQL } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, inArray, isNotNull, max, ne, or, sql, type Column, type SQL } from "drizzle-orm";
 
 import {
   BOARD_COLUMNS,
@@ -9,17 +9,19 @@ import {
   type TaskStatus,
 } from "@/lib/domain";
 import { subtreeIds } from "@/lib/goal-tree";
+import { buildJourneys, TIMELINE_AHEAD_DAYS, timeWindow, type Journey, type TimeWindow } from "@/lib/timeline";
 
 import type { Db } from "../db/client";
 import { countWhere } from "../db/raw";
 import { agents, events, goals, tasks } from "../db/schema";
+import { listAgents, type Agent } from "./agents";
 import type { Ctx, Tenant } from "./context";
 import { notFound } from "./errors";
 import { listActivity, type Activity } from "./events";
 import { allGoalsWithProgress, ancestorChain, type GoalWithProgress } from "./goals";
 import { recall, type Memory } from "./memory";
 import { assertCan } from "./policy";
-import { BoardInput, Empty, GoalRefInput, GoalScopeInput } from "./schemas";
+import { BoardInput, Empty, GoalRefInput, GoalScopeInput, JourneysInput } from "./schemas";
 import { service } from "./service";
 import { byUrgency, isDueWithinWeek, isOpenTask, isOverdue, selectTaskViews, type TaskView } from "./tasks";
 
@@ -116,17 +118,22 @@ export async function getWorkspaceStats(db: Db, tenantIds: readonly string[]): P
 export interface StatusSummary extends WorkspaceStats {
   workspace: Tenant;
   overdueTasks: TaskView[];
+  /** Open tasks due today or later, soonest first. */
+  dueSoonTasks: TaskView[];
 }
 
 export const getStatusSummary = service(Empty, async (ctx): Promise<StatusSummary> => {
   assertCan(ctx, "workspace:read");
-  const [stats, overdueTasks] = await Promise.all([
+  const [stats, overdueTasks, dueSoonTasks] = await Promise.all([
     getWorkspaceStats(ctx.db, [ctx.tenant.id]),
     selectTaskViews(ctx, isOverdue)
       .orderBy(...byUrgency)
       .limit(10),
+    selectTaskViews(ctx, and(isOpenTask, sql`${tasks.dueDate} >= current_date`))
+      .orderBy(tasks.dueDate, ...byUrgency)
+      .limit(8),
   ]);
-  return { workspace: ctx.tenant, ...stats.get(ctx.tenant.id)!, overdueTasks };
+  return { workspace: ctx.tenant, ...stats.get(ctx.tenant.id)!, overdueTasks, dueSoonTasks };
 });
 
 /** Open work first, then finished, then dropped. */
@@ -212,4 +219,92 @@ export const getTimeline = service(GoalScopeInput, async (ctx, { goalId }): Prom
   return selectTaskViews(ctx, and(isNotNull(tasks.dueDate), ne(tasks.status, "dropped"), scope))
     .orderBy(tasks.dueDate, ...byUrgency)
     .limit(300);
+});
+
+export interface Journeys {
+  window: TimeWindow;
+  /** Oldest task first. */
+  journeys: Journey<TaskView>[];
+  /** More tasks moved in the window than one timetable shows; the newest are kept. */
+  truncated: boolean;
+}
+
+const JOURNEY_LIMIT = 300;
+
+/** Every task that was open at some point in the window, with the statuses it held over time. */
+export const getJourneys = service(JourneysInput, async (ctx, { goalId, days }): Promise<Journeys> => {
+  assertCan(ctx, "workspace:read");
+  const scope = await goalScope(ctx, goalId);
+  const window = timeWindow(days, new Date(), TIMELINE_AHEAD_DAYS);
+  // A task closed before the window started has not been touched since, so its updatedAt is older.
+  const rows = await selectTaskViews(ctx, and(scope, or(isOpenTask, gte(tasks.updatedAt, window.start))))
+    .orderBy(desc(tasks.createdAt))
+    .limit(JOURNEY_LIMIT + 1);
+  const shown = rows.slice(0, JOURNEY_LIMIT).reverse();
+
+  const log = shown.length
+    ? await ctx.db
+        .select({ entityId: events.entityId, action: events.action, createdAt: events.createdAt, data: events.data })
+        .from(events)
+        .where(
+          and(
+            eq(events.tenantId, ctx.tenant.id),
+            eq(events.entityType, "task"),
+            inArray(
+              events.entityId,
+              shown.map((task) => task.id),
+            ),
+          ),
+        )
+        .orderBy(asc(events.createdAt), asc(events.id))
+    : [];
+
+  return { window, journeys: buildJourneys(shown, log), truncated: rows.length > JOURNEY_LIMIT };
+});
+
+export interface AgentLoad {
+  agent: Agent;
+  /** Open tasks the agent holds right now. */
+  claimed: number;
+  completedLast7Days: number;
+}
+
+const isCompletion = or(
+  eq(events.action, "task.completed"),
+  and(eq(events.action, "task.updated"), sql`${events.data}->>'status' = 'done'`),
+);
+
+/** What each connected agent holds and has finished this week, busiest first. */
+export const getAgentWorkload = service(Empty, async (ctx): Promise<AgentLoad[]> => {
+  assertCan(ctx, "workspace:read");
+  const [roster, claims, completions] = await Promise.all([
+    listAgents(ctx, {}),
+    ctx.db
+      .select({ agentId: tasks.claimedByAgentId, total: count() })
+      .from(tasks)
+      .where(and(eq(tasks.tenantId, ctx.tenant.id), isOpenTask, isNotNull(tasks.claimedByAgentId)))
+      .groupBy(tasks.claimedByAgentId),
+    ctx.db
+      .select({ agentId: events.actorId, total: count() })
+      .from(events)
+      .where(
+        and(
+          eq(events.tenantId, ctx.tenant.id),
+          eq(events.actorType, "agent"),
+          isCompletion,
+          sql`${events.createdAt} > now() - interval '7 days'`,
+        ),
+      )
+      .groupBy(events.actorId),
+  ]);
+
+  const totals = (rows: { agentId: string | null; total: number }[]) =>
+    new Map(rows.map((row) => [row.agentId, row.total]));
+  const claimed = totals(claims);
+  const completed = totals(completions);
+
+  return roster
+    .filter((agent) => !agent.revokedAt)
+    .map((agent) => ({ agent, claimed: claimed.get(agent.id) ?? 0, completedLast7Days: completed.get(agent.id) ?? 0 }))
+    .sort((a, b) => b.claimed + b.completedLast7Days - (a.claimed + a.completedLast7Days));
 });

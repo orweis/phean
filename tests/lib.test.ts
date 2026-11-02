@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import { groupActivity, type ActivityLike } from "@/lib/activity";
-import { formatDueDate, percent, pluralize, timeAgo, truncate } from "@/lib/format";
-import { flattenTree, subtreeIds, toTree, withProgress } from "@/lib/goal-tree";
+import { formatDueDate, percent, pluralize, relativeDue, timeAgo, truncate } from "@/lib/format";
+import { EMPTY_COUNTS, flattenTree, subtreeIds, tallyStatus, toTree, treeGuides, withProgress } from "@/lib/goal-tree";
 import { prefixTsQuery } from "@/server/db/fts";
 import { postgresConnectionString } from "@/server/db/url";
 
@@ -27,13 +27,25 @@ describe("goal tree helpers", () => {
 
   it("rolls progress up from descendants and ignores dropped work", () => {
     const counts = new Map([
-      ["a", { open: 1, done: 0, total: 1 }],
-      ["c", { open: 0, done: 3, total: 3 }],
+      ["a", tallyStatus(tallyStatus(EMPTY_COUNTS, "todo", 1), "dropped", 5)],
+      ["c", tallyStatus(EMPTY_COUNTS, "done", 3)],
     ]);
     const byId = new Map(withProgress(goals, counts).map((goal) => [goal.id, goal]));
-    expect(byId.get("a")).toMatchObject({ rollup: { open: 1, done: 3, total: 4 }, progress: 0.75, childCount: 1 });
+    expect(byId.get("a")).toMatchObject({ rollup: { todo: 1, open: 1, done: 3, total: 4 }, progress: 0.75, childCount: 1 });
     expect(byId.get("b")).toMatchObject({ own: { total: 0 }, progress: 1, depth: 1 });
     expect(byId.get("d")).toMatchObject({ progress: 0 });
+  });
+
+  it("draws tree connectors: rails continue past a row only while a later sibling is coming", () => {
+    const rows = [0, 1, 2, 1, 2, 0].map((depth) => ({ depth }));
+    expect(treeGuides(rows)).toEqual([
+      { rails: [], last: false },
+      { rails: [], last: false },
+      { rails: [true], last: true },
+      { rails: [], last: true },
+      { rails: [false], last: true },
+      { rails: [], last: true },
+    ]);
   });
 
   it("collects a subtree and tolerates cycles", () => {
@@ -107,5 +119,9 @@ describe("formatting", () => {
     expect(timeAgo(new Date("2026-01-01T11:58:00Z"), now)).toBe("2 minutes ago");
     expect(timeAgo(null, now)).toBe("never");
     expect(timeAgo(now, now)).toBe("just now");
+    expect(relativeDue("2026-01-01", now)).toBe("Today");
+    expect(relativeDue("2026-01-02", now)).toBe("Tomorrow");
+    expect(relativeDue("2026-01-05", now)).toBe("In 4 days");
+    expect(relativeDue("2025-12-30", now)).toBe("2 days late");
   });
 });

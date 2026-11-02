@@ -34,6 +34,11 @@ export function formatDueDate(isoDate: string): string {
   return dateFormat.format(new Date(`${isoDate}T00:00:00Z`));
 }
 
+/** "Nov 3" for a moment, read as a UTC calendar day like due dates are. */
+export function formatDay(date: Date): string {
+  return dateFormat.format(date);
+}
+
 /** Today's calendar date in UTC, matching how the database compares due dates. */
 export function todayIso(now = new Date()): string {
   return now.toISOString().slice(0, 10);
@@ -41,6 +46,14 @@ export function todayIso(now = new Date()): string {
 
 export function isPastDue(dueDate: string | null, now = new Date()): boolean {
   return dueDate !== null && dueDate < todayIso(now);
+}
+
+/** "Today", "Tomorrow", "In 3 days" or "2 days late", counted in UTC calendar days. */
+export function relativeDue(isoDate: string, now = new Date()): string {
+  const days = Math.round((Date.parse(`${isoDate}T00:00:00Z`) - Date.parse(`${todayIso(now)}T00:00:00Z`)) / 86_400_000);
+  if (days === 0) return "Today";
+  if (days === 1) return "Tomorrow";
+  return days > 0 ? `In ${days} days` : `${pluralize(-days, "day")} late`;
 }
 
 export function percent(fraction: number): string {

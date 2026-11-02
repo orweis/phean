@@ -230,7 +230,8 @@ export const TOOLS: readonly PheanTool[] = [
   defineTool({
     name: "get_status_summary",
     title: "Status summary",
-    description: "Headline numbers: tasks and goals by status, overdue and due this week, goals awaiting approval, active agents, plus the most urgent overdue tasks.",
+    description:
+      "Headline numbers: tasks and goals by status, overdue and due this week, goals awaiting approval, active agents, plus the most urgent overdue tasks and the next tasks coming due.",
     input: Empty,
     readOnly: true,
     run: async (ctx) => ({

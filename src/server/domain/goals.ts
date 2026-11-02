@@ -1,7 +1,7 @@
 import { and, asc, count, eq, inArray, isNotNull, sql } from "drizzle-orm";
 
 import { GOAL_MAX_DEPTH, GOAL_STATUS_META, type GoalStatus } from "@/lib/domain";
-import { type TaskCounts, withProgress, type WithProgress } from "@/lib/goal-tree";
+import { EMPTY_COUNTS, tallyStatus, type TaskCounts, withProgress, type WithProgress } from "@/lib/goal-tree";
 
 import { publicColumns } from "../db/columns";
 import { newId } from "../db/ids";
@@ -97,12 +97,7 @@ export async function taskCountsByGoal(ctx: Ctx): Promise<Map<string, TaskCounts
 
   const counts = new Map<string, TaskCounts>();
   for (const { goalId, status, n } of rows) {
-    if (!goalId) continue;
-    const entry = counts.get(goalId) ?? { open: 0, done: 0, total: 0 };
-    if (status === "done") entry.done += n;
-    else if (status !== "dropped") entry.open += n;
-    entry.total = entry.open + entry.done;
-    counts.set(goalId, entry);
+    if (goalId) counts.set(goalId, tallyStatus(counts.get(goalId) ?? EMPTY_COUNTS, status, n));
   }
   return counts;
 }
