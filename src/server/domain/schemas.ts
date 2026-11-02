@@ -150,3 +150,5 @@ export const InviteMemberInput = z.object({
   email: z.email().trim().toLowerCase(),
   role: z.enum(["admin", "member"]).default("member"),
 });
+export const InvitationRefInput = z.object({ invitationId: z.string().trim().min(1) });
+export const MemberRefInput = z.object({ memberId: z.string().trim().min(1) });

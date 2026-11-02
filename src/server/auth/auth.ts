@@ -24,6 +24,8 @@ export const auth = betterAuth({
   database: drizzleAdapter(getDb(), { provider: "pg", schema: authSchema }),
   emailAndPassword: { enabled: true, minPasswordLength: 8, autoSignIn: true },
   socialProviders: socialProviders(),
+  // Serverless instances do not share memory, so limits are counted in Postgres.
+  rateLimit: { storage: "database" },
   plugins: [
     // Organizations are Phean tenants ("workspaces"). Invitations are shared as links,
     // so no email delivery is configured.

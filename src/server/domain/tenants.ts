@@ -108,6 +108,35 @@ export const listPendingInvitations = service(Empty, async (ctx): Promise<Pendin
     .orderBy(asc(invitation.createdAt));
 });
 
+export interface InvitationView {
+  id: string;
+  email: string;
+  role: string | null;
+  status: string;
+  expiresAt: Date;
+  tenant: Tenant;
+  inviterName: string;
+}
+
+/** An invitation as shown on its share link; the id itself is the unguessable capability. */
+export async function findInvitation(db: Db, invitationId: string): Promise<InvitationView | null> {
+  const [row] = await db
+    .select({
+      id: invitation.id,
+      email: invitation.email,
+      role: invitation.role,
+      status: invitation.status,
+      expiresAt: invitation.expiresAt,
+      tenant: tenantColumns,
+      inviterName: user.name,
+    })
+    .from(invitation)
+    .innerJoin(organization, eq(organization.id, invitation.organizationId))
+    .innerJoin(user, eq(user.id, invitation.inviterId))
+    .where(eq(invitation.id, invitationId));
+  return row ?? null;
+}
+
 export async function countMembers(db: Db, tenantId: string): Promise<number> {
   const [row] = await db.select({ n: count() }).from(member).where(eq(member.organizationId, tenantId));
   return row?.n ?? 0;
