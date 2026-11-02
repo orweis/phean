@@ -27,7 +27,7 @@ export function AddTaskForm({ slug, goals, goalId, lockGoal = false }: AddTaskFo
       <div
         className={cx(
           "grid gap-2 sm:items-center",
-          pickGoal ? "sm:grid-cols-[minmax(0,1fr)_7rem_10rem_minmax(0,14rem)_auto]" : "sm:grid-cols-[minmax(0,1fr)_7rem_10rem_auto]",
+          pickGoal ? "sm:grid-cols-[minmax(0,1fr)_8.5rem_10rem_minmax(0,14rem)_auto]" : "sm:grid-cols-[minmax(0,1fr)_8.5rem_10rem_auto]",
         )}
       >
         <label className="sr-only" htmlFor="add-task-title">
