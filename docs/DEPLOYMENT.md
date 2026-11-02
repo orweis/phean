@@ -20,11 +20,15 @@ flowchart LR
 | --- | --- |
 | Team | Permit (`team_5xJVYKrOpj2zXMJF6RzrtygY`) |
 | Project | `phean` (`prj_moewgt7lQydZrSAyHVEgkTKCYFwt`), framework Next.js, Node.js 22.x |
+| Git | `orweis/phean`, production branch `main`. Every push to `main` deploys production; other branches get previews |
+| Production domain | `phean-alpha.vercel.app` |
+| Database | Neon `phean-db` (free plan, `iad1` Washington, D.C.), connected to production and preview with a database branch per preview deployment |
 | Deployment protection | Vercel Authentication on **preview deployments only**. Production stays public, because customers sign in with Phean's own login and agents call `/mcp` with their own tokens |
-| Environment variables | `BETTER_AUTH_SECRET` (production, preview) |
-| Still needed | Connect the Git repository, and add Neon Postgres (steps 1 and 2 below) |
+| Environment variables | `BETTER_AUTH_SECRET`, plus `DATABASE_URL` and the other `DATABASE_*` variables from Neon (production, preview) |
 
 ## First-time setup
+
+Steps 1 and 2 are done for the Permit project; they are kept here for recreating it elsewhere.
 
 ### 1. Connect the repository
 
@@ -34,9 +38,9 @@ The Vercel GitHub app is installed on `orweis` with access to selected repositor
 
 ### 2. Add Neon Postgres
 
-Project → Storage → Create Database → **Neon** (Vercel Marketplace). Connect it to the `phean` project for all environments, and enable a branch per preview deployment so previews never touch production data.
+Project → Storage → Create Database → **Neon** (Vercel Marketplace), free plan. Leave Neon Auth off; Phean has its own login. Connect it to the `phean` project for Production and Preview, and tick **Create database branch for deployment → Preview** so previews never touch production data. Leave Development unticked so `vercel env pull` never hands out the production database.
 
-This injects `DATABASE_URL` (pooled) and related variables. Phean reads `DATABASE_URL`, falling back to `POSTGRES_URL`. Pick the Neon region closest to the project's function region (default `iad1`, US East).
+Set the custom prefix to `DATABASE`. That yields `DATABASE_URL` (pooled), which is what Phean reads (falling back to `POSTGRES_URL`), plus `DATABASE_URL_UNPOOLED` and other `DATABASE_*` variables. Pick the Neon region closest to the project's function region (default `iad1`, Washington, D.C.).
 
 Why Neon: goals form a hierarchy (recursive CTEs), memory and tasks need full-text search (`tsvector` with GIN indexes), every row is tenant-scoped with foreign keys, the activity log uses JSONB, and `pgvector` is available for semantic memory later. See [ARCHITECTURE.md](ARCHITECTURE.md#storage).
 
