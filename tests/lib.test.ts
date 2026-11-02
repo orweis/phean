@@ -4,6 +4,7 @@ import { groupActivity, type ActivityLike } from "@/lib/activity";
 import { formatDueDate, percent, pluralize, timeAgo, truncate } from "@/lib/format";
 import { flattenTree, subtreeIds, toTree, withProgress } from "@/lib/goal-tree";
 import { prefixTsQuery } from "@/server/db/fts";
+import { postgresConnectionString } from "@/server/db/url";
 
 describe("goal tree helpers", () => {
   const goals = [
@@ -81,6 +82,16 @@ describe("full-text query building", () => {
     expect(prefixTsQuery("o'reilly & co | !")).toBe("o:* & reilly:* & co:*");
     expect(prefixTsQuery("Ünïcode 2026")).toBe("ünïcode:* & 2026:*");
     expect(prefixTsQuery("!!! ???")).toBeNull();
+  });
+});
+
+describe("Postgres connection strings", () => {
+  it("pins certificate verification without touching other parameters", () => {
+    expect(postgresConnectionString("postgresql://u:p%40ss@host.neon.tech/db?sslmode=require&channel_binding=require")).toBe(
+      "postgresql://u:p%40ss@host.neon.tech/db?sslmode=verify-full&channel_binding=require",
+    );
+    expect(postgresConnectionString("postgres://u:p@localhost:5432/db?sslmode=disable")).toBe("postgres://u:p@localhost:5432/db?sslmode=disable");
+    expect(postgresConnectionString("postgres://u:p@localhost:5432/db")).toBe("postgres://u:p@localhost:5432/db");
   });
 });
 

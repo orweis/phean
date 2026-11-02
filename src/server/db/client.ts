@@ -7,7 +7,7 @@ import { Pool } from "pg";
 
 import { openPglite } from "./pglite";
 import * as schema from "./schema";
-import { isPostgresUrl, resolveDatabaseUrl } from "./url";
+import { isPostgresUrl, postgresConnectionString, resolveDatabaseUrl } from "./url";
 
 export type Schema = typeof schema;
 /** Driver-agnostic database handle: node-postgres in production, PGlite locally and in tests. */
@@ -15,7 +15,7 @@ export type Db = PgDatabase<PgQueryResultHKT, Schema>;
 
 export function createDb(url: string): Db {
   if (isPostgresUrl(url)) {
-    const pool = new Pool({ connectionString: url, max: 10, idleTimeoutMillis: 5_000 });
+    const pool = new Pool({ connectionString: postgresConnectionString(url), max: 10, idleTimeoutMillis: 5_000 });
     // Lets Vercel Fluid compute release idle clients before a function instance is suspended.
     attachDatabasePool(pool);
     return drizzlePg(pool, { schema });

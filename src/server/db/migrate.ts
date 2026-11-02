@@ -8,7 +8,7 @@ import { migrate as migratePglite } from "drizzle-orm/pglite/migrator";
 import { Pool } from "pg";
 
 import { openPglite } from "./pglite";
-import { isPostgresUrl } from "./url";
+import { isPostgresUrl, postgresConnectionString } from "./url";
 
 export const MIGRATIONS_FOLDER = path.join(process.cwd(), "drizzle");
 
@@ -20,7 +20,7 @@ export async function migratePgliteClient(client: PGlite): Promise<void> {
 /** Applies pending migrations to the database behind `url`, then closes the connection. */
 export async function migrateDatabase(url: string): Promise<void> {
   if (isPostgresUrl(url)) {
-    const pool = new Pool({ connectionString: url, max: 1 });
+    const pool = new Pool({ connectionString: postgresConnectionString(url), max: 1 });
     try {
       await migratePg(drizzlePg(pool), { migrationsFolder: MIGRATIONS_FOLDER });
     } finally {
