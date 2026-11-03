@@ -19,17 +19,17 @@ export function KanbanBoard({ board, slug, canWrite }: { board: Board; slug: str
         const shown = status === "done" ? tasks.slice(0, DONE_SHOWN) : tasks;
         const folded = tasks.slice(shown.length);
         return (
-          <section key={status} aria-labelledby={`lane-${status}`} className="flex min-w-0 flex-col rounded-lg bg-fill">
-            <header className="px-3 pt-0 pb-2">
-              <span aria-hidden className={`block h-1 rounded-b-xs ${STATION_STYLE[status].fill}`} />
-              <div className="mt-2 flex items-baseline justify-between gap-2">
+          <section key={status} aria-labelledby={`lane-${status}`} className="flex min-w-0 flex-col">
+            <header className="pb-2.5">
+              <span aria-hidden className={`block h-1 rounded-full ${STATION_STYLE[status].fill}`} />
+              <div className="mt-2.5 flex items-baseline justify-between gap-2 px-1">
                 <h2 id={`lane-${status}`} className="text-sm font-bold text-ink">
                   {STATION_STYLE[status].label}
                 </h2>
                 <span className="text-xs font-semibold text-muted">{tasks.length}</span>
               </div>
             </header>
-            <div className="flex flex-col gap-2 px-2 pb-2">
+            <div className="flex flex-col gap-2">
               <Cards tasks={shown} slug={slug} canWrite={canWrite} />
               {folded.length > 0 && (
                 <details className="group/more">
@@ -42,7 +42,9 @@ export function KanbanBoard({ board, slug, canWrite }: { board: Board; slug: str
                   </div>
                 </details>
               )}
-              {tasks.length === 0 && <p className="px-1.5 py-6 text-center text-xs text-muted">Nothing here</p>}
+              {tasks.length === 0 && (
+                <p className="rounded-md border border-dashed border-rule px-1.5 py-6 text-center text-xs text-muted">Nothing here</p>
+              )}
             </div>
           </section>
         );

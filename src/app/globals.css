@@ -82,11 +82,11 @@
   --color-dusk-2: oklch(34% 0.11 292);
   --color-dusk-ink: oklch(97% 0.012 300);
   --color-dusk-muted: oklch(82% 0.05 300);
+  --color-dusk-hill: oklch(63% 0.17 292);
 
   /* The light the glass picks up from the content layer beneath it. */
   --color-glow-violet: oklch(50% 0.2 292 / 0.1);
   --color-glow-ember: oklch(73% 0.165 50 / 0.13);
-  --color-dusk-glow: oklch(73% 0.165 50 / 0.24);
 
   /* Liquid Glass, regular variant for bars and a thicker one for menus and sheets that hold forms. */
   --color-glass: oklch(98.6% 0.006 300 / 0.78);
@@ -255,12 +255,10 @@
   }
 }
 
-/* The dusk band: deep violet with the ember glow of the boulder low on the right. */
+/* The dusk band: a sky that darkens upward from the horizon, so the ember stays the boulder's alone. */
 @utility dusk {
   background-color: var(--color-dusk);
-  background-image:
-    radial-gradient(40rem 22rem at 88% 108%, var(--color-dusk-glow), transparent 70%),
-    radial-gradient(48rem 26rem at 4% -12%, var(--color-dusk-2), transparent 72%);
+  background-image: linear-gradient(var(--color-dusk), var(--color-dusk-2));
   color: var(--color-dusk-ink);
 }
 
@@ -308,7 +306,7 @@
       --color-late-tint: oklch(27.5% 0.05 20);
       --color-wait: oklch(81% 0.13 86);
       --color-wait-ink: oklch(85% 0.11 88);
-      --color-wait-tint: oklch(27.5% 0.035 88);
+      --color-wait-tint: oklch(28% 0.045 80);
       --color-arrive: oklch(68% 0.13 158);
       --color-arrive-ink: oklch(79% 0.12 158);
       --color-arrive-tint: oklch(28% 0.05 160);
@@ -378,6 +376,12 @@
   h1 {
     letter-spacing: var(--tracking-title);
   }
+
+  p,
+  li {
+    text-wrap: pretty;
+  }
+
   ::selection {
     background: var(--color-selection);
     color: var(--color-ink);
@@ -386,6 +390,10 @@
   :focus-visible {
     outline: 2px solid var(--color-focus);
     outline-offset: 2px;
+  }
+
+  [data-dusk] {
+    --color-hill: var(--color-dusk-hill);
   }
 
   [data-dusk] :focus-visible {

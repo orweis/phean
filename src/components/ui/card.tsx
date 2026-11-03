@@ -15,6 +15,14 @@ const HEADER_TONES: Record<PanelTone, string> = {
   wait: "border-wait/50 bg-wait-tint",
   late: "border-late/25 bg-late-tint",
 };
+
+/** On a tinted header, grey would wash out; the description takes the tone's ink instead. */
+const DESCRIPTION_TONES: Record<PanelTone, string> = {
+  plain: "text-muted",
+  wait: "text-wait-ink",
+  late: "text-late-ink",
+};
+
 export function Card({ className, tone = "plain", ...props }: ComponentProps<"section"> & { tone?: PanelTone }) {
   return <section data-tone={tone} className={cx("rounded-lg border bg-panel", PANEL_TONES[tone], className)} {...props} />;
 }
@@ -36,7 +44,7 @@ export function CardHeader({ title, description, action, tone = "plain" }: CardH
     >
       <div className="min-w-0">
         <h2 className="text-md font-semibold">{title}</h2>
-        {description && <p className="mt-0.5 text-xs text-muted">{description}</p>}
+        {description && <p className={cx("mt-0.5 text-xs", DESCRIPTION_TONES[tone])}>{description}</p>}
       </div>
       {action && <div className="flex shrink-0 items-center gap-2">{action}</div>}
     </header>

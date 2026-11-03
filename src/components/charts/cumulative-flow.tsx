@@ -70,7 +70,8 @@ export function CumulativeFlow({ flow, className }: { flow: readonly FlowPoint[]
           ))}
         </svg>
 
-        <div aria-hidden data-now className="absolute inset-y-0 -right-px w-0.5 bg-late">
+        <div aria-hidden data-now className="absolute inset-y-0 -right-px">
+          <span className="absolute inset-y-0 right-0 w-0.5 bg-late" />
           <span className="absolute -top-5 right-0 text-2xs font-bold text-late-ink">Now</span>
         </div>
 

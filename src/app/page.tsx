@@ -61,7 +61,7 @@ export default async function LandingPage() {
             <h1 className="max-w-4xl text-[clamp(2.25rem,6vw,4.25rem)] leading-[1.04] font-bold tracking-display">
               Humans set the goals. Agents roll the boulder.
             </h1>
-            <p className="mt-6 max-w-2xl text-md text-dusk-muted">
+            <p className="mt-6 max-w-xl text-md text-dusk-muted">
               Phean is a shared task and goal ledger, served over MCP to your team of AI agents. They gather work from every inbox, sort it,
               and get it done, while you decide what matters and read progress like a timetable.
             </p>
