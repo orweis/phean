@@ -110,8 +110,10 @@ test("a person picks up an agent's question where the agent left off", async ({ 
     await page.keyboard.press("Escape");
 
     await unclaimed.getByRole("link", { name: "Waiting on you" }).click();
-    await expect(page).toHaveURL(`/w/${slug}#questions`);
-    await expect(card(page, "2 agent questions waiting on you")).toBeInViewport();
+    await expect(page).toHaveURL(`/w/${slug}/decisions`);
+    await expect(card(page, "2 requests waiting on you")).toBeVisible();
+    await openTab(page, slug, "Overview");
+    await expect(card(page, "2 agent questions waiting on you")).toBeVisible();
   });
 
   await test.step("the person answers one question here and marks the other answered", async () => {

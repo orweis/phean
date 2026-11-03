@@ -82,7 +82,7 @@ describe("MCP surface", () => {
   it("advertises every tool with annotations, plus prompts and instructions", async () => {
     const { tools } = await scout.listTools();
     expect(tools.map((tool) => tool.name).sort()).toEqual(TOOLS.map((tool) => tool.name).sort());
-    expect(tools).toHaveLength(24);
+    expect(tools).toHaveLength(27);
     const byName = new Map(tools.map((tool) => [tool.name, tool]));
     expect(byName.get("list_tasks")?.annotations?.readOnlyHint).toBe(true);
     expect(byName.get("forget")?.annotations?.destructiveHint).toBe(true);
@@ -194,11 +194,11 @@ describe("multiple agents sharing a workspace", () => {
     expect(rejected.isError).toBe(true);
     expect(textOf(rejected)).toContain("Use an https link");
 
-    const asked = dataOf<{ task: { inputRequest: { question: string } }; questionsUrl: string }>(
+    const asked = dataOf<{ task: { inputRequest: { question: string } }; decisionsUrl: string }>(
       await call(scout, "request_input", { taskId: task!.id, question: "Lisbon or Porto?" }),
     );
     expect(asked.task.inputRequest.question).toBe("Lisbon or Porto?");
-    expect(asked.questionsUrl).toBe(`${TEST_ORIGIN}/w/${ws.tenant.slug}#questions`);
+    expect(asked.decisionsUrl).toBe(`${TEST_ORIGIN}/w/${ws.tenant.slug}/decisions`);
 
     const summary = dataOf<{ awaitingInput: number; awaitingInputTasks: { id: string; agentSessions: { url: string }[] }[] }>(
       await call(closer, "get_status_summary"),
@@ -210,6 +210,47 @@ describe("multiple agents sharing a workspace", () => {
     const { events } = dataOf<{ events: { action: string; data: { answer?: string } }[] }>(await call(scout, "get_activity", { limit: 1 }));
     expect(events[0]).toMatchObject({ action: "task.input_answered", data: { answer: "Porto" } });
     expect(dataOf<{ task: { inputRequest: unknown } }>(await call(scout, "resolve_input", { taskId: task!.id })).task.inputRequest).toBeNull();
+  });
+
+  it("lets an agent ask for a decision, wait, and wake with the human's answer", async () => {
+    const {
+      created: [task],
+    } = dataOf<{ created: { id: string }[] }>(await call(scout, "capture_tasks", { tasks: [{ title: "Pick the auditor", status: "todo" }] }));
+    const asked = dataOf<{ task: { inputRequest: { kind: string; options: string[]; links: { kind: string }[] } } }>(
+      await call(scout, "request_input", {
+        taskId: task!.id,
+        kind: "decision",
+        question: "Rivera or Okafor?",
+        options: ["Rivera", "Okafor"],
+        links: [{ url: "https://claude.ai/chat/9", title: "This chat", kind: "conversation" }],
+      }),
+    );
+    expect(asked.task.inputRequest).toMatchObject({ kind: "decision", options: ["Rivera", "Okafor"], links: [{ kind: "conversation" }] });
+
+    expect(dataOf(await call(scout, "wait_for_answers", { timeoutSeconds: 1 }))).toEqual({ answers: [], timedOut: true, stillOpen: 1 });
+
+    setTimeout(() => void answerInput(ws.human, { taskId: task!.id, answer: "Okafor" }), 200);
+    const woken = dataOf<{ answers: { answer: string; chosenOption: string }[]; timedOut: boolean }>(
+      await call(scout, "wait_for_answers", { taskIds: [task!.id], timeoutSeconds: 20 }),
+    );
+    expect(woken).toMatchObject({ timedOut: false, answers: [{ answer: "Okafor", chosenOption: "Okafor" }] });
+    expect(dataOf(await call(scout, "collect_answers"))).toEqual({ answers: [] });
+  });
+
+  it("lets an agent read a task whole and fix it in place", async () => {
+    const {
+      created: [parent],
+    } = dataOf<{ created: { id: string }[] }>(await call(scout, "capture_tasks", { tasks: [{ title: "Launch the pricing page", status: "todo" }] }));
+    dataOf(await call(scout, "capture_tasks", { tasks: [{ title: "Write the FAQ", parentTaskId: parent!.id }] }));
+    const fixed = dataOf<{ task: { title: string; links: { url: string }[] } }>(
+      await call(closer, "update_task", { taskId: parent!.id, title: "Launch the new pricing page", addLinks: [{ url: "https://github.com/acme/site/pull/7", kind: "doc" }] }),
+    );
+    expect(fixed.task).toMatchObject({ title: "Launch the new pricing page", links: [{ url: "https://github.com/acme/site/pull/7" }] });
+    const detail = dataOf<{ task: { subtaskCount: number }; subtasks: { title: string }[]; activity: { action: string }[]; boardUrl: string }>(
+      await call(scout, "get_task", { taskId: parent!.id }),
+    );
+    expect(detail).toMatchObject({ task: { subtaskCount: 1 }, subtasks: [{ title: "Write the FAQ" }], boardUrl: `${TEST_ORIGIN}/w/${ws.tenant.slug}/board` });
+    expect(detail.activity.map((event) => event.action)).toEqual(["task.updated", "task.captured"]);
   });
 
   it("hands back the cursor it was given when nothing happened since", async () => {

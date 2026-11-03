@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { isResumeUrl, RESUME_URL_SCHEMES } from "@/lib/agent-sessions";
+import { isResumeUrl, LINK_KINDS, MAX_LINKS, REQUEST_KINDS, RESUME_URL_SCHEMES } from "@/lib/agent-sessions";
 import {
   GOAL_STATUSES,
   INVITABLE_ROLES,
@@ -42,6 +42,24 @@ export const SetGoalStatusInput = z.object({ goalId, status: z.enum(GOAL_STATUSE
 export const ListGoalsInput = z.object({ status: z.enum(GOAL_STATUSES).optional() });
 export const GoalRefInput = z.object({ goalId });
 
+const APP_SCHEMES = RESUME_URL_SCHEMES.filter((scheme) => !scheme.startsWith("http")).map((scheme) => `${scheme}://`);
+const linkUrl = z
+  .string()
+  .trim()
+  .min(1)
+  .max(LIMITS.url)
+  .refine(isResumeUrl, { message: `Use an https link, or an app link (${APP_SCHEMES.join(", ")}).` });
+
+export const LinkInput = z.object({
+  url: linkUrl.describe("Permalink people can click: the conversation, message, ticket, or doc"),
+  title: z.string().trim().max(LIMITS.linkTitle).default("").describe("Short label, e.g. \"This chat\" or \"Dana's email\""),
+  kind: z
+    .enum(LINK_KINDS)
+    .default("source")
+    .describe("conversation: back to the chat or thread with the human. source: the email, Slack message, event, ticket or PR. doc: a draft or file. other."),
+});
+const links = z.array(LinkInput).max(MAX_LINKS);
+
 // Tasks
 export const TaskDraft = z.object({
   title,
@@ -58,6 +76,8 @@ export const TaskDraft = z.object({
   goalId: goalId.optional(),
   tags: tags.default([]),
   status: z.enum(["inbox", "todo"]).default("inbox"),
+  parentTaskId: taskId.optional().describe("Make this a subtask of an existing task (one level: not of a subtask). Inherits the parent's goal unless goalId is set"),
+  links: links.default([]).describe("References people can click: the conversation (kind conversation) and the source message (kind source)"),
 });
 
 export const CaptureTasksInput = z.object({ tasks: z.array(TaskDraft).min(1).max(100) });
@@ -71,12 +91,17 @@ export const UpdateTaskInput = z.object({
   dueDate: isoDate.nullable().optional(),
   goalId: goalId.nullable().optional(),
   tags: tags.optional(),
+  source: z.enum(SOURCES).optional(),
+  sourceRef: z.string().trim().max(LIMITS.sourceRef).optional().describe("Fix the origin reference; must not match another task's"),
+  parentTaskId: taskId.nullable().optional().describe("Make it a subtask of another task, or null to detach it"),
+  links: links.optional().describe("Replaces all of the task's links; [] removes them. To add or remove some, use addLinks and removeLinks"),
+  addLinks: links.optional().describe("Links to add; a link whose url is already on the task is updated in place"),
+  removeLinks: z.array(z.string().trim().min(1).max(LIMITS.url)).max(MAX_LINKS).optional().describe("URLs of links to remove"),
 });
 
 export const TaskRefInput = z.object({ taskId });
 
 const ref = (max: number) => z.string().trim().max(max).optional();
-const APP_SCHEMES = RESUME_URL_SCHEMES.filter((scheme) => !scheme.startsWith("http")).map((scheme) => `${scheme}://`);
 
 export const SessionInput = z
   .object({
@@ -113,8 +138,34 @@ export const AskInput = z.object({
     .min(1)
     .max(LIMITS.question)
     .describe("What you need from the human, answerable without opening anything else"),
+  kind: z
+    .enum(REQUEST_KINDS)
+    .default("question")
+    .describe("'decision' when the human must choose or sign off (give options); 'question' when you need information"),
+  context: longText.default("").describe("The facts, the trade-offs, and your recommendation, for a human reading it cold"),
+  options: z
+    .array(z.string().trim().min(1).max(LIMITS.option))
+    .max(8)
+    .default([])
+    .describe("2-5 short, mutually exclusive answers to pick from; the human may still write their own"),
+  links: links.default([]).describe("References for this question: the conversation (kind conversation), the sources it is about (kind source), docs"),
   session: SessionInput.optional().describe("Where the human can answer you; include a url whenever you have one"),
 });
+export const CollectAnswersInput = z.object({
+  taskIds: z.array(taskId).max(100).optional().describe("Only answers on these tasks; omit for all of yours"),
+});
+/** Kept under the MCP route's maxDuration, with room to spare. */
+export const MAX_WAIT_SECONDS = 240;
+export const WaitForAnswersInput = CollectAnswersInput.extend({
+  timeoutSeconds: z
+    .number()
+    .int()
+    .min(1)
+    .max(MAX_WAIT_SECONDS)
+    .default(55)
+    .describe(`How long to wait for an answer, at most ${MAX_WAIT_SECONDS}s. Some clients give up on a tool call after 60s.`),
+});
+export const DecisionsInput = z.object({ limit: limit(200, 50) });
 export const AnswerInput = z.object({
   taskId,
   answer: z.string().trim().max(LIMITS.note).default("").describe("Empty marks the question answered elsewhere"),
@@ -129,6 +180,7 @@ export const AssignTasksInput = z.object({ taskIds: z.array(taskId).min(1).max(1
 export const ListTasksInput = z.object({
   status: z.enum(TASK_STATUSES).optional(),
   goalId: goalId.optional(),
+  parentTaskId: taskId.optional().describe("Only the subtasks of this task"),
   priority: z.enum(PRIORITIES).optional(),
   claimed: z.enum(["any", "mine", "unclaimed"]).default("any"),
   due: z

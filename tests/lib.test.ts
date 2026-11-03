@@ -276,7 +276,7 @@ describe("agent sessions", () => {
     expect(resumeLabel({ app: "Claude Code" })).toBe("Resume in Claude Code");
     expect(resumeLabel({ app: null })).toBe("Resume conversation");
     const sessions = [session("a"), session("b")];
-    expect(sessionOfAsker(sessions, { agentId: "b", agentName: "b", question: "?", askedAt: "" })?.agentId).toBe("b");
-    expect(sessionOfAsker(sessions, { agentId: "c", agentName: "c", question: "?", askedAt: "" })).toBeUndefined();
+    expect(sessionOfAsker(sessions, { agentId: "b" })?.agentId).toBe("b");
+    expect(sessionOfAsker(sessions, { agentId: "c" })).toBeUndefined();
   });
 });

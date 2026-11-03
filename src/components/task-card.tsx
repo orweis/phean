@@ -1,4 +1,4 @@
-import { Bot, CalendarClock } from "lucide-react";
+import { Bot, CalendarClock, CornerDownRight, ListChecks } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { completeTaskAction, releaseTaskAction, updateTaskAction } from "@/app/w/[slug]/actions";
@@ -8,8 +8,10 @@ import { isLate, isOpenTaskStatus, PRIORITY_META, SOURCE_META, TASK_STATUS_META,
 import { formatDueDate, truncate } from "@/lib/format";
 import type { TaskView } from "@/server/domain/tasks";
 
-import { OutsideLink, QuestionNote, ResumePopover, WaitingBadge } from "./agent-sessions";
+import { OutsideLink, QuestionNote, ResumePopover, TaskLinks, WaitingBadge } from "./agent-sessions";
+import { EditTaskPopover } from "./edit-task-form";
 import { GoalLink } from "./goal-link";
+import type { GoalOption } from "./goal-options";
 import { ActionButton } from "./ui/action-button";
 import { Badge, MetaBadge } from "./ui/badge";
 
@@ -73,8 +75,20 @@ function TaskMeta({ task, slug, showGoal, showDue = true }: { task: TaskView; sl
   const late = isLate(task);
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
-      {task.inputRequest && <WaitingBadge slug={slug} />}
+      {task.inputRequest && <WaitingBadge slug={slug} kind={task.inputRequest.kind} />}
+      {task.parentTitle && (
+        <span className="inline-flex max-w-56 items-center gap-1">
+          <CornerDownRight className="size-3 shrink-0" aria-hidden />
+          <span className="truncate">Subtask of {task.parentTitle}</span>
+        </span>
+      )}
       {showGoal && task.goalId && task.goalTitle && <GoalLink slug={slug} goalId={task.goalId} title={task.goalTitle} />}
+      {task.subtaskCount > 0 && (
+        <span className={cx("inline-flex items-center gap-1", task.subtasksDone === task.subtaskCount && "text-arrive-ink")}>
+          <ListChecks className="size-3" aria-hidden />
+          {task.subtasksDone} of {task.subtaskCount} subtasks done
+        </span>
+      )}
       {showDue && task.dueDate && (
         <span className={cx("inline-flex items-center gap-1", late && "font-semibold text-late-ink")}>
           <CalendarClock className="size-3" aria-hidden />
@@ -107,10 +121,12 @@ interface TaskViewProps {
   canWrite: boolean;
   /** Hide the goal link when the task is already shown under its goal. */
   showGoal?: boolean;
+  /** Goals the editor offers; without them, editing keeps the task's goal. */
+  goals?: readonly GoalOption[];
 }
 
 /** A task on a board lane. */
-export function TaskCard({ task, slug, canWrite, showGoal = true }: TaskViewProps) {
+export function TaskCard({ task, slug, canWrite, showGoal = true, goals = [] }: TaskViewProps) {
   const actions = canWrite && NEXT_STEP[task.status];
   return (
     <article data-task={task.id} className={cx("rounded-md border bg-panel p-3", isLate(task) ? "border-late/45" : "border-rule")}>
@@ -119,11 +135,13 @@ export function TaskCard({ task, slug, canWrite, showGoal = true }: TaskViewProp
       <div className="mt-2">
         <TaskMeta task={task} slug={slug} showGoal={showGoal} />
       </div>
+      <TaskLinks links={task.links} className="mt-2" />
       {task.inputRequest && <QuestionNote request={task.inputRequest} className="mt-2" />}
       {(actions || task.agentSessions.length > 0) && (
         <div className="mt-2.5 flex flex-wrap items-center gap-1.5 border-t border-rule pt-2.5">
           {actions && <TaskActions task={task} slug={slug} />}
-          <div className="ml-auto">
+          <div className="ml-auto flex items-center gap-3">
+            {canWrite && <EditTaskPopover task={task} slug={slug} goals={goals} />}
             <ResumePopover sessions={task.agentSessions} />
           </div>
         </div>
@@ -133,7 +151,7 @@ export function TaskCard({ task, slug, canWrite, showGoal = true }: TaskViewProp
 }
 
 /** A task as one line of a list, with an optional leading column such as its due date. */
-export function TaskRow({ task, slug, canWrite, showGoal = true, lead, showDue = !lead }: TaskViewProps & { lead?: ReactNode; showDue?: boolean }) {
+export function TaskRow({ task, slug, canWrite, showGoal = true, goals = [], lead, showDue = !lead }: TaskViewProps & { lead?: ReactNode; showDue?: boolean }) {
   return (
     <li data-task={task.id} className="flex flex-wrap items-start gap-x-4 gap-y-2 border-b border-rule py-3 last:border-b-0">
       {lead && <div className="w-20 shrink-0">{lead}</div>}
@@ -143,10 +161,12 @@ export function TaskRow({ task, slug, canWrite, showGoal = true, lead, showDue =
           <MetaBadge meta={TASK_STATUS_META} value={task.status} />
           <TaskMeta task={task} slug={slug} showGoal={showGoal} showDue={showDue} />
         </div>
+        <TaskLinks links={task.links} className="mt-1.5" />
       </div>
       {(canWrite || task.agentSessions.length > 0) && (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
           {canWrite && <TaskActions task={task} slug={slug} />}
+          {canWrite && <EditTaskPopover task={task} slug={slug} goals={goals} />}
           <ResumePopover sessions={task.agentSessions} />
         </div>
       )}

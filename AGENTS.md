@@ -32,7 +32,10 @@ Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) first. The rules below are the
 - Dates are UTC calendar days through `src/lib/dates.ts` (`isoDayFromToday`, `daysBetween`, `isPastDue`), in the app, the scripts, and the tests.
 - `src/lib` is client-safe and must not import from `src/server`.
 - Agent sessions and questions are JSONB on `tasks`, shaped by `src/lib/agent-sessions.ts`. Change them inside `inTransaction` on a row read with `findTask(tx, id, { lock: true })`, so concurrent agents never drop each other's sessions. A session URL is checked with `isResumeUrl` in its schema and stored normalized; anything rendered as a link from agent input goes through `OutsideLink`, and only `webUrl` decides what is a web link. Never widen `RESUME_URL_SCHEMES` to schemes that run code (`javascript:`, `data:`, `file:`).
-- A service that ends a task's run (complete, release, any status change except to in progress) clears its `inputRequest`, so no question outlives the work it was about.
+- A service that ends a task's run (complete, release, any status change except to in progress) closes its `inputRequest` with `closeOpenRequest()`, which archives it in `inputAnswers`, so no question outlives the work it was about and the Decisions page keeps its history.
+- Links agents leave (`tasks.links`, `InputRequest.links`) are validated by `LinkInput` with `isResumeUrl` and stored normalized by `normalizeLinks`; render them with `TaskLinks`, which goes through `OutsideLink`.
+- Subtasks are one level deep: `assertValidParent` in `tasks.ts` refuses a subtask as a parent and a task with subtasks as a child. `TaskView` carries `parentTitle`, `subtaskCount` and `subtasksDone` from `selectTaskViews`; build task lists from it, not from raw rows.
+- `answered` and `answered_elsewhere` are the only outcomes delivered to agents (`DELIVERED_OUTCOMES`); deliver them through `collectAnswers` so each answer arrives once.
 
 ### Database
 

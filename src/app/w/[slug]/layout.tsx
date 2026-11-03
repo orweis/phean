@@ -23,7 +23,7 @@ export default async function WorkspaceLayout({ children, params }: LayoutProps<
   return (
     <>
       <AppHeader user={viewer.user} workspace={{ current: membership.tenant, all: workspaces }}>
-        <WorkspaceNav slug={slug} counts={{ waitingOnYou: stats.waitingOnYou, inbox: stats.inbox }} />
+        <WorkspaceNav slug={slug} counts={{ waitingOnYou: stats.waitingOnYou, decisions: stats.awaitingInput, inbox: stats.inbox }} />
       </AppHeader>
       {membership.role === "platform_admin" && (
         <p className="flex items-center justify-center gap-1.5 border-b border-wait/50 bg-wait-tint px-4 py-2 text-xs font-semibold text-wait-ink">

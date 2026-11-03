@@ -22,6 +22,20 @@
       "when": 1793694191989,
       "tag": "0002_agent_sessions",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1793722782661,
+      "tag": "0003_decisions_and_links",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1793724100501,
+      "tag": "0004_subtasks",
+      "breakpoints": true
     }
   ]
 }

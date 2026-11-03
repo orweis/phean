@@ -15,14 +15,35 @@ Phean is a shared task and goal ledger for one workspace. Humans set direction a
 2. Capture: record findings with one capture_tasks call. Always set source and a stable source_ref (message link, thread id, event id). Phean skips items another agent already captured and reports them as duplicates.
 3. Triage: group inbox tasks under goals with assign_tasks_to_goal, and set priority and due dates with update_task. If no goal fits, propose one with create_goal.
 4. Execute: call suggest_next_actions, claim_task with your session before you start, do the work, then complete_task with a short note on what you did. Release tasks you cannot finish. Picking up a task from an earlier session? Call link_session from this one.
-5. Ask: when a task needs a decision or information only the human has, call request_input with one clear question and your session, then work on something else. When the answer comes (in your conversation, or as task.input_answered in get_activity), call resolve_input and carry on.
+5. Ask: when a task needs a decision or information only the human has, record it with request_input (see "Asking the human" below) instead of only asking in chat. Then wait_for_answers if you can wait in this session, or work on something else and collect_answers later.
 6. Review: get_status_summary and visualize (goal_tree, kanban, timeline) answer "where do we stand?".
 7. Remember: save durable facts, preferences, and decisions with remember; check recall before asking the human something they may have told another agent.
+
+## Asking the human
+Questions you only ask in chat get lost; Phean keeps them on the human's Decisions page with a way back to you.
+- kind "decision" when the human must choose or sign off (approve a budget, pick a vendor, accept a draft); kind "question" when you need a fact only they have. If there is no task for it yet, capture one first.
+- question: one concrete question, answerable in a word or a line. Not "thoughts?".
+- context: the facts, the trade-offs, and your recommendation, in a few lines, for someone reading it cold days later.
+- options: 2-5 short, mutually exclusive answers whenever the answer space is known. The human can still write their own answer, so treat a custom answer as authoritative.
+- links: always add a link back to this conversation (kind "conversation") when your client has one, and permalinks to every source the question is about (kind "source": the email, Slack message, ticket, PR; kind "doc" for drafts and files). Give each a short title ("This chat", "Dana's email"). Never invent a URL; if you have none, say where to look in context.
+- session: also pass your session so the human can resume with you in one click.
+- Tell the human in one line that a decision is waiting, with decisionsUrl, and batch several into one message.
+- Collect the answer: wait_for_answers blocks until the human answers (it returns timedOut after at most a few minutes; say what you are still waiting on, then wait again or move on). Otherwise collect_answers at the start of every session and before acting on blocked work. Each answer is delivered once. Act on it, then continue or complete the task.
+
+## References and links
+Every task should lead a human back to where it came from. On capture_tasks and update_task, pass links ([{url, title, kind}]) with the source permalink and, when the work came up in a conversation with the human, a link to it. They show as clickable links on the task in Phean. Use https:// links or app links (slack://, cursor://, ...); other schemes are refused.
+
+## Keeping tasks accurate
+Tasks are shared, so fix them when you learn more instead of capturing duplicates:
+- get_task shows everything on a task (links, sessions, questions, parent, subtasks, history); read it before changing one.
+- update_task changes only the fields you pass. Add a link you found with addLinks (for example the PR you opened, or the thread you replied in), drop a broken one with removeLinks, and correct title, description, priority, due date, goal, source or sourceRef when they are wrong.
+- Split big work into subtasks: capture_tasks with parentTaskId, or update_task with parentTaskId to attach an existing task (null detaches it). Subtasks go one level deep and inherit their parent's goal. list_tasks with parentTaskId lists them.
+- Found a duplicate? Keep the better one, move what matters (links, notes) onto it with update_task, then drop the other with status "dropped" and say why in its description.
 
 ## Rules
 - Goals you create start as "proposed". Only a human can approve, complete, or abandon a goal, in the Phean web app. Share the review link that create_goal returns; never claim a goal is approved.
 - Claim before working. If a task is claimed by another agent, leave it alone and pick another one.
-- Never leave a task silently stalled on the human: ask with request_input, so the question and the way back to you show on their overview.
+- Never leave a task silently stalled on the human: ask with request_input, so the question and the way back to you show on their Decisions page.
 - Session links are for humans to click: only pass links that open your own conversation, message, or app.
 - Search before capturing or creating goals, so the workspace does not fill with duplicates.
 - Goals nest at most ${GOAL_MAX_DEPTH} levels deep. Prefer a few clear goals over many tiny ones.
@@ -41,7 +62,7 @@ export const PROMPTS = [
 1. Call whoami.
 2. Call get_activity (limit 30). Summarize what changed and who did it, grouping repetitive events.
 3. Call list_tasks with claimed="mine". For each task you hold, say whether you will continue it now or release it. For the ones you continue, call link_session so humans can reach you in this session.
-4. Look for answers to questions you asked (task.input_answered events, or the answer appended to the task) and call resolve_input on any you can now act on.
+4. Call collect_answers and act on every answer the human gave you. For questions of yours still open that you no longer need, call resolve_input.
 5. Call get_status_summary and mention pending approvals, questions waiting on the human, and overdue tasks, if any.
 6. Finish with the single most useful next step.`,
   },
@@ -52,7 +73,7 @@ export const PROMPTS = [
     text: `Sweep your available sources for actionable items and feed Phean:
 1. Check every connector you can access (email, Slack, calendar, and others). Look for requests, commitments, deadlines, follow-ups, and meetings that need preparation.
 2. For each candidate, search Phean first and skip anything already tracked.
-3. Capture the rest in ONE capture_tasks call. Always set source and source_ref (message link, thread id, or event id), and due_date when one is evident. Do not triage yet.
+3. Capture the rest in ONE capture_tasks call. Always set source and source_ref (message link, thread id, or event id), links (the source permalink as kind "source"), and due_date when one is evident. Do not triage yet.
 4. Report what you scanned and what you captured, note duplicates Phean skipped, flag anything urgent, and offer to triage the inbox.`,
   },
   {

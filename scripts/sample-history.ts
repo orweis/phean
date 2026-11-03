@@ -5,7 +5,7 @@
  */
 import { count, eq } from "drizzle-orm";
 
-import type { AgentSession } from "../src/lib/agent-sessions";
+import type { AgentSession, TaskLink } from "../src/lib/agent-sessions";
 import { addDays, isoDayFromToday, startOfUtcDay } from "../src/lib/dates";
 import { SOURCE_META, TASK_STATUS_META, type GoalStatus, type Priority, type Source, type TaskStatus } from "../src/lib/domain";
 import { truncate } from "../src/lib/format";
@@ -83,7 +83,17 @@ const TASKS: SampleTask[] = [
 ];
 
 /** Where each working agent can be resumed, and the one question waiting on the owner. */
-const HANDOFFS: Record<string, { session: Omit<AgentSession, "agentId" | "agentName" | "linkedAt">; hoursAgo: number; question?: string }> = {
+interface Handoff {
+  session: Omit<AgentSession, "agentId" | "agentName" | "linkedAt">;
+  hoursAgo: number;
+  question?: string;
+  /** With options, the question is a decision. */
+  options?: string[];
+  context?: string;
+  links?: TaskLink[];
+}
+
+const HANDOFFS: Record<string, Handoff> = {
   "Chase three overdue invoices": {
     session: {
       app: "Claude",
@@ -95,6 +105,12 @@ const HANDOFFS: Record<string, { session: Omit<AgentSession, "agentId" | "agentN
     },
     hoursAgo: 3,
     question: "Globex disputes invoice #4471 ($2,400) and asks for 10% off. Offer 5% to settle this week, or escalate to their CFO?",
+    options: ["Offer 5% this week", "Escalate to their CFO"],
+    context: "They have paid on time for two years and the dispute is about a late delivery we caused. I recommend offering 5%: it costs $120 and keeps the account.",
+    links: [
+      { url: "https://claude.ai/chat/5d0c2e7a-91b4-4a8e-b1f3-2c6e8a4d7f10", title: "This chat", kind: "conversation" },
+      { url: "https://mail.google.com/mail/u/0/#inbox/globex-4471", title: "Globex's dispute email", kind: "source" },
+    ],
   },
   "Screen the first twenty applicants": {
     session: {
@@ -211,7 +227,18 @@ export async function seedSampleHistory(db: Db, tenant: Tenant, owner: { id: str
       claimedAt: last.status === "in_progress" ? last.at : null,
       completedAt: last.status === "done" ? last.at : null,
       agentSessions: handoff ? [{ ...who, ...handoff.session, linkedAt: handedOffAt!.toISOString() }] : [],
-      inputRequest: handoff?.question ? { ...who, question: handoff.question, askedAt: handedOffAt!.toISOString() } : null,
+      inputRequest: handoff?.question
+        ? {
+            ...who,
+            id: `q_${id.slice(2)}`,
+            kind: handoff.options ? "decision" : "question",
+            question: handoff.question,
+            context: handoff.context ?? "",
+            options: handoff.options ?? [],
+            links: handoff.links ?? [],
+            askedAt: handedOffAt!.toISOString(),
+          }
+        : null,
       createdByType: capturedBy.actorType,
       createdById: capturedBy.actorId,
       createdByName: capturedBy.actorName,

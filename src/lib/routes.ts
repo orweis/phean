@@ -17,6 +17,8 @@ export const routes = {
   workspace: (slug: string) => `/w/${slug}`,
   /** The overview's list of agent questions waiting on a person. */
   questions: (slug: string) => `/w/${slug}#questions`,
+  /** Every question and decision agents asked people: what waits, and what was answered. */
+  decisions: (slug: string) => `/w/${slug}/decisions`,
   board: (slug: string, goalId?: string) => withQuery(`/w/${slug}/board`, { goal: goalId }),
   timeline: (slug: string, filters?: { goal?: string; days?: string }) => withQuery(`/w/${slug}/timeline`, filters),
   goal: (slug: string, goalId: string) => `/w/${slug}/goals/${goalId}`,

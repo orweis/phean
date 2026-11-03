@@ -14,7 +14,7 @@ import {
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 
-import type { AgentSession, InputRequest } from "../../../lib/agent-sessions";
+import type { AgentSession, InputAnswer, InputRequest, TaskLink } from "../../../lib/agent-sessions";
 import {
   ACTOR_TYPES,
   GOAL_STATUSES,
@@ -118,6 +118,8 @@ export const tasks = pgTable(
     id: text("id").primaryKey(),
     tenantId: tenantId(),
     goalId: text("goal_id"),
+    /** The task this one is a step of. One level only: a subtask has no subtasks of its own. */
+    parentTaskId: text("parent_task_id"),
     title: text("title").notNull(),
     description: text("description").notNull().default(""),
     status: taskStatusEnum("status").notNull().default("inbox"),
@@ -139,6 +141,16 @@ export const tasks = pgTable(
       .default(sql`'[]'::jsonb`),
     /** The question an agent is waiting on a person to answer, if any. */
     inputRequest: jsonb("input_request").$type<InputRequest>(),
+    /** Closed questions and decisions, newest first, with each person's answer. */
+    inputAnswers: jsonb("input_answers")
+      .$type<InputAnswer[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    /** References agents left for people: the conversation, the source message, docs. */
+    links: jsonb("links")
+      .$type<TaskLink[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
     ...createdBy,
     ...timestamps,
     search: searchVector(titleDescriptionSearch),
@@ -151,6 +163,11 @@ export const tasks = pgTable(
       foreignColumns: [goals.tenantId, goals.id],
     }),
     foreignKey({
+      name: "tasks_parent_fk",
+      columns: [t.tenantId, t.parentTaskId],
+      foreignColumns: [t.tenantId, t.id],
+    }),
+    foreignKey({
       name: "tasks_claimed_by_fk",
       columns: [t.tenantId, t.claimedByAgentId],
       foreignColumns: [agents.tenantId, agents.id],
@@ -161,6 +178,7 @@ export const tasks = pgTable(
       .where(sql`source_ref <> ''`),
     index("tasks_tenant_status_idx").on(t.tenantId, t.status),
     index("tasks_tenant_goal_idx").on(t.tenantId, t.goalId),
+    index("tasks_tenant_parent_idx").on(t.tenantId, t.parentTaskId),
     index("tasks_search_idx").using("gin", t.search),
   ],
 );

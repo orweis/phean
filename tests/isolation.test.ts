@@ -13,7 +13,10 @@ import {
   assignTasksToGoal,
   captureTasks,
   claimTask,
+  collectAnswers,
+  getTask,
   linkSession,
+  listDecisions,
   listTasks,
   requestInput,
   updateTask,
@@ -72,6 +75,15 @@ describe("tenant isolation", () => {
     }
   });
 
+  it("keeps questions, decisions, and answers inside their workspace", async () => {
+    await requestInput(acme.scout.ctx, { taskId: acmeTask.id, kind: "decision", question: "Sign the merger?", options: ["Yes", "No"] });
+    for (const ctx of [globexOwner, globexAgent]) expect(await listDecisions(ctx, {})).toEqual({ open: [], closed: [] });
+    await answerInput(acmeOwner, { taskId: acmeTask.id, answer: "Yes" });
+    expect(await collectAnswers(globexAgent, { taskIds: [acmeTask.id] })).toEqual([]);
+    expect((await listDecisions(globexOwner, {})).closed).toEqual([]);
+    expect((await collectAnswers(acme.scout.ctx, {})).map((answer) => answer.answer)).toEqual(["Yes"]);
+  });
+
   it("rejects writes that reference another tenant's records", async () => {
     const globexGoal = await createGoal(globexOwner, { title: "Globex goal" });
 
@@ -81,6 +93,8 @@ describe("tenant isolation", () => {
     await expect(claimTask(globexAgent, { taskId: acmeTask.id })).rejects.toMatchObject({ code: "not_found" });
     await expect(linkSession(globexAgent, { taskId: acmeTask.id, session: { sessionId: "s1" } })).rejects.toMatchObject({ code: "not_found" });
     await expect(requestInput(globexAgent, { taskId: acmeTask.id, question: "Who signs?" })).rejects.toMatchObject({ code: "not_found" });
+    await expect(captureTasks(globexAgent, { tasks: [{ title: "Sneaky step", parentTaskId: acmeTask.id }] })).rejects.toMatchObject({ code: "not_found" });
+    await expect(getTask(globexOwner, { taskId: acmeTask.id })).rejects.toMatchObject({ code: "not_found" });
     await expect(answerInput(globexOwner, { taskId: acmeTask.id, answer: "Me" })).rejects.toMatchObject({ code: "not_found" });
     await expect(
       assignTasksToGoal(globexAgent, { taskIds: [acmeTask.id], goalId: globexGoal.id }),

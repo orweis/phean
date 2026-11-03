@@ -2,6 +2,7 @@
  * Single source of truth for Phean's domain vocabulary. Used by the database
  * enums, the zod input schemas, and the UI, so it must stay client-safe.
  */
+import type { LinkKind, RequestKind, RequestOutcome } from "./agent-sessions";
 import { isPastDue } from "./dates";
 
 /** Narrows an untrusted value (a query parameter, a logged event field) to one of `values`. */
@@ -60,6 +61,8 @@ export const LIMITS = {
   command: 500,
   brief: 500,
   question: 1000,
+  option: 200,
+  linkTitle: 120,
 } as const;
 
 /**
@@ -116,6 +119,25 @@ export const SOURCE_META: Record<Source, EnumMeta> = {
   chat: { label: "Chat", tone: "neutral" },
   manual: { label: "Manual", tone: "neutral" },
   other: { label: "Other", tone: "neutral" },
+};
+
+export const REQUEST_KIND_META: Record<RequestKind, EnumMeta> = {
+  question: { label: "Question", tone: "neutral" },
+  decision: { label: "Decision", tone: "warning" },
+};
+
+export const REQUEST_OUTCOME_META: Record<RequestOutcome, EnumMeta> = {
+  answered: { label: "Answered", tone: "success" },
+  answered_elsewhere: { label: "Answered elsewhere", tone: "success" },
+  resolved: { label: "Resolved by the agent", tone: "neutral" },
+  closed: { label: "Closed with the task", tone: "neutral" },
+};
+
+export const LINK_KIND_META: Record<LinkKind, EnumMeta> = {
+  conversation: { label: "Conversation", tone: "accent" },
+  source: { label: "Source", tone: "neutral" },
+  doc: { label: "Doc", tone: "neutral" },
+  other: { label: "Link", tone: "neutral" },
 };
 
 export const MEMORY_KIND_META: Record<MemoryKind, EnumMeta> = {
