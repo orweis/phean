@@ -2,11 +2,13 @@ import { Bot, CalendarClock } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { completeTaskAction, releaseTaskAction, updateTaskAction } from "@/app/w/[slug]/actions";
+import { webUrl } from "@/lib/agent-sessions";
 import { cx } from "@/lib/cx";
 import { isLate, isOpenTaskStatus, PRIORITY_META, SOURCE_META, TASK_STATUS_META, type TaskStatus } from "@/lib/domain";
 import { formatDueDate, truncate } from "@/lib/format";
 import type { TaskView } from "@/server/domain/tasks";
 
+import { OutsideLink, QuestionNote, ResumePopover, WaitingBadge } from "./agent-sessions";
 import { GoalLink } from "./goal-link";
 import { ActionButton } from "./ui/action-button";
 import { Badge, MetaBadge } from "./ui/badge";
@@ -53,11 +55,25 @@ function TaskActions({ task, slug }: { task: TaskView; slug: string }) {
   );
 }
 
+/** "From email", linked to the message itself when the agent recorded its link. */
+function SourceLabel({ task }: { task: TaskView }) {
+  const label = `From ${SOURCE_META[task.source].label.toLowerCase()}`;
+  const href = webUrl(task.sourceRef);
+  return href ? (
+    <OutsideLink href={href} className="inline-flex items-center gap-0.5 hover:text-ink link [&_svg]:size-3">
+      {label}
+    </OutsideLink>
+  ) : (
+    <span>{label}</span>
+  );
+}
+
 /** Goal, due date, source and claimant: the facts every task listing shows. */
 function TaskMeta({ task, slug, showGoal, showDue = true }: { task: TaskView; slug: string; showGoal: boolean; showDue?: boolean }) {
   const late = isLate(task);
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
+      {task.inputRequest && <WaitingBadge slug={slug} />}
       {showGoal && task.goalId && task.goalTitle && <GoalLink slug={slug} goalId={task.goalId} title={task.goalTitle} />}
       {showDue && task.dueDate && (
         <span className={cx("inline-flex items-center gap-1", late && "font-semibold text-late-ink")}>
@@ -65,7 +81,7 @@ function TaskMeta({ task, slug, showGoal, showDue = true }: { task: TaskView; sl
           {late ? `Late, due ${formatDueDate(task.dueDate)}` : `Due ${formatDueDate(task.dueDate)}`}
         </span>
       )}
-      {task.source !== "manual" && <span>From {SOURCE_META[task.source].label.toLowerCase()}</span>}
+      {task.source !== "manual" && <SourceLabel task={task} />}
       {task.claimedByName && (
         <Badge tone="info">
           <Bot aria-hidden />
@@ -95,6 +111,7 @@ interface TaskViewProps {
 
 /** A task on a board lane. */
 export function TaskCard({ task, slug, canWrite, showGoal = true }: TaskViewProps) {
+  const actions = canWrite && NEXT_STEP[task.status];
   return (
     <article data-task={task.id} className={cx("rounded-md border bg-panel p-3", isLate(task) ? "border-late/45" : "border-rule")}>
       <TaskTitle task={task} />
@@ -102,9 +119,13 @@ export function TaskCard({ task, slug, canWrite, showGoal = true }: TaskViewProp
       <div className="mt-2">
         <TaskMeta task={task} slug={slug} showGoal={showGoal} />
       </div>
-      {canWrite && NEXT_STEP[task.status] && (
-        <div className="mt-2.5 border-t border-rule pt-2.5">
-          <TaskActions task={task} slug={slug} />
+      {task.inputRequest && <QuestionNote request={task.inputRequest} className="mt-2" />}
+      {(actions || task.agentSessions.length > 0) && (
+        <div className="mt-2.5 flex flex-wrap items-center gap-1.5 border-t border-rule pt-2.5">
+          {actions && <TaskActions task={task} slug={slug} />}
+          <div className="ml-auto">
+            <ResumePopover sessions={task.agentSessions} />
+          </div>
         </div>
       )}
     </article>
@@ -123,7 +144,12 @@ export function TaskRow({ task, slug, canWrite, showGoal = true, lead, showDue =
           <TaskMeta task={task} slug={slug} showGoal={showGoal} showDue={showDue} />
         </div>
       </div>
-      {canWrite && <TaskActions task={task} slug={slug} />}
+      {(canWrite || task.agentSessions.length > 0) && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+          {canWrite && <TaskActions task={task} slug={slug} />}
+          <ResumePopover sessions={task.agentSessions} />
+        </div>
+      )}
     </li>
   );
 }

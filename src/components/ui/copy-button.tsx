@@ -7,12 +7,21 @@ import { cx } from "@/lib/cx";
 
 import { Button, type ButtonVariant } from "./button";
 
-export function CopyButton({ value, label = "Copy", variant = "secondary" }: { value: string; label?: string; variant?: ButtonVariant }) {
+interface CopyButtonProps {
+  value: string;
+  label?: string;
+  /** What is copied ("session id"), for screen readers when several copy buttons sit together. */
+  subject?: string;
+  variant?: ButtonVariant;
+}
+
+export function CopyButton({ value, label = "Copy", subject, variant = "secondary" }: CopyButtonProps) {
   const [copied, setCopied] = useState(false);
   return (
     <Button
       size="sm"
       variant={variant}
+      aria-label={subject && `${copied ? "Copied" : label} ${subject}`}
       onClick={async () => {
         await navigator.clipboard.writeText(value);
         setCopied(true);

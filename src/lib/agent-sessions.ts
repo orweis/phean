@@ -39,23 +39,28 @@ export interface InputRequest {
   askedAt: string;
 }
 
-function schemeOf(value: string): string | null {
+function parseUrl(value: string): URL | null {
   try {
-    return new URL(value).protocol.slice(0, -1);
+    return new URL(value);
   } catch {
     return null;
   }
 }
 
+const schemeOf = (url: URL) => url.protocol.slice(0, -1);
+
 export function isResumeUrl(value: string): boolean {
-  const scheme = schemeOf(value);
-  return scheme !== null && (RESUME_URL_SCHEMES as readonly string[]).includes(scheme);
+  const url = parseUrl(value);
+  return url !== null && (RESUME_URL_SCHEMES as readonly string[]).includes(schemeOf(url));
 }
 
-/** An http(s) link, safe to render as one and opened in a new tab; app links open their app instead. */
-export function isWebUrl(value: string): boolean {
-  const scheme = schemeOf(value);
-  return scheme === "https" || scheme === "http";
+/**
+ * `value` as an http(s) link, normalized the way a browser reads it, or null. Web links open in a
+ * new tab; app links open their app. Also turns a task's source reference into a link when it is one.
+ */
+export function webUrl(value: string): string | null {
+  const url = parseUrl(value);
+  return url && (schemeOf(url) === "https" || schemeOf(url) === "http") ? url.href : null;
 }
 
 /** The agent's new session first, replacing its previous one, so each agent has one place to resume. */

@@ -13,10 +13,16 @@ interface PopoverProps {
   icon?: ReactNode;
   children: ReactNode;
   variant?: ButtonVariant;
+  /** "link" sets the trigger as a compact text link, for panels that lead elsewhere rather than act. */
+  look?: "button" | "link";
   align?: "left" | "right";
   className?: string;
   triggerClassName?: string;
 }
+
+/** The pseudo-element extends the hit target to 44px, like small buttons. */
+const LINK_TRIGGER =
+  "relative inline-flex h-8 cursor-pointer items-center gap-1 rounded-sm text-xs font-semibold text-accent-ink after:absolute after:-inset-x-1 after:-inset-y-1.5 hover:underline [&_svg]:size-3.5";
 
 /**
  * A small disclosure panel built on <details>, so it opens and closes from its trigger without
@@ -24,7 +30,7 @@ interface PopoverProps {
  * can sit anywhere in a wrapped row, so the panel becomes a sheet across the top of the screen, over
  * the header, and carries its own close button.
  */
-export function Popover({ label, icon, children, variant = "secondary", align = "right", className, triggerClassName }: PopoverProps) {
+export function Popover({ label, icon, children, variant = "secondary", look = "button", align = "right", className, triggerClassName }: PopoverProps) {
   const ref = useRef<HTMLDetailsElement>(null);
 
   useEffect(() => {
@@ -48,7 +54,7 @@ export function Popover({ label, icon, children, variant = "secondary", align = 
 
   return (
     <details ref={ref} className="group relative">
-      <summary className={cx(buttonClasses(variant, "sm"), "list-none [&::-webkit-details-marker]:hidden", triggerClassName)}>
+      <summary className={cx(look === "link" ? LINK_TRIGGER : buttonClasses(variant, "sm"), "list-none [&::-webkit-details-marker]:hidden", triggerClassName)}>
         {icon}
         {label}
       </summary>

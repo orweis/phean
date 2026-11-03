@@ -25,7 +25,7 @@ const COLUMNS: { label: string; value: (row: WorkspaceOverview) => number; alert
   { label: "Late", value: (row) => row.overdue, alert: "late" },
   { label: "Due this week", value: (row) => row.dueThisWeek },
   { label: "Done, 7 days", value: (row) => row.doneLast7Days },
-  { label: "Awaiting decision", value: (row) => row.pendingApprovals, alert: "wait" },
+  { label: "Waiting on you", value: (row) => row.waitingOnYou, alert: "wait" },
 ];
 
 const ALERT_TEXT = { late: "font-bold text-late-ink", wait: "font-bold text-wait-ink" } as const;
@@ -63,7 +63,7 @@ export default async function WorkspacesPage() {
         )}
 
         <Card>
-          <CardHeader title="Status per workspace" description="Open work by status, then what is late and what waits on a decision. Refreshes every 15 seconds." />
+          <CardHeader title="Status per workspace" description="Open work by status, then what is late and what waits on you: goals to decide and agent questions. Refreshes every 15 seconds." />
           {rows.length === 0 ? (
             <EmptyState icon={<Building2 />} title="No workspaces yet">
               Create your first workspace below, then connect an agent to it.

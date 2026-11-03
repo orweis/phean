@@ -3,11 +3,11 @@ import { describe, expect, it } from "vitest";
 import { groupActivity, type ActivityLike } from "@/lib/activity";
 import {
   isResumeUrl,
-  isWebUrl,
   MAX_SESSIONS,
   movesSession,
   resumeLabel,
   sessionOfAsker,
+  webUrl,
   withSession,
   type AgentSession,
 } from "@/lib/agent-sessions";
@@ -247,9 +247,11 @@ describe("agent sessions", () => {
     for (const url of ["javascript:alert(1)", " javascript:alert(1)", "vbscript:x", "data:text/html,x", "file:///etc/passwd", "blob:https://a/b", "/relative", ""]) {
       expect(isResumeUrl(url), url).toBe(false);
     }
-    expect(isWebUrl("https://acme.slack.com/archives/C1/p2")).toBe(true);
-    expect(isWebUrl("slack://channel?id=C1")).toBe(false);
-    expect(isWebUrl("gmail:thread/18c1")).toBe(false);
+    expect(webUrl("https://acme.slack.com/archives/C1/p2")).toBe("https://acme.slack.com/archives/C1/p2");
+    expect(webUrl("HTTPS://Mail.Example.com/m/1")).toBe("https://mail.example.com/m/1");
+    expect(webUrl("slack://channel?id=C1")).toBeNull();
+    expect(webUrl("gmail:thread/18c1")).toBeNull();
+    expect(webUrl("msg-42")).toBeNull();
   });
 
   it("keeps each agent's latest session first, up to the cap", () => {

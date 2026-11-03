@@ -7,7 +7,7 @@ import { cancelInvitation, inviteMember, removeMember } from "@/server/auth/work
 import { createAgent, revokeAgent } from "@/server/domain/agents";
 import { createGoal, setGoalStatus, updateGoal } from "@/server/domain/goals";
 import { forget, remember } from "@/server/domain/memory";
-import { addTask, completeTask, releaseTask, updateTask } from "@/server/domain/tasks";
+import { addTask, answerInput, completeTask, releaseTask, updateTask } from "@/server/domain/tasks";
 
 // Goals
 export const createGoalAction = tenantAction(createGoal, {
@@ -25,6 +25,7 @@ export const addTaskAction = tenantAction(addTask, {
 export const updateTaskAction = tenantAction(updateTask, { success: "Saved." });
 export const completeTaskAction = tenantAction(completeTask, { success: "Done." });
 export const releaseTaskAction = tenantAction(releaseTask, { success: "Released." });
+export const answerInputAction = tenantAction(answerInput, { success: "Answered." });
 
 // Memory
 export const rememberAction = tenantAction(remember, { success: "Saved to memory." });

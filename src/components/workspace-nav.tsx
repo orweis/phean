@@ -9,12 +9,13 @@ import { routes } from "@/lib/routes";
 
 /** Counts shown on the tab rail, so the extent of what waits is visible from every page. */
 export interface NavCounts {
-  awaitingApproval: number;
+  /** Goals to decide and agent questions to answer. */
+  waitingOnYou: number;
   inbox: number;
 }
 
 const TABS = [
-  { label: "Overview", icon: LayoutDashboard, href: routes.workspace, exact: true, count: "awaitingApproval" },
+  { label: "Overview", icon: LayoutDashboard, href: routes.workspace, exact: true, count: "waitingOnYou" },
   { label: "Board", icon: KanbanSquare, href: routes.board, count: "inbox" },
   { label: "Timeline", icon: CalendarRange, href: routes.timeline },
   { label: "Memory", icon: Brain, href: routes.memory },
@@ -24,7 +25,7 @@ const TABS = [
 ] as const;
 
 const COUNT_LABELS: Record<keyof NavCounts, string> = {
-  awaitingApproval: "awaiting approval",
+  waitingOnYou: "waiting on you",
   inbox: "in the inbox",
 };
 

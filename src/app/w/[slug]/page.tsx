@@ -5,6 +5,7 @@ import { AgentWorkload } from "@/components/agent-list";
 import { Timetable, TimetableLegend } from "@/components/charts/timetable";
 import { GoalTree } from "@/components/goal-tree";
 import { ManualEntry } from "@/components/manual-entry";
+import { OpenQuestions } from "@/components/open-questions";
 import { PageHeader } from "@/components/page-header";
 import { PendingApprovals } from "@/components/pending-approvals";
 import { TaskRow } from "@/components/task-card";
@@ -31,6 +32,7 @@ const list = new Intl.ListFormat("en", { type: "conjunction" });
 /** The one sentence an owner needs first: what waits on them, what is late, how much is moving. */
 function statusSentence(stats: WorkspaceStats): string {
   const parts = [
+    stats.awaitingInput > 0 && `${pluralize(stats.awaitingInput, "agent question")} ${stats.awaitingInput === 1 ? "awaits" : "await"} your answer`,
     stats.pendingApprovals > 0 && `${pluralize(stats.pendingApprovals, "goal")} ${stats.pendingApprovals === 1 ? "awaits" : "await"} your decision`,
     stats.overdue > 0 && `${pluralize(stats.overdue, "task")} ${stats.overdue === 1 ? "is" : "are"} late`,
     stats.openTasks > 0 && `${pluralize(stats.openTasks, "task")} ${stats.openTasks === 1 ? "is" : "are"} open`,
@@ -87,6 +89,19 @@ export default async function DashboardPage({ params }: PageProps<"/w/[slug]">) 
       {/* On phones both columns dissolve into one stack, ordered by what needs a person first. */}
       <div className="mt-6 grid gap-6 lg:grid-cols-3">
         <div className="min-w-0 max-lg:contents lg:col-span-2 lg:space-y-6">
+          {summary.awaitingInputTasks.length > 0 && (
+            <Card id="questions" tone="wait" className="scroll-mt-32 max-lg:order-1">
+              <CardHeader
+                tone="wait"
+                title={`${pluralize(summary.awaitingInput, "agent question")} waiting on you`}
+                description="Agents paused for your answer. Resume the conversation where it stopped, or answer here."
+              />
+              <CardBody className="py-1">
+                <OpenQuestions tasks={summary.awaitingInputTasks} slug={slug} canAnswer={canWrite} />
+              </CardBody>
+            </Card>
+          )}
+
           {proposed.length > 0 && (
             <Card tone="wait" className="max-lg:order-1">
               <CardHeader
