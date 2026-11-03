@@ -65,6 +65,8 @@ pnpm db:migrate && next build
 
 Migrations are plain SQL files in `drizzle/`, applied in order and tracked in the database. A failed migration fails the build, so a broken schema change never goes live.
 
+To ship a branch to production before it merges, create a production deployment from its Git ref rather than from a preview: `vercel deploy --prod` from a checkout of the branch, or the deployments API with `target: "production"` and a `gitSource` naming the branch and commit. That build runs with the production environment variables, so its migrations run against the production database, and it takes the production domain when it is ready. The next push to `main` replaces it.
+
 ### 5. Smoke test
 
 ```bash
