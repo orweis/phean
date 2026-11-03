@@ -7,6 +7,8 @@ import {
   cumulativeFlow,
   fitWindow,
   fractionOf,
+  groupByGoal,
+  journeyTotals,
   mostPressing,
   parseTimelineDays,
   statusAt,
@@ -24,6 +26,10 @@ const day = (offset: number, hour = 9) => new Date(Date.UTC(2026, 2, 15 + offset
 
 function task(id: string, status: TaskStatus, createdOffset: number, extra: Partial<JourneyTask> = {}): JourneyTask {
   return { id, status, createdAt: day(createdOffset), updatedAt: day(createdOffset), completedAt: null, ...extra };
+}
+
+function plannedTask(id: string, status: TaskStatus, extra: Partial<PlannedTask> = {}): PlannedTask {
+  return { ...task(id, status, -2), priority: "medium", dueDate: null, goalId: null, ...extra };
 }
 
 const event = (entityId: string, action: string, offset: number, data: Record<string, unknown> = {}): TaskEventLike => ({
@@ -148,8 +154,10 @@ describe("tracks and flow", () => {
   });
 
   it("picks the most pressing open tracks and keeps them in the order they set out", () => {
-    const track = (id: string, priority: Priority, dueDate: string | null, status: TaskStatus = "todo") =>
-      ({ task: { ...task(id, status, 0), priority, dueDate, goalId: null }, stops: [{ status, at: NOW }] }) satisfies Journey<PlannedTask>;
+    const track = (id: string, priority: Priority, dueDate: string | null, status: TaskStatus = "todo"): Journey<PlannedTask> => ({
+      task: plannedTask(id, status, { priority, dueDate }),
+      stops: [{ status, at: NOW }],
+    });
     const tracks = [
       track("low", "low", null),
       track("late", "medium", "2026-03-10"),
@@ -158,6 +166,42 @@ describe("tracks and flow", () => {
       track("soon", "medium", "2026-03-16"),
     ];
     expect(mostPressing(tracks, 3, NOW).map(({ task }) => task.id)).toEqual(["late", "urgent", "soon"]);
+  });
+
+  it("totals a window's journeys, counting only arrivals inside it", () => {
+    const planned = buildJourneys(
+      [
+        plannedTask("late", "todo", { dueDate: "2026-03-10" }),
+        plannedTask("open", "in_progress", { dueDate: "2026-03-15" }),
+        plannedTask("arrived", "done", { completedAt: day(-1) }),
+        plannedTask("old", "done", { completedAt: day(-30) }),
+        plannedTask("dropped", "dropped"),
+      ],
+      [],
+    );
+    expect(journeyTotals(planned, window)).toEqual({ total: 5, done: 1, dropped: 1, open: 2, late: 1 });
+  });
+
+  it("groups journeys under their goals in tree order, with unfiled work last", () => {
+    const planned = buildJourneys(
+      [
+        plannedTask("ops-task", "todo", { goalId: "g_ops" }),
+        plannedTask("loose", "todo"),
+        plannedTask("finance-task", "todo", { goalId: "g_finance" }),
+        plannedTask("hidden-goal", "todo", { goalId: "g_not_shown" }),
+      ],
+      [],
+    );
+    const goals = [
+      { id: "g_finance", title: "Finance" },
+      { id: "g_empty", title: "Nothing here" },
+      { id: "g_ops", title: "Ops" },
+    ];
+    expect(groupByGoal(planned, goals, "acme").map(({ key, title, href, journeys }) => [key, title, href, journeys.map(({ task }) => task.id)])).toEqual([
+      ["g_finance", "Finance", "/w/acme/goals/g_finance", ["finance-task"]],
+      ["g_ops", "Ops", "/w/acme/goals/g_ops", ["ops-task"]],
+      ["unfiled", "Not filed under a goal", undefined, ["loose", "hidden-goal"]],
+    ]);
   });
 
   it("counts each station at the end of every day, and only arrivals inside the window", () => {

@@ -1,9 +1,14 @@
+import { APIError } from "better-auth/api";
+import { redirect } from "next/navigation";
 import { describe, expect, it } from "vitest";
 
+import { IDLE, stringData } from "@/lib/action-state";
 import { mcpClientSetups } from "@/lib/mcp-config";
 import { queryParam, routes, safeNextPath } from "@/lib/routes";
-import { parseInput } from "@/server/domain/service";
+import { attempt, expectedErrorMessage } from "@/server/actions";
+import { invalid } from "@/server/domain/errors";
 import { CreateGoalInput, RememberInput, TaskDraft, UpdateGoalInput, UpdateTaskInput } from "@/server/domain/schemas";
+import { parseInput } from "@/server/domain/service";
 import { formToInput } from "@/server/forms";
 
 function form(entries: [string, string][]): FormData {
@@ -83,5 +88,28 @@ describe("formToInput", () => {
 
   it("keeps an empty string where the schema accepts one, so text can be cleared", () => {
     expect(formToInput(form([["goalId", "g_1"], ["description", "  "]]), UpdateGoalInput)).toEqual({ goalId: "g_1", description: "" });
+  });
+});
+
+describe("form action results", () => {
+  it("turns expected failures into a form error and lets everything else through", async () => {
+    await expect(attempt(async () => 42)).resolves.toEqual({ ok: true, value: 42 });
+    await expect(attempt(() => Promise.reject(invalid("Title is required.")))).resolves.toEqual({
+      ok: false,
+      state: { status: "error", message: "Title is required.", at: expect.any(Number) },
+    });
+    expect(expectedErrorMessage(new APIError("BAD_REQUEST", { message: "User already exists" }))).toBe("User already exists");
+
+    const crash = new Error("connection reset");
+    expect(expectedErrorMessage(crash)).toBeNull();
+    await expect(attempt(() => Promise.reject(crash))).rejects.toBe(crash);
+    await expect(attempt(async () => redirect("/w/acme"))).rejects.toMatchObject({ digest: expect.stringMatching(/^NEXT_REDIRECT/) });
+  });
+
+  it("hands back named strings only when every one is there", () => {
+    const issued = { status: "success" as const, data: { token: "phn_secret", name: "Scout", count: 2 } };
+    expect(stringData(issued, "token", "name")).toEqual({ token: "phn_secret", name: "Scout" });
+    expect(stringData(issued, "token", "count")).toBeNull();
+    expect(stringData(IDLE, "token")).toBeNull();
   });
 });

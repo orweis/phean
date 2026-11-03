@@ -1,10 +1,81 @@
 import { describe, expect, it } from "vitest";
 
 import { groupActivity, type ActivityLike } from "@/lib/activity";
+import { addDays, dayOf, daysBetween, isoDate, isoDayFromToday, isPastDue, startOfUtcDay, todayIso } from "@/lib/dates";
+import {
+  isLate,
+  isOneOf,
+  isOpenTaskStatus,
+  LIMITS,
+  OPEN_TASK_STATUSES,
+  slugify,
+  STATIONS,
+  TASK_STATUSES,
+  WORKSPACE_SLUG_PATTERN,
+  zeroCounts,
+} from "@/lib/domain";
 import { formatDueDate, percent, pluralize, relativeDue, timeAgo, truncate } from "@/lib/format";
 import { EMPTY_COUNTS, flattenTree, subtreeIds, tallyStatus, toTree, treeGuides, withProgress } from "@/lib/goal-tree";
+import { patchOf } from "@/server/db/columns";
 import { prefixTsQuery } from "@/server/db/fts";
-import { postgresConnectionString } from "@/server/db/url";
+
+describe("calendar dates", () => {
+  const lateEvening = new Date("2026-03-15T23:30:00Z");
+
+  it("does day arithmetic in UTC", () => {
+    expect(startOfUtcDay(lateEvening).toISOString()).toBe("2026-03-15T00:00:00.000Z");
+    expect(addDays(lateEvening, -15).toISOString()).toBe("2026-02-28T23:30:00.000Z");
+    expect(dayOf("2026-03-01").toISOString()).toBe("2026-03-01T00:00:00.000Z");
+    expect(isoDate(lateEvening)).toBe("2026-03-15");
+    expect(todayIso(lateEvening)).toBe("2026-03-15");
+    expect(isoDayFromToday(1, lateEvening)).toBe("2026-03-16");
+    expect(isoDayFromToday(-15, lateEvening)).toBe("2026-02-28");
+    expect(daysBetween(dayOf("2026-03-01"), lateEvening)).toBe(14);
+    expect(daysBetween(lateEvening, dayOf("2026-03-01"))).toBe(-14);
+  });
+
+  it("counts open work as late only once its due day has ended", () => {
+    expect(isPastDue(null, lateEvening)).toBe(false);
+    expect(isPastDue("2026-03-15", lateEvening)).toBe(false);
+    expect(isPastDue("2026-03-14", lateEvening)).toBe(true);
+    expect(isLate({ status: "todo", dueDate: "2026-03-14" }, lateEvening)).toBe(true);
+    expect(isLate({ status: "in_progress", dueDate: "2026-03-15" }, lateEvening)).toBe(false);
+    expect(isLate({ status: "done", dueDate: "2026-03-14" }, lateEvening)).toBe(false);
+    expect(isLate({ status: "dropped", dueDate: "2026-03-14" }, lateEvening)).toBe(false);
+  });
+});
+
+describe("domain vocabulary", () => {
+  it("narrows untrusted values and fills in missing counts", () => {
+    expect(isOneOf(TASK_STATUSES, "todo")).toBe(true);
+    expect(isOneOf(TASK_STATUSES, "TODO")).toBe(false);
+    expect(isOneOf(TASK_STATUSES, undefined)).toBe(false);
+    expect(isOneOf([14, 30], 30)).toBe(true);
+    expect(isOneOf([14, 30], "30")).toBe(false);
+    expect(zeroCounts(STATIONS)).toEqual({ inbox: 0, todo: 0, in_progress: 0, done: 0 });
+    expect(TASK_STATUSES.filter(isOpenTaskStatus)).toEqual([...OPEN_TASK_STATUSES]);
+  });
+
+  it("suggests workspace slugs that the slug pattern accepts", () => {
+    expect(slugify("Acme Corp.")).toBe("acme-corp");
+    expect(slugify("Société Générale")).toBe("societe-generale");
+    expect(slugify("--Edge--case--")).toBe("edge-case");
+    expect(slugify(`${"x".repeat(LIMITS.slug - 1)}-tail`)).toBe("x".repeat(LIMITS.slug - 1));
+    expect(slugify("x".repeat(60))).toHaveLength(LIMITS.slug);
+    expect(slugify("!!!")).toBe("");
+
+    const schemaPattern = new RegExp(`^${WORKSPACE_SLUG_PATTERN}$`);
+    // Browsers compile an input's `pattern` with the v flag, which rejects an unescaped "-" in a class.
+    const htmlPattern = new RegExp(`^(?:${WORKSPACE_SLUG_PATTERN})$`, "v");
+    for (const name of ["Acme Corp.", "Société Générale", "a", "--Edge--case--", "x".repeat(60), "Q3 / 2026 plan"]) {
+      expect(slugify(name)).toMatch(schemaPattern);
+      expect(slugify(name)).toMatch(htmlPattern);
+    }
+    for (const bad of ["-acme", "acme-", "Acme", "ac me", "a".repeat(LIMITS.slug + 1)]) {
+      expect(bad).not.toMatch(schemaPattern);
+    }
+  });
+});
 
 describe("goal tree helpers", () => {
   const goals = [
@@ -88,22 +159,17 @@ describe("activity grouping", () => {
   });
 });
 
-describe("full-text query building", () => {
+describe("query helpers", () => {
   it("builds safe prefix queries", () => {
     expect(prefixTsQuery("Audit plan")).toBe("audit:* & plan:*");
     expect(prefixTsQuery("o'reilly & co | !")).toBe("o:* & reilly:* & co:*");
     expect(prefixTsQuery("Ünïcode 2026")).toBe("ünïcode:* & 2026:*");
     expect(prefixTsQuery("!!! ???")).toBeNull();
   });
-});
 
-describe("Postgres connection strings", () => {
-  it("pins certificate verification without touching other parameters", () => {
-    expect(postgresConnectionString("postgresql://u:p%40ss@host.neon.tech/db?sslmode=require&channel_binding=require")).toBe(
-      "postgresql://u:p%40ss@host.neon.tech/db?sslmode=verify-full&channel_binding=require",
-    );
-    expect(postgresConnectionString("postgres://u:p@localhost:5432/db?sslmode=disable")).toBe("postgres://u:p@localhost:5432/db?sslmode=disable");
-    expect(postgresConnectionString("postgres://u:p@localhost:5432/db")).toBe("postgres://u:p@localhost:5432/db");
+  it("patches only the fields an update was given, keeping null as a clear", () => {
+    expect(patchOf({ title: "New", dueDate: null, goalId: undefined, tags: [] })).toEqual({ title: "New", dueDate: null, tags: [] });
+    expect(patchOf({ title: undefined })).toEqual({});
   });
 });
 
