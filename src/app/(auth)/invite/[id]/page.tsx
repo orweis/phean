@@ -12,7 +12,7 @@ import { ROLE_META } from "@/lib/domain";
 import { routes } from "@/lib/routes";
 import { getViewer } from "@/server/auth/session";
 import { getDb } from "@/server/db/client";
-import { findInvitation, toMemberRole } from "@/server/domain/tenants";
+import { findInvitation } from "@/server/domain/tenants";
 
 export const metadata: Metadata = { title: "Invitation" };
 
@@ -69,7 +69,7 @@ export default async function InvitePage({ params }: PageProps<"/invite/[id]">) 
     <Message title={`Join ${tenant.name}`}>
       <p>
         {invitation.inviterName} invited you to join as{" "}
-        <strong className="text-ink">{ROLE_META[toMemberRole(invitation.role ?? "member")].label.toLowerCase()}</strong>. You will
+        <strong className="text-ink">{ROLE_META[invitation.role].label.toLowerCase()}</strong>. You will
         see the workspace&apos;s goals, tasks, memory, and agents.
       </p>
       <ActionForm action={acceptInvitationAction}>

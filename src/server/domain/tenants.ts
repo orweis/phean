@@ -17,9 +17,9 @@ export interface Membership {
 
 const tenantColumns = { id: organization.id, slug: organization.slug, name: organization.name };
 
-/** Better Auth stores roles as a comma-separated list; Phean uses the most privileged one. */
-export function toMemberRole(raw: string): MemberRole {
-  const roles = raw.split(",").map((role) => role.trim());
+/** Better Auth stores roles as a comma-separated list (or none); Phean uses the most privileged one. */
+export function toMemberRole(raw: string | null): MemberRole {
+  const roles = (raw ?? "").split(",").map((role) => role.trim());
   if (roles.includes("owner")) return "owner";
   if (roles.includes("admin")) return "admin";
   return "member";
@@ -89,13 +89,13 @@ export const listMembers = service(Empty, async (ctx): Promise<Member[]> => {
 export interface PendingInvitation {
   id: string;
   email: string;
-  role: string | null;
+  role: MemberRole;
   expiresAt: Date;
 }
 
 export const listPendingInvitations = service(Empty, async (ctx): Promise<PendingInvitation[]> => {
   assertCan(ctx, "member:manage");
-  return ctx.db
+  const rows = await ctx.db
     .select({ id: invitation.id, email: invitation.email, role: invitation.role, expiresAt: invitation.expiresAt })
     .from(invitation)
     .where(
@@ -106,12 +106,13 @@ export const listPendingInvitations = service(Empty, async (ctx): Promise<Pendin
       ),
     )
     .orderBy(asc(invitation.createdAt));
+  return rows.map((row) => ({ ...row, role: toMemberRole(row.role) }));
 });
 
 export interface InvitationView {
   id: string;
   email: string;
-  role: string | null;
+  role: MemberRole;
   status: string;
   expiresAt: Date;
   tenant: Tenant;
@@ -134,7 +135,7 @@ export async function findInvitation(db: Db, invitationId: string): Promise<Invi
     .innerJoin(organization, eq(organization.id, invitation.organizationId))
     .innerJoin(user, eq(user.id, invitation.inviterId))
     .where(eq(invitation.id, invitationId));
-  return row ?? null;
+  return row ? { ...row, role: toMemberRole(row.role) } : null;
 }
 
 export async function countMembers(db: Db, tenantId: string): Promise<number> {

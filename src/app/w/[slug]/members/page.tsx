@@ -13,7 +13,7 @@ import { timeAgo } from "@/lib/format";
 import { routes } from "@/lib/routes";
 import { requireWorkspace } from "@/server/auth/session";
 import { can } from "@/server/domain/policy";
-import { listMembers, listPendingInvitations, toMemberRole } from "@/server/domain/tenants";
+import { listMembers, listPendingInvitations } from "@/server/domain/tenants";
 import { absoluteUrl } from "@/server/web";
 
 export const metadata: Metadata = { title: "Members" };
@@ -93,7 +93,7 @@ export default async function MembersPage({ params }: PageProps<"/w/[slug]/membe
                   <li key={invitation.id} className="space-y-2 px-5 py-3">
                     <div className="flex items-center gap-2">
                       <p className="min-w-0 flex-1 truncate text-sm text-ink">{invitation.email}</p>
-                      <MetaBadge meta={ROLE_META} value={toMemberRole(invitation.role ?? "member")} />
+                      <MetaBadge meta={ROLE_META} value={invitation.role} />
                     </div>
                     <div className="flex items-center gap-1.5">
                       <span className="flex-1 text-xs text-muted">Expires {timeAgo(invitation.expiresAt)}</span>
