@@ -1,5 +1,8 @@
 import type { Metadata, Viewport } from "next";
 
+import { COLOR_SCHEMES, colorSchemeFor, themeColorFor } from "@/lib/appearance";
+import { getAppearance } from "@/server/web";
+
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -7,18 +10,18 @@ export const metadata: Metadata = {
   description: "Humans set the goals. Agents roll the boulder. A shared task and goal ledger for teams of AI agents.",
 };
 
-/** The browser chrome takes the paper of each appearance (sRGB of `--color-paper`). */
-export const viewport: Viewport = {
-  colorScheme: "light dark",
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#f7f5fb" },
-    { media: "(prefers-color-scheme: dark)", color: "#0e0d17" },
-  ],
-};
+/** One theme-color per device scheme, so the browser chrome still follows the device under System. */
+export async function generateViewport(): Promise<Viewport> {
+  const appearance = await getAppearance();
+  return {
+    colorScheme: colorSchemeFor(appearance),
+    themeColor: COLOR_SCHEMES.map((scheme) => ({ media: `(prefers-color-scheme: ${scheme})`, color: themeColorFor(appearance, scheme) })),
+  };
+}
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default async function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en">
+    <html lang="en" data-appearance={await getAppearance()}>
       <body className="min-h-dvh">{children}</body>
     </html>
   );

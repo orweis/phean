@@ -1,7 +1,9 @@
 import "server-only";
 
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { notFound } from "next/navigation";
+
+import { APPEARANCE_COOKIE, parseAppearance, type Appearance } from "@/lib/appearance";
 
 import { appUrl } from "./config";
 import { isDomainError } from "./domain/errors";
@@ -14,6 +16,11 @@ export async function orNotFound<T>(load: Promise<T>): Promise<T> {
     if (isDomainError(error) && error.code === "not_found") notFound();
     throw error;
   }
+}
+
+/** The viewer's appearance, read from its cookie so the first paint is already in it. */
+export async function getAppearance(): Promise<Appearance> {
+  return parseAppearance((await cookies()).get(APPEARANCE_COOKIE)?.value);
 }
 
 /** An absolute URL on the origin the viewer is using, so copied links work on previews too. */

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { groupActivity, type ActivityLike } from "@/lib/activity";
+import { appearanceCookie, colorSchemeFor, parseAppearance, themeColorFor } from "@/lib/appearance";
 import { addDays, dayOf, daysBetween, isoDate, isoDayFromToday, isPastDue, startOfUtcDay, todayIso } from "@/lib/dates";
 import {
   isLate,
@@ -189,5 +190,28 @@ describe("formatting", () => {
     expect(relativeDue("2026-01-02", now)).toBe("Tomorrow");
     expect(relativeDue("2026-01-05", now)).toBe("In 4 days");
     expect(relativeDue("2025-12-30", now)).toBe("2 days late");
+  });
+});
+
+describe("appearance", () => {
+  it("falls back to following the system for a missing or unknown choice", () => {
+    expect(parseAppearance("dark")).toBe("dark");
+    expect(parseAppearance("light")).toBe("light");
+    expect(parseAppearance(undefined)).toBe("system");
+    expect(parseAppearance("sepia")).toBe("system");
+  });
+
+  it("gives the browser chrome the paper of the chosen appearance, or of the device's under System", () => {
+    expect(themeColorFor("system", "light")).toBe("#f7f5fb");
+    expect(themeColorFor("system", "dark")).toBe("#0e0d17");
+    expect(themeColorFor("dark", "light")).toBe("#0e0d17");
+    expect(themeColorFor("light", "dark")).toBe("#f7f5fb");
+    expect(colorSchemeFor("system")).toBe("light dark");
+    expect(colorSchemeFor("dark")).toBe("dark");
+  });
+
+  it("keeps the choice for a year, and only over HTTPS when the page is secure", () => {
+    expect(appearanceCookie("dark", true)).toBe("phean-appearance=dark; Path=/; Max-Age=31536000; SameSite=Lax; Secure");
+    expect(appearanceCookie("system", false)).not.toContain("Secure");
   });
 });
