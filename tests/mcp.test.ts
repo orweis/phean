@@ -3,6 +3,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 
 import { isoDayFromToday } from "@/lib/dates";
 import { createAgent, revokeAgent } from "@/server/domain/agents";
+import { answerInput } from "@/server/domain/tasks";
 import { createPheanMcpHandler } from "@/server/mcp/handler";
 import { TOOLS } from "@/server/mcp/tools";
 
@@ -81,11 +82,12 @@ describe("MCP surface", () => {
   it("advertises every tool with annotations, plus prompts and instructions", async () => {
     const { tools } = await scout.listTools();
     expect(tools.map((tool) => tool.name).sort()).toEqual(TOOLS.map((tool) => tool.name).sort());
-    expect(tools).toHaveLength(21);
+    expect(tools).toHaveLength(24);
     const byName = new Map(tools.map((tool) => [tool.name, tool]));
     expect(byName.get("list_tasks")?.annotations?.readOnlyHint).toBe(true);
     expect(byName.get("forget")?.annotations?.destructiveHint).toBe(true);
     expect(byName.get("capture_tasks")?.inputSchema.properties).toHaveProperty("tasks");
+    expect(byName.get("claim_task")?.inputSchema.properties).toHaveProperty("session.properties.url");
 
     const { prompts } = await scout.listPrompts();
     expect(prompts.map((prompt) => prompt.name).sort()).toEqual(["daily_review", "scan_sources", "sync_up", "triage_inbox"]);
@@ -179,6 +181,35 @@ describe("multiple agents sharing a workspace", () => {
       tasksByStatus: { done: 1 },
       dashboardUrl: `${TEST_ORIGIN}/w/${ws.tenant.slug}`,
     });
+  });
+
+  it("asks the human through Phean and hands the answer back to the agent", async () => {
+    const {
+      created: [task],
+    } = dataOf<{ created: { id: string }[] }>(await call(scout, "capture_tasks", { tasks: [{ title: "Pick the offsite city", status: "todo" }] }));
+    const session = { url: "https://claude.ai/chat/7c1f", app: "Claude", brief: "Shortlisted Lisbon and Porto" };
+    dataOf(await call(scout, "claim_task", { taskId: task!.id, session }));
+
+    const rejected = await call(scout, "link_session", { taskId: task!.id, session: { url: "javascript:alert(document.cookie)" } });
+    expect(rejected.isError).toBe(true);
+    expect(textOf(rejected)).toContain("Use an https link");
+
+    const asked = dataOf<{ task: { inputRequest: { question: string } }; questionsUrl: string }>(
+      await call(scout, "request_input", { taskId: task!.id, question: "Lisbon or Porto?" }),
+    );
+    expect(asked.task.inputRequest.question).toBe("Lisbon or Porto?");
+    expect(asked.questionsUrl).toBe(`${TEST_ORIGIN}/w/${ws.tenant.slug}#questions`);
+
+    const summary = dataOf<{ awaitingInput: number; awaitingInputTasks: { id: string; agentSessions: { url: string }[] }[] }>(
+      await call(closer, "get_status_summary"),
+    );
+    expect(summary.awaitingInput).toBe(1);
+    expect(summary.awaitingInputTasks[0]).toMatchObject({ id: task!.id, agentSessions: [{ url: session.url }] });
+
+    await answerInput(ws.human, { taskId: task!.id, answer: "Porto" });
+    const { events } = dataOf<{ events: { action: string; data: { answer?: string } }[] }>(await call(scout, "get_activity", { limit: 1 }));
+    expect(events[0]).toMatchObject({ action: "task.input_answered", data: { answer: "Porto" } });
+    expect(dataOf<{ task: { inputRequest: unknown } }>(await call(scout, "resolve_input", { taskId: task!.id })).task.inputRequest).toBeNull();
   });
 
   it("hands back the cursor it was given when nothing happened since", async () => {

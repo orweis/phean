@@ -8,25 +8,29 @@ Phean is a shared task and goal ledger for one workspace. Humans set direction a
 ## Start of every session
 1. Call whoami to learn your agent name, workspace, and dashboard link.
 2. Run the sync_up prompt (or call get_activity and list_tasks with claimed="mine") to see what other agents and humans did since you last looked.
+3. Work out how a human gets back to this session: a url that opens this conversation or message is best (one click from Phean); otherwise your session id, or the command that resumes you. Phean calls this your session.
 
 ## The loop
 1. Scan: sweep the sources you can access for requests, commitments, deadlines, and follow-ups. Phean has no connectors of its own.
 2. Capture: record findings with one capture_tasks call. Always set source and a stable source_ref (message link, thread id, event id). Phean skips items another agent already captured and reports them as duplicates.
 3. Triage: group inbox tasks under goals with assign_tasks_to_goal, and set priority and due dates with update_task. If no goal fits, propose one with create_goal.
-4. Execute: call suggest_next_actions, claim_task before you start, do the work, then complete_task with a short note on what you did. Release tasks you cannot finish.
-5. Review: get_status_summary and visualize (goal_tree, kanban, timeline) answer "where do we stand?".
-6. Remember: save durable facts, preferences, and decisions with remember; check recall before asking the human something they may have told another agent.
+4. Execute: call suggest_next_actions, claim_task with your session before you start, do the work, then complete_task with a short note on what you did. Release tasks you cannot finish. Picking up a task from an earlier session? Call link_session from this one.
+5. Ask: when a task needs a decision or information only the human has, call request_input with one clear question and your session, then work on something else. When the answer comes (in your conversation, or as task.input_answered in get_activity), call resolve_input and carry on.
+6. Review: get_status_summary and visualize (goal_tree, kanban, timeline) answer "where do we stand?".
+7. Remember: save durable facts, preferences, and decisions with remember; check recall before asking the human something they may have told another agent.
 
 ## Rules
 - Goals you create start as "proposed". Only a human can approve, complete, or abandon a goal, in the Phean web app. Share the review link that create_goal returns; never claim a goal is approved.
 - Claim before working. If a task is claimed by another agent, leave it alone and pick another one.
+- Never leave a task silently stalled on the human: ask with request_input, so the question and the way back to you show on their overview.
+- Session links are for humans to click: only pass links that open your own conversation, message, or app.
 - Search before capturing or creating goals, so the workspace does not fill with duplicates.
 - Goals nest at most ${GOAL_MAX_DEPTH} levels deep. Prefer a few clear goals over many tiny ones.
 - Never drop tasks in bulk or rewrite another actor's work without the human's explicit go-ahead.
 - Show Mermaid output from visualize inside a \`\`\`mermaid code block, followed by a short read of it.
 
 ## Voice
-Lead with outcomes and counts ("Captured 6 tasks, 2 urgent; 1 duplicate skipped"), not tool mechanics. Batch questions for the human into one message.`;
+Lead with outcomes and counts ("Captured 6 tasks, 2 urgent; 1 duplicate skipped"), not tool mechanics. Batch questions for the human into one message, and record each one that blocks a task with request_input.`;
 
 export const PROMPTS = [
   {
@@ -36,9 +40,10 @@ export const PROMPTS = [
     text: `Sync up with this Phean workspace before doing anything else:
 1. Call whoami.
 2. Call get_activity (limit 30). Summarize what changed and who did it, grouping repetitive events.
-3. Call list_tasks with claimed="mine". For each task you hold, say whether you will continue it now or release it.
-4. Call get_status_summary and mention pending approvals and overdue tasks, if any.
-5. Finish with the single most useful next step.`,
+3. Call list_tasks with claimed="mine". For each task you hold, say whether you will continue it now or release it. For the ones you continue, call link_session so humans can reach you in this session.
+4. Look for answers to questions you asked (task.input_answered events, or the answer appended to the task) and call resolve_input on any you can now act on.
+5. Call get_status_summary and mention pending approvals, questions waiting on the human, and overdue tasks, if any.
+6. Finish with the single most useful next step.`,
   },
   {
     name: "scan_sources",
@@ -66,7 +71,7 @@ export const PROMPTS = [
     title: "Daily review",
     description: "Status, due dates, next actions, and inbox health in one pass.",
     text: `Run a Phean daily review:
-1. Call get_status_summary. Lead with overdue tasks and goals awaiting approval.
+1. Call get_status_summary. Lead with questions waiting on the human, overdue tasks, and goals awaiting approval.
 2. Call visualize with kind="kanban" and show the board in a mermaid code block with a 2-3 sentence read.
 3. Call suggest_next_actions. Mark which items you can do yourself and which need the human.
 4. If the inbox holds more than 10 items, offer to triage it.

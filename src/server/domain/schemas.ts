@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { isResumeUrl, RESUME_URL_SCHEMES } from "@/lib/agent-sessions";
 import {
   GOAL_STATUSES,
   INVITABLE_ROLES,
@@ -73,6 +74,52 @@ export const UpdateTaskInput = z.object({
 });
 
 export const TaskRefInput = z.object({ taskId });
+
+const ref = (max: number) => z.string().trim().max(max).optional();
+const APP_SCHEMES = RESUME_URL_SCHEMES.filter((scheme) => !scheme.startsWith("http")).map((scheme) => `${scheme}://`);
+
+export const SessionInput = z
+  .object({
+    url: z
+      .string()
+      .trim()
+      .max(LIMITS.url)
+      .refine((value) => value === "" || isResumeUrl(value), {
+        message: `Use an https link, or an app link (${APP_SCHEMES.join(", ")}). Otherwise give a sessionId or command.`,
+      })
+      .optional()
+      .describe("Link that opens this conversation or message: the one-click way back for a human. Pass it whenever your client has one."),
+    sessionId: ref(LIMITS.ref).describe("Your session, conversation or thread id"),
+    messageId: ref(LIMITS.ref).describe("The message to pick up from, if your client has message ids"),
+    command: ref(LIMITS.command).describe("Shell command that resumes this session, e.g. `claude --resume <id>`"),
+    app: ref(LIMITS.name).describe("Where this session lives: Claude Code, Cursor, ChatGPT, Slack..."),
+    brief: z.string().trim().max(LIMITS.brief).default("").describe("Where things stand, in a sentence"),
+  })
+  .refine((session) => Boolean(session.url || session.sessionId || session.command), {
+    message: "Give a url, a sessionId or a command, so a human can find this session.",
+  })
+  .describe("Where a human can resume this work with you");
+
+export const LinkSessionInput = z.object({ taskId, session: SessionInput });
+export const ClaimTaskInput = z.object({
+  taskId,
+  session: SessionInput.optional().describe("Where a human can resume this work with you; same as link_session"),
+});
+export const AskInput = z.object({
+  taskId,
+  question: z
+    .string()
+    .trim()
+    .min(1)
+    .max(LIMITS.question)
+    .describe("What you need from the human, answerable without opening anything else"),
+  session: SessionInput.optional().describe("Where the human can answer you; include a url whenever you have one"),
+});
+export const AnswerInput = z.object({
+  taskId,
+  answer: z.string().trim().max(LIMITS.note).default("").describe("Empty marks the question answered elsewhere"),
+});
+
 export const CompleteTaskInput = z.object({
   taskId,
   note: z.string().trim().max(LIMITS.note).default("").describe("What was done, in one or two sentences"),

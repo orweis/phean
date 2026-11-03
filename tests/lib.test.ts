@@ -1,6 +1,16 @@
 import { describe, expect, it } from "vitest";
 
 import { groupActivity, type ActivityLike } from "@/lib/activity";
+import {
+  isResumeUrl,
+  isWebUrl,
+  MAX_SESSIONS,
+  movesSession,
+  resumeLabel,
+  sessionOfAsker,
+  withSession,
+  type AgentSession,
+} from "@/lib/agent-sessions";
 import { appearanceCookie, colorSchemeFor, parseAppearance, themeColorFor } from "@/lib/appearance";
 import { addDays, dayOf, daysBetween, isoDate, isoDayFromToday, isPastDue, startOfUtcDay, todayIso } from "@/lib/dates";
 import {
@@ -213,5 +223,58 @@ describe("appearance", () => {
   it("keeps the choice for a year, and only over HTTPS when the page is secure", () => {
     expect(appearanceCookie("dark", true)).toBe("phean-appearance=dark; Path=/; Max-Age=31536000; SameSite=Lax; Secure");
     expect(appearanceCookie("system", false)).not.toContain("Secure");
+  });
+});
+
+describe("agent sessions", () => {
+  const session = (agentId: string, overrides: Partial<AgentSession> = {}): AgentSession => ({
+    agentId,
+    agentName: agentId,
+    app: null,
+    url: null,
+    sessionId: `${agentId}-1`,
+    messageId: null,
+    command: null,
+    brief: "",
+    linkedAt: "2026-01-01T00:00:00.000Z",
+    ...overrides,
+  });
+
+  it("links to the web and to agent apps, never to script or local files", () => {
+    for (const url of ["https://claude.ai/chat/1", "http://localhost:3000/c/2", "cursor://anysphere.cursor-deeplink/chat", "slack://channel?id=C1", "VSCODE://file/x"]) {
+      expect(isResumeUrl(url), url).toBe(true);
+    }
+    for (const url of ["javascript:alert(1)", " javascript:alert(1)", "vbscript:x", "data:text/html,x", "file:///etc/passwd", "blob:https://a/b", "/relative", ""]) {
+      expect(isResumeUrl(url), url).toBe(false);
+    }
+    expect(isWebUrl("https://acme.slack.com/archives/C1/p2")).toBe(true);
+    expect(isWebUrl("slack://channel?id=C1")).toBe(false);
+    expect(isWebUrl("gmail:thread/18c1")).toBe(false);
+  });
+
+  it("keeps each agent's latest session first, up to the cap", () => {
+    const first = withSession([], session("a"));
+    const second = withSession(first, session("b"));
+    expect(withSession(second, session("a", { sessionId: "a-2" })).map((entry) => entry.sessionId)).toEqual(["a-2", "b-1"]);
+
+    const many = Array.from({ length: MAX_SESSIONS + 2 }, (_, index) => session(`agent-${index}`)).reduce(withSession, [] as AgentSession[]);
+    expect(many).toHaveLength(MAX_SESSIONS);
+    expect(many[0]?.agentId).toBe(`agent-${MAX_SESSIONS + 1}`);
+  });
+
+  it("treats a new link, id or command as moving, and a new brief or message as a refresh", () => {
+    const before = session("a", { url: "https://x.test/c/1" });
+    expect(movesSession(undefined, before)).toBe(true);
+    expect(movesSession(before, { ...before, brief: "Later", messageId: "m2" })).toBe(false);
+    expect(movesSession(before, { ...before, url: "https://x.test/c/2" })).toBe(true);
+    expect(movesSession(before, { ...before, command: "claude --resume a-1" })).toBe(true);
+  });
+
+  it("names the app to resume in and finds the asking agent's session", () => {
+    expect(resumeLabel({ app: "Claude Code" })).toBe("Resume in Claude Code");
+    expect(resumeLabel({ app: null })).toBe("Resume conversation");
+    const sessions = [session("a"), session("b")];
+    expect(sessionOfAsker(sessions, { agentId: "b", agentName: "b", question: "?", askedAt: "" })?.agentId).toBe("b");
+    expect(sessionOfAsker(sessions, { agentId: "c", agentName: "c", question: "?", askedAt: "" })).toBeUndefined();
   });
 });

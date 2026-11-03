@@ -55,6 +55,11 @@ export const LIMITS = {
   tag: 40,
   sourceRef: 500,
   slug: 40,
+  url: 2000,
+  ref: 200,
+  command: 500,
+  brief: 500,
+  question: 1000,
 } as const;
 
 /**

@@ -10,15 +10,18 @@ import { createGoal, listGoals, updateGoal } from "../domain/goals";
 import { forget, recall, remember } from "../domain/memory";
 import { getBoard, getGoalDetail, getStatusSummary, getTimeline } from "../domain/overview";
 import { ACTIONS, can } from "../domain/policy";
-import { Empty, GoalRefInput, VisualizeInput } from "../domain/schemas";
+import { AskInput, Empty, GoalRefInput, VisualizeInput } from "../domain/schemas";
 import { search } from "../domain/search";
 import {
   assignTasksToGoal,
   captureTasks,
   claimTask,
   completeTask,
+  linkSession,
   listTasks,
   releaseTask,
+  requestInput,
+  resolveInput,
   suggestNextActions,
   updateTask,
 } from "../domain/tasks";
@@ -139,8 +142,36 @@ export const TOOLS: readonly PheanTool[] = [
   serviceTool({
     name: "claim_task",
     title: "Claim task",
-    description: "Take ownership of a task before working on it, so other agents leave it alone. Moves it to 'in_progress'. Fails with the claimant's name if another agent got there first.",
+    description:
+      "Take ownership of a task before working on it, so other agents leave it alone. Moves it to 'in_progress'. Pass 'session' (as in link_session) so humans can resume the work with you. Fails with the claimant's name if another agent got there first.",
     service: claimTask,
+    key: "task",
+  }),
+  serviceTool({
+    name: "link_session",
+    title: "Link session",
+    description:
+      "Attach this session to a task so a human can pick the work up with you from Phean: a url that opens this conversation or message (best: one click), your session id, message id, or the command that resumes you, plus a one-line brief. One per agent: linking again replaces yours. Call it when you start or resume work on a task.",
+    service: linkSession,
+    key: "task",
+  }),
+  defineTool({
+    name: "request_input",
+    title: "Request input",
+    description:
+      "Ask the human a question you need answered to go on with a task. Phean shows it as waiting on them, with a link back to this session; include 'session' with a url whenever you have one. Ends when you call resolve_input, when the task is completed, released, or moved out of progress, or when the human answers in Phean (their answer is appended to the task and appears in get_activity as task.input_answered).",
+    input: AskInput,
+    run: async (ctx, input) => ({
+      task: await requestInput(ctx, input),
+      questionsUrl: ctx.url(routes.questions(ctx.tenant.slug)),
+      note: "Share questionsUrl if the human is not in this conversation. Check get_activity or the task's description for the answer.",
+    }),
+  }),
+  serviceTool({
+    name: "resolve_input",
+    title: "Resolve input",
+    description: "Close your open question on a task once you have the answer, in your conversation or from Phean, so it stops waiting on the human.",
+    service: resolveInput,
     key: "task",
   }),
   serviceTool({
@@ -153,7 +184,8 @@ export const TOOLS: readonly PheanTool[] = [
   serviceTool({
     name: "complete_task",
     title: "Complete task",
-    description: "Mark a task done, with a one or two sentence note on what you did. The note is appended to the task for humans to review.",
+    description:
+      "Mark a task done, with a one or two sentence note on what you did. The note is appended to the task for humans to review, and any open question of yours on it is closed.",
     service: completeTask,
     key: "task",
   }),
@@ -231,7 +263,7 @@ export const TOOLS: readonly PheanTool[] = [
     name: "get_status_summary",
     title: "Status summary",
     description:
-      "Headline numbers: tasks and goals by status, overdue and due this week, goals awaiting approval, active agents, plus the most urgent overdue tasks and the next tasks coming due.",
+      "Headline numbers: tasks and goals by status, overdue and due this week, goals awaiting approval, questions agents asked the human, active agents, plus the open questions, the most urgent overdue tasks, and the next tasks coming due.",
     input: Empty,
     readOnly: true,
     run: async (ctx) => ({

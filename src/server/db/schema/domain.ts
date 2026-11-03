@@ -14,6 +14,7 @@ import {
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 
+import type { AgentSession, InputRequest } from "../../../lib/agent-sessions";
 import {
   ACTOR_TYPES,
   GOAL_STATUSES,
@@ -131,6 +132,13 @@ export const tasks = pgTable(
     claimedByAgentId: text("claimed_by_agent_id"),
     claimedAt: timestampTz("claimed_at"),
     completedAt: timestampTz("completed_at"),
+    /** Where people can resume the work with each agent, newest first. */
+    agentSessions: jsonb("agent_sessions")
+      .$type<AgentSession[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    /** The question an agent is waiting on a person to answer, if any. */
+    inputRequest: jsonb("input_request").$type<InputRequest>(),
     ...createdBy,
     ...timestamps,
     search: searchVector(titleDescriptionSearch),

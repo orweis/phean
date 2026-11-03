@@ -8,7 +8,17 @@ import { createGoal, findGoal, listGoals, updateGoal, type Goal } from "@/server
 import { forget, recall, remember, type Memory } from "@/server/domain/memory";
 import { getBoard, getGoalDetail, getStatusSummary } from "@/server/domain/overview";
 import { search } from "@/server/domain/search";
-import { assignTasksToGoal, captureTasks, claimTask, listTasks, updateTask, type Task } from "@/server/domain/tasks";
+import {
+  answerInput,
+  assignTasksToGoal,
+  captureTasks,
+  claimTask,
+  linkSession,
+  listTasks,
+  requestInput,
+  updateTask,
+  type Task,
+} from "@/server/domain/tasks";
 import { getWorkspaceOverviews, listMemberships } from "@/server/domain/tenants";
 
 import { createTestDb, seedWorkspace, type TestDb, type Workspace } from "./support/db";
@@ -69,6 +79,9 @@ describe("tenant isolation", () => {
       code: "not_found",
     });
     await expect(claimTask(globexAgent, { taskId: acmeTask.id })).rejects.toMatchObject({ code: "not_found" });
+    await expect(linkSession(globexAgent, { taskId: acmeTask.id, session: { sessionId: "s1" } })).rejects.toMatchObject({ code: "not_found" });
+    await expect(requestInput(globexAgent, { taskId: acmeTask.id, question: "Who signs?" })).rejects.toMatchObject({ code: "not_found" });
+    await expect(answerInput(globexOwner, { taskId: acmeTask.id, answer: "Me" })).rejects.toMatchObject({ code: "not_found" });
     await expect(
       assignTasksToGoal(globexAgent, { taskIds: [acmeTask.id], goalId: globexGoal.id }),
     ).rejects.toMatchObject({ code: "not_found" });

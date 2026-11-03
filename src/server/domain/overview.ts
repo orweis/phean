@@ -25,7 +25,7 @@ import { recall, type Memory } from "./memory";
 import { assertCan } from "./policy";
 import { BoardInput, Empty, GoalRefInput, GoalScopeInput, JourneysInput } from "./schemas";
 import { service } from "./service";
-import { byUrgency, isDueWithinWeek, isOpenTask, isOverdue, selectTaskViews, type TaskView } from "./tasks";
+import { byUrgency, isAwaitingInput, isDueWithinWeek, isOpenTask, isOverdue, selectTaskViews, type TaskView } from "./tasks";
 
 export interface WorkspaceStats {
   tasksByStatus: Record<TaskStatus, number>;
@@ -37,6 +37,10 @@ export interface WorkspaceStats {
   doneLast7Days: number;
   activeGoals: number;
   pendingApprovals: number;
+  /** Open tasks whose agent is waiting on a person's answer. */
+  awaitingInput: number;
+  /** Goals to decide plus questions to answer: everything that waits on a person. */
+  waitingOnYou: number;
   agents: number;
   /** Agents that called the MCP server in the last 24 hours. */
   activeAgents: number;
@@ -58,6 +62,7 @@ export async function getWorkspaceStats(db: Db, tenantIds: readonly string[]): P
         byStatus: countByValue(tasks.status, TASK_STATUSES),
         overdue: countWhere(isOverdue),
         dueThisWeek: countWhere(isDueWithinWeek),
+        awaitingInput: countWhere(isAwaitingInput),
         doneLast7Days: countWhere(sql`${tasks.completedAt} > now() - interval '7 days'`),
       })
       .from(tasks)
@@ -95,6 +100,7 @@ export async function getWorkspaceStats(db: Db, tenantIds: readonly string[]): P
       const t = taskMap.get(id);
       const tasksByStatus = t?.byStatus ?? zeroCounts(TASK_STATUSES);
       const goalsByStatus = goalMap.get(id)?.byStatus ?? zeroCounts(GOAL_STATUSES);
+      const awaitingInput = t?.awaitingInput ?? 0;
       const stats: WorkspaceStats = {
         tasksByStatus,
         goalsByStatus,
@@ -105,6 +111,8 @@ export async function getWorkspaceStats(db: Db, tenantIds: readonly string[]): P
         doneLast7Days: t?.doneLast7Days ?? 0,
         activeGoals: goalsByStatus.active,
         pendingApprovals: goalsByStatus.proposed,
+        awaitingInput,
+        waitingOnYou: goalsByStatus.proposed + awaitingInput,
         agents: agentMap.get(id)?.total ?? 0,
         activeAgents: agentMap.get(id)?.active ?? 0,
         lastActivityAt: activityMap.get(id)?.lastActivityAt ?? null,
@@ -116,6 +124,8 @@ export async function getWorkspaceStats(db: Db, tenantIds: readonly string[]): P
 
 export interface StatusSummary extends WorkspaceStats {
   workspace: Tenant;
+  /** Tasks whose agent asked a person something, longest waiting first. */
+  awaitingInputTasks: TaskView[];
   overdueTasks: TaskView[];
   /** Open tasks due today or later, soonest first. */
   dueSoonTasks: TaskView[];
@@ -123,8 +133,11 @@ export interface StatusSummary extends WorkspaceStats {
 
 export const getStatusSummary = service(Empty, async (ctx): Promise<StatusSummary> => {
   assertCan(ctx, "workspace:read");
-  const [stats, overdueTasks, dueSoonTasks] = await Promise.all([
+  const [stats, awaitingInputTasks, overdueTasks, dueSoonTasks] = await Promise.all([
     getWorkspaceStats(ctx.db, [ctx.tenant.id]),
+    selectTaskViews(ctx, isAwaitingInput)
+      .orderBy(sql`${tasks.inputRequest}->>'askedAt'`)
+      .limit(20),
     selectTaskViews(ctx, isOverdue)
       .orderBy(...byUrgency)
       .limit(10),
@@ -132,7 +145,7 @@ export const getStatusSummary = service(Empty, async (ctx): Promise<StatusSummar
       .orderBy(tasks.dueDate, ...byUrgency)
       .limit(8),
   ]);
-  return { workspace: ctx.tenant, ...stats.get(ctx.tenant.id)!, overdueTasks, dueSoonTasks };
+  return { workspace: ctx.tenant, ...stats.get(ctx.tenant.id)!, awaitingInputTasks, overdueTasks, dueSoonTasks };
 });
 
 /** Open work first, then finished, then dropped. */

@@ -18,12 +18,16 @@ import {
 import { search } from "@/server/domain/search";
 import {
   addTask,
+  answerInput,
   assignTasksToGoal,
   captureTasks,
   claimTask,
   completeTask,
+  linkSession,
   listTasks,
   releaseTask,
+  requestInput,
+  resolveInput,
   suggestNextActions,
   updateTask,
 } from "@/server/domain/tasks";
@@ -278,6 +282,97 @@ describe("tasks", () => {
   });
 });
 
+describe("agent sessions and questions", () => {
+  const todo = async (title: string) => (await captureTasks(human, { tasks: [{ title, status: "todo" }] })).created[0]!;
+  const chat = (id: string) => ({ url: `https://claude.ai/chat/${id}`, app: "Claude", brief: "Comparing the two quotes" });
+
+  it("keeps one session per agent, newest first, and logs only a new place to resume", async () => {
+    const task = await todo("Pick a payroll provider");
+    const claimed = await claimTask(scout, { taskId: task.id, session: chat("a1") });
+    expect(claimed.agentSessions).toEqual([
+      expect.objectContaining({ agentName: "Scout", url: "https://claude.ai/chat/a1", app: "Claude", sessionId: null, brief: "Comparing the two quotes" }),
+    ]);
+
+    await linkSession(scout, { taskId: task.id, session: { ...chat("a1"), messageId: "m7", brief: "Waiting on the second quote" } });
+    await releaseTask(scout, { taskId: task.id });
+    const both = await linkSession(closer, { taskId: task.id, session: { sessionId: "f3e1", command: "claude --resume f3e1" } });
+    expect(both.agentSessions.map((session) => [session.agentName, session.messageId ?? session.command])).toEqual([
+      ["Closer", "claude --resume f3e1"],
+      ["Scout", "m7"],
+    ]);
+    expect(await actionsOf(human, task.id)).toEqual(["task.session_linked", "task.released", "task.claimed", "task.captured"]);
+
+    const moved = await linkSession(scout, { taskId: task.id, session: chat("b2") });
+    expect(moved.agentSessions.map((session) => session.url)).toEqual(["https://claude.ai/chat/b2", null]);
+  });
+
+  it("accepts web and app links only, and needs a way back to the session", async () => {
+    const task = await todo("Draft the launch post");
+    for (const url of ["javascript:alert(1)", "JaVaScRiPt:alert(1)", "java\tscript:alert(1)", "data:text/html,hi", "file:///etc/passwd", "/w/acme", "not a link"]) {
+      await expect(linkSession(scout, { taskId: task.id, session: { url } }), url).rejects.toMatchObject({ code: "invalid" });
+    }
+    await expect(linkSession(scout, { taskId: task.id, session: { brief: "Somewhere" } })).rejects.toMatchObject({ code: "invalid" });
+
+    const app = await linkSession(scout, { taskId: task.id, session: { url: "cursor://anysphere.cursor-deeplink/chat?id=9", app: "Cursor" } });
+    expect(app.agentSessions[0]?.url).toBe("cursor://anysphere.cursor-deeplink/chat?id=9");
+    await expect(linkSession(human, { taskId: task.id, session: chat("h") })).rejects.toMatchObject({ code: "invalid" });
+  });
+
+  it("shows a question as waiting on people until it is answered, and appends the answer", async () => {
+    const task = await todo("Settle the Globex invoice dispute");
+    await claimTask(scout, { taskId: task.id });
+    const asked = await requestInput(scout, { taskId: task.id, question: "Offer a 5% discount, or escalate to their CFO?", session: chat("q1") });
+    expect(asked.inputRequest).toMatchObject({ agentName: "Scout", question: "Offer a 5% discount, or escalate to their CFO?" });
+    expect(asked.agentSessions[0]?.url).toBe("https://claude.ai/chat/q1");
+
+    const summary = await getStatusSummary(human, {});
+    expect(summary).toMatchObject({ awaitingInput: 1, waitingOnYou: 1 });
+    expect(summary.awaitingInputTasks.map((waiting) => waiting.id)).toEqual([task.id]);
+    expect(await suggestNextActions(scout, { limit: 20 })).not.toContainEqual(expect.objectContaining({ id: task.id }));
+
+    await expect(requestInput(closer, { taskId: task.id, question: "Also, which bank?" })).rejects.toMatchObject({ code: "conflict" });
+    await expect(answerInput(scout, { taskId: task.id, answer: "Escalate" })).rejects.toMatchObject({ code: "invalid" });
+
+    const answered = await answerInput(human, { taskId: task.id, answer: "Escalate to their CFO." });
+    expect(answered).toMatchObject({ inputRequest: null, status: "in_progress", claimedByAgentId: ws.scout.agentId });
+    expect(answered.description).toBe("Question from Scout: Offer a 5% discount, or escalate to their CFO?\nAnswer from Dana: Escalate to their CFO.");
+    expect((await getStatusSummary(human, {})).awaitingInput).toBe(0);
+
+    const [event] = await listActivity(scout, { limit: 1 });
+    expect(event).toMatchObject({ action: "task.input_answered", actorName: "Dana", data: expect.objectContaining({ answer: "Escalate to their CFO." }) });
+    await expect(answerInput(human, { taskId: task.id, answer: "Too late" })).rejects.toMatchObject({ code: "conflict" });
+    await expect(answerInput(human, { taskId: task.id })).resolves.toMatchObject({ inputRequest: null });
+  });
+
+  it("closes a question when its agent resolves it or the work stops", async () => {
+    const task = await todo("Book the offsite venue");
+    await requestInput(scout, { taskId: task.id, question: "Lisbon or Porto?" });
+    await expect(resolveInput(closer, { taskId: task.id })).rejects.toMatchObject({ code: "conflict" });
+    expect((await resolveInput(scout, { taskId: task.id })).inputRequest).toBeNull();
+    expect((await resolveInput(scout, { taskId: task.id })).inputRequest).toBeNull();
+
+    const ask = () => requestInput(scout, { taskId: task.id, question: "Lisbon or Porto?" });
+    await claimTask(scout, { taskId: task.id });
+    await ask();
+    expect((await releaseTask(scout, { taskId: task.id })).inputRequest).toBeNull();
+    await ask();
+    expect((await updateTask(human, { taskId: task.id, status: "in_progress" })).inputRequest).not.toBeNull();
+    expect((await updateTask(human, { taskId: task.id, status: "todo" })).inputRequest).toBeNull();
+    await ask();
+    expect((await completeTask(scout, { taskId: task.id, note: "Booked Porto" })).inputRequest).toBeNull();
+    await expect(ask()).rejects.toMatchObject({ code: "conflict" });
+    expect((await getStatusSummary(human, {})).awaitingInput).toBe(0);
+    expect(await actionsOf(human, task.id)).toEqual(expect.arrayContaining(["task.input_requested", "task.input_resolved"]));
+  });
+
+  it("keeps agents off questions and sessions on work another agent holds", async () => {
+    const task = await todo("Renew the SSL certificate");
+    await claimTask(scout, { taskId: task.id, session: chat("s1") });
+    await expect(linkSession(closer, { taskId: task.id, session: chat("c1") })).rejects.toMatchObject({ code: "conflict" });
+    await expect(requestInput(closer, { taskId: task.id, question: "Which CA?" })).rejects.toMatchObject({ code: "conflict" });
+  });
+});
+
 describe("memory and search", () => {
   it("recalls by prefix and only lets agents forget their own memories", async () => {
     const preference = await remember(scout, { content: "Dana prefers invoices batched on Fridays", kind: "preference" });
@@ -366,6 +461,8 @@ describe("read models", () => {
       doneLast7Days: 0,
       activeGoals: 0,
       pendingApprovals: 0,
+      awaitingInput: 0,
+      waitingOnYou: 0,
       agents: 0,
       activeAgents: 0,
       lastActivityAt: null,

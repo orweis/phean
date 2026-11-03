@@ -15,6 +15,8 @@ export const routes = {
   signUp: (next?: string) => withQuery("/sign-up", { next }),
   workspaces: () => "/workspaces",
   workspace: (slug: string) => `/w/${slug}`,
+  /** The overview's list of agent questions waiting on a person. */
+  questions: (slug: string) => `/w/${slug}#questions`,
   board: (slug: string, goalId?: string) => withQuery(`/w/${slug}/board`, { goal: goalId }),
   timeline: (slug: string, filters?: { goal?: string; days?: string }) => withQuery(`/w/${slug}/timeline`, filters),
   goal: (slug: string, goalId: string) => `/w/${slug}/goals/${goalId}`,
