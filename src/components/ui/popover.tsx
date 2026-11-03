@@ -1,4 +1,7 @@
-import type { ReactNode } from "react";
+"use client";
+
+import { X } from "lucide-react";
+import { useEffect, useRef, type ReactNode } from "react";
 
 import { cx } from "@/lib/cx";
 
@@ -13,12 +16,35 @@ interface PopoverProps {
 }
 
 /**
- * A small disclosure panel built on <details>, so it works without client JavaScript.
- * On phones the trigger can sit anywhere in a wrapped row, so the panel spans the screen instead.
+ * A small disclosure panel built on <details>, so it opens and closes from its trigger without
+ * client JavaScript. With it, Escape and a click outside close the panel too. On phones the trigger
+ * can sit anywhere in a wrapped row, so the panel spans the screen as a sheet over the trigger and
+ * carries its own close button.
  */
 export function Popover({ label, children, variant = "secondary", align = "right", className }: PopoverProps) {
+  const ref = useRef<HTMLDetailsElement>(null);
+
+  useEffect(() => {
+    const details = ref.current;
+    if (!details) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || !details.open) return;
+      details.open = false;
+      details.querySelector("summary")?.focus();
+    };
+    const onPointerDown = (event: PointerEvent) => {
+      if (details.open && !details.contains(event.target as Node)) details.open = false;
+    };
+    document.addEventListener("keydown", onKeyDown);
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("pointerdown", onPointerDown);
+    };
+  }, []);
+
   return (
-    <details className="group relative">
+    <details ref={ref} className="group relative">
       <summary className={cx(buttonClasses(variant, "sm"), "list-none [&::-webkit-details-marker]:hidden")}>{label}</summary>
       <div
         className={cx(
@@ -28,6 +54,18 @@ export function Popover({ label, children, variant = "secondary", align = "right
           className,
         )}
       >
+        <div className="-mt-2 -mr-2 mb-1 flex justify-end sm:hidden">
+          <button
+            type="button"
+            aria-label="Close"
+            className={buttonClasses("ghost", "sm")}
+            onClick={() => {
+              if (ref.current) ref.current.open = false;
+            }}
+          >
+            <X aria-hidden />
+          </button>
+        </div>
         {children}
       </div>
     </details>
