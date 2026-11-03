@@ -8,13 +8,14 @@ import { cx } from "@/lib/cx";
 import { buttonClasses, type ButtonVariant } from "./button";
 
 interface PopoverProps {
-  label: string;
+  label: ReactNode;
   /** An icon element (not a component: server pages render this client component). */
   icon?: ReactNode;
   children: ReactNode;
   variant?: ButtonVariant;
   align?: "left" | "right";
   className?: string;
+  triggerClassName?: string;
 }
 
 /**
@@ -23,7 +24,7 @@ interface PopoverProps {
  * can sit anywhere in a wrapped row, so the panel becomes a sheet across the top of the screen, over
  * the header, and carries its own close button.
  */
-export function Popover({ label, icon, children, variant = "secondary", align = "right", className }: PopoverProps) {
+export function Popover({ label, icon, children, variant = "secondary", align = "right", className, triggerClassName }: PopoverProps) {
   const ref = useRef<HTMLDetailsElement>(null);
 
   useEffect(() => {
@@ -47,7 +48,7 @@ export function Popover({ label, icon, children, variant = "secondary", align = 
 
   return (
     <details ref={ref} className="group relative">
-      <summary className={cx(buttonClasses(variant, "sm"), "list-none [&::-webkit-details-marker]:hidden")}>
+      <summary className={cx(buttonClasses(variant, "sm"), "list-none [&::-webkit-details-marker]:hidden", triggerClassName)}>
         {icon}
         {label}
       </summary>

@@ -1,9 +1,11 @@
+import { AppearancePicker } from "@/components/appearance-picker";
 import { TimetableLegend } from "@/components/charts/timetable";
 import { Logo, LogoMark } from "@/components/logo";
 import { SampleTimetable } from "@/components/sample-timetable";
 import { ButtonLink } from "@/components/ui/button";
 import { routes } from "@/lib/routes";
 import { getSession } from "@/server/auth/session";
+import { getAppearance } from "@/server/web";
 
 const FEATURES = [
   {
@@ -31,7 +33,8 @@ const ROUTE = [
 ];
 
 export default async function LandingPage() {
-  const signedIn = Boolean(await getSession());
+  const [session, appearance] = await Promise.all([getSession(), getAppearance()]);
+  const signedIn = Boolean(session);
 
   return (
     <div className="min-h-dvh">
@@ -130,6 +133,14 @@ export default async function LandingPage() {
           </div>
         </section>
       </main>
+
+      <footer className="mx-auto flex max-w-6xl flex-wrap items-end justify-between gap-6 px-4 py-10 sm:px-6">
+        <p className="flex items-center gap-2 text-sm font-semibold text-ink sm:pb-1.5">
+          <LogoMark className="size-5" />
+          Phean
+        </p>
+        <AppearancePicker initial={appearance} className="w-full sm:w-72" />
+      </footer>
     </div>
   );
 }

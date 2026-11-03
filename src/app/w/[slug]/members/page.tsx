@@ -4,6 +4,7 @@ import { cancelInvitationAction, removeMemberAction } from "@/app/w/[slug]/actio
 import { InviteMemberForm } from "@/components/invite-member-form";
 import { PageHeader } from "@/components/page-header";
 import { ActionButton } from "@/components/ui/action-button";
+import { Avatar } from "@/components/ui/avatar";
 import { Badge, MetaBadge } from "@/components/ui/badge";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { CopyButton } from "@/components/ui/copy-button";
@@ -51,9 +52,7 @@ export default async function MembersPage({ params }: PageProps<"/w/[slug]/membe
               const isSelf = person.userId === ctx.actor.id;
               return (
                 <li key={person.id} className="flex items-center gap-3 px-5 py-3">
-                  <span aria-hidden className="flex size-8 shrink-0 items-center justify-center rounded-full bg-accent-tint text-sm font-bold text-accent-ink">
-                    {person.name.slice(0, 1).toUpperCase()}
-                  </span>
+                  <Avatar name={person.name} />
                   <div className="min-w-0 flex-1">
                     <p className="flex items-center gap-2 text-sm font-semibold text-ink">
                       <span className="truncate">{person.name}</span>

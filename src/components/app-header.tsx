@@ -4,9 +4,13 @@ import type { ReactNode } from "react";
 
 import { routes } from "@/lib/routes";
 import type { Tenant } from "@/server/domain/context";
+import { getAppearance } from "@/server/web";
 
+import { AppearancePicker } from "./appearance-picker";
 import { Logo } from "./logo";
 import { SignOutButton } from "./sign-out-button";
+import { Avatar } from "./ui/avatar";
+import { Popover } from "./ui/popover";
 
 function WorkspaceSwitcher({ current, workspaces }: { current: Tenant; workspaces: readonly Tenant[] }) {
   return (
@@ -40,8 +44,43 @@ function WorkspaceSwitcher({ current, workspaces }: { current: Tenant; workspace
   );
 }
 
+interface Viewer {
+  name: string;
+  email: string;
+}
+
+/** Who is signed in, how the app looks for them, and the way out. On phones the trigger is the avatar alone. */
+async function AccountMenu({ user }: { user: Viewer }) {
+  const appearance = await getAppearance();
+  return (
+    <Popover
+      variant="ghost"
+      className="sm:w-72"
+      triggerClassName="pl-1 max-sm:pr-1"
+      label={
+        <>
+          <Avatar name={user.name} size="sm" />
+          <span className="max-w-40 truncate max-sm:sr-only">{user.name}</span>
+        </>
+      }
+    >
+      <div className="flex items-center gap-3">
+        <Avatar name={user.name} />
+        <div className="min-w-0">
+          <p className="truncate text-sm font-semibold text-ink">{user.name}</p>
+          <p className="truncate text-xs text-ink-2">{user.email}</p>
+        </div>
+      </div>
+      <AppearancePicker initial={appearance} className="mt-4" />
+      <div className="mt-4 border-t border-rule pt-3">
+        <SignOutButton />
+      </div>
+    </Popover>
+  );
+}
+
 interface AppHeaderProps {
-  user: { name: string; email: string };
+  user: Viewer;
   workspace?: { current: Tenant; all: readonly Tenant[] };
   children?: ReactNode;
 }
@@ -60,12 +99,8 @@ export function AppHeader({ user, workspace, children }: AppHeaderProps) {
             <WorkspaceSwitcher current={workspace.current} workspaces={workspace.all} />
           </>
         )}
-        <div className="ml-auto flex items-center gap-2">
-          <span className="hidden text-right text-xs sm:block">
-            <span className="block font-semibold text-ink">{user.name}</span>
-            <span className="text-ink-2">{user.email}</span>
-          </span>
-          <SignOutButton />
+        <div className="ml-auto">
+          <AccountMenu user={user} />
         </div>
       </div>
       {children && <div className="mx-auto max-w-7xl px-4 pb-1 sm:px-6">{children}</div>}
