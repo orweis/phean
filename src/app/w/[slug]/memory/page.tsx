@@ -51,8 +51,8 @@ export default async function MemoryPage({ params, searchParams }: PageProps<"/w
                   href={routes.memory(slug, { kind: option, q })}
                   aria-current={option === kind ? "page" : undefined}
                   className={cx(
-                    "rounded-sm border px-2.5 py-1 text-xs font-semibold transition-colors duration-(--dur-micro)",
-                    option === kind ? "border-shell bg-shell text-shell-ink" : "border-rule text-ink-2 hover:border-edge hover:text-ink",
+                    "rounded-full px-3 py-1 text-xs font-semibold transition-colors duration-(--dur-micro)",
+                    option === kind ? "bg-accent-tint text-accent-ink" : "bg-fill text-ink-2 hover:bg-rule hover:text-ink",
                   )}
                 >
                   {option ? MEMORY_KIND_META[option].label : "All"}

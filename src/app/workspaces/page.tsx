@@ -86,7 +86,7 @@ export default async function WorkspacesPage() {
                 </thead>
                 <tbody className="divide-y divide-rule">
                   {rows.map((row) => (
-                    <tr key={row.tenant.id} className="transition-colors duration-(--dur-micro) hover:bg-sunken/60">
+                    <tr key={row.tenant.id} className="transition-colors duration-(--dur-micro) hover:bg-fill/60">
                       <td className={cx("py-3 pr-3 pl-5", PINNED_CELL)}>
                         <Link href={routes.workspace(row.tenant.slug)} className="font-semibold text-ink link">
                           {row.tenant.name}

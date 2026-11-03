@@ -31,7 +31,7 @@ function TaskActions({ task, slug }: { task: TaskView; slug: string }) {
     <div className="flex flex-wrap gap-1.5">
       {next &&
         (next.status === "done" ? (
-          <ActionButton action={completeTaskAction} workspace={slug} fields={{ taskId }} size="sm" variant="primary">
+          <ActionButton action={completeTaskAction} workspace={slug} fields={{ taskId }} size="sm" variant="tinted">
             {next.label}
           </ActionButton>
         ) : (

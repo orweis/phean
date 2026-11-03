@@ -78,7 +78,7 @@ export default async function GoalPage({ params }: PageProps<"/w/[slug]/goals/[i
       <div className="mb-6 flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
         <div className="min-w-0 flex-1 basis-80">
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-2xl font-extrabold text-ink">{goal.title}</h1>
+            <h1 className="text-2xl font-bold text-ink">{goal.title}</h1>
             <MetaBadge meta={GOAL_STATUS_META} value={goal.status} />
           </div>
           {goal.description && <p className="mt-1.5 max-w-3xl text-sm whitespace-pre-line text-ink-2">{goal.description}</p>}

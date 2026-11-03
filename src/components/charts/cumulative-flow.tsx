@@ -85,7 +85,7 @@ export function CumulativeFlow({ flow, className }: { flow: readonly FlowPoint[]
               />
               <span
                 className={cx(
-                  "pointer-events-none absolute top-2 z-10 hidden w-max rounded-md border border-rule bg-panel px-2.5 py-1.5 text-xs shadow-pop group-hover/day:block",
+                  "pointer-events-none absolute top-2 z-10 hidden w-max rounded-md bg-panel px-2.5 py-1.5 text-xs shadow-float group-hover/day:block",
                   index < flow.length / 2 ? "left-1/2" : "right-1/2",
                 )}
               >

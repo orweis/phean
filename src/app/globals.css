@@ -1,75 +1,104 @@
-/* Hallmark · shape: app screen · genre: modern-minimal · theme: custom · redesign: full
- * idea: "work runs on a line, set like a railway timetable" · vibe: "station board navy over a timetable sheet"
- * paper: oklch(97.4% 0.007 255) · accent: oklch(86% 0.165 93) · display: Archivo (semi-condensed) · body: Archivo
- * nav: station-board header with a tab rail · signature: the timetable, every task a track on one time axis · states: loading, empty, error, full
- * axes: light/grotesk-sans/chromatic-yellow · posture: committed shell, full palette for the four stations · contrast: pass · v2.0.0 */
+/* Hallmark · shape: app screen · genre: modern-minimal · theme: custom (by request) · redesign: restyle
+ * idea: "dusk on the slope: a violet hill, and the ember boulder the agents keep rolling up it" · vibe: "Apple-calm Liquid Glass over a lavender ledger, one ember glow"
+ * paper: oklch(97.3% 0.008 300) · accent: oklch(50% 0.2 292) · signal: oklch(73% 0.165 50) · display: SF Pro (system, by request) · body: SF Pro, with Inter Variable where SF is absent
+ * nav: Liquid Glass header with a capsule tab rail · signature: the timetable, every task a track on one time axis · states: loading, empty, error, full
+ * axes: light+dark/neo-grotesk/violet-ember · posture: committed tinted ground under a glass functional layer, full palette for the four stations · modes: light+dark · contrast: pass · v3.0.0 */
 /* Hallmark · pre-emit critique: P4 H4 E4 S5 R4 V5 · weakest: E, many screens share one system; every surface goes through the same primitives and tokens */
+/* Hallmark · waive 29 · glass only on the sticky header, the workspace switcher, popovers and the phone sheet · the person asked for Apple's Liquid Glass, which belongs on the floating controls above the ledger and never on its cards */
 /* Hallmark · reworded "How it works" to "The route in" · the three steps are drawn as stations on one line, so the heading names the route */
 /* Hallmark · dropped <NewGoalForm slug={slug} goals={goals} /> · the overview renders one ghost Add manually popover in the header, which holds both the task and the goal form, because agents do most of the capturing */
 /* Hallmark · reworded "<RememberForm slug={slug} goals={goals} goalId={goal.id} />" and "<NewGoalForm slug={slug} goals={goals} parentGoalId={goal.id} />" · both goal-page popovers stay with the same forms; only their triggers became ghost buttons, so manual entry stays quieter than the agents' work */
+/* Hallmark · waive 80 · the 224px drawing on the landing is the Phean mark itself · the boulder on its hill, set large on the dusk band as the landing's one brand moment beside the headline */
+/* Hallmark · dismissed 41 · here every hue's -ink token is its text colour on light surfaces, as with late-ink and arrive-ink; the label on the violet fill is on-accent, at 6.5:1 in light and 5.2:1 in dark */
 /* Hallmark · waive 49b · a real phrase that cannot shorten, two lines at most · an activity line links the sentence that names the goal, and on a 320px phone the goal title wraps with it */
 /* Hallmark · dismissed F25 · on phones the first column is pinned, so each agent or workspace stays named while its figures and the revoke action scroll beside it inside the card */
-/* Hallmark · answered F19 · Archivo is one variable family: 400 for running text, 600 for labels, 700 for titles and figures, 800 only for the page title */
 /* Hallmark · dropped <p>An MCP server for teams of AI agents</p> · the eyebrow announced the head; the lede now says the ledger is served over MCP to a team of AI agents */
 /* Hallmark · dropped <p>This goal is waiting for a decision…</p> · the Proposed chip beside the title and the Approve and Reject buttons already say it */
 /* Hallmark · reworded "{routes.goal(slug, memory.goalId)}" and "{routes.goal(slug, task.goalId)}" · memory items and task cards still link their goal, through GoalLink, which builds the same routes.goal href */
 /* Hallmark · reworded "agentId", "invitationId", "memberId", "memoryId" and "taskId" · one-click actions still post each id, as hidden inputs that ActionButton renders from its fields prop */
 @import "tailwindcss";
-@import "@fontsource-variable/archivo/wdth.css";
+@import "@fontsource-variable/inter/opsz.css";
 
 @theme {
   --color-*: initial;
 
-  /* The timetable sheet and its rules. */
-  --color-paper: oklch(97.4% 0.007 255);
-  --color-panel: oklch(99.6% 0.002 255);
-  --color-sunken: oklch(94.6% 0.011 255);
-  --color-rule: oklch(90% 0.012 260);
-  --color-edge: oklch(60% 0.025 262);
+  /* The ground, the cards on it, and the neutral fill for wells, tracks and hovers. */
+  --color-paper: oklch(97.3% 0.008 300);
+  --color-panel: oklch(99.5% 0.002 300);
+  --color-fill: oklch(94.4% 0.011 300);
+  --color-raised: oklch(99.5% 0.002 300);
+  --color-rule: oklch(90.6% 0.014 300);
+  --color-edge: oklch(61% 0.03 298);
 
-  --color-ink: oklch(24% 0.05 266);
-  --color-ink-2: oklch(37% 0.04 265);
-  --color-muted: oklch(49% 0.03 262);
-  --color-faint: oklch(70% 0.02 262);
+  --color-ink: oklch(22% 0.04 295);
+  --color-ink-2: oklch(37% 0.035 295);
+  --color-muted: oklch(49.5% 0.03 295);
+  --color-faint: oklch(72% 0.02 295);
 
-  /* The station board: header, tab rail and the primary action. */
-  --color-shell: oklch(29% 0.085 266);
-  --color-shell-2: oklch(36% 0.09 266);
-  --color-shell-ink: oklch(98.5% 0.005 265);
-  --color-shell-muted: oklch(81% 0.035 265);
+  /* Violet, the hill: primary actions, selection, focus and work in motion. */
+  --color-accent: oklch(50% 0.2 292);
+  --color-accent-2: oklch(44% 0.19 292);
+  --color-accent-ink: oklch(47% 0.19 292);
+  --color-accent-tint: oklch(95% 0.026 298);
+  --color-on-accent: oklch(99% 0.004 300);
 
-  /* Signal yellow marks where you are and what is new. */
-  --color-signal: oklch(86% 0.165 93);
-  --color-signal-ink: oklch(30% 0.06 90);
-  --color-signal-tint: oklch(95.5% 0.055 95);
+  /* Ember, the boulder: what is new and what needs a person. */
+  --color-signal: oklch(73% 0.165 50);
+  --color-signal-2: oklch(79% 0.15 56);
+  --color-signal-shade: oklch(62% 0.17 40);
+  --color-signal-ink: oklch(52% 0.15 42);
+  --color-signal-tint: oklch(95.6% 0.028 62);
+  --color-on-signal: oklch(25% 0.06 40);
 
   /* State: late and now, awaiting a decision, moving, arrived. */
-  --color-late: oklch(56% 0.21 27);
-  --color-late-ink: oklch(47% 0.18 27);
-  --color-late-tint: oklch(96.2% 0.025 25);
-  --color-wait: oklch(72% 0.15 68);
-  --color-wait-ink: oklch(47% 0.11 60);
-  --color-wait-tint: oklch(96.5% 0.04 82);
-  --color-move: oklch(53% 0.15 256);
-  --color-move-ink: oklch(45% 0.14 258);
-  --color-move-tint: oklch(95.6% 0.028 255);
-  --color-arrive: oklch(57% 0.12 155);
-  --color-arrive-ink: oklch(43% 0.1 155);
-  --color-arrive-tint: oklch(95.6% 0.035 155);
+  --color-late: oklch(56% 0.2 22);
+  --color-late-ink: oklch(49% 0.18 22);
+  --color-late-tint: oklch(96% 0.018 18);
+  --color-wait: oklch(79% 0.14 86);
+  --color-wait-ink: oklch(47% 0.095 76);
+  --color-wait-tint: oklch(96.5% 0.045 92);
+  --color-move: var(--color-station-progress);
+  --color-move-ink: var(--color-accent-ink);
+  --color-move-tint: var(--color-accent-tint);
+  --color-arrive: oklch(58% 0.13 158);
+  --color-arrive-ink: oklch(44% 0.1 158);
+  --color-arrive-tint: oklch(95.6% 0.032 160);
 
   /* The four stations a task passes through, in chart order. */
-  --color-station-inbox: oklch(82% 0.15 90);
-  --color-station-todo: oklch(76% 0.03 262);
-  --color-station-progress: var(--color-move);
-  --color-station-done: var(--color-arrive);
-  /* Darker cuts of the waiting stations for thin timetable lines, at 3:1 on the sheet. */
-  --color-line-inbox: oklch(62% 0.13 78);
-  --color-line-todo: oklch(57% 0.035 262);
+  --color-station-inbox: var(--color-signal);
+  --color-station-todo: oklch(80% 0.06 300);
+  --color-station-progress: oklch(55% 0.19 292);
+  --color-station-done: oklch(62% 0.13 158);
+  /* Darker cuts of the waiting stations for thin timetable lines, at 3:1 on a card. */
+  --color-line-inbox: oklch(64% 0.16 46);
+  --color-line-todo: oklch(60% 0.07 298);
 
-  --color-focus: oklch(53% 0.15 256);
+  --color-focus: oklch(54% 0.2 292);
+  --color-selection: oklch(50% 0.2 292 / 0.2);
+  --color-hill: var(--color-accent);
 
-  --font-sans: "Archivo Variable", ui-sans-serif, sans-serif;
-  --font-mono: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  /* Dusk: the deep violet band behind the landing hero and the sign-in story. */
+  --color-dusk: oklch(27% 0.09 292);
+  --color-dusk-2: oklch(34% 0.11 292);
+  --color-dusk-ink: oklch(97% 0.012 300);
+  --color-dusk-muted: oklch(82% 0.05 300);
+
+  /* The light the glass picks up from the content layer beneath it. */
+  --color-glow-violet: oklch(50% 0.2 292 / 0.1);
+  --color-glow-ember: oklch(73% 0.165 50 / 0.13);
+  --color-dusk-glow: oklch(73% 0.165 50 / 0.24);
+
+  /* Liquid Glass, regular variant for bars and a thicker one for menus and sheets that hold forms. */
+  --color-glass: oklch(98.6% 0.006 300 / 0.78);
+  --color-glass-thick: oklch(99.2% 0.004 300 / 0.88);
+  --color-glass-rim: oklch(22% 0.04 295 / 0.1);
+  --color-glass-sheen: oklch(99% 0.005 300 / 0.8);
+  --color-glass-fade: oklch(97.3% 0.008 300 / 0.7);
+
+  /* Inter everywhere SF Pro is not the system face; Apple devices switch to SF below. */
+  --font-sans: "Inter Variable", ui-sans-serif, sans-serif;
+  --font-rounded: var(--font-sans);
+  --font-mono: ui-monospace, "SF Mono", "SFMono-Regular", Menlo, monospace;
 
   --text-2xs: 0.6875rem;
   --text-2xs--line-height: 1rem;
@@ -79,36 +108,37 @@
   --text-sm--line-height: 1.35rem;
   --text-md: 1rem;
   --text-md--line-height: 1.55rem;
-  --text-lg: 1.1875rem;
-  --text-lg--line-height: 1.6rem;
-  --text-xl: 1.4375rem;
-  --text-xl--line-height: 1.85rem;
+  --text-lg: 1.25rem;
+  --text-lg--line-height: 1.65rem;
+  --text-xl: 1.375rem;
+  --text-xl--line-height: 1.8rem;
   --text-2xl: 1.75rem;
   --text-2xl--line-height: 2.15rem;
 
-  --radius-xs: 2px;
-  --radius-sm: 3px;
-  --radius-md: 4px;
-  --radius-lg: 6px;
-  --radius-xl: 8px;
+  --tracking-title: -0.016em;
+  --tracking-display: -0.028em;
 
-  --shadow-pop: 0 10px 28px -10px oklch(24% 0.05 266 / 0.35), 0 2px 6px -2px oklch(24% 0.05 266 / 0.18);
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 16px;
+
+  --shadow-float: 0 18px 40px -16px oklch(22% 0.06 292 / 0.3), 0 3px 10px -3px oklch(22% 0.06 292 / 0.14);
+  --shadow-raised: 0 1px 2px oklch(22% 0.04 295 / 0.14), 0 1px 1px -0.5px oklch(22% 0.04 295 / 0.08);
 
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --dur-micro: 120ms;
   --dur-short: 220ms;
-}
 
-@utility font-stretch-condensed {
-  font-stretch: 82%;
-}
+  --animate-glass-in: glass-in var(--dur-short) var(--ease-out);
 
-@utility font-stretch-tight {
-  font-stretch: 90%;
-}
-
-@utility font-stretch-wordmark {
-  font-stretch: 66%;
+  @keyframes glass-in {
+    from {
+      opacity: 0;
+      transform: translateY(-4px) scale(0.97);
+    }
+  }
 }
 
 /* Inline text links: underlined on hover, a heavier underline while pressed. */
@@ -125,10 +155,194 @@
   }
 }
 
+/* Figures: SF Pro Rounded on Apple devices, Inter elsewhere. */
+@utility figure {
+  font-family: var(--font-rounded);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--tracking-title);
+}
+
+/*
+ * The sticky bar of the functional layer. The material sits on a pseudo-element so the bar
+ * itself is not a backdrop root, and the switcher menu inside it can still blur the page.
+ * Below the bar, a scroll edge fades content out instead of letting it collide with the glass.
+ */
+@utility glass-bar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+
+  &::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background-color: var(--color-glass);
+    -webkit-backdrop-filter: blur(24px) saturate(1.6);
+    backdrop-filter: blur(24px) saturate(1.6);
+    box-shadow: inset 0 -1px 0 var(--color-glass-rim);
+  }
+
+  &::after {
+    content: "";
+    position: absolute;
+    inset-inline: 0;
+    top: 100%;
+    height: 1rem;
+    pointer-events: none;
+    background-image: linear-gradient(var(--color-glass-fade), transparent);
+  }
+
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    &::before {
+      background-color: var(--color-panel);
+    }
+  }
+
+  @media (prefers-reduced-transparency: reduce) {
+    &::before {
+      background-color: var(--color-panel);
+      -webkit-backdrop-filter: none;
+      backdrop-filter: none;
+    }
+
+    &::after {
+      display: none;
+    }
+  }
+
+  @media (prefers-contrast: more) {
+    &::before {
+      background-color: var(--color-panel);
+      -webkit-backdrop-filter: none;
+      backdrop-filter: none;
+      box-shadow: inset 0 -1px 0 var(--color-edge);
+    }
+
+    &::after {
+      display: none;
+    }
+  }
+}
+
+/* Menus, popovers and sheets: thicker glass with a hairline rim, a top sheen and a soft shadow. */
+@utility glass-float {
+  background-color: var(--color-glass-thick);
+  -webkit-backdrop-filter: blur(28px) saturate(1.6);
+  backdrop-filter: blur(28px) saturate(1.6);
+  box-shadow:
+    inset 0 0 0 1px var(--color-glass-rim),
+    inset 0 1px 0 var(--color-glass-sheen),
+    var(--shadow-float);
+
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    background-color: var(--color-panel);
+  }
+
+  @media (prefers-reduced-transparency: reduce) {
+    background-color: var(--color-panel);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+
+  @media (prefers-contrast: more) {
+    background-color: var(--color-panel);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    box-shadow:
+      inset 0 0 0 1px var(--color-edge),
+      var(--shadow-float);
+  }
+}
+
+/* The dusk band: deep violet with the ember glow of the boulder low on the right. */
+@utility dusk {
+  background-color: var(--color-dusk);
+  background-image:
+    radial-gradient(40rem 22rem at 88% 108%, var(--color-dusk-glow), transparent 70%),
+    radial-gradient(48rem 26rem at 4% -12%, var(--color-dusk-2), transparent 72%);
+  color: var(--color-dusk-ink);
+}
+
 @layer base {
+  :root {
+    color-scheme: light dark;
+  }
+
+  /* Other engines map -apple-system to their own UI face, so only WebKit, which knows Apple's text styles, gets SF Pro. */
+  @supports (font: -apple-system-body) {
+    :root {
+      --font-sans: -apple-system, "Inter Variable", sans-serif;
+      --font-rounded: ui-rounded, -apple-system, "Inter Variable", sans-serif;
+    }
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --color-paper: oklch(16.5% 0.022 292);
+      --color-panel: oklch(21% 0.026 292);
+      --color-fill: oklch(26.5% 0.028 292);
+      --color-raised: oklch(36% 0.03 292);
+      --color-rule: oklch(30% 0.028 292);
+      --color-edge: oklch(55% 0.03 295);
+
+      --color-ink: oklch(95.5% 0.008 300);
+      --color-ink-2: oklch(85% 0.015 300);
+      --color-muted: oklch(71% 0.02 300);
+      --color-faint: oklch(47% 0.022 296);
+
+      --color-accent: oklch(55% 0.19 292);
+      --color-accent-2: oklch(50% 0.19 292);
+      --color-accent-ink: oklch(77% 0.13 296);
+      --color-accent-tint: oklch(30% 0.075 292);
+
+      --color-signal: oklch(76% 0.15 52);
+      --color-signal-2: oklch(81% 0.135 58);
+      --color-signal-shade: oklch(64% 0.16 42);
+      --color-signal-ink: oklch(80% 0.13 56);
+      --color-signal-tint: oklch(30% 0.06 45);
+      --color-on-signal: oklch(22% 0.05 40);
+
+      --color-late: oklch(66% 0.18 22);
+      --color-late-ink: oklch(77% 0.13 22);
+      --color-late-tint: oklch(27.5% 0.05 20);
+      --color-wait: oklch(81% 0.13 86);
+      --color-wait-ink: oklch(85% 0.11 88);
+      --color-wait-tint: oklch(27.5% 0.035 88);
+      --color-arrive: oklch(68% 0.13 158);
+      --color-arrive-ink: oklch(79% 0.12 158);
+      --color-arrive-tint: oklch(28% 0.05 160);
+
+      --color-station-todo: oklch(58% 0.06 298);
+      --color-station-progress: oklch(65% 0.17 292);
+      --color-station-done: oklch(68% 0.13 158);
+      --color-line-inbox: oklch(76% 0.15 52);
+      --color-line-todo: oklch(64% 0.06 298);
+
+      --color-focus: oklch(72% 0.15 294);
+      --color-selection: oklch(55% 0.19 292 / 0.4);
+      --color-hill: oklch(63% 0.17 292);
+
+      --color-dusk: oklch(23% 0.07 292);
+      --color-dusk-2: oklch(31% 0.09 292);
+
+      --color-glow-violet: oklch(55% 0.19 292 / 0.2);
+      --color-glow-ember: oklch(76% 0.15 52 / 0.08);
+
+      --color-glass: oklch(22% 0.026 292 / 0.78);
+      --color-glass-thick: oklch(24% 0.028 292 / 0.88);
+      --color-glass-rim: oklch(95% 0.01 300 / 0.12);
+      --color-glass-sheen: oklch(95% 0.01 300 / 0.08);
+      --color-glass-fade: oklch(16.5% 0.022 292 / 0.7);
+
+      --shadow-float: 0 18px 40px -16px oklch(8% 0.02 292 / 0.6);
+      --shadow-raised: none;
+    }
+  }
+
   html {
-    color-scheme: light;
-    scrollbar-color: var(--color-faint) var(--color-paper);
+    scrollbar-color: var(--color-faint) transparent;
+    -webkit-tap-highlight-color: transparent;
   }
 
   html,
@@ -137,28 +351,35 @@
   }
 
   body {
-    background: var(--color-paper);
+    background-color: var(--color-paper);
+    background-image:
+      radial-gradient(56rem 26rem at 6% -10rem, var(--color-glow-violet), transparent 70%),
+      radial-gradient(44rem 22rem at 94% -12rem, var(--color-glow-ember), transparent 70%);
+    background-repeat: no-repeat;
     color: var(--color-ink);
     font-family: var(--font-sans);
     font-size: var(--text-sm);
     line-height: var(--text-sm--line-height);
+    font-optical-sizing: auto;
     font-synthesis: none;
     font-variant-numeric: tabular-nums;
     -webkit-font-smoothing: antialiased;
-    caret-color: var(--color-move);
+    caret-color: var(--color-accent);
   }
 
   h1,
   h2,
   h3 {
-    font-stretch: 86%;
     overflow-wrap: break-word;
     min-width: 0;
     text-wrap: balance;
   }
 
+  h1 {
+    letter-spacing: var(--tracking-title);
+  }
   ::selection {
-    background: var(--color-signal-tint);
+    background: var(--color-selection);
     color: var(--color-ink);
   }
 
@@ -167,8 +388,13 @@
     outline-offset: 2px;
   }
 
-  [data-shell] :focus-visible {
+  [data-dusk] :focus-visible {
     outline-color: var(--color-signal);
+  }
+
+  [data-dusk] ::selection {
+    background: var(--color-dusk-2);
+    color: var(--color-dusk-ink);
   }
 
   a {

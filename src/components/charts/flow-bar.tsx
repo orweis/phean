@@ -20,7 +20,7 @@ export function FlowBar({ counts, label, size = "sm", stations = STATIONS, class
   return (
     <div role="img" aria-label={`${label}: ${describeCounts(counts, stations)}`} className={cx("flex gap-0.5", SIZES[size], className)}>
       {shown.length === 0 ? (
-        <span className="flex-1 rounded-xs bg-sunken" />
+        <span className="flex-1 rounded-xs bg-fill" />
       ) : (
         shown.map((station) => (
           <span key={station} className={cx("min-w-1 rounded-xs", STATION_STYLE[station].fill)} style={{ flexGrow: counts[station] }} />

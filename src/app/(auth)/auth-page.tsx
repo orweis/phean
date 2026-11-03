@@ -25,7 +25,7 @@ export async function AuthPage({ mode, searchParams }: AuthPageProps) {
 
   return (
     <>
-      <h1 className="text-xl font-extrabold text-ink">{COPY[mode].title}</h1>
+      <h1 className="text-xl font-bold text-ink">{COPY[mode].title}</h1>
       <p className="mt-1 mb-6 text-sm text-ink-2">{COPY[mode].subtitle}</p>
       <AuthForm mode={mode} next={next} providers={providers} />
     </>

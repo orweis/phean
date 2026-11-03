@@ -83,7 +83,7 @@ function TokenReveal({ token, agentName, slug, mcpUrl }: { token: string; agentN
             <p className="text-xs text-ink-2">{setup.where}</p>
             <CopyButton value={setup.code} variant="ghost" />
           </div>
-          <pre className="overflow-x-auto rounded-md bg-shell p-3 font-mono text-xs leading-relaxed text-shell-ink">{setup.code}</pre>
+          <pre className="overflow-x-auto rounded-md bg-dusk p-3 font-mono text-xs leading-relaxed text-dusk-ink">{setup.code}</pre>
         </div>
       </div>
     </div>

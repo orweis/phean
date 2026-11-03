@@ -1,6 +1,6 @@
 import { cx } from "@/lib/cx";
 
-const BAR = "rounded-sm bg-sunken motion-safe:animate-pulse";
+const BAR = "rounded-sm bg-fill motion-safe:animate-pulse";
 
 /** A panel whose rows are a label and an empty dashed track, like a timetable before it fills. */
 function PanelPlaceholder({ rows }: { rows: number }) {

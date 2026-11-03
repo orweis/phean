@@ -4,24 +4,27 @@ import type { ComponentProps } from "react";
 
 import { cx } from "@/lib/cx";
 
-export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger" | "shell" | "signal";
+export type ButtonVariant = "primary" | "tinted" | "secondary" | "ghost" | "danger" | "dusk" | "signal";
 export type ButtonSize = "sm" | "md";
 
 const VARIANTS: Record<ButtonVariant, string> = {
-  primary: "bg-shell text-shell-ink hover:bg-shell-2 active:bg-ink",
-  secondary: "border border-rule bg-panel text-ink hover:border-edge hover:bg-sunken active:bg-rule",
-  ghost: "text-ink-2 hover:bg-sunken hover:text-ink active:bg-rule",
-  danger: "border border-late/35 bg-panel text-late-ink hover:bg-late-tint active:bg-late-tint",
-  /** For controls on the navy header. */
-  shell: "text-shell-muted hover:bg-shell-2 hover:text-shell-ink active:bg-ink",
-  /** The one call to action on a navy surface. */
-  signal: "bg-signal text-signal-ink hover:bg-signal-tint active:bg-signal",
+  /** The prominent action of a view; keep it to one or two per screen. */
+  primary: "bg-accent text-on-accent hover:bg-accent-2 active:bg-accent-2",
+  /** The forward step repeated on every row of a list, coloured but not prominent. */
+  tinted: "bg-accent-tint text-accent-ink hover:bg-accent/20 active:bg-accent/25",
+  secondary: "bg-fill text-ink hover:bg-rule active:bg-rule",
+  ghost: "text-ink-2 hover:bg-fill hover:text-ink active:bg-rule",
+  danger: "bg-late-tint text-late-ink hover:bg-late/20 active:bg-late/25",
+  /** For quiet controls on a dusk band. */
+  dusk: "text-dusk-muted hover:bg-dusk-2 hover:text-dusk-ink active:bg-dusk-2",
+  /** The one call to action on a dusk band: the ember of the boulder. */
+  signal: "bg-signal text-on-signal hover:bg-signal-2 active:bg-signal-2",
 };
 
 /** Small buttons are 32px tall; the pseudo-element extends the hit target to 44px. */
 const SIZES: Record<ButtonSize, string> = {
-  sm: "relative h-8 gap-1.5 rounded-md px-2.5 text-xs after:absolute after:inset-x-0 after:-inset-y-1.5 [&_svg]:size-3.5",
-  md: "h-9 gap-2 rounded-md px-3.5 text-sm [&_svg]:size-4",
+  sm: "relative h-8 gap-1.5 rounded-full px-3 text-xs after:absolute after:inset-x-0 after:-inset-y-1.5 [&_svg]:size-3.5",
+  md: "h-9 gap-2 rounded-full px-4 text-sm [&_svg]:size-4",
 };
 
 export function buttonClasses(variant: ButtonVariant = "secondary", size: ButtonSize = "md", className?: string) {

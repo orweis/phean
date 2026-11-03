@@ -4,7 +4,7 @@ import type { Tone } from "@/lib/domain";
 import { cx } from "@/lib/cx";
 
 const TONES: Record<Tone, string> = {
-  neutral: "bg-sunken text-ink-2",
+  neutral: "bg-fill text-ink-2",
   info: "bg-move-tint text-move-ink",
   success: "bg-arrive-tint text-arrive-ink",
   warning: "bg-wait-tint text-wait-ink",
@@ -16,7 +16,7 @@ export function Badge({ tone = "neutral", children, className }: { tone?: Tone; 
   return (
     <span
       className={cx(
-        "inline-flex h-5 items-center gap-1 rounded-sm px-1.5 text-xs font-semibold whitespace-nowrap ring-1 ring-current/15 ring-inset [&_svg]:size-3",
+        "inline-flex h-5 items-center gap-1 rounded-full px-2 text-xs font-semibold whitespace-nowrap [&_svg]:size-3",
         TONES[tone],
         className,
       )}

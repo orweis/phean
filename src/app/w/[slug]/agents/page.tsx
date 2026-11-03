@@ -118,7 +118,7 @@ export default async function AgentsPage({ params }: PageProps<"/w/[slug]/agents
           <Card>
             <CardHeader title="MCP endpoint" description="Streamable HTTP, authenticated with a bearer token." />
             <CardBody>
-              <CopyField value={mcpUrl} surface="sunken" />
+              <CopyField value={mcpUrl} surface="fill" />
             </CardBody>
           </Card>
           <Card>

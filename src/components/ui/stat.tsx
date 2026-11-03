@@ -29,7 +29,7 @@ export function Stat({ label, value, hint, tone, href }: StatProps) {
   const body = (
     <>
       <span className="block text-xs text-muted">{label}</span>
-      <span className={cx("mt-0.5 block text-xl font-bold font-stretch-condensed", (tone && VALUE_TONES[tone]) || "text-ink")}>
+      <span className={cx("figure mt-0.5 block text-xl font-bold", (tone && VALUE_TONES[tone]) || "text-ink")}>
         {value}
       </span>
       {hint && <span className="block truncate text-xs text-muted">{hint}</span>}
@@ -37,7 +37,7 @@ export function Stat({ label, value, hint, tone, href }: StatProps) {
   );
   const className = "block min-w-0 bg-panel px-4 py-3";
   return href ? (
-    <Link href={href} className={cx(className, "transition-colors duration-(--dur-micro) hover:bg-sunken")}>
+    <Link href={href} className={cx(className, "transition-colors duration-(--dur-micro) hover:bg-fill")}>
       {body}
     </Link>
   ) : (
@@ -54,9 +54,9 @@ export function ProgressBar({ value, className, label }: { value: number; classN
       aria-valuenow={pct}
       aria-valuemin={0}
       aria-valuemax={100}
-      className={cx("h-1.5 overflow-hidden rounded-xs bg-sunken", className)}
+      className={cx("h-1.5 overflow-hidden rounded-full bg-fill", className)}
     >
-      <div className={cx("h-full", pct === 100 ? "bg-arrive" : "bg-shell")} style={{ width: `${pct}%` }} />
+      <div className={cx("h-full rounded-full", pct === 100 ? "bg-arrive" : "bg-accent")} style={{ width: `${pct}%` }} />
     </div>
   );
 }

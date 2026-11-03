@@ -31,7 +31,7 @@ const COUNT_LABELS: Record<keyof NavCounts, string> = {
 export function WorkspaceNav({ slug, counts }: { slug: string; counts: NavCounts }) {
   const pathname = usePathname();
   return (
-    <nav aria-label="Workspace" className="relative -mx-2 flex overflow-x-auto max-sm:pr-10 max-sm:mask-r-from-[calc(100%-2.5rem)]">
+    <nav aria-label="Workspace" className="relative -mx-1 flex gap-0.5 overflow-x-auto max-sm:pr-10 max-sm:mask-r-from-[calc(100%-2.5rem)]">
       {TABS.map(({ label, icon: Icon, href, ...tab }) => {
         const target = href(slug);
         const active = "exact" in tab ? pathname === target : pathname.startsWith(target);
@@ -42,15 +42,14 @@ export function WorkspaceNav({ slug, counts }: { slug: string; counts: NavCounts
             href={target}
             aria-current={active ? "page" : undefined}
             className={cx(
-              "relative flex h-11 items-center gap-1.5 px-2.5 text-sm whitespace-nowrap transition-colors duration-(--dur-micro)",
-              "after:absolute after:inset-x-2 after:bottom-0 after:h-[3px] after:rounded-t-xs",
-              active ? "font-semibold text-shell-ink after:bg-signal" : "text-shell-muted after:bg-transparent hover:text-shell-ink",
+              "relative my-1 flex h-9 items-center gap-1.5 rounded-full px-3 text-sm whitespace-nowrap transition-colors duration-(--dur-micro)",
+              active ? "bg-accent-tint font-semibold text-accent-ink" : "text-ink-2 hover:bg-fill hover:text-ink",
             )}
           >
             <Icon className="size-4" aria-hidden />
             {label}
             {count > 0 && "count" in tab && (
-              <span className="rounded-sm bg-signal px-1.5 text-xs leading-4.5 font-bold text-signal-ink">
+              <span className="min-w-4.5 rounded-full bg-signal px-1.5 text-center text-xs leading-4.5 font-bold text-on-signal">
                 {count}
                 <span className="sr-only"> {COUNT_LABELS[tab.count]}</span>
               </span>

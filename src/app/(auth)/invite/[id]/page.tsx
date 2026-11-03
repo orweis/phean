@@ -18,7 +18,7 @@ export const metadata: Metadata = { title: "Invitation" };
 function Message({ title, children }: { title: string; children: ReactNode }) {
   return (
     <>
-      <h1 className="text-xl font-extrabold text-ink">{title}</h1>
+      <h1 className="text-xl font-bold text-ink">{title}</h1>
       <div className="mt-2 space-y-4 text-sm text-ink-2">{children}</div>
     </>
   );

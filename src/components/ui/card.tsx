@@ -6,16 +6,15 @@ export type PanelTone = "plain" | "wait" | "late";
 
 const PANEL_TONES: Record<PanelTone, string> = {
   plain: "border-rule",
-  wait: "border-wait/60",
+  wait: "border-wait/70",
   late: "border-late/40",
 };
 
 const HEADER_TONES: Record<PanelTone, string> = {
   plain: "border-rule",
-  wait: "border-wait/40 bg-wait-tint",
+  wait: "border-wait/50 bg-wait-tint",
   late: "border-late/25 bg-late-tint",
 };
-
 export function Card({ className, tone = "plain", ...props }: ComponentProps<"section"> & { tone?: PanelTone }) {
   return <section data-tone={tone} className={cx("rounded-lg border bg-panel", PANEL_TONES[tone], className)} {...props} />;
 }
@@ -36,7 +35,7 @@ export function CardHeader({ title, description, action, tone = "plain" }: CardH
       )}
     >
       <div className="min-w-0">
-        <h2 className="text-md font-bold">{title}</h2>
+        <h2 className="text-md font-semibold">{title}</h2>
         {description && <p className="mt-0.5 text-xs text-muted">{description}</p>}
       </div>
       {action && <div className="flex shrink-0 items-center gap-2">{action}</div>}

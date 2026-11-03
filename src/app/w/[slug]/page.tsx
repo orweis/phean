@@ -41,7 +41,7 @@ function statusSentence(stats: WorkspaceStats): string {
 function DueLead({ dueDate, late }: { dueDate: string; late?: boolean }) {
   return (
     <>
-      <span className="block text-md font-bold font-stretch-condensed text-ink">{formatDueDate(dueDate)}</span>
+      <span className="figure block text-md font-bold text-ink">{formatDueDate(dueDate)}</span>
       <span className={late ? "text-xs font-semibold text-late-ink" : "text-xs text-muted"}>{relativeDue(dueDate)}</span>
     </>
   );

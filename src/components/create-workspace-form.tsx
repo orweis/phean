@@ -32,7 +32,7 @@ export function CreateWorkspaceForm() {
         />
       </Field>
       <Field label="URL" htmlFor="workspace-slug">
-        <div className="flex h-9 items-center rounded-md border border-edge bg-sunken pl-3 text-sm text-muted hover:border-ink-2 focus-within:border-focus focus-within:outline-2 focus-within:outline-focus">
+        <div className="flex h-9 items-center rounded-md border border-edge bg-fill pl-3 text-sm text-muted hover:border-ink-2 focus-within:border-focus focus-within:outline-2 focus-within:outline-focus">
           /w/
           <input
             id="workspace-slug"

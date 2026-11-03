@@ -29,7 +29,7 @@ export function ActivityFeed({ events, slug }: { events: readonly Activity[]; sl
             <span
               className={cx(
                 "mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md",
-                isAgent ? "bg-move-tint text-move-ink" : "bg-sunken text-ink-2",
+                isAgent ? "bg-move-tint text-move-ink" : "bg-fill text-ink-2",
               )}
             >
               <Icon className="size-3.5" aria-label={isAgent ? "Agent" : "Person"} />

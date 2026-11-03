@@ -26,7 +26,7 @@ export function agentStatus(agent: Agent, now = Date.now()): AgentStatus {
 
 function LoadBar({ value, max, className }: { value: number; max: number; className: string }) {
   return (
-    <span className="h-1.5 rounded-xs bg-sunken">
+    <span className="h-1.5 rounded-full bg-fill">
       <span className={cx("block h-full rounded-xs", className)} style={{ width: `${(value / max) * 100}%` }} />
     </span>
   );

@@ -73,7 +73,7 @@ export default async function SearchPage({ params, searchParams }: PageProps<"/w
                     const status = meta[hit.status];
                     return (
                       <li key={hit.id}>
-                        <Link href={href(slug, hit)} className="flex gap-3 px-5 py-3 transition-colors duration-(--dur-micro) hover:bg-sunken">
+                        <Link href={href(slug, hit)} className="flex gap-3 px-5 py-3 transition-colors duration-(--dur-micro) hover:bg-fill">
                           <Icon className="mt-0.5 size-4 shrink-0 text-muted" aria-hidden />
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2">

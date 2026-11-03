@@ -15,9 +15,9 @@ import { EmptyState } from "./ui/stat";
 /** Each goal is a station on the map: filled when achieved, ringed while active, dashed while proposed. */
 const STATION_MARK: Record<GoalStatus, string> = {
   proposed: "border-2 border-dashed border-wait bg-panel",
-  active: "border-2 border-shell bg-panel",
+  active: "border-2 border-accent bg-panel",
   achieved: "border-2 border-arrive bg-arrive",
-  abandoned: "border-2 border-faint bg-sunken",
+  abandoned: "border-2 border-faint bg-fill",
 };
 
 interface GoalTreeProps {

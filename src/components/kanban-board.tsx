@@ -19,7 +19,7 @@ export function KanbanBoard({ board, slug, canWrite }: { board: Board; slug: str
         const shown = status === "done" ? tasks.slice(0, DONE_SHOWN) : tasks;
         const folded = tasks.slice(shown.length);
         return (
-          <section key={status} aria-labelledby={`lane-${status}`} className="flex min-w-0 flex-col rounded-lg bg-sunken">
+          <section key={status} aria-labelledby={`lane-${status}`} className="flex min-w-0 flex-col rounded-lg bg-fill">
             <header className="px-3 pt-0 pb-2">
               <span aria-hidden className={`block h-1 rounded-b-xs ${STATION_STYLE[status].fill}`} />
               <div className="mt-2 flex items-baseline justify-between gap-2">

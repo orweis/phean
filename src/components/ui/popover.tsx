@@ -20,8 +20,8 @@ interface PopoverProps {
 /**
  * A small disclosure panel built on <details>, so it opens and closes from its trigger without
  * client JavaScript. With it, Escape and a click outside close the panel too. On phones the trigger
- * can sit anywhere in a wrapped row, so the panel spans the screen as a sheet over the trigger and
- * carries its own close button.
+ * can sit anywhere in a wrapped row, so the panel becomes a sheet across the top of the screen, over
+ * the header, and carries its own close button.
  */
 export function Popover({ label, icon, children, variant = "secondary", align = "right", className }: PopoverProps) {
   const ref = useRef<HTMLDetailsElement>(null);
@@ -53,8 +53,8 @@ export function Popover({ label, icon, children, variant = "secondary", align = 
       </summary>
       <div
         className={cx(
-          "absolute z-20 mt-2 w-80 rounded-lg border border-rule bg-panel p-4 shadow-pop",
-          "max-sm:fixed max-sm:inset-x-4 max-sm:top-20 max-sm:mt-0 max-sm:max-h-[calc(100dvh-6rem)] max-sm:w-auto max-sm:overflow-y-auto",
+          "glass-float absolute z-40 mt-2 w-80 origin-top rounded-xl p-4 motion-safe:animate-glass-in",
+          "max-sm:fixed max-sm:inset-x-3 max-sm:top-3 max-sm:mt-0 max-sm:max-h-[calc(100dvh-1.5rem)] max-sm:w-auto max-sm:overflow-y-auto",
           align === "right" ? "sm:right-0" : "sm:left-0",
           className,
         )}

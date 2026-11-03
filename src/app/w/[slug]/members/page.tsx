@@ -51,7 +51,7 @@ export default async function MembersPage({ params }: PageProps<"/w/[slug]/membe
               const isSelf = person.userId === ctx.actor.id;
               return (
                 <li key={person.id} className="flex items-center gap-3 px-5 py-3">
-                  <span aria-hidden className="flex size-8 shrink-0 items-center justify-center rounded-md bg-shell text-sm font-bold text-shell-ink">
+                  <span aria-hidden className="flex size-8 shrink-0 items-center justify-center rounded-full bg-accent-tint text-sm font-bold text-accent-ink">
                     {person.name.slice(0, 1).toUpperCase()}
                   </span>
                   <div className="min-w-0 flex-1">

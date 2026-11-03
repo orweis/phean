@@ -5,8 +5,9 @@ import { cx } from "@/lib/cx";
 /** Controls fill their container (class order cannot override `w-full`), so size the wrapper instead. */
 const CONTROL =
   "w-full rounded-md border border-edge bg-panel px-3 text-sm text-ink placeholder:text-muted hover:border-ink-2 " +
-  "focus:border-focus focus:outline-2 focus:outline-offset-0 focus:outline-focus " +
-  "disabled:cursor-not-allowed disabled:bg-sunken disabled:text-muted";
+  "transition-[border-color,outline-color] duration-(--dur-micro) " +
+  "focus:border-focus focus:outline-3 focus:outline-offset-0 focus:outline-focus/30 " +
+  "disabled:cursor-not-allowed disabled:bg-fill disabled:text-muted";
 
 export function Input({ className, ...props }: ComponentProps<"input">) {
   return <input className={cx(CONTROL, "h-9", className)} {...props} />;

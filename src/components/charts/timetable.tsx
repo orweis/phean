@@ -159,7 +159,7 @@ export function Timetable({ window, groups, empty }: TimetableProps) {
   return (
     <div className="group/tt relative [--label:11rem] lg:[--label:15rem]">
       <div aria-hidden className="pointer-events-none absolute inset-y-0 right-0 left-0 sm:left-[calc(var(--label)+1rem)]">
-        <div className="absolute inset-y-0 right-0 bg-sunken/70" style={{ left: `${now * 100}%` }} />
+        <div className="absolute inset-y-0 right-0 bg-fill/70" style={{ left: `${now * 100}%` }} />
         {ticks.map((tick) => (
           <span key={tick.at} className={cx("absolute inset-y-0 w-px", tick.week ? "bg-rule" : "bg-rule/50")} style={at(tick.at)} />
         ))}
