@@ -1,3 +1,5 @@
+import type { z } from "zod";
+
 import { TASK_STATUS_META } from "@/lib/domain";
 import { pluralize } from "@/lib/format";
 import { subtreeIds } from "@/lib/goal-tree";
@@ -21,12 +23,12 @@ import {
   updateTask,
 } from "../domain/tasks";
 import { planningScaffold } from "./guidance";
-import { defineTool, type PheanTool, type ToolContext } from "./tool";
+import { defineTool, type PheanTool, serviceTool, type ToolContext } from "./tool";
 import { fenced, goalTreeMermaid, kanbanMermaid, timelineMermaid } from "./views";
 
 const goalUrl = (ctx: ToolContext, goalId: string) => ctx.url(routes.goal(ctx.tenant.slug, goalId));
 
-async function visualize(ctx: ToolContext, { kind, goalId }: { kind: "goal_tree" | "kanban" | "timeline"; goalId?: string }) {
+async function visualize(ctx: ToolContext, { kind, goalId }: z.output<typeof VisualizeInput>) {
   if (kind === "kanban") {
     const board = await getBoard(ctx, { goalId });
     const summary = board.columns.map((column) => `${TASK_STATUS_META[column.status].label}: ${column.tasks.length}`).join(" · ");
@@ -80,20 +82,20 @@ export const TOOLS: readonly PheanTool[] = [
       };
     },
   }),
-  defineTool({
+  serviceTool({
     name: "update_goal",
     title: "Update goal",
     description: "Edit a goal's title or description, or move it under another goal (parentGoalId null makes it top-level). Status changes are for humans in the web app.",
-    input: updateGoal.schema,
-    run: async (ctx, input) => ({ goal: await updateGoal(ctx, input) }),
+    service: updateGoal,
+    key: "goal",
   }),
-  defineTool({
+  serviceTool({
     name: "list_goals",
     title: "List goals",
     description: "All goals as a depth-first tree (depth, parentId) with task counts and progress rolled up from sub-goals.",
-    input: listGoals.schema,
     readOnly: true,
-    run: async (ctx, input) => ({ goals: await listGoals(ctx, input) }),
+    service: listGoals,
+    key: "goals",
   }),
   defineTool({
     name: "get_goal",
@@ -105,99 +107,97 @@ export const TOOLS: readonly PheanTool[] = [
   }),
 
   // Tasks
-  defineTool({
+  serviceTool({
     name: "capture_tasks",
     title: "Capture tasks",
     description:
       "Record up to 100 tasks found in your sources in one call. Set source and a stable sourceRef (message link, thread or event id): items any agent already captured are skipped and reported in 'duplicates'. New tasks land in the inbox unless status is 'todo'.",
-    input: captureTasks.schema,
-    run: captureTasks,
+    service: captureTasks,
   }),
-  defineTool({
+  serviceTool({
     name: "list_tasks",
     title: "List tasks",
     description: "Tasks filtered by status, goal, priority, claim (mine, unclaimed), or due date, most urgent first. Each includes its goal title and who has claimed it.",
-    input: listTasks.schema,
     readOnly: true,
-    run: async (ctx, input) => ({ tasks: await listTasks(ctx, input) }),
+    service: listTasks,
+    key: "tasks",
   }),
-  defineTool({
+  serviceTool({
     name: "update_task",
     title: "Update task",
     description: "Change a task's title, description, status, priority, due date (null clears), goal (null unfiles), or tags. Fails if another agent has claimed it.",
-    input: updateTask.schema,
-    run: async (ctx, input) => ({ task: await updateTask(ctx, input) }),
+    service: updateTask,
+    key: "task",
   }),
-  defineTool({
+  serviceTool({
     name: "assign_tasks_to_goal",
     title: "Assign tasks to goal",
     description: "File several tasks under one goal. Inbox tasks become 'todo', since filing them is the triage step.",
-    input: assignTasksToGoal.schema,
-    run: async (ctx, input) => ({ tasks: await assignTasksToGoal(ctx, input) }),
+    service: assignTasksToGoal,
+    key: "tasks",
   }),
-  defineTool({
+  serviceTool({
     name: "claim_task",
     title: "Claim task",
     description: "Take ownership of a task before working on it, so other agents leave it alone. Moves it to 'in_progress'. Fails with the claimant's name if another agent got there first.",
-    input: claimTask.schema,
-    run: async (ctx, input) => ({ task: await claimTask(ctx, input) }),
+    service: claimTask,
+    key: "task",
   }),
-  defineTool({
+  serviceTool({
     name: "release_task",
     title: "Release task",
     description: "Give up your claim on a task you cannot finish; it goes back to 'todo' for others.",
-    input: releaseTask.schema,
-    run: async (ctx, input) => ({ task: await releaseTask(ctx, input) }),
+    service: releaseTask,
+    key: "task",
   }),
-  defineTool({
+  serviceTool({
     name: "complete_task",
     title: "Complete task",
     description: "Mark a task done, with a one or two sentence note on what you did. The note is appended to the task for humans to review.",
-    input: completeTask.schema,
-    run: async (ctx, input) => ({ task: await completeTask(ctx, input) }),
+    service: completeTask,
+    key: "task",
   }),
-  defineTool({
+  serviceTool({
     name: "suggest_next_actions",
     title: "Suggest next actions",
     description: "The most urgent open tasks (priority, then due date, then age), skipping tasks claimed by other agents. The answer to 'what should I do next?'.",
-    input: suggestNextActions.schema,
     readOnly: true,
-    run: async (ctx, input) => ({ tasks: await suggestNextActions(ctx, input) }),
+    service: suggestNextActions,
+    key: "tasks",
   }),
 
   // Memory
-  defineTool({
+  serviceTool({
     name: "remember",
     title: "Remember",
     description: "Save a durable fact, preference, decision, or context note to the workspace's long-term memory, shared with every agent. Optionally link it to a goal or task.",
-    input: remember.schema,
-    run: async (ctx, input) => ({ memory: await remember(ctx, input) }),
+    service: remember,
+    key: "memory",
   }),
-  defineTool({
+  serviceTool({
     name: "recall",
     title: "Recall",
     description: "Look up long-term memory by text (prefix matching), kind, or goal. Without a query, returns the most recently updated memories.",
-    input: recall.schema,
     readOnly: true,
-    run: async (ctx, input) => ({ memories: await recall(ctx, input) }),
+    service: recall,
+    key: "memories",
   }),
-  defineTool({
+  serviceTool({
     name: "forget",
     title: "Forget",
     description: "Delete a memory that is wrong or obsolete. Agents can only delete memories they saved.",
-    input: forget.schema,
     destructive: true,
-    run: forget,
+    service: forget,
   }),
 
   // Search, planning, views, coordination
-  defineTool({
+  serviceTool({
     name: "search",
     title: "Search",
     description: "Full-text search across goals, tasks, and memories (prefix matching: 'audit' finds 'auditor'). Use before capturing or creating goals.",
-    input: search.schema,
     readOnly: true,
-    run: async (ctx, input) => ({ results: await search(ctx, input) }),
+    service: search,
+    key: "results",
   }),
   defineTool({
     name: "plan_goal",

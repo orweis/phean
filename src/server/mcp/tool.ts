@@ -3,6 +3,7 @@ import type { z } from "zod";
 
 import type { Ctx } from "../domain/context";
 import { isDomainError } from "../domain/errors";
+import type { ServiceFn } from "../domain/service";
 
 /** A domain context plus what tools need to link humans back to the web app. */
 export interface ToolContext extends Ctx {
@@ -19,15 +20,18 @@ export interface PheanTool {
   execute: (ctx: ToolContext, input: unknown) => Promise<CallToolResult>;
 }
 
-interface ToolSpec<S extends z.ZodObject, O extends object> {
+interface ToolMeta {
   name: string;
   title: string;
   description: string;
-  input: S;
   /** Read-only tools never change workspace state. */
   readOnly?: boolean;
   /** Destructive tools remove information (as opposed to adding or updating it). */
   destructive?: boolean;
+}
+
+interface ToolSpec<S extends z.ZodObject, O extends object> extends ToolMeta {
+  input: S;
   run: (ctx: ToolContext, input: z.output<S>) => Promise<O>;
   /** Text shown to the model; defaults to the JSON of the result. */
   format?: (output: O) => string;
@@ -55,6 +59,25 @@ export function defineTool<S extends z.ZodObject, O extends object>(spec: ToolSp
       }
     },
   };
+}
+
+/**
+ * A tool that is one domain service: its input is the service's schema. With `key`, the output
+ * arrives named (`{ task }`, `{ goals }`), so an agent reads what it got; without, the service's
+ * own result object is the tool result.
+ */
+export function serviceTool<S extends z.ZodObject, O>(spec: ToolMeta & { service: ServiceFn<S, O>; key: string }): PheanTool;
+export function serviceTool<S extends z.ZodObject, O extends object>(spec: ToolMeta & { service: ServiceFn<S, O> }): PheanTool;
+export function serviceTool<S extends z.ZodObject, O>({ service, key, ...meta }: ToolMeta & { service: ServiceFn<S, O>; key?: string }): PheanTool {
+  return defineTool({
+    ...meta,
+    input: service.schema,
+    run: async (ctx, input) => {
+      // Already-parsed input parses to itself, so handing it to the (self-validating) service is safe.
+      const output = await service(ctx, input as z.input<S>);
+      return key ? { [key]: output } : (output as object);
+    },
+  });
 }
 
 export function toolResult(output: object, text = JSON.stringify(output)): CallToolResult {

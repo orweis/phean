@@ -1,4 +1,5 @@
 import { and, asc, eq, inArray, isNull, or, sql, type SQL } from "drizzle-orm";
+import type { z } from "zod";
 
 import { isOpenTaskStatus, OPEN_TASK_STATUSES, SOURCE_META, TASK_STATUS_META } from "@/lib/domain";
 
@@ -16,6 +17,7 @@ import {
   CompleteTaskInput,
   ListTasksInput,
   NextActionsInput,
+  TaskDraft,
   TaskRefInput,
   UpdateTaskInput,
 } from "./schemas";
@@ -82,7 +84,12 @@ export interface CaptureResult {
   duplicates: { title: string; source: string; sourceRef: string; existingTaskId: string | null }[];
 }
 
-export const captureTasks = service(CaptureTasksInput, async (ctx, { tasks: drafts }): Promise<CaptureResult> => {
+export const captureTasks = service(CaptureTasksInput, (ctx, { tasks: drafts }) => capture(ctx, drafts));
+
+/** One task entered by hand (the web app's quick add). */
+export const addTask = service(TaskDraft, (ctx, draft) => capture(ctx, [draft]));
+
+async function capture(ctx: Ctx, drafts: z.output<typeof TaskDraft>[]): Promise<CaptureResult> {
   assertCan(ctx, "task:write");
   await assertGoalsExist(ctx, drafts.flatMap((draft) => (draft.goalId ? [draft.goalId] : [])));
 
@@ -135,7 +142,7 @@ export const captureTasks = service(CaptureTasksInput, async (ctx, { tasks: draf
       })),
     };
   });
-});
+}
 
 export const updateTask = service(UpdateTaskInput, async (ctx, input): Promise<Task> => {
   assertCan(ctx, "task:write");

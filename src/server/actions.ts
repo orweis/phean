@@ -11,7 +11,7 @@ import { routes } from "@/lib/routes";
 import { requireWorkspace } from "./auth/session";
 import type { Ctx } from "./domain/context";
 import { isDomainError } from "./domain/errors";
-import { parseInput } from "./domain/service";
+import type { ServiceFn } from "./domain/service";
 import { formToInput } from "./forms";
 
 /** A user-facing message for expected failures; anything else propagates to the error boundary. */
@@ -42,20 +42,17 @@ interface TenantActionOptions<O> {
 }
 
 /**
- * Wraps a workspace-scoped mutation as a `useActionState` server action. The form posts a
+ * Wraps a workspace-scoped domain service as a `useActionState` server action. The form posts a
  * `workspace` slug; the wrapper resolves it against the session (never trusting the slug alone),
- * validates the fields with the service's schema, and refreshes every page of that workspace.
+ * reads the fields the service's schema names, and refreshes every page of that workspace.
  */
-export function tenantAction<S extends z.ZodObject, O>(
-  schema: S,
-  run: (ctx: Ctx, input: z.output<S>) => Promise<O>,
-  options: TenantActionOptions<O> = {},
-) {
+export function tenantAction<S extends z.ZodObject, O>(service: ServiceFn<S, O>, options: TenantActionOptions<O> = {}) {
   return async (_previous: ActionState, formData: FormData): Promise<ActionState> => {
     const slug = String(formData.get("workspace") ?? "");
     const { ctx } = await requireWorkspace(slug);
 
-    const result = await attempt(() => run(ctx, parseInput(schema, formToInput(formData, schema))));
+    // The service validates its own input, so the raw form fields can go straight in.
+    const result = await attempt(() => service(ctx, formToInput(formData, service.schema) as z.input<S>));
     if (!result.ok) return result.state;
     const output = result.value;
 
