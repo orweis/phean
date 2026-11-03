@@ -1,0 +1,52 @@
+"use client";
+
+import { Check, Copy } from "lucide-react";
+import { useState } from "react";
+
+import { cx } from "@/lib/cx";
+
+import { Button, type ButtonVariant } from "./button";
+
+interface CopyButtonProps {
+  value: string;
+  label?: string;
+  /** What is copied ("session id"), for screen readers when several copy buttons sit together. */
+  subject?: string;
+  variant?: ButtonVariant;
+}
+
+export function CopyButton({ value, label = "Copy", subject, variant = "secondary" }: CopyButtonProps) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <Button
+      size="sm"
+      variant={variant}
+      aria-label={subject && `${copied ? "Copied" : label} ${subject}`}
+      onClick={async () => {
+        await navigator.clipboard.writeText(value);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      }}
+    >
+      {copied ? <Check aria-hidden /> : <Copy aria-hidden />}
+      {copied ? "Copied" : label}
+    </Button>
+  );
+}
+
+/** A value to paste elsewhere (a token, a link, an endpoint), shown in full width with its copy button. */
+export function CopyField({ value, surface = "panel" }: { value: string; surface?: "panel" | "fill" }) {
+  return (
+    <div className="flex items-center gap-2">
+      <code
+        className={cx(
+          "min-w-0 flex-1 truncate rounded-md border border-rule px-2.5 py-2 font-mono text-xs text-ink",
+          surface === "panel" ? "bg-panel" : "bg-fill",
+        )}
+      >
+        {value}
+      </code>
+      <CopyButton value={value} />
+    </div>
+  );
+}

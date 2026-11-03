@@ -1,0 +1,175 @@
+import { Bot, CalendarClock, CornerDownRight, ListChecks } from "lucide-react";
+import type { ReactNode } from "react";
+
+import { completeTaskAction, releaseTaskAction, updateTaskAction } from "@/app/w/[slug]/actions";
+import { webUrl } from "@/lib/agent-sessions";
+import { cx } from "@/lib/cx";
+import { isLate, isOpenTaskStatus, PRIORITY_META, SOURCE_META, TASK_STATUS_META, type TaskStatus } from "@/lib/domain";
+import { formatDueDate, truncate } from "@/lib/format";
+import type { TaskView } from "@/server/domain/tasks";
+
+import { OutsideLink, QuestionNote, ResumePopover, TaskLinks, WaitingBadge } from "./agent-sessions";
+import { EditTaskPopover } from "./edit-task-form";
+import { GoalLink } from "./goal-link";
+import type { GoalOption } from "./goal-options";
+import { ActionButton } from "./ui/action-button";
+import { Badge, MetaBadge } from "./ui/badge";
+
+/** The one-click next step for each status; "done" goes through complete so it is logged as completion. */
+const NEXT_STEP: Partial<Record<TaskStatus, { label: string; status: TaskStatus }>> = {
+  inbox: { label: "Accept", status: "todo" },
+  todo: { label: "Start", status: "in_progress" },
+  in_progress: { label: "Done", status: "done" },
+  done: { label: "Reopen", status: "todo" },
+  dropped: { label: "Restore", status: "todo" },
+};
+
+/** Fits two lines in the narrowest lane, so no clamped text sits hidden under the meta row. */
+const CARD_EXCERPT = 80;
+
+/** Next step, release and drop, as compact buttons. */
+function TaskActions({ task, slug }: { task: TaskView; slug: string }) {
+  const next = NEXT_STEP[task.status];
+  const taskId = task.id;
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {next &&
+        (next.status === "done" ? (
+          <ActionButton action={completeTaskAction} workspace={slug} fields={{ taskId }} size="sm" variant="tinted">
+            {next.label}
+          </ActionButton>
+        ) : (
+          <ActionButton action={updateTaskAction} workspace={slug} fields={{ taskId, status: next.status }} size="sm">
+            {next.label}
+          </ActionButton>
+        ))}
+      {task.claimedByName && (
+        <ActionButton action={releaseTaskAction} workspace={slug} fields={{ taskId }} size="sm" variant="ghost">
+          Release
+        </ActionButton>
+      )}
+      {isOpenTaskStatus(task.status) && (
+        <ActionButton action={updateTaskAction} workspace={slug} fields={{ taskId, status: "dropped" }} size="sm" variant="ghost">
+          Drop
+        </ActionButton>
+      )}
+    </div>
+  );
+}
+
+/** "From email", linked to the message itself when the agent recorded its link. */
+function SourceLabel({ task }: { task: TaskView }) {
+  const label = `From ${SOURCE_META[task.source].label.toLowerCase()}`;
+  const href = webUrl(task.sourceRef);
+  return href ? (
+    <OutsideLink href={href} className="inline-flex items-center gap-0.5 hover:text-ink link [&_svg]:size-3">
+      {label}
+    </OutsideLink>
+  ) : (
+    <span>{label}</span>
+  );
+}
+
+/** Goal, due date, source and claimant: the facts every task listing shows. */
+function TaskMeta({ task, slug, showGoal, showDue = true }: { task: TaskView; slug: string; showGoal: boolean; showDue?: boolean }) {
+  const late = isLate(task);
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
+      {task.inputRequest && <WaitingBadge slug={slug} kind={task.inputRequest.kind} />}
+      {task.parentTitle && (
+        <span className="inline-flex max-w-56 items-center gap-1">
+          <CornerDownRight className="size-3 shrink-0" aria-hidden />
+          <span className="truncate">Subtask of {task.parentTitle}</span>
+        </span>
+      )}
+      {showGoal && task.goalId && task.goalTitle && <GoalLink slug={slug} goalId={task.goalId} title={task.goalTitle} />}
+      {task.subtaskCount > 0 && (
+        <span className={cx("inline-flex items-center gap-1", task.subtasksDone === task.subtaskCount && "text-arrive-ink")}>
+          <ListChecks className="size-3" aria-hidden />
+          {task.subtasksDone} of {task.subtaskCount} subtasks done
+        </span>
+      )}
+      {showDue && task.dueDate && (
+        <span className={cx("inline-flex items-center gap-1", late && "font-semibold text-late-ink")}>
+          <CalendarClock className="size-3" aria-hidden />
+          {late ? `Late, due ${formatDueDate(task.dueDate)}` : `Due ${formatDueDate(task.dueDate)}`}
+        </span>
+      )}
+      {task.source !== "manual" && <SourceLabel task={task} />}
+      {task.claimedByName && (
+        <Badge tone="info">
+          <Bot aria-hidden />
+          {task.claimedByName}
+        </Badge>
+      )}
+    </div>
+  );
+}
+
+function TaskTitle({ task }: { task: TaskView }) {
+  return (
+    <div className="flex items-start gap-2">
+      <p className={cx("min-w-0 flex-1 text-sm font-semibold text-ink", task.status === "dropped" && "text-muted line-through")}>{task.title}</p>
+      {task.priority !== "medium" && <MetaBadge meta={PRIORITY_META} value={task.priority} />}
+    </div>
+  );
+}
+
+interface TaskViewProps {
+  task: TaskView;
+  slug: string;
+  canWrite: boolean;
+  /** Hide the goal link when the task is already shown under its goal. */
+  showGoal?: boolean;
+  /** Goals the editor offers; without them, editing keeps the task's goal. */
+  goals?: readonly GoalOption[];
+}
+
+/** A task on a board lane. */
+export function TaskCard({ task, slug, canWrite, showGoal = true, goals = [] }: TaskViewProps) {
+  const actions = canWrite && NEXT_STEP[task.status];
+  return (
+    <article data-task={task.id} className={cx("rounded-md border bg-panel p-3", isLate(task) ? "border-late/45" : "border-rule")}>
+      <TaskTitle task={task} />
+      {task.description && <p className="mt-1 line-clamp-2 text-xs text-muted">{truncate(task.description, CARD_EXCERPT)}</p>}
+      <div className="mt-2">
+        <TaskMeta task={task} slug={slug} showGoal={showGoal} />
+      </div>
+      <TaskLinks links={task.links} className="mt-2" />
+      {task.inputRequest && <QuestionNote request={task.inputRequest} className="mt-2" />}
+      {(actions || task.agentSessions.length > 0) && (
+        <div className="mt-2.5 flex flex-wrap items-center gap-1.5 border-t border-rule pt-2.5">
+          {actions && <TaskActions task={task} slug={slug} />}
+          <div className="ml-auto flex items-center gap-3">
+            {canWrite && <EditTaskPopover task={task} slug={slug} goals={goals} />}
+            <ResumePopover sessions={task.agentSessions} />
+          </div>
+        </div>
+      )}
+    </article>
+  );
+}
+
+/** A task as one line of a list, with an optional leading column such as its due date. */
+export function TaskRow({ task, slug, canWrite, showGoal = true, goals = [], lead, showDue = !lead }: TaskViewProps & { lead?: ReactNode; showDue?: boolean }) {
+  return (
+    <li data-task={task.id} className="flex flex-wrap items-start gap-x-4 gap-y-2 border-b border-rule py-3 last:border-b-0">
+      {lead && <div className="w-20 shrink-0">{lead}</div>}
+      <div className="min-w-0 flex-1 basis-56">
+        <TaskTitle task={task} />
+        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+          <MetaBadge meta={TASK_STATUS_META} value={task.status} />
+          <TaskMeta task={task} slug={slug} showGoal={showGoal} showDue={showDue} />
+        </div>
+        <TaskLinks links={task.links} className="mt-1.5" />
+      </div>
+      {(canWrite || task.agentSessions.length > 0) && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+          {canWrite && <TaskActions task={task} slug={slug} />}
+          {canWrite && <EditTaskPopover task={task} slug={slug} goals={goals} />}
+          <ResumePopover sessions={task.agentSessions} />
+        </div>
+      )}
+    </li>
+  );
+}

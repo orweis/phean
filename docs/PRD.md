@@ -2,68 +2,86 @@
 
 ## Problem
 
-Modern knowledge work generates tasks faster than humans can collect them. Action items arrive scattered across email threads, Slack messages, calendar invites, and hallway conversations. The act of *gathering* them into one trusted system - before any actual work happens - is itself a recurring, unrewarding chore. It is Sisyphean: every morning the boulder is back at the bottom of the hill.
+Knowledge work produces tasks faster than people can collect them. Action items are scattered across email threads, Slack messages, calendar invites, and meetings. Just gathering them into one trusted system, before any real work starts, is a recurring and unrewarding chore. It is Sisyphean: every morning the boulder is back at the bottom of the hill.
 
-Existing task managers assume the human is the operator: the human captures, categorizes, prioritizes, and updates. AI agents can now do most of that, but they lack a shared, structured, persistent workspace built for agent operation with human oversight.
+Existing task managers assume a person operates them: the person captures, categorizes, prioritizes, and updates. AI agents can now do most of that work, but teams of agents have no shared, structured, persistent place to do it with human oversight. Today each agent keeps its own notes, duplicates the others' work, and leaves no audit trail.
 
 ## Vision
 
-**The human points at the hill; the agent rolls the boulder.**
+**Humans set the goals. Agents roll the boulder.**
 
-Phean inverts the operator model. The human's job shrinks to two things: defining/approving goals and making judgment calls. The connected AI agent does everything else - collecting tasks from its connectors, triaging them into goals, tracking progress, and completing tasks where possible.
+Phean flips who operates the system. People do two things: decide which goals matter, and make the judgment calls. A team of AI agents does the rest. They collect tasks from their own connectors, triage them into goals, coordinate who does what, complete what they can, and remember what they learned.
 
 ## Personas
 
-- **The Human (Owner)** - a busy professional drowning in scattered action items. Wants a single trustworthy picture of "what's on my plate and how it ladders up to my goals," without doing data entry. Retains authority: goals only become active with their approval.
-- **The Agent (Operator)** - an AI assistant (Cursor, Claude, etc.) with its own connectors to email, Slack, calendar, and more. Needs structured tools and clear operating guidance to manage the owner's tasks reliably across sessions.
+- **Workspace owner.** A founder, manager, or consultant drowning in scattered action items for one team or customer. Wants one trustworthy picture of what is on the plate and how it ladders up to goals, without doing data entry. Keeps authority: goals become active only with a person's approval.
+- **Agent.** An AI assistant (Cursor, Claude Code, background agents) with its own email, Slack, and calendar integrations. Needs structured tools, operating guidance, and a shared ledger with the other agents in the workspace.
+- **Operator.** Runs Phean for several customers, for example a Permit team serving its accounts. Wants status per customer at a glance: what is overdue, what is waiting on a decision, and which agents are active.
 
 ## Product shape
 
-Phean is an **MCP server**. This is the core product decision:
+Phean is a **hosted, multi-tenant service** with two faces over one ledger:
 
-- The agent is the UI. There is no Phean app to open; all interaction is conversational, mediated by whatever agent the human already uses.
-- **Connectors are the agent's job, not Phean's.** The agent already has email/Slack/calendar access through its own integrations. Phean supplies *guidance* (server instructions and prompts) that teaches the agent how to scan those sources and feed findings into Phean's tools. This keeps Phean small, private, and connector-agnostic.
-- Phean is the persistent brain and ledger: durable storage, structure, search, planning scaffolds, and visualization.
+1. **A remote MCP server** that agents connect to with a per-agent token. It provides both the *guidance* (server instructions and prompts that teach the operating loop and multi-agent etiquette) and the *tools* (CRUD, search, planning, memory, and visualization).
+2. **A web app** where people sign in, create workspaces, invite teammates, connect agents, approve goals, and watch progress.
 
-## MVP scope
+Connectors stay with the agents. Phean never holds email or Slack credentials. It is the shared brain and ledger.
+
+## Scope
 
 ### In scope
 
-1. **Goal management** - create, update, list, archive. Goals carry an approval flag; the agent proposes (`proposed`), the human approves (`active`).
-2. **Task intake** - bulk capture of tasks with source metadata (`email`, `slack`, `calendar`, `chat`, `manual`, `other`). New tasks land in an `inbox` status awaiting triage.
-3. **Triage** - assign tasks to goals, set priority and due dates, drop noise.
-4. **Task lifecycle** - `inbox -> todo -> in_progress -> done` (or `dropped`).
-5. **Search** - full-text search (SQLite FTS5) plus structured filters across tasks and goals.
-6. **Visualization** - Mermaid diagrams returned as text through MCP tools, rendered by the agent's chat UI: goal tree, kanban board, due-date timeline.
-7. **Detailed planning** - `plan_goal` returns a structured breakdown scaffold the agent fills in with the human; `suggest_next_actions` surfaces what to do next.
-8. **Guidance** - server instructions plus `triage_inbox`, `daily_review`, and `scan_sources` prompts encoding the Phean operating loop.
+1. **Accounts and workspaces.** Email and password sign-up, plus GitHub and Google when configured. A person can belong to several workspaces (tenants), each fully isolated. Roles: owner, admin, member. Invitations are shared as links.
+2. **Agents per workspace.** Owners and admins issue named agent tokens. Each token is shown once, stored hashed, and revocable. Any number of agents share one workspace.
+3. **Goals as a hierarchy.** Goals and sub-goals up to four levels deep, with progress rolled up from every descendant. Agents propose goals, and only people approve, achieve, or abandon them.
+4. **Task intake and triage.** Bulk capture with source metadata. Items already captured by another agent, matched on source plus source reference, are skipped. New items land in the inbox, and filing them under a goal triages them.
+5. **Coordination.** Agents claim tasks before working on them, and a second claim is refused with the claimant's name. Next-action suggestions skip work claimed by others. A shared activity feed lets each agent catch up on what the rest did.
+6. **Hand-offs between agents and people.** An agent leaves its session on each task it works on: a link to its conversation or message where it has one (ideal: one click from Phean), otherwise its session and message ids and the command that resumes it, plus a one-line brief. When it needs a person, it asks one question on the task. The question waits on the person's overview with the way back into the agent's conversation, and can be answered there or in Phean, where the agent reads the answer on the task.
+7. **Long-term memory.** Facts, preferences, decisions, and context that any agent can save and every agent in the workspace can recall, optionally linked to a goal or task.
+8. **Search.** Full-text, prefix-matching search across goals, tasks, and memory.
+9. **Planning and views.** `plan_goal` returns a planning scaffold. Mermaid goal tree, kanban, and timeline views render in the agent's chat.
+10. **Web status views.**
+   - Status per workspace: open, inbox, overdue, due this week, done in the last 7 days, waiting on you (goals to decide and agent questions), active agents, last activity.
+   - A workspace dashboard, kanban board, goal pages, memory, search, agent management, and members.
+   - Platform admins get the same per-customer view across every workspace, read-only.
+11. **Hosting.** Runs entirely on Vercel, with Neon Postgres as the single store.
 
-### Out of scope (MVP)
+### Out of scope (for now)
 
-- Built-in connectors (email/Slack/calendar polling) - delegated to the agent.
-- Web UI or dashboard - the agent's chat is the UI.
-- Multi-user support, auth, sync, or hosting - single-user, local, stdio transport.
-- Recurring tasks, reminders/notifications, time tracking.
-- Automatic task execution - the agent executes using its own capabilities; Phean only tracks.
+- Built-in connectors. Scanning sources is the agents' job.
+- MCP OAuth for clients that cannot send headers (they can use the `mcp-remote` bridge for now).
+- Email delivery: invitations, notifications, digests.
+- Semantic (embedding) memory search. `pgvector` is available when needed.
+- Recurring tasks, reminders, time tracking, billing.
+- Fine-grained authorization beyond the role matrix (the `can()` seam is ready for Permit.io).
 
 ## The human-approval principle
 
-The agent proposes; the human disposes. Concretely:
+The agent proposes; the human disposes. This is enforced by the server, not left to prompts:
 
-- Goals created by the agent default to `proposed` and are not treated as active until the human approves.
-- Bulk destructive operations (dropping many tasks, abandoning goals) require explicit human confirmation in conversation - guidance instructs the agent to ask.
-- Everything else (capturing, triaging, updating status, completing verified work) the agent does autonomously.
+- Goals created by agents always start as `proposed`. Goals created by people start `active`.
+- Only people can change a goal's status. Agents get a review link to hand to their human.
+- Agents can forget only the memories they saved themselves.
+- Everything else (capturing, triaging, claiming, completing verified work) agents do on their own, and it is attributed to them in the activity log.
 
 ## Success criteria
 
-1. A user can connect Phean to Cursor or Claude Desktop with one config block and no other setup.
-2. Starting from an empty database, an agent following only Phean's built-in guidance can: capture a batch of tasks from a source sweep, triage them into human-approved goals, and render a coherent kanban and goal tree - within a single conversation.
-3. "What should I do next?" returns a sensibly prioritized answer (priority, then due date, then age).
-4. State survives across sessions: a new conversation days later picks up exactly where the last one left off.
-5. The whole server stays small enough to read in one sitting (single SQLite file, no ORM, one dependency).
+1. Someone can go from sign-up to a connected agent in under two minutes: create a workspace, issue a token, paste the generated config.
+2. Two agents connected to the same workspace never capture the same source item twice and never both work on the same task.
+3. The owner sees what the agents did, what is overdue, and what awaits a decision or an answer on one screen, refreshed without reloading.
+4. From any task an agent worked on, a person gets back into that agent's conversation in one click when the agent gave a link, or with ids and a command ready to copy when it did not.
+5. An operator sees status across all customer workspaces in one table.
+6. No request can read or change another workspace's data. This is covered by isolation tests at the service, MCP, and database levels.
+7. State survives across sessions and agents: a new agent connecting days later picks up the goals, claims, and memory exactly where the others left them.
 
 ## Risks
 
-- **Agent compliance** - guidance is advisory; agents may skip the approval flow. Mitigation: encode the rules in server instructions (always in context) and in every relevant tool description.
-- **Mermaid rendering variance** - not all clients render all diagram types. Mitigation: stick to widely supported diagrams (flowchart, kanban, gantt) and always include a plain-text fallback summary alongside.
-- **Inbox rot** - capture without triage recreates the original problem. Mitigation: `daily_review` prompt and status summaries that surface inbox size loudly.
+| Risk | Mitigation |
+| --- | --- |
+| Agents ignore the guidance | Critical rules are enforced in services (approval, claims, dedupe, memory ownership), not just written in prompts |
+| Cross-tenant leaks | The tenant comes only from a verified token or session. Every query is tenant-scoped, composite foreign keys make cross-tenant links impossible, and isolation tests cover all of it |
+| Leaked agent token | Hashed at rest, shown once, last-seen visible, revocable instantly |
+| A task stalls silently on a person | Agents ask with `request_input`; open questions lead the overview and count on the Overview tab and in the workspaces table, and `suggest_next_actions` skips tasks waiting on a person |
+| A session link that is not what it says | Only `https`, `http`, and known agent and chat app schemes are accepted; web links open in a new tab without access to Phean's window, and the guidance tells agents to link only their own conversations |
+| Inbox rot | The dashboard and status summary surface the inbox count, and the `daily_review` prompt pushes triage |
+| Mermaid rendering varies by client | Widely supported diagram types only, always with text alongside |
