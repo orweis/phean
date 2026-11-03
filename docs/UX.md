@@ -219,7 +219,9 @@ Switching workspace tabs answers at once: a loading frame holds the page's shape
 
 ### Color language
 
-The full system (tokens, type, components, and the rules behind them) is in [DESIGN.md](../DESIGN.md). In short: dusk on Sisyphus's slope, in Apple's design language. A Liquid Glass header floats over a lavender ground of white panels; violet is the brand and the primary action, ember (the boulder) marks what is new, and four state colours carry meaning and nothing else. The app follows the system's light or dark appearance, and both keep text at 4.5:1 or better.
+The full system (tokens, type, components, and the rules behind them) is in [DESIGN.md](../DESIGN.md). In short: dusk on Sisyphus's slope, in Apple's design language. A Liquid Glass header floats over a lavender ground of white panels; violet is the brand and the primary action, ember (the boulder) marks what is new, and four state colours carry meaning and nothing else. Light and dark both keep text at 4.5:1 or better.
+
+**Appearance.** The account menu (and the landing page's footer, before signing in) offers **Light**, **Dark**, and **System**. System is the default and follows the device, changing with it when the device switches at dusk. The choice applies at once and is kept in a cookie for a year, so every later page, the sign-in screens included, is rendered in it from the first paint, with no flash of the other appearance.
 
 One table per concept (`src/lib/domain.ts`) maps each value to a label and a tone, and every badge, stat, and table cell reads from it, so a status looks the same everywhere.
 

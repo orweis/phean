@@ -238,7 +238,7 @@ components:
 
 # Design System: Phean
 
-The tokens above mirror the `@theme` block in `src/app/globals.css`, which is the source of truth. That block resets Tailwind's default palette (`--color-*: initial`), so a class like `text-zinc-500` does not exist here: every colour is one of these names. The `dark-` entries are the same tokens in the dark appearance, set in the `prefers-color-scheme: dark` block of the same file, so components never name a dark colour themselves.
+The tokens above mirror the `@theme` block in `src/app/globals.css`, which is the source of truth. That block resets Tailwind's default palette (`--color-*: initial`), so a class like `text-zinc-500` does not exist here: every colour is one of these names. The `dark-` entries are the same tokens in the dark appearance, set once under the file's custom `dark` variant (`@variant dark` on `:root`), so components never name a dark colour themselves.
 
 ## Overview
 
@@ -248,7 +248,7 @@ Phean is named for Sisyphus, so the world is his hill at dusk: a violet slope, a
 
 The density is that of an operations screen, not a marketing page. People check in a few times a day to see what agents did, what is late, and what awaits their decision, so the overview leads with the line and the decisions, and every figure is a tabular numeral with its label. Colour carries meaning only: violet is the brand and work in motion, ember is what is new and what needs a person, and each state has one hue on every screen.
 
-The app follows the system's appearance. In dark mode the ground turns to a deep violet night and the glass to smoked violet; the hues lift to keep their contrast. There is no toggle.
+Each person picks Light, Dark, or System (the default, which follows the device and changes with it) in the account menu, or in the landing page's footer before signing in. In dark the ground turns to a deep violet night and the glass to smoked violet; the hues lift to keep their contrast.
 
 **Key Characteristics:**
 
@@ -257,7 +257,7 @@ The app follows the system's appearance. In dark mode the ground turns to a deep
 - Capsule controls throughout (buttons, tabs, badges, segmented controls); cards keep a 14px continuous-looking corner.
 - SF Pro on Apple devices, Inter Variable with optical sizing everywhere else; SF Pro Rounded for figures where it exists.
 - State is carried by line form as well as hue: dashed while waiting, solid while moving, a dot on arrival, a slash when dropped.
-- Light and dark appearances, every text pair at 4.5:1 or better and every line and control at 3:1 or better in both.
+- Light, Dark, and System appearances, every text pair at 4.5:1 or better and every line and control at 3:1 or better in both palettes.
 
 ## Colors
 
@@ -292,11 +292,11 @@ A cool lavender ground under a violet brand, with one ember signal and four stat
 
 ### Dark appearance
 
-Every token above is redefined under `prefers-color-scheme: dark`. The ground drops to oklch(16.5% 0.022 292), panels to 21% and fills to 26.5%, all on the violet hue; text inverts to a lavender white; each `-ink` lifts to a light cut of its hue (violet ink to 77%, crimson to 77%, honey to 85%, green to 79%); and each `-tint` becomes a deep wash of its hue around 28% lightness. Glass turns to smoked violet with a light rim. The `theme-color` meta follows: `#f7f5fb` in light, `#0e0d17` in dark.
+Every token above is redefined under the custom `dark` variant, which holds when `<html data-appearance>` is `dark`, or when it is `system` (or missing) and the device prefers dark. The attribute comes from the `phean-appearance` cookie, read by `getAppearance()` in the root layout, so the first paint is already in the chosen appearance; the picker sets the attribute and the cookie together, and the change is instant. The ground drops to oklch(16.5% 0.022 292), panels to 21% and fills to 26.5%, all on the violet hue; text inverts to a lavender white; each `-ink` lifts to a light cut of its hue (violet ink to 77%, crimson to 77%, honey to 85%, green to 79%); and each `-tint` becomes a deep wash of its hue around 28% lightness. Glass turns to smoked violet with a light rim. The `theme-color` and `color-scheme` metas follow the choice: `#f7f5fb` in light, `#0e0d17` in dark, and one of each, by media query, under System.
 
 ### Named Rules
 
-**The Two Appearances Rule.** A colour is a token with a light and a dark value, never a literal in a component. Every text pair holds 4.5:1 and every line and control 3:1 in both appearances; the dark-scheme axe scans in `e2e/quality.spec.ts` guard it.
+**The Two Appearances Rule.** A colour is a token with a light and a dark value, never a literal in a component. Every text pair holds 4.5:1 and every line and control 3:1 in both appearances; the dark-scheme axe scans in `e2e/quality.spec.ts` and the picker's tests in `e2e/appearance.spec.ts` guard it.
 
 **The Prominence Rule.** A view has one or two filled violet actions at most. The forward step repeated on every row of a list (Done on each task) is tinted, and the rest are secondary or ghost.
 
@@ -369,7 +369,7 @@ Controls are capsules: buttons, tabs, badges, count chips, segmented controls an
 - **Primary:** violet with white text, darker violet on hover. One or two per view (see The Prominence Rule).
 - **Tinted:** a violet wash with violet text, for the forward step repeated on each row (Done).
 - **Secondary:** a filled grey capsule, a shade deeper on hover.
-- **Ghost:** text only, for the secondary actions in a row (Release, Drop, Open board), the account's Sign out, and every manual entry point (Add manually, Add task, Add sub-goal).
+- **Ghost:** text only, for the secondary actions in a row (Release, Drop, Open board), the account menu's trigger and its Sign out, and every manual entry point (Add manually, Add task, Add sub-goal).
 - **Danger:** crimson text on a crimson wash, and it always asks for confirmation.
 - **Signal:** ember with dark text, used once per dusk band, as the landing hero's call to action.
 - **Dusk:** quiet text controls on a dusk band, lifting to `dusk-2` on hover.
@@ -399,11 +399,11 @@ Controls are capsules: buttons, tabs, badges, count chips, segmented controls an
 
 ### Segmented controls
 
-A grey capsule well with capsule segments; the selected one is raised (white with the raised shadow in light, a lifted violet-grey in dark). Used for the timeline window (14, 30 or 90 days), the MCP client tabs in Connect an agent, and the task or goal choice in manual entry.
+A grey capsule well with capsule segments; the selected one is raised (white with the raised shadow in light, a lifted violet-grey in dark). Used for the timeline window (14, 30 or 90 days), the MCP client tabs in Connect an agent, the task or goal choice in manual entry, and the Light, Dark and System choice of the appearance picker, whose segments carry a sun, a moon and a display.
 
 ### Navigation
 
-The glass header holds the boulder wordmark, a `/`, the workspace switcher (a capsule that opens a glass menu), and the account with a ghost Sign out. Below them, the tab rail (Overview, Board, Timeline, Memory, Search, Agents, Members) is a row of capsules: muted until hovered, which fills them grey; the active tab is a violet-tinted capsule with semibold violet text. Inline text links underline on hover and thicken the underline while pressed (the `link` utility).
+The glass header holds the boulder wordmark, a `/`, the workspace switcher (a capsule that opens a glass menu), and the account menu: a ghost capsule with the person's initial on a violet disc and their name (the initial alone on phones), which opens a glass popover with their name and email, the appearance picker, and Sign out. Below them, the tab rail (Overview, Board, Timeline, Memory, Search, Agents, Members) is a row of capsules: muted until hovered, which fills them grey; the active tab is a violet-tinted capsule with semibold violet text. Inline text links underline on hover and thicken the underline while pressed (the `link` utility).
 
 ### Menus, popovers and sheets
 
