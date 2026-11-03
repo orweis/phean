@@ -1,23 +1,31 @@
 import { expect, test, type Page } from "@playwright/test";
 
 import { DEMO_SESSION } from "./support/env";
-import { card } from "./support/locators";
+import { card, lane } from "./support/locators";
 
 /** Reads the seeded Globex workspace, which has three weeks of backdated history. Never writes. */
 test.use({ storageState: DEMO_SESSION });
 
 const track = (page: Page, title: string) => page.locator("li[data-task]").filter({ hasText: title });
 
-test("the overview leads with status, flow and the goal map", async ({ page }) => {
+test("the overview leads with status, the line and the goal map", async ({ page }) => {
   await page.goto("/w/globex");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Globex");
 
   const today = page.getByRole("region", { name: "Today on the line" });
   await expect(today.getByRole("img", { name: /^Open work by status: \d+ inbox/ })).toBeVisible();
 
-  const flow = card(page, "How the work moved");
-  await expect(flow.locator("figure svg path")).toHaveCount(4);
-  await expect(flow.locator("figure table tbody tr")).toHaveCount(14);
+  const line = card(page, "On the line");
+  await expect(line).toContainText(/The 8 most pressing of \d+ open tasks/);
+  await expect(line.locator("li[data-task]")).toHaveCount(8);
+  await expect(line.locator("[data-now]")).toContainText("Now");
+  const onLine = (title: string) => line.locator("li[data-task]").filter({ hasText: title });
+  await expect(onLine("Chase three overdue invoices")).toContainText(/Late, due/);
+  await expect(onLine("Renew the SSL certificate")).toBeVisible();
+  await expect(onLine("Read the Slack thread about on-call pay")).toHaveCount(0);
+  await expect(line.locator('[data-end="arrived"], [data-end="dropped"]')).toHaveCount(0);
+
+  await expect(card(page, "Next actions")).toContainText("Chase three overdue invoices");
 
   const map = card(page, "Goal map");
   await expect(map.getByRole("link", { name: "Launch the partner portal" })).toBeVisible();
@@ -28,6 +36,23 @@ test("the overview leads with status, flow and the goal map", async ({ page }) =
   await expect(card(page, "1 goal awaiting your decision")).toContainText("Renew the office lease");
   await expect(card(page, "Late")).toContainText("Chase three overdue invoices");
   for (const agent of ["Inbox sweeper", "Calendar planner", "Finance clerk"]) await expect(card(page, "Agents")).toContainText(agent);
+});
+
+test("the timeline charts how the work moved, with the numbers on request", async ({ page }) => {
+  await page.goto("/w/globex/timeline");
+  const flow = card(page, "How the work moved");
+  await expect(flow.locator("figure svg path")).toHaveCount(4);
+  const numbers = flow.getByRole("table", { name: "Tasks at each status at the end of each day" });
+  await expect(numbers).toBeHidden();
+  await flow.getByText("Show the numbers").click();
+  await expect(numbers).toBeVisible();
+  await expect(numbers.locator("tbody tr")).toHaveCount(14);
+});
+
+test("a window longer than the history starts with the history", async ({ page }) => {
+  await page.goto("/w/globex/timeline?days=90");
+  await expect(page.getByText(/Where every task stood each day since \w+ \d+\./)).toBeVisible();
+  await expect(track(page, "Set up the partner Slack channel").locator('[data-end="arrived"]')).toHaveCount(1);
 });
 
 test("the timetable draws a track per task with its stations and ends", async ({ page }) => {
@@ -86,7 +111,13 @@ test("the board lanes follow the stations in order", async ({ page }) => {
   await page.goto("/w/globex/board");
   const lanes = page.locator("section[aria-labelledby^=lane-] h2");
   await expect(lanes).toHaveText(["Inbox", "To do", "In progress", "Done"]);
-  await expect(page.locator('section[aria-labelledby="lane-in_progress"]')).toContainText("Chase three overdue invoices");
+  await expect(lane(page, "in_progress")).toContainText("Chase three overdue invoices");
+
+  const done = lane(page, "done").locator("article[data-task]");
+  await expect(done.filter({ visible: true })).toHaveCount(5);
+  await lane(page, "done").getByText(/^Show \d+ more$/).click();
+  await expect(done.filter({ visible: true })).toHaveCount(await done.count());
+  await expect(lane(page, "done").getByText("Show fewer")).toBeVisible();
 });
 
 test("the workspaces table shows open work per workspace", async ({ page }) => {

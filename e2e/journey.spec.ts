@@ -94,7 +94,8 @@ test("an owner and an agent run a workspace end to end", async ({ page }) => {
 
     await expect(card(page, "Goal map").getByRole("link", { name: "Close the quarter" })).toBeVisible();
     await expect(card(page, "Late").locator(`[data-task="${tasks.late.id}"]`)).toContainText("Reconcile the payouts");
-    await expect(card(page, "Coming due").locator(`[data-task="${tasks.claimed.id}"]`)).toContainText("Inbox sweeper");
+    await expect(card(page, "Next actions").locator(`[data-task="${tasks.claimed.id}"]`)).toContainText("Inbox sweeper");
+    await expect(card(page, "On the line").locator(`[data-task="${tasks.late.id}"]`)).toContainText(/Late, due/);
     await expect(card(page, "Agents")).toContainText("Inbox sweeper");
     await expect(page.getByRole("region", { name: "Today on the line" }).getByRole("img", { name: /Open work by status/ })).toHaveAccessibleName(
       "Open work by status: 2 inbox, 1 in progress",
@@ -125,7 +126,8 @@ test("an owner and an agent run a workspace end to end", async ({ page }) => {
     const unfiled = page.getByRole("region", { name: "Not filed under a goal" }).locator(`[data-task="${tasks.unfiled.id}"]`);
     await expect(unfiled).toContainText("Done");
     await expect(unfiled.locator('[data-end="arrived"]')).toHaveCount(1);
-    await expect(card(page, "How the work moved").locator("figure table")).toBeAttached();
+    await expect(card(page, "How the work moved")).toContainText("The flow fills in after a few days");
+    await expect(page.getByText(/Where every task stood each day since \w+ \d+\./)).toBeVisible();
 
     await page.getByRole("link", { name: "30 days" }).click();
     await expect(page).toHaveURL(/days=30/);
