@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { PGlite } from "@electric-sql/pglite";
 
-import type { MemberRole } from "@/lib/domain";
+import { slugify, type MemberRole } from "@/lib/domain";
 import { createPgliteDb, type Db } from "@/server/db/client";
 import { migratePgliteClient } from "@/server/db/migrate";
 import { member, organization, user } from "@/server/db/schema";
@@ -27,8 +27,10 @@ export interface TestUser {
   email: string;
 }
 
+/** A user; the email is unique per call, so the same name can be seeded into many workspaces. */
 export async function seedUser(db: Db, name: string): Promise<TestUser> {
-  const person = { id: randomUUID(), name, email: `${name.toLowerCase().replace(/\W+/g, ".")}@example.com` };
+  const id = randomUUID();
+  const person = { id, name, email: `${name.toLowerCase().replace(/\W+/g, ".")}.${id.slice(0, 8)}@example.com` };
   await db.insert(user).values(person);
   return person;
 }
@@ -49,10 +51,39 @@ export function asUser(db: Db, tenant: Tenant, person: TestUser, role: UserRole 
   return { db, tenant, actor: { type: "user", id: person.id, name: person.name, role } };
 }
 
+export interface ConnectedAgent {
+  ctx: Ctx;
+  token: string;
+  agentId: string;
+}
+
 /** Issues a real agent token through the service and resolves it the way the MCP endpoint does. */
-export async function connectAgent(owner: Ctx, name: string): Promise<{ ctx: Ctx; token: string; agentId: string }> {
+export async function connectAgent(owner: Ctx, name: string): Promise<ConnectedAgent> {
   const { agent, token } = await createAgent(owner, { name });
   const principal = await authenticateAgentToken(owner.db, token);
   if (!principal) throw new Error("freshly issued token did not authenticate");
   return { ctx: agentContext(owner.db, principal), token, agentId: agent.id };
+}
+
+export interface Workspace {
+  tenant: Tenant;
+  /** The owner (Dana unless named otherwise). */
+  human: Ctx;
+  scout: ConnectedAgent;
+  closer: ConnectedAgent;
+}
+
+let workspaces = 0;
+
+/**
+ * A new workspace with an owner and two connected agents, Scout and Closer, so a test starts from
+ * an empty ledger and never depends on what an earlier test wrote. Many fit in one database.
+ */
+export async function seedWorkspace(db: Db, { name = "Acme", owner = "Dana" } = {}): Promise<Workspace> {
+  const tenant = await seedTenant(db, `${slugify(name)}-${++workspaces}`, name);
+  const person = await seedUser(db, owner);
+  await addMember(db, tenant, person, "owner");
+  const human = asUser(db, tenant, person);
+  const [scout, closer] = await Promise.all([connectAgent(human, "Scout"), connectAgent(human, "Closer")]);
+  return { tenant, human, scout, closer };
 }

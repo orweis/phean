@@ -1,17 +1,17 @@
 import type { Client } from "@modelcontextprotocol/client";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
+import { isoDayFromToday } from "@/lib/dates";
 import { createAgent, revokeAgent } from "@/server/domain/agents";
-import type { Ctx } from "@/server/domain/context";
 import { createPheanMcpHandler } from "@/server/mcp/handler";
 import { TOOLS } from "@/server/mcp/tools";
 
-import { asUser, createTestDb, seedTenant, seedUser, type TestDb } from "./support/db";
+import { createTestDb, seedWorkspace, type TestDb, type Workspace } from "./support/db";
 import { connectMcpClient, dataOf, MCP_URL, TEST_ORIGIN, textOf } from "./support/mcp";
 
 let testDb: TestDb;
-let owner: Ctx;
 let handler: (request: Request) => Promise<Response>;
+let ws: Workspace;
 let scout: Client;
 let closer: Client;
 let outsider: Client;
@@ -23,19 +23,18 @@ beforeAll(async () => {
   testDb = await createTestDb();
   const { db } = testDb;
   handler = createPheanMcpHandler({ getDb: () => db });
-
-  const acme = await seedTenant(db, "acme", "Acme");
-  owner = asUser(db, acme, await seedUser(db, "Dana"));
-  scout = await connectMcpClient(handler, (await createAgent(owner, { name: "Scout" })).token);
-  closer = await connectMcpClient(handler, (await createAgent(owner, { name: "Closer" })).token);
-
-  const globex = await seedTenant(db, "globex", "Globex");
-  const globexOwner = asUser(db, globex, await seedUser(db, "Eli"));
-  outsider = await connectMcpClient(handler, (await createAgent(globexOwner, { name: "Spy" })).token);
+  outsider = await connectMcpClient(handler, (await seedWorkspace(db)).scout.token);
 });
 
+beforeEach(async () => {
+  ws = await seedWorkspace(testDb.db);
+  [scout, closer] = await Promise.all([connectMcpClient(handler, ws.scout.token), connectMcpClient(handler, ws.closer.token)]);
+});
+
+afterEach(() => Promise.all([scout.close(), closer.close()]));
+
 afterAll(async () => {
-  await Promise.all([scout, closer, outsider].map((client) => client?.close()));
+  await outsider?.close();
   await testDb.close();
 });
 
@@ -61,18 +60,18 @@ describe("MCP authentication", () => {
 
     expect((await initialize({ authorization: "Bearer phn_not-a-real-token" })).status).toBe(401);
 
-    const { agent, token } = await createAgent(owner, { name: "Temp" });
+    const { agent, token } = await createAgent(ws.human, { name: "Temp" });
     expect((await initialize({ authorization: `Bearer ${token}` })).status).toBe(200);
-    await revokeAgent(owner, { agentId: agent.id });
+    await revokeAgent(ws.human, { agentId: agent.id });
     expect((await initialize({ authorization: `Bearer ${token}` })).status).toBe(401);
   });
 
   it("identifies the agent and workspace from the token alone", async () => {
     const me = dataOf(await call(scout, "whoami"));
     expect(me).toMatchObject({
-      agent: { name: "Scout" },
-      workspace: { slug: "acme" },
-      dashboardUrl: `${TEST_ORIGIN}/w/acme`,
+      agent: { id: ws.scout.agentId, name: "Scout" },
+      workspace: { slug: ws.tenant.slug },
+      dashboardUrl: `${TEST_ORIGIN}/w/${ws.tenant.slug}`,
     });
     expect(me.permissions).not.toContain("goal:decide");
   });
@@ -104,6 +103,21 @@ describe("MCP surface", () => {
     expect(missing.isError).toBe(true);
     expect(textOf(missing)).toContain('not_found: No goal with id "g_nope"');
   });
+
+  it("names a service's result after what it is, unless the result is already an object of its own", async () => {
+    const {
+      created: [task],
+    } = dataOf<{ created: { id: string }[] }>(await call(scout, "capture_tasks", { tasks: [{ title: "Water the plants" }] }));
+    const updated = dataOf(await call(scout, "update_task", { taskId: task!.id, priority: "high" }));
+    expect(Object.keys(updated)).toEqual(["task"]);
+    expect(updated.task).toMatchObject({ id: task!.id, priority: "high" });
+
+    const listed = dataOf<{ tasks: unknown[] }>(await call(scout, "list_tasks"));
+    expect(listed.tasks).toHaveLength(1);
+
+    const { memory } = dataOf<{ memory: { id: string } }>(await call(scout, "remember", { content: "Plants need water on Mondays" }));
+    expect(dataOf(await call(scout, "forget", { memoryId: memory.id }))).toEqual({ forgotten: memory.id });
+  });
 });
 
 describe("multiple agents sharing a workspace", () => {
@@ -112,7 +126,7 @@ describe("multiple agents sharing a workspace", () => {
       await call(scout, "create_goal", { title: "Close Q3 books" }),
     );
     expect(goal.goal.status).toBe("proposed");
-    expect(goal.reviewUrl).toBe(`${TEST_ORIGIN}/w/acme/goals/${goal.goal.id}`);
+    expect(goal.reviewUrl).toBe(`${TEST_ORIGIN}/w/${ws.tenant.slug}/goals/${goal.goal.id}`);
 
     const first = dataOf<{ created: { id: string }[] }>(
       await call(scout, "capture_tasks", {
@@ -156,10 +170,20 @@ describe("multiple agents sharing a workspace", () => {
     expect(since.events.length).toBeGreaterThanOrEqual(1);
     expect(since.events.length).toBeLessThan(activity.events.length);
 
-    const summary = dataOf<{ pendingApprovals: number; agents: number; tasksByStatus: { done: number } }>(
+    const summary = dataOf<{ pendingApprovals: number; agents: number; tasksByStatus: { done: number }; dashboardUrl: string }>(
       await call(closer, "get_status_summary"),
     );
-    expect(summary).toMatchObject({ pendingApprovals: 1, agents: 2, tasksByStatus: { done: 1 } });
+    expect(summary).toMatchObject({
+      pendingApprovals: 1,
+      agents: 2,
+      tasksByStatus: { done: 1 },
+      dashboardUrl: `${TEST_ORIGIN}/w/${ws.tenant.slug}`,
+    });
+  });
+
+  it("hands back the cursor it was given when nothing happened since", async () => {
+    const future = new Date(Date.now() + 60_000).toISOString();
+    expect(dataOf(await call(closer, "get_activity", { since: future }))).toEqual({ events: [], latestAt: future });
   });
 
   it("shares long-term memory between agents", async () => {
@@ -171,24 +195,32 @@ describe("multiple agents sharing a workspace", () => {
   });
 
   it("renders Mermaid views and the planning scaffold", async () => {
-    const { goals } = dataOf<{ goals: { id: string }[] }>(await call(scout, "list_goals"));
+    const { goal } = dataOf<{ goal: { id: string } }>(await call(scout, "create_goal", { title: "Year-end audit" }));
+    await call(scout, "capture_tasks", { tasks: [{ title: "Send the trial balance", goalId: goal.id, dueDate: isoDayFromToday(5) }] });
+
     const kanban = await call(scout, "visualize", { kind: "kanban" });
     expect(textOf(kanban)).toMatch(/^```mermaid\nkanban\n/);
+    expect(textOf(kanban)).toContain("Inbox: 1");
 
-    const tree = await call(scout, "visualize", { kind: "goal_tree", goalId: goals[0]!.id });
+    const tree = await call(scout, "visualize", { kind: "goal_tree", goalId: goal.id });
     expect(textOf(tree)).toContain("flowchart TD");
     expect(textOf(tree)).toContain("classDef proposed");
+    expect(textOf(tree)).toContain("Send the trial balance");
 
-    const plan = await call(scout, "plan_goal", { goalId: goals[0]!.id });
+    const timeline = await call(scout, "visualize", { kind: "timeline" });
+    expect(textOf(timeline)).toMatch(/^```mermaid\ngantt\n/);
+    expect(textOf(timeline)).toContain("1 task with due dates.");
+
+    const plan = await call(scout, "plan_goal", { goalId: goal.id });
     expect(textOf(plan)).toContain("Definition of done");
   });
 
   it("never lets an agent reach another workspace", async () => {
-    const { goals } = dataOf<{ goals: { id: string }[] }>(await call(scout, "list_goals"));
-    const probe = await call(outsider, "get_goal", { goalId: goals[0]!.id });
+    const { goal } = dataOf<{ goal: { id: string } }>(await call(scout, "create_goal", { title: "Bank covenant review" }));
+    const probe = await call(outsider, "get_goal", { goalId: goal.id });
     expect(probe.isError).toBe(true);
     expect(textOf(probe)).toContain("not_found");
     expect(dataOf<{ results: unknown[] }>(await call(outsider, "search", { query: "bank" })).results).toEqual([]);
-    expect(dataOf<{ workspace: { slug: string } }>(await call(outsider, "whoami")).workspace.slug).toBe("globex");
+    expect(dataOf<{ workspace: { slug: string } }>(await call(outsider, "whoami")).workspace.slug).not.toBe(ws.tenant.slug);
   });
 });

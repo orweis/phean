@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { isoDayFromToday } from "@/lib/dates";
 import { TIMELINE_AHEAD_DAYS, TIMELINE_MIN_DAYS } from "@/lib/timeline";
@@ -6,9 +6,18 @@ import type { Ctx } from "@/server/domain/context";
 import { listActivity } from "@/server/domain/events";
 import { createGoal, findGoal, listGoals, setGoalStatus, updateGoal } from "@/server/domain/goals";
 import { forget, recall, remember } from "@/server/domain/memory";
-import { getAgentWorkload, getBoard, getGoalDetail, getJourneys, getStatusSummary, getTimeline } from "@/server/domain/overview";
+import {
+  getAgentWorkload,
+  getBoard,
+  getGoalDetail,
+  getJourneys,
+  getStatusSummary,
+  getTimeline,
+  getWorkspaceStats,
+} from "@/server/domain/overview";
 import { search } from "@/server/domain/search";
 import {
+  addTask,
   assignTasksToGoal,
   captureTasks,
   claimTask,
@@ -19,22 +28,29 @@ import {
   updateTask,
 } from "@/server/domain/tasks";
 
-import { asUser, connectAgent, createTestDb, seedTenant, seedUser, type TestDb } from "./support/db";
+import { createTestDb, seedTenant, seedWorkspace, type TestDb, type Workspace } from "./support/db";
 
 let testDb: TestDb;
+let ws: Workspace;
 let human: Ctx;
 let scout: Ctx;
 let closer: Ctx;
 
 beforeAll(async () => {
   testDb = await createTestDb();
-  const tenant = await seedTenant(testDb.db, "acme", "Acme");
-  human = asUser(testDb.db, tenant, await seedUser(testDb.db, "Dana"));
-  scout = (await connectAgent(human, "Scout")).ctx;
-  closer = (await connectAgent(human, "Closer")).ctx;
+});
+
+beforeEach(async () => {
+  ws = await seedWorkspace(testDb.db);
+  ({ human } = ws);
+  scout = ws.scout.ctx;
+  closer = ws.closer.ctx;
 });
 
 afterAll(() => testDb.close());
+
+const actionsOf = async (ctx: Ctx, entityId: string) =>
+  (await listActivity(ctx, {})).filter((event) => event.entityId === entityId).map((event) => event.action);
 
 describe("goals", () => {
   it("approves goals written by humans and only lets agents propose", async () => {
@@ -58,6 +74,24 @@ describe("goals", () => {
     expect(latest).toMatchObject({ action: "goal.approved", actorName: "Dana", entityId: goal.id });
   });
 
+  it("logs each status decision once, and keeps the first approval when a goal comes back", async () => {
+    const goal = await createGoal(scout, { title: "Migrate payroll" });
+    const approved = await setGoalStatus(human, { goalId: goal.id, status: "active" });
+    await setGoalStatus(human, { goalId: goal.id, status: "achieved" });
+    await setGoalStatus(human, { goalId: goal.id, status: "achieved" });
+    await setGoalStatus(human, { goalId: goal.id, status: "abandoned" });
+    const back = await setGoalStatus(human, { goalId: goal.id, status: "active" });
+
+    expect(back).toMatchObject({ status: "active", approvedAt: approved.approvedAt });
+    expect((await actionsOf(human, goal.id)).reverse()).toEqual([
+      "goal.proposed",
+      "goal.approved",
+      "goal.achieved",
+      "goal.abandoned",
+      "goal.reactivated",
+    ]);
+  });
+
   it("enforces the nesting depth limit and rejects cycles", async () => {
     const root = await createGoal(human, { title: "Level 1" });
     const level2 = await createGoal(human, { title: "Level 2", parentGoalId: root.id });
@@ -79,6 +113,13 @@ describe("goals", () => {
     });
     const moved = await updateGoal(human, { goalId: loose.id, parentGoalId: level2.id });
     expect(moved.parentId).toBe(level2.id);
+    const unnested = await updateGoal(human, { goalId: loose.id, parentGoalId: null });
+    expect(unnested.parentId).toBeNull();
+  });
+
+  it("rejects an edit that changes nothing", async () => {
+    const goal = await createGoal(human, { title: "Tidy the wiki" });
+    await expect(updateGoal(human, { goalId: goal.id })).rejects.toMatchObject({ code: "invalid" });
   });
 
   it("rolls task progress up the hierarchy", async () => {
@@ -122,6 +163,17 @@ describe("tasks", () => {
     ]);
   });
 
+  it("adds one task by hand through the same capture path", async () => {
+    const goal = await createGoal(human, { title: "Taxes" });
+    const added = await addTask(human, { title: "File the extension", goalId: goal.id, status: "todo", source: "email", sourceRef: "msg-9" });
+    expect(added.created).toEqual([expect.objectContaining({ title: "File the extension", goalId: goal.id, createdByName: "Dana" })]);
+    expect(await actionsOf(human, added.created[0]!.id)).toEqual(["task.captured"]);
+
+    const again = await addTask(human, { title: "File it", source: "email", sourceRef: "msg-9" });
+    expect(again).toEqual({ created: [], duplicates: [expect.objectContaining({ existingTaskId: added.created[0]!.id })] });
+    await expect(addTask(human, { title: "  " })).rejects.toMatchObject({ code: "invalid" });
+  });
+
   it("lets exactly one agent claim a task and protects claimed work", async () => {
     const {
       created: [task],
@@ -137,16 +189,31 @@ describe("tasks", () => {
     await expect(completeTask(other, { taskId: task!.id })).rejects.toMatchObject({ code: "conflict" });
     await expect(releaseTask(other, { taskId: task!.id })).rejects.toMatchObject({ code: "conflict" });
     expect(await suggestNextActions(other, { limit: 20 })).not.toContainEqual(expect.objectContaining({ id: task!.id }));
+    expect((await listTasks(holder, { claimed: "mine" })).map((mine) => mine.id)).toEqual([task!.id]);
+    expect(await listTasks(human, { claimed: "mine" })).toEqual([]);
 
     const done = await completeTask(holder, { taskId: task!.id, note: "Sent 4 reminders" });
     expect(done).toMatchObject({ status: "done", claimedByAgentId: null });
     expect(done.description).toContain(`Completion note (${holder.actor.name}): Sent 4 reminders`);
   });
 
+  it("completes a task once, so a retry neither fails nor logs again", async () => {
+    const {
+      created: [task],
+    } = await captureTasks(scout, { tasks: [{ title: "Pay the cloud bill", status: "todo" }] });
+    const first = await completeTask(scout, { taskId: task!.id, note: "Paid" });
+    const retry = await completeTask(scout, { taskId: task!.id, note: "Paid" });
+
+    expect(retry).toEqual(first);
+    expect(await actionsOf(human, task!.id)).toEqual(["task.completed", "task.captured"]);
+    await expect(claimTask(scout, { taskId: task!.id })).rejects.toMatchObject({ code: "conflict" });
+  });
+
   it("lets humans step in on claimed tasks and agents release their own", async () => {
     const {
       created: [task],
     } = await captureTasks(human, { tasks: [{ title: "Renew domain", status: "todo" }] });
+    await expect(claimTask(human, { taskId: task!.id })).rejects.toMatchObject({ code: "invalid" });
     await claimTask(scout, { taskId: task!.id });
 
     const released = await releaseTask(scout, { taskId: task!.id });
@@ -156,6 +223,17 @@ describe("tasks", () => {
     const dropped = await updateTask(human, { taskId: task!.id, status: "dropped" });
     expect(dropped).toMatchObject({ status: "dropped", claimedByAgentId: null });
     await expect(claimTask(closer, { taskId: task!.id })).rejects.toMatchObject({ code: "conflict" });
+  });
+
+  it("clears a due date and unfiles a task with null, and rejects an edit that changes nothing", async () => {
+    const goal = await createGoal(human, { title: "Errands" });
+    const {
+      created: [task],
+    } = await captureTasks(human, { tasks: [{ title: "Return the parcel", goalId: goal.id, dueDate: isoDayFromToday(1) }] });
+
+    const cleared = await updateTask(human, { taskId: task!.id, dueDate: null, goalId: null });
+    expect(cleared).toMatchObject({ dueDate: null, goalId: null, title: "Return the parcel" });
+    await expect(updateTask(human, { taskId: task!.id })).rejects.toMatchObject({ code: "invalid" });
   });
 
   it("triages inbox items when filing them under a goal", async () => {
@@ -196,7 +274,7 @@ describe("tasks", () => {
     await expect(
       captureTasks(human, { tasks: [{ title: "Bad date", dueDate: "next tuesday" }] }),
     ).rejects.toMatchObject({ code: "invalid" });
-    await expect(updateTask(human, { taskId: "t_whatever" })).rejects.toMatchObject({ code: "not_found" });
+    await expect(updateTask(human, { taskId: "t_whatever", title: "x" })).rejects.toMatchObject({ code: "not_found" });
   });
 });
 
@@ -211,34 +289,88 @@ describe("memory and search", () => {
     await expect(forget(closer, { memoryId: preference.id })).rejects.toMatchObject({ code: "forbidden" });
     await expect(forget(scout, { memoryId: preference.id })).resolves.toEqual({ forgotten: preference.id });
     await expect(forget(human, { memoryId: fact.id })).resolves.toEqual({ forgotten: fact.id });
+    expect(await recall(closer, {})).toEqual([]);
   });
 
   it("searches goals, tasks, and memories together with prefix matching", async () => {
+    const hiring = await createGoal(human, { title: "Hiring" });
+    await captureTasks(scout, { tasks: [{ title: "Reply to auditor", goalId: hiring.id }] });
     await remember(scout, { content: "Auditors want the ledger export as CSV" });
+
     const hits = await search(human, { query: "audit" });
-    expect(new Set(hits.map((hit) => hit.kind))).toEqual(new Set(["task", "memory"]));
-    expect(hits.some((hit) => hit.title === "Reply to auditor")).toBe(true);
+    expect(hits.map((hit) => [hit.kind, hit.title, hit.goalId]).sort()).toEqual([
+      ["memory", "Auditors want the ledger export as CSV", null],
+      ["task", "Reply to auditor", hiring.id],
+    ]);
 
     const onlyGoals = await search(human, { query: "hiring", kinds: ["goal"] });
-    expect(onlyGoals.map((hit) => hit.title)).toEqual(["Hiring"]);
+    expect(onlyGoals.map((hit) => [hit.title, hit.status])).toEqual([["Hiring", "active"]]);
     await expect(search(human, { query: "!!!" })).rejects.toMatchObject({ code: "invalid" });
+  });
+
+  it("titles a memory hit with its opening words", async () => {
+    const content = `Quarterly close checklist: ${"reconcile accounts, ".repeat(6)}then lock the period.`;
+    await remember(human, { content });
+    const [hit] = await search(human, { query: "checklist" });
+    expect(hit).toMatchObject({ kind: "memory", status: "note", snippet: content });
+    expect(hit!.title).toHaveLength(80);
+    expect(hit!.title.endsWith("…")).toBe(true);
+    expect(content.startsWith(hit!.title.slice(0, -1))).toBe(true);
   });
 });
 
 describe("read models", () => {
   it("summarizes workspace status", async () => {
+    await createGoal(scout, { title: "Renew vendor contracts" });
+    await captureTasks(human, {
+      tasks: [
+        { title: "Overdue filing", dueDate: "2001-01-01", status: "todo" },
+        { title: "Due this week", dueDate: isoDayFromToday(3), status: "todo" },
+        { title: "Untriaged" },
+      ],
+    });
+
     const summary = await getStatusSummary(scout, {});
-    expect(summary.workspace.slug).toBe("acme");
-    expect(summary.agents).toBe(2);
-    expect(summary.activeAgents).toBe(2);
-    expect(summary.overdue).toBe(1);
+    expect(summary).toMatchObject({
+      workspace: ws.tenant,
+      agents: 2,
+      activeAgents: 2,
+      openTasks: 3,
+      inbox: 1,
+      overdue: 1,
+      dueThisWeek: 1,
+      activeGoals: 0,
+      pendingApprovals: 1,
+      goalsByStatus: { proposed: 1, active: 0, achieved: 0, abandoned: 0 },
+      tasksByStatus: { inbox: 1, todo: 2, in_progress: 0, done: 0, dropped: 0 },
+    });
     expect(summary.overdueTasks.map((task) => task.title)).toEqual(["Overdue filing"]);
-    expect(summary.pendingApprovals).toBe(summary.goalsByStatus.proposed);
-    expect(summary.goalsByStatus.proposed).toBeGreaterThan(0);
-    expect(summary.openTasks).toBe(
-      summary.tasksByStatus.inbox + summary.tasksByStatus.todo + summary.tasksByStatus.in_progress,
-    );
+    expect(summary.dueSoonTasks.map((task) => task.title)).toEqual(["Due this week"]);
     expect(summary.lastActivityAt).toBeInstanceOf(Date);
+  });
+
+  it("counts many workspaces at once and gives an untouched one zeros", async () => {
+    await captureTasks(human, { tasks: [{ title: "Only in this workspace" }] });
+    const quiet = await seedTenant(testDb.db, `quiet-${ws.tenant.slug}`);
+
+    const stats = await getWorkspaceStats(testDb.db, [ws.tenant.id, quiet.id, ws.tenant.id]);
+    expect([...stats.keys()]).toEqual([ws.tenant.id, quiet.id]);
+    expect(stats.get(ws.tenant.id)).toMatchObject({ openTasks: 1, inbox: 1, agents: 2 });
+    expect(stats.get(quiet.id)).toEqual({
+      tasksByStatus: { inbox: 0, todo: 0, in_progress: 0, done: 0, dropped: 0 },
+      goalsByStatus: { proposed: 0, active: 0, achieved: 0, abandoned: 0 },
+      openTasks: 0,
+      inbox: 0,
+      overdue: 0,
+      dueThisWeek: 0,
+      doneLast7Days: 0,
+      activeGoals: 0,
+      pendingApprovals: 0,
+      agents: 0,
+      activeAgents: 0,
+      lastActivityAt: null,
+    });
+    expect(await getWorkspaceStats(testDb.db, [])).toEqual(new Map());
   });
 
   it("assembles goal detail with ancestors, sub-goals, tasks, memories, and activity", async () => {
@@ -266,6 +398,7 @@ describe("read models", () => {
       tasks: [
         { title: "Sign lease", goalId: goal.id, status: "todo" },
         { title: "Order desks", goalId: sub.id, status: "todo" },
+        { title: "Elsewhere", status: "todo" },
       ],
     });
     await completeTask(human, { taskId: created[0]!.id });
@@ -273,9 +406,20 @@ describe("read models", () => {
     const board = await getBoard(human, { goalId: goal.id });
     const titles = Object.fromEntries(board.columns.map((column) => [column.status, column.tasks.map((task) => task.title)]));
     expect(titles).toEqual({ inbox: [], todo: ["Order desks"], in_progress: [], done: ["Sign lease"] });
+    await expect(getBoard(human, { goalId: "g_missing" })).rejects.toMatchObject({ code: "not_found" });
+  });
 
-    const timeline = await getTimeline(human, {});
-    expect(timeline.map((task) => task.dueDate)).toEqual([...timeline.map((task) => task.dueDate)].sort());
+  it("lists dated work soonest first and leaves out dropped tasks", async () => {
+    const { created } = await captureTasks(human, {
+      tasks: [
+        { title: "Later", dueDate: isoDayFromToday(9) },
+        { title: "Undated" },
+        { title: "Sooner", dueDate: isoDayFromToday(2) },
+        { title: "Abandoned", dueDate: isoDayFromToday(1) },
+      ],
+    });
+    await updateTask(human, { taskId: created[3]!.id, status: "dropped" });
+    expect((await getTimeline(human, {})).map((task) => task.title)).toEqual(["Sooner", "Later"]);
   });
 
   it("filters activity by time and by goal", async () => {
@@ -319,14 +463,23 @@ describe("read models", () => {
     await expect(getJourneys(human, { days: 7 as 14 })).rejects.toMatchObject({ code: "invalid" });
   });
 
-  it("reports each agent's workload", async () => {
-    const workload = await getAgentWorkload(human, {});
-    const byName = Object.fromEntries(workload.map((load) => [load.agent.name, load]));
-    const { created } = await captureTasks(scout, { tasks: [{ title: "Book the movers", status: "todo" }] });
+  it("reports each agent's workload, busiest first", async () => {
+    const { created } = await captureTasks(human, {
+      tasks: [
+        { title: "Book the movers", status: "todo" },
+        { title: "Cancel the lease", status: "todo" },
+        { title: "Forward the mail", status: "todo" },
+      ],
+    });
     await claimTask(scout, { taskId: created[0]!.id });
+    await claimTask(closer, { taskId: created[1]!.id });
+    await completeTask(closer, { taskId: created[1]!.id });
+    await claimTask(closer, { taskId: created[2]!.id });
 
-    const after = Object.fromEntries((await getAgentWorkload(human, {})).map((load) => [load.agent.name, load]));
-    expect(after.Scout!.claimed).toBe(byName.Scout!.claimed + 1);
-    expect(after.Closer!.completedLast7Days).toBeGreaterThan(0);
+    const workload = await getAgentWorkload(human, {});
+    expect(workload.map((load) => [load.agent.name, load.claimed, load.completedLast7Days])).toEqual([
+      ["Closer", 1, 1],
+      ["Scout", 1, 0],
+    ]);
   });
 });

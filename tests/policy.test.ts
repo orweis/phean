@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { createAgent, listAgents, revokeAgent } from "@/server/domain/agents";
 import type { Actor, Ctx, Role } from "@/server/domain/context";
@@ -7,7 +7,7 @@ import { ACTIONS, can, type Action } from "@/server/domain/policy";
 import { captureTasks } from "@/server/domain/tasks";
 import { listPendingInvitations } from "@/server/domain/tenants";
 
-import { asUser, createTestDb, seedTenant, seedUser, type TestDb } from "./support/db";
+import { addMember, asUser, createTestDb, seedUser, seedWorkspace, type TestDb } from "./support/db";
 
 const EXPECTED: Record<Role, readonly Action[]> = {
   owner: ACTIONS,
@@ -40,10 +40,16 @@ describe("policy enforcement in services", () => {
 
   beforeAll(async () => {
     testDb = await createTestDb();
-    const tenant = await seedTenant(testDb.db, "acme");
-    owner = asUser(testDb.db, tenant, await seedUser(testDb.db, "Owner"), "owner");
-    member = asUser(testDb.db, tenant, await seedUser(testDb.db, "Member"), "member");
-    platformAdmin = asUser(testDb.db, tenant, await seedUser(testDb.db, "Support"), "platform_admin");
+  });
+
+  beforeEach(async () => {
+    const { db } = testDb;
+    const { tenant, human } = await seedWorkspace(db);
+    owner = human;
+    const person = await seedUser(db, "Member");
+    await addMember(db, tenant, person, "member");
+    member = asUser(db, tenant, person, "member");
+    platformAdmin = asUser(db, tenant, await seedUser(db, "Support"), "platform_admin");
   });
 
   afterAll(() => testDb.close());
@@ -62,7 +68,7 @@ describe("policy enforcement in services", () => {
     await expect(captureTasks(platformAdmin, { tasks: [{ title: "Nope" }] })).rejects.toMatchObject({
       code: "forbidden",
     });
-    await expect(listAgents(platformAdmin, {})).resolves.toEqual([]);
+    expect((await listAgents(platformAdmin, {})).map((agent) => agent.name).sort()).toEqual(["Closer", "Scout"]);
   });
 
   it("lets owners issue and revoke agents without exposing token hashes", async () => {

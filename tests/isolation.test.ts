@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { tasks } from "@/server/db/schema";
 import { authenticateAgentToken } from "@/server/domain/agents";
@@ -11,30 +11,30 @@ import { search } from "@/server/domain/search";
 import { assignTasksToGoal, captureTasks, claimTask, listTasks, updateTask, type Task } from "@/server/domain/tasks";
 import { getWorkspaceOverviews, listMemberships } from "@/server/domain/tenants";
 
-import { addMember, asUser, connectAgent, createTestDb, seedTenant, seedUser, type TestDb } from "./support/db";
+import { createTestDb, seedWorkspace, type TestDb, type Workspace } from "./support/db";
 
 let testDb: TestDb;
+let acme: Workspace;
+let globex: Workspace;
 let acmeOwner: Ctx;
 let globexOwner: Ctx;
 let globexAgent: Ctx;
-let globexToken: string;
 let acmeGoal: Goal;
 let acmeTask: Task;
 let acmeMemory: Memory;
 
 beforeAll(async () => {
   testDb = await createTestDb();
-  const { db } = testDb;
-  const acme = await seedTenant(db, "acme", "Acme");
-  const globex = await seedTenant(db, "globex", "Globex");
-  const dana = await seedUser(db, "Dana");
-  const eli = await seedUser(db, "Eli");
-  await addMember(db, acme, dana, "owner");
-  await addMember(db, globex, eli, "owner");
+});
 
-  acmeOwner = asUser(db, acme, dana);
-  globexOwner = asUser(db, globex, eli);
-  ({ ctx: globexAgent, token: globexToken } = await connectAgent(globexOwner, "Globex bot"));
+beforeEach(async () => {
+  [acme, globex] = await Promise.all([
+    seedWorkspace(testDb.db),
+    seedWorkspace(testDb.db, { name: "Globex", owner: "Eli" }),
+  ]);
+  acmeOwner = acme.human;
+  globexOwner = globex.human;
+  globexAgent = globex.scout.ctx;
 
   acmeGoal = await createGoal(acmeOwner, { title: "Acme secret merger" });
   [acmeTask] = (
@@ -84,6 +84,7 @@ describe("tenant isolation", () => {
     await expect(forget(globexOwner, { memoryId: acmeMemory.id })).rejects.toMatchObject({ code: "not_found" });
 
     expect((await findGoal(acmeOwner, acmeGoal.id)).title).toBe("Acme secret merger");
+    expect((await recall(acmeOwner, {})).map((memory) => memory.id)).toEqual([acmeMemory.id]);
   });
 
   it("scopes duplicate detection to the tenant", async () => {
@@ -109,15 +110,15 @@ describe("tenant isolation", () => {
   });
 
   it("binds agent tokens to their own workspace", async () => {
-    const principal = await authenticateAgentToken(testDb.db, globexToken);
-    expect(principal?.tenant.slug).toBe("globex");
+    const principal = await authenticateAgentToken(testDb.db, globex.scout.token);
+    expect(principal?.tenant).toEqual(globex.tenant);
   });
 
   it("shows each user only the workspaces they belong to", async () => {
     const memberships = await listMemberships(testDb.db, acmeOwner.actor.id);
-    expect(memberships.map((membership) => [membership.tenant.slug, membership.role])).toEqual([["acme", "owner"]]);
+    expect(memberships.map((membership) => [membership.tenant.slug, membership.role])).toEqual([[acme.tenant.slug, "owner"]]);
 
     const [overview] = await getWorkspaceOverviews(testDb.db, memberships);
-    expect(overview).toMatchObject({ openTasks: 1, inbox: 1, activeGoals: 1, agents: 0 });
+    expect(overview).toMatchObject({ openTasks: 1, inbox: 1, activeGoals: 1, agents: 2 });
   });
 });
