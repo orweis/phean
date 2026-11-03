@@ -54,11 +54,11 @@ src/
 │   └── globals.css              # The design tokens: Tailwind @theme, utilities, motion (see DESIGN.md)
 ├── components/                  # Domain components (TaskCard, GoalTree, KanbanBoard, ActivityFeed, ...)
 │   ├── charts/                  # FlowBar, Timetable, CumulativeFlow, station colours
-│   └── ui/                      # Design-system primitives (Button, Card, Badge, Field, Popover, ActionForm, table cells)
+│   └── ui/                      # Design-system primitives (Button, Card, Badge, Field, Popover, ActionForm, ActionButton, CopyField, table cells)
 ├── lib/                         # Client-safe: domain vocabulary + labels, routes, formatting, timeline geometry, pure helpers
 ├── server/
 │   ├── domain/                  # Services, policy, zod schemas, errors, context, read models
-│   ├── mcp/                     # defineTool registry, tools, prompts and instructions, Mermaid views, handler
+│   ├── mcp/                     # defineTool / serviceTool, the tool list, prompts and instructions, Mermaid views, handler
 │   ├── auth/                    # Better Auth config, session and workspace resolution, membership operations
 │   ├── db/                      # Drizzle schema (auth + domain), driver-agnostic client, FTS helpers, migrations
 │   ├── actions.ts               # tenantAction / attempt: server-action plumbing
@@ -86,27 +86,36 @@ interface Ctx {
     | { type: "agent"; id: string; name: string; role: "agent" };
 }
 
-// Every domain service: validated input in, plain data out. `.schema` is reused by adapters.
-const createGoal = service(CreateGoalInput, async (ctx, input) => { ... });
+// Every domain service: it validates its own input (`.schema`), and returns plain data.
+const updateGoal = service(UpdateGoalInput, async (ctx, input) => { ... });
 
-// MCP: tools are declared, never hand-wired. Annotations derive from readOnly/destructive.
-defineTool({ name: "create_goal", title, description, input: createGoal.schema, run: createGoal });
+// MCP: a tool that is one service is declared, never hand-wired. `key` names the result
+// ({ goal }); annotations derive from readOnly/destructive. Tools that add links or format
+// text (create_goal, visualize) use defineTool with `input: service.schema` instead.
+serviceTool({ name: "update_goal", title, description, service: updateGoal, key: "goal" });
 
-// Web: a server action is one line. It resolves the session, parses the form with the
-// same schema, runs the service, revalidates the workspace, and returns form state.
-export const createGoalAction = tenantAction(createGoal.schema, createGoal, { redirectTo });
+// Web: a server action is one line. It resolves the session from the posted slug, reads the
+// fields the service's schema names, runs the service, revalidates the workspace, and returns form state.
+export const updateGoalAction = tenantAction(updateGoal, { success: "Saved." });
+
+// Tenant scope: every query on a tenant table filters through one of two helpers.
+ctx.db.update(goals).set(patchOf(fields)).where(tenantRow(ctx, goals, goalId)); // also inTenant(ctx, goals)
 
 // Authorization: one matrix, one function.
 can(actor, "goal:decide"); // owner, admin, member: yes. agent, platform_admin: no.
 ```
 
+`patchOf` builds an update from optional input fields: `undefined` leaves a column as it is and `null` clears it, so every update service treats "not given" the same way.
+
 Other single sources of truth:
 
-- **Domain vocabulary** (`lib/domain.ts`): statuses, priorities, sources, and memory kinds are `as const` arrays that drive the Postgres enums, the zod schemas, and the UI's `{ label, tone }` metadata tables.
+- **Domain vocabulary** (`lib/domain.ts`): statuses, priorities, sources, and memory kinds are `as const` arrays that drive the Postgres enums, the zod schemas, and the UI's `{ label, tone }` metadata tables. `STATIONS` is the board and chart order, and `isOneOf` narrows an untrusted value (a query parameter, a logged event field) to one of them.
+- **Limits and patterns** (`lib/domain.ts`): `LIMITS` gives the zod schemas their maximums and the forms their `maxLength`. `WORKSPACE_SLUG_PATTERN` is both the schema's regex and the form's `pattern` attribute, and `slugify` suggests a slug from a workspace name.
+- **Dates** (`lib/dates.ts`): calendar arithmetic in UTC days, matching how the database compares due dates. `isPastDue`, `isLate`, the timeline, the formatting helpers, the seeds, and the tests all use it.
 - **Routes** (`lib/routes.ts`): every in-app path, used by pages, redirects, and the links MCP tools hand to agents.
 - **Read models** (`domain/overview.ts`): `getWorkspaceStats` computes headline numbers for any number of workspaces in four grouped queries. It powers both the per-customer table and the `get_status_summary` tool.
 - **Hierarchy helpers** (`lib/goal-tree.ts`): `toTree`, `withProgress`, and `subtreeIds` are pure functions shared by the MCP Mermaid views and the web pages.
-- **Timeline model** (`lib/timeline.ts`): a task's history is a `Journey`, its stops at each station replayed by `buildJourneys` from the activity log (`task.captured`, `task.claimed`, `task.released`, `task.completed`, `task.updated`). `trackOf` turns a journey into the segments the timetable draws, `cumulativeFlow` counts each station at the end of every day, and `fitWindow` trims a window to the history a workspace actually has (at least `TIMELINE_MIN_DAYS`). `getJourneys` (`domain/overview.ts`) loads them for a workspace or a goal subtree, capped so a 90-day window stays bounded. All of it is pure and unit tested; the chart components only lay it out.
+- **Timeline model** (`lib/timeline.ts`): a task's history is a `Journey`, its stops at each station replayed by `buildJourneys` from the activity log (`task.captured`, `task.claimed`, `task.released`, `task.completed`, `task.updated`). `trackOf` turns a journey into the segments the timetable draws, `cumulativeFlow` counts each station at the end of every day, and `fitWindow` trims a window to the history a workspace actually has (at least `TIMELINE_MIN_DAYS`). `journeyTotals` gives the headline counts, `mostPressing` picks the tracks the overview shows, and `groupByGoal` sorts tracks under their goals. `getJourneys` (`domain/overview.ts`) loads them for a workspace or a goal subtree, capped so a 90-day window stays bounded. All of it is pure and unit tested; the chart components only lay it out.
 
 ## Storage
 
@@ -187,7 +196,7 @@ Prompts: `sync_up`, `scan_sources`, `triage_inbox`, and `daily_review`. The serv
 
 ## Web UI
 
-Server components read through the same services. Mutations are server actions created by `tenantAction` and rendered with `ActionForm` (`useActionState`), so forms work without client JavaScript and show errors inline. Workspace pages refresh every 15 seconds while the tab is visible, so people watch agents work in near real time without websockets. See [UX.md](UX.md) for the screens and [DESIGN.md](../DESIGN.md) for the visual system.
+Server components read through the same services. Mutations are server actions created by `tenantAction` and rendered with `ActionForm` (`useActionState`), so forms work without client JavaScript and show errors inline. A one-click action (approve, revoke, forget) is an `ActionButton`, which posts fixed fields and reports only failures, because the page itself shows the result. Workspace pages refresh every 15 seconds while the tab is visible, so people watch agents work in near real time without websockets. See [UX.md](UX.md) for the screens and [DESIGN.md](../DESIGN.md) for the visual system.
 
 The diagrams are server-rendered HTML and CSS, not a charting library: tracks and bars are absolutely positioned spans placed by fractions of the time window, and the cumulative flow is one inline SVG. They ship no client JavaScript and stay accessible: each diagram has a text equivalent (per-row status notes, `aria-label` counts, or a numbers table). Hover effects are CSS only (`group-has-[li:hover]`), and motion respects `prefers-reduced-motion`.
 
@@ -195,19 +204,23 @@ Styling is Tailwind 4 with the default palette switched off (`--color-*: initial
 
 ## Testing
 
-Vitest, with a fresh in-memory PGlite database per suite and the real migrations applied:
+Vitest, with a fresh in-memory PGlite database per suite and the real migrations applied. Database-backed tests call `seedWorkspace(db)` (`tests/support/db.ts`) in `beforeEach`: a new workspace with an owner, Dana, and two agents, Scout and Closer, connected through real tokens. Each test seeds what it asserts on, so the suites pass in any order (`pnpm exec vitest run --sequence.shuffle`).
 
-- `domain`: goals (hierarchy, depth, cycles, roll-up progress), tasks (capture dedupe, claims, completion), memory and search, read models.
+- `domain`: goals (hierarchy, depth, cycles, roll-up progress, the status decision log), tasks (capture dedupe, manual add, claims, idempotent completion, clearing fields, no-op edits), memory and search, read models (status summary, multi-workspace stats, goal detail, board, timeline, journeys, workload).
 - `policy`: the full role-by-action matrix, including agents being unable to decide goals.
 - `isolation`: users and agents in one workspace cannot read, reference, or change another's data, through services, MCP, and the database's own foreign keys.
+- `tenants`: members, pending invitations and share links, and reading Better Auth's role lists as one role.
 - `agents`: token entropy and hashing, authentication, last-seen tracking, revocation.
-- `mcp`: an MCP SDK client over Streamable HTTP against the real route handler, covering auth failures, tool list and annotations, prompts, errors, and two agents coordinating.
-- `views`, `lib`, `web`: Mermaid builders, pure helpers, routes, MCP client snippets, and form-to-schema parsing.
-- `timeline`: journeys replayed from events, track segments and ends, window fitting, cumulative flow, and which tracks the overview picks as most pressing.
+- `mcp`: an MCP SDK client over Streamable HTTP against the real route handler, covering auth failures, tool list and annotations, prompts, errors, how tools name their results, the Mermaid views, and two agents coordinating.
+- `config`: the environment readers (app URL precedence, trusted origins, platform admins, OAuth providers, database URLs).
+- `views`, `lib`, `web`: Mermaid builders, dates, slugs, pure helpers, routes, MCP client snippets, form-to-schema parsing, and how server actions report failures.
+- `timeline`: journeys replayed from events, track segments and ends, window fitting, cumulative flow, totals, grouping by goal, and which tracks the overview picks as most pressing.
 
-Playwright drives Chromium against a production build (`next start` on port 3200) with a fresh on-disk PGlite seeded with the demo account. A setup project signs in once and the specs reuse its session, because sign-in is rate limited.
+Playwright drives Chromium against a production build (`next start` on port 3200) with a fresh on-disk PGlite seeded with the demo account. A setup project signs in once and the specs reuse its session, because sign-in is rate limited. Better Auth allows three sign-ups per 10 seconds from one client, so a spec that writes signs up at most one person (`newWorkspace` in `e2e/support/accounts.ts`), and a second person is the demo account in a browser context of its own. `e2e/support/agents.ts` issues a token from the Agents page and runs an agent over real MCP, and `openTab` (`e2e/support/navigation.ts`) moves between workspace tabs and waits for the new page.
 
 - `journey`: the whole loop on a fresh account. A person signs up, creates a workspace, and issues a token; an agent connects over real MCP, proposes a goal, and captures and claims work; the person approves the goal and moves a task across the board; the overview, timeline, goal page, and workspaces table show the result.
+- `manual-entry`: every place a person adds a task or goal by hand, and that each stays a quiet ghost button.
+- `workspace-admin`: editing a goal and walking it through approve, abandon, and reactivate; remembering, filtering, and forgetting memory; search results and their links; revoking an agent and its token failing at once; inviting a colleague, cancelling an invitation, the demo account accepting its link, and removing it again.
 - `diagrams`: the overview's order and its pressing tracks, the timetable's stations, ends, late notes, window switch and hover, the cumulative flow and its numbers table, window fitting, goal filtering, the goal page roll-up, board lanes and the folded Done lane, and the workspaces flow bars.
 - `quality`: axe accessibility scans on every page, nothing cut off at 375px, the phone card order, popovers inside the screen, and the Now chip clear of every date label at desktop and phone widths.
 - `public`: the landing page's sample timetable, sign-in redirects, a refused password, and accessibility of the signed-out pages.

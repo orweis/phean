@@ -22,12 +22,14 @@ Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) first. The rules below are the
 
 ### Where code goes
 
-- Business rules live in `src/server/domain` as `service(schema, run)` functions. Routes, server actions, and MCP tools are thin adapters that reuse `service.schema`; they never query the database themselves.
-- Tenant scoping comes only from `Ctx`, which is built from a verified agent token or session. Every query filters by `ctx.tenant.id`, and every insert sets `tenantId` from it. Never accept a tenant id or slug from tool input.
+- Business rules live in `src/server/domain` as `service(schema, run)` functions, which validate their own input. Routes, server actions, and MCP tools are thin adapters that take the service itself; they never query the database themselves.
+- Tenant scoping comes only from `Ctx`, which is built from a verified agent token or session. Every query on a tenant table filters through `inTenant(ctx, table)` or `tenantRow(ctx, table, id)`, and every insert sets `tenantId` from `ctx`. Never accept a tenant id or slug from tool input.
+- Update services build their `set` with `patchOf`, so `undefined` means "leave it" and `null` means "clear it" everywhere, and throw `invalid` when nothing would change.
 - Authorization is the matrix in `src/server/domain/policy.ts`. Call `assertCan` in the service; do not scatter role checks in UI or adapters. `goal:decide` stays human-only.
-- New MCP tools go through `defineTool` in `src/server/mcp/tools.ts`. Mark read-only tools `readOnly` and deleting tools `destructive`, and write descriptions for the agent that will read them.
-- New workspace mutations are one `tenantAction(...)` line in `src/app/w/[slug]/actions.ts`, rendered with `ActionForm`.
-- Labels and colors for statuses, priorities, roles, and kinds come from the `{ label, tone }` tables in `src/lib/domain.ts`. Paths come from `routes` in `src/lib/routes.ts`. Do not hard-code either.
+- An MCP tool that is one service is `serviceTool({ name, title, description, service, key })` in `src/server/mcp/tools.ts`; use `defineTool` only when the tool adds links or formats text. Mark read-only tools `readOnly` and deleting tools `destructive`, and write descriptions for the agent that will read them.
+- New workspace mutations are one `tenantAction(service, options)` line in `src/app/w/[slug]/actions.ts`, rendered with `ActionForm`, or `ActionButton` for a one-click post of fixed fields.
+- Labels and colors for statuses, priorities, roles, and kinds come from the `{ label, tone }` tables in `src/lib/domain.ts`. Paths come from `routes` in `src/lib/routes.ts`. Field limits come from `LIMITS` and the slug rule from `WORKSPACE_SLUG_PATTERN`, for the schema and the form alike. Do not hard-code any of them.
+- Dates are UTC calendar days through `src/lib/dates.ts` (`isoDayFromToday`, `daysBetween`, `isPastDue`), in the app, the scripts, and the tests.
 - `src/lib` is client-safe and must not import from `src/server`.
 
 ### Database
@@ -45,11 +47,15 @@ Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) first. The rules below are the
 - `cx` joins classes; it does not merge them. Pass a class that conflicts with a component's own and both apply, so add a prop or a variant instead.
 - Charts are server-rendered spans placed by `lib/timeline.ts` fractions. Keep the maths in `lib` (with unit tests) and the layout in `components/charts`. Every diagram needs a text equivalent for screen readers, and state must not rely on colour alone.
 - Form controls are `w-full` by design and class order cannot override it. Size the wrapper (a grid column or a `div` with a width) instead of the control.
-- Destructive actions take a `confirm` message on `ActionForm`.
+- Reuse the primitives before writing markup: `ActionButton`, `GoalField` (goal and parent pickers), `CopyField`, `FlowStat`, `GoalLink`, `segment` from `components/ui/segmented.ts`, `TH` and `PINNED_CELL` from `components/ui/table.ts`, and `Button`'s `pending` state.
+- Destructive actions take a `confirm` message on `ActionForm` or `ActionButton`.
 
 ### Tests
 
 - Tests run against in-memory PGlite through the real services and the real MCP handler. Add a case to `tests/isolation.test.ts` for anything that reads or writes tenant data, and to `tests/policy.test.ts` for any permission change.
+- A database test seeds its own workspace with `seedWorkspace(db)` in `beforeEach` and never reads what another test wrote. `pnpm exec vitest run --sequence.shuffle` catches a test that does.
 - UI tests in `e2e/` find things the way a person does: by role, label, and visible text. `card(page, title)` relies on `Card` rendering a `<section>` and `CardHeader` an `<h2>`. The diagrams expose `data-task`, `data-segment`, `data-end`, `data-now`, and `data-tick` for assertions a person makes by eye; keep them when you restyle.
-- Specs share the seeded demo account through the `setup` project because sign-in is rate limited. Read-only specs use the seeded Globex workspace and its three weeks of history; a spec that writes creates its own account and workspace, so specs can run in parallel.
+- Specs share the seeded demo account through the `setup` project because sign-in is rate limited. Read-only specs use the seeded Globex workspace and its three weeks of history; a spec that writes creates its own account and workspace with `newWorkspace` (`e2e/support/accounts.ts`), so specs can run in parallel.
+- Sign-up allows three per 10 seconds from one client, and the specs together already use most of that. A spec signs up at most one person; a second person is the demo account in its own browser context (`DEMO_SESSION`), and the spec undoes what it changed for them.
+- Move between workspace tabs with `openTab` (`e2e/support/navigation.ts`), which waits for the new URL. Pages share controls (memory and search both have a search box), so acting before navigation finishes can hit the page being left.
 - Every new page goes into `PAGES` in `e2e/quality.spec.ts` (axe and the 375px checks), and every new timetable into `TIMETABLES`.

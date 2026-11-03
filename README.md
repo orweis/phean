@@ -103,8 +103,8 @@ Pages refresh every 15 seconds while open. Owners and admins manage agents and m
 | --- | --- |
 | `pnpm dev` | Apply migrations and start the dev server |
 | `pnpm check` | Typecheck, lint, and run the tests |
-| `pnpm test` | Vitest: domain services, policy, tenant isolation, timelines, and MCP over HTTP, against in-memory PGlite |
-| `pnpm test:e2e` | Playwright UI tests: builds, serves on port 3200 against a fresh seeded PGlite, and drives Chromium through sign-up, agents over MCP, approvals, the board, the diagrams, accessibility (axe), and phone layouts |
+| `pnpm test` | Vitest: domain services, policy, tenant isolation, members and invitations, configuration, timelines, and MCP over HTTP, against in-memory PGlite |
+| `pnpm test:e2e` | Playwright UI tests: builds, serves on port 3200 against a fresh seeded PGlite, and drives Chromium through sign-up, agents over MCP, approvals and goal edits, manual entry, the board, memory, search, invitations, the diagrams, accessibility (axe), and phone layouts |
 | `pnpm build` | Production build (never connects to the database) |
 | `pnpm db:generate` | Generate a SQL migration from schema changes in `src/server/db/schema` |
 | `pnpm db:migrate` | Apply pending migrations |
