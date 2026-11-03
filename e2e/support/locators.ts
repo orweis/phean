@@ -10,5 +10,9 @@ export const popover = (page: Page, trigger: string) => page.locator("details").
 /** An option of the Task/Goal switch in the Add manually panel. Its radios are visually hidden, so this is the label a person clicks. */
 export const entryKind = (entry: Locator, kind: "Task" | "Goal") => entry.getByRole("group", { name: "What to add" }).getByText(kind, { exact: true });
 
+/** An option of an appearance picker, the label a person clicks. */
+export const appearanceOption = (scope: Locator, option: "Light" | "Dark" | "System") =>
+  scope.getByRole("group", { name: "Appearance" }).getByText(option, { exact: true });
+
 /** A board lane by task status. */
 export const lane = (page: Page, status: "inbox" | "todo" | "in_progress" | "done") => page.locator(`section[aria-labelledby="lane-${status}"]`);
