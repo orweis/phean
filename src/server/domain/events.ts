@@ -4,7 +4,7 @@ import type { EventAction } from "@/lib/activity";
 
 import { publicColumns } from "../db/columns";
 import { events, type EventRow } from "../db/schema";
-import type { Ctx } from "./context";
+import { inTenant, type Ctx } from "./context";
 import { assertCan } from "./policy";
 import { ActivityInput } from "./schemas";
 import { service } from "./service";
@@ -51,7 +51,7 @@ export const listActivity = service(ActivityInput, async (ctx, { since, goalId, 
     .from(events)
     .where(
       and(
-        eq(events.tenantId, ctx.tenant.id),
+        inTenant(ctx, events),
         since ? gte(events.createdAt, new Date(since)) : undefined,
         goalId ? concernsGoal(goalId) : undefined,
       ),

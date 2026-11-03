@@ -8,7 +8,7 @@ import type { Db } from "../db/client";
 import { publicColumns } from "../db/columns";
 import { newId } from "../db/ids";
 import { agents, organization, type AgentRow } from "../db/schema";
-import { inTransaction, type Ctx, type Tenant } from "./context";
+import { inTenant, inTransaction, type Ctx, type Tenant } from "./context";
 import { notFound } from "./errors";
 import { recordEvent } from "./events";
 import { assertCan } from "./policy";
@@ -34,7 +34,7 @@ export const listAgents = service(Empty, async (ctx): Promise<Agent[]> => {
   return ctx.db
     .select(agentColumns)
     .from(agents)
-    .where(eq(agents.tenantId, ctx.tenant.id))
+    .where(inTenant(ctx, agents))
     .orderBy(asc(agents.createdAt));
 });
 
@@ -71,7 +71,7 @@ export const revokeAgent = service(AgentRefInput, async (ctx, { agentId }): Prom
     const [agent] = await tx.db
       .update(agents)
       .set({ revokedAt: new Date() })
-      .where(and(eq(agents.tenantId, tx.tenant.id), eq(agents.id, agentId), isNull(agents.revokedAt)))
+      .where(and(inTenant(tx, agents), eq(agents.id, agentId), isNull(agents.revokedAt)))
       .returning(agentColumns);
     if (!agent) throw notFound("active agent", agentId);
     await recordEvent(tx, {

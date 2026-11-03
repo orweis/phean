@@ -1,13 +1,13 @@
-import { and, asc, count, eq, inArray, isNotNull, sql } from "drizzle-orm";
+import { and, asc, count, inArray, isNotNull, sql } from "drizzle-orm";
 
 import { GOAL_MAX_DEPTH, GOAL_STATUS_META, type GoalStatus } from "@/lib/domain";
 import { EMPTY_COUNTS, tallyStatus, type TaskCounts, withProgress, type WithProgress } from "@/lib/goal-tree";
 
-import { publicColumns } from "../db/columns";
+import { patchOf, publicColumns } from "../db/columns";
 import { newId } from "../db/ids";
 import { queryRows } from "../db/raw";
 import { goals, tasks, type GoalRow } from "../db/schema";
-import { createdByFields, inTransaction, type Ctx } from "./context";
+import { createdByFields, inTenant, inTransaction, tenantRow, type Ctx } from "./context";
 import { conflict, invalid, notFound } from "./errors";
 import { recordEvent, type EventAction } from "./events";
 import { assertCan } from "./policy";
@@ -23,7 +23,7 @@ export async function findGoal(ctx: Ctx, goalId: string): Promise<Goal> {
   const [goal] = await ctx.db
     .select(goalColumns)
     .from(goals)
-    .where(and(eq(goals.tenantId, ctx.tenant.id), eq(goals.id, goalId)));
+    .where(tenantRow(ctx, goals, goalId));
   if (!goal) throw notFound("goal", goalId);
   return goal;
 }
@@ -35,7 +35,7 @@ export async function assertGoalsExist(ctx: Ctx, goalIds: readonly string[]): Pr
   const found = await ctx.db
     .select({ id: goals.id })
     .from(goals)
-    .where(and(eq(goals.tenantId, ctx.tenant.id), inArray(goals.id, unique)));
+    .where(and(inTenant(ctx, goals), inArray(goals.id, unique)));
   const missing = unique.find((id) => !found.some((goal) => goal.id === id));
   if (missing) throw notFound("goal", missing);
 }
@@ -92,7 +92,7 @@ export async function taskCountsByGoal(ctx: Ctx): Promise<Map<string, TaskCounts
   const rows = await ctx.db
     .select({ goalId: tasks.goalId, status: tasks.status, n: count() })
     .from(tasks)
-    .where(and(eq(tasks.tenantId, ctx.tenant.id), isNotNull(tasks.goalId)))
+    .where(and(inTenant(ctx, tasks), isNotNull(tasks.goalId)))
     .groupBy(tasks.goalId, tasks.status);
 
   const counts = new Map<string, TaskCounts>();
@@ -108,7 +108,7 @@ export async function allGoalsWithProgress(ctx: Ctx): Promise<GoalWithProgress[]
     ctx.db
       .select(goalColumns)
       .from(goals)
-      .where(eq(goals.tenantId, ctx.tenant.id))
+      .where(inTenant(ctx, goals))
       .orderBy(asc(goals.createdAt)),
     taskCountsByGoal(ctx),
   ]);
@@ -159,11 +159,7 @@ export const updateGoal = service(UpdateGoalInput, async (ctx, input): Promise<G
   const current = await findGoal(ctx, input.goalId);
   if (input.parentGoalId) await assertValidParent(ctx, input.parentGoalId, current.id);
 
-  const patch = {
-    ...(input.title !== undefined && { title: input.title }),
-    ...(input.description !== undefined && { description: input.description }),
-    ...(input.parentGoalId !== undefined && { parentId: input.parentGoalId }),
-  };
+  const patch = patchOf({ title: input.title, description: input.description, parentId: input.parentGoalId });
   const changed = Object.keys(patch);
   if (changed.length === 0) throw invalid("Nothing to update: pass title, description, or parentGoalId.");
 
@@ -171,7 +167,7 @@ export const updateGoal = service(UpdateGoalInput, async (ctx, input): Promise<G
     const [goal] = await tx.db
       .update(goals)
       .set(patch)
-      .where(and(eq(goals.tenantId, tx.tenant.id), eq(goals.id, current.id)))
+      .where(tenantRow(tx, goals, current.id))
       .returning(goalColumns);
     await recordEvent(tx, {
       action: "goal.updated",
@@ -209,7 +205,7 @@ export const setGoalStatus = service(SetGoalStatusInput, async (ctx, { goalId, s
         status,
         ...(approving && { approvedById: tx.actor.id, approvedByName: tx.actor.name, approvedAt: new Date() }),
       })
-      .where(and(eq(goals.tenantId, tx.tenant.id), eq(goals.id, goalId)))
+      .where(tenantRow(tx, goals, goalId))
       .returning(goalColumns);
     await recordEvent(tx, {
       action,

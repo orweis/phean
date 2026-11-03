@@ -7,7 +7,7 @@ import { publicColumns } from "../db/columns";
 import { matchesTsQuery, prefixTsQuery, tsRank } from "../db/fts";
 import { newId } from "../db/ids";
 import { memories, type MemoryRow } from "../db/schema";
-import { createdByFields, inTransaction, type Ctx } from "./context";
+import { createdByFields, inTenant, inTransaction, tenantRow } from "./context";
 import { forbidden, notFound } from "./errors";
 import { recordEvent } from "./events";
 import { assertGoalsExist } from "./goals";
@@ -19,7 +19,6 @@ import { findTask } from "./tasks";
 export type Memory = Omit<MemoryRow, "tenantId" | "search">;
 
 const memoryColumns = publicColumns(memories, ["tenantId", "search"]);
-const inTenant = (ctx: Ctx) => eq(memories.tenantId, ctx.tenant.id);
 
 export const remember = service(RememberInput, async (ctx, input): Promise<Memory> => {
   assertCan(ctx, "memory:write");
@@ -59,7 +58,7 @@ export const recall = service(RecallInput, async (ctx, { query, kind, goalId, li
     .from(memories)
     .where(
       and(
-        inTenant(ctx),
+        inTenant(ctx, memories),
         kind ? eq(memories.kind, kind) : undefined,
         goalId ? eq(memories.goalId, goalId) : undefined,
         tsQuery ? matchesTsQuery(memories.search, tsQuery) : undefined,
@@ -74,14 +73,14 @@ export const forget = service(MemoryRefInput, async (ctx, { memoryId }): Promise
   const [memory] = await ctx.db
     .select(memoryColumns)
     .from(memories)
-    .where(and(inTenant(ctx), eq(memories.id, memoryId)));
+    .where(tenantRow(ctx, memories, memoryId));
   if (!memory) throw notFound("memory", memoryId);
   if (ctx.actor.type === "agent" && memory.createdById !== ctx.actor.id) {
     throw forbidden("Agents can only forget memories they saved themselves. Ask a human to remove this one.");
   }
 
   await inTransaction(ctx, async (tx) => {
-    await tx.db.delete(memories).where(and(inTenant(tx), eq(memories.id, memoryId)));
+    await tx.db.delete(memories).where(tenantRow(tx, memories, memoryId));
     await recordEvent(tx, {
       action: "memory.forgotten",
       entityType: "memory",

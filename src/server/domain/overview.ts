@@ -15,7 +15,7 @@ import type { Db } from "../db/client";
 import { countWhere } from "../db/raw";
 import { agents, events, goals, tasks } from "../db/schema";
 import { listAgents, type Agent } from "./agents";
-import type { Ctx, Tenant } from "./context";
+import { inTenant, type Ctx, type Tenant } from "./context";
 import { notFound } from "./errors";
 import { listActivity, type Activity } from "./events";
 import { allGoalsWithProgress, ancestorChain, type GoalWithProgress } from "./goals";
@@ -180,7 +180,7 @@ async function goalScope(ctx: Ctx, goalId: string | undefined): Promise<SQL | un
   const hierarchy = await ctx.db
     .select({ id: goals.id, parentId: goals.parentId })
     .from(goals)
-    .where(eq(goals.tenantId, ctx.tenant.id));
+    .where(inTenant(ctx, goals));
   if (!hierarchy.some((goal) => goal.id === goalId)) throw notFound("goal", goalId);
   return inArray(tasks.goalId, subtreeIds(hierarchy, goalId));
 }
@@ -249,7 +249,7 @@ export const getJourneys = service(JourneysInput, async (ctx, { goalId, days }):
         .from(events)
         .where(
           and(
-            eq(events.tenantId, ctx.tenant.id),
+            inTenant(ctx, events),
             eq(events.entityType, "task"),
             inArray(
               events.entityId,
@@ -284,14 +284,14 @@ export const getAgentWorkload = service(Empty, async (ctx): Promise<AgentLoad[]>
     ctx.db
       .select({ agentId: tasks.claimedByAgentId, total: count() })
       .from(tasks)
-      .where(and(eq(tasks.tenantId, ctx.tenant.id), isOpenTask, isNotNull(tasks.claimedByAgentId)))
+      .where(and(inTenant(ctx, tasks), isOpenTask, isNotNull(tasks.claimedByAgentId)))
       .groupBy(tasks.claimedByAgentId),
     ctx.db
       .select({ agentId: events.actorId, total: count() })
       .from(events)
       .where(
         and(
-          eq(events.tenantId, ctx.tenant.id),
+          inTenant(ctx, events),
           eq(events.actorType, "agent"),
           isCompletion,
           sql`${events.createdAt} > now() - interval '7 days'`,

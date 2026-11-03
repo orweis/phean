@@ -3,10 +3,10 @@ import type { z } from "zod";
 
 import { isOpenTaskStatus, OPEN_TASK_STATUSES, SOURCE_META, TASK_STATUS_META } from "@/lib/domain";
 
-import { publicColumns } from "../db/columns";
+import { patchOf, publicColumns } from "../db/columns";
 import { newId } from "../db/ids";
 import { agents, goals, tasks, type TaskRow } from "../db/schema";
-import { createdByFields, inTransaction, type Ctx } from "./context";
+import { createdByFields, inTenant, inTransaction, tenantRow, type Ctx } from "./context";
 import { conflict, invalid, notFound } from "./errors";
 import { recordEvent, recordEvents } from "./events";
 import { assertGoalsExist, findGoal } from "./goals";
@@ -36,7 +36,6 @@ export const byUrgency: SQL[] = [
   asc(tasks.createdAt),
 ];
 
-const inTenant = (ctx: Ctx) => eq(tasks.tenantId, ctx.tenant.id);
 const agentIdOf = (ctx: Ctx) => (ctx.actor.type === "agent" ? ctx.actor.id : null);
 
 export const isOpenTask = inArray(tasks.status, [...OPEN_TASK_STATUSES]);
@@ -53,14 +52,14 @@ export function selectTaskViews(ctx: Ctx, where?: SQL) {
     .from(tasks)
     .leftJoin(goals, and(eq(goals.tenantId, tasks.tenantId), eq(goals.id, tasks.goalId)))
     .leftJoin(agents, and(eq(agents.tenantId, tasks.tenantId), eq(agents.id, tasks.claimedByAgentId)))
-    .where(and(inTenant(ctx), where));
+    .where(and(inTenant(ctx, tasks), where));
 }
 
 export async function findTask(ctx: Ctx, taskId: string): Promise<Task> {
   const [task] = await ctx.db
     .select(taskColumns)
     .from(tasks)
-    .where(and(inTenant(ctx), eq(tasks.id, taskId)));
+    .where(tenantRow(ctx, tasks, taskId));
   if (!task) throw notFound("task", taskId);
   return task;
 }
@@ -114,7 +113,7 @@ async function capture(ctx: Ctx, drafts: z.output<typeof TaskDraft>[]): Promise<
           .from(tasks)
           .where(
             and(
-              inTenant(tx),
+              inTenant(tx, tasks),
               or(...skipped.map((row) => and(eq(tasks.source, row.source), eq(tasks.sourceRef, row.sourceRef)))),
             ),
           )
@@ -150,9 +149,7 @@ export const updateTask = service(UpdateTaskInput, async (ctx, input): Promise<T
   const current = await findTask(ctx, taskId);
   if (fields.goalId) await assertGoalsExist(ctx, [fields.goalId]);
 
-  const patch: Partial<typeof tasks.$inferInsert> = Object.fromEntries(
-    Object.entries(fields).filter(([, value]) => value !== undefined),
-  );
+  const patch: Partial<typeof tasks.$inferInsert> = patchOf(fields);
   const changed = Object.keys(patch);
   if (changed.length === 0) throw invalid("Nothing to update: pass at least one field to change.");
 
@@ -168,7 +165,7 @@ export const updateTask = service(UpdateTaskInput, async (ctx, input): Promise<T
     const [task] = await tx.db
       .update(tasks)
       .set(patch)
-      .where(and(inTenant(tx), eq(tasks.id, current.id)))
+      .where(tenantRow(tx, tasks, current.id))
       .returning(taskColumns);
     await recordEvent(tx, {
       action: "task.updated",
@@ -196,7 +193,7 @@ export const claimTask = service(TaskRefInput, async (ctx, { taskId }): Promise<
       .set({ claimedByAgentId: me, claimedAt: new Date(), status: "in_progress" })
       .where(
         and(
-          inTenant(tx),
+          inTenant(tx, tasks),
           eq(tasks.id, taskId),
           isOpenTask,
           or(isNull(tasks.claimedByAgentId), eq(tasks.claimedByAgentId, me)),
@@ -238,7 +235,7 @@ export const releaseTask = service(TaskRefInput, async (ctx, { taskId }): Promis
         claimedAt: null,
         status: current.status === "in_progress" ? "todo" : current.status,
       })
-      .where(and(inTenant(tx), eq(tasks.id, taskId)))
+      .where(tenantRow(tx, tasks, taskId))
       .returning(taskColumns);
     await recordEvent(tx, {
       action: "task.released",
@@ -265,7 +262,7 @@ export const completeTask = service(CompleteTaskInput, async (ctx, { taskId, not
     const [task] = await tx.db
       .update(tasks)
       .set({ status: "done", completedAt: new Date(), claimedByAgentId: null, claimedAt: null, description })
-      .where(and(inTenant(tx), eq(tasks.id, taskId)))
+      .where(tenantRow(tx, tasks, taskId))
       .returning(taskColumns);
     await recordEvent(tx, {
       action: "task.completed",
@@ -291,7 +288,7 @@ export const assignTasksToGoal = service(AssignTasksInput, async (ctx, { taskIds
         // Filing an untriaged task under a goal is the triage step: inbox becomes todo.
         status: sql`case when ${tasks.status} = 'inbox' then 'todo'::task_status else ${tasks.status} end`,
       })
-      .where(and(inTenant(tx), inArray(tasks.id, ids)))
+      .where(and(inTenant(tx, tasks), inArray(tasks.id, ids)))
       .returning(taskColumns);
 
     const missing = ids.find((id) => !updated.some((task) => task.id === id));
