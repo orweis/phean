@@ -44,3 +44,28 @@ export function FlowLegend({ counts, stations = STATIONS, className }: { counts?
     </ul>
   );
 }
+
+interface FlowStatProps {
+  /** What the bar counts; also names it for screen readers. */
+  label: string;
+  /** The headline figure beside the label, e.g. "12 tasks" or "40% done". */
+  figure: string;
+  counts: StationCounts;
+  stations?: readonly Station[];
+  /** A heading for the cell when it differs from the bar's name. */
+  caption?: string;
+}
+
+/** The wide first cell of a `StatStrip`: work by station as a bar with its key. */
+export function FlowStat({ label, figure, counts, stations, caption = label }: FlowStatProps) {
+  return (
+    <div className="col-span-2 min-w-0 bg-panel px-4 py-3 sm:col-span-4 lg:col-span-1">
+      <p className="flex items-baseline justify-between gap-3 text-xs text-muted">
+        {caption}
+        <span className="text-sm font-bold text-ink">{figure}</span>
+      </p>
+      <FlowBar counts={counts} stations={stations} size="lg" label={label} className="mt-2" />
+      <FlowLegend counts={counts} stations={stations} className="mt-2" />
+    </div>
+  );
+}

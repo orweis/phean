@@ -1,16 +1,14 @@
-import { Bot, Brain, Target, Trash2, User } from "lucide-react";
-import Link from "next/link";
+import { Bot, Brain, Trash2, User } from "lucide-react";
 
 import { forgetAction } from "@/app/w/[slug]/actions";
 import { MEMORY_KIND_META } from "@/lib/domain";
 import { timeAgo } from "@/lib/format";
-import { routes } from "@/lib/routes";
 import type { Memory } from "@/server/domain/memory";
 
-import { ActionForm } from "./ui/action-form";
+import { GoalLink } from "./goal-link";
+import { ActionButton } from "./ui/action-button";
 import { Badge, MetaBadge } from "./ui/badge";
 import { EmptyState } from "./ui/stat";
-import { SubmitButton } from "./ui/submit-button";
 
 interface MemoryListProps {
   memories: readonly Memory[];
@@ -43,12 +41,7 @@ export function MemoryList({ memories, slug, canWrite, goalTitles, empty = "Noth
                 {memory.tags.map((tag) => (
                   <Badge key={tag}>#{tag}</Badge>
                 ))}
-                {memory.goalId && goalTitle && (
-                  <Link href={routes.goal(slug, memory.goalId)} className="inline-flex max-w-56 items-center gap-1 hover:text-ink link">
-                    <Target className="size-3 shrink-0" aria-hidden />
-                    <span className="truncate">{goalTitle}</span>
-                  </Link>
-                )}
+                {memory.goalId && goalTitle && <GoalLink slug={slug} goalId={memory.goalId} title={goalTitle} />}
                 <span className="inline-flex items-center gap-1">
                   <AuthorIcon className="size-3" aria-hidden />
                   {memory.createdByName}
@@ -57,12 +50,17 @@ export function MemoryList({ memories, slug, canWrite, goalTitles, empty = "Noth
               </div>
             </div>
             {canWrite && (
-              <ActionForm action={forgetAction} workspace={slug} confirm="Forget this memory for every agent?" quiet>
-                <input type="hidden" name="memoryId" value={memory.id} />
-                <SubmitButton size="sm" variant="ghost" aria-label="Forget">
-                  <Trash2 aria-hidden />
-                </SubmitButton>
-              </ActionForm>
+              <ActionButton
+                action={forgetAction}
+                workspace={slug}
+                fields={{ memoryId: memory.id }}
+                confirm="Forget this memory for every agent?"
+                size="sm"
+                variant="ghost"
+                aria-label="Forget"
+              >
+                <Trash2 aria-hidden />
+              </ActionButton>
             )}
           </li>
         );

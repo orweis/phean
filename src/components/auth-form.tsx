@@ -1,6 +1,5 @@
 "use client";
 
-import { LoaderCircle } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition, type FormEvent } from "react";
@@ -94,8 +93,7 @@ export function AuthForm({ mode, next, providers }: AuthFormProps) {
             {error}
           </p>
         )}
-        <Button type="submit" variant="primary" className="w-full" disabled={pending}>
-          {pending && <LoaderCircle className="motion-safe:animate-spin" aria-hidden />}
+        <Button type="submit" variant="primary" className="w-full" pending={pending}>
           {signingUp ? "Create account" : "Sign in"}
         </Button>
       </form>

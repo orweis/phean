@@ -5,13 +5,12 @@ import { revokeAgentAction } from "@/app/w/[slug]/actions";
 import { AGENT_STATUS_META, agentStatus } from "@/components/agent-list";
 import { ConnectAgentForm } from "@/components/connect-agent-form";
 import { PageHeader } from "@/components/page-header";
-import { ActionForm } from "@/components/ui/action-form";
+import { ActionButton } from "@/components/ui/action-button";
 import { MetaBadge } from "@/components/ui/badge";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
-import { CopyButton } from "@/components/ui/copy-button";
+import { CopyField } from "@/components/ui/copy-button";
 import { EmptyState } from "@/components/ui/stat";
-import { SubmitButton } from "@/components/ui/submit-button";
-import { PINNED_CELL } from "@/components/ui/table";
+import { PINNED_CELL, TH } from "@/components/ui/table";
 import { cx } from "@/lib/cx";
 import { timeAgo } from "@/lib/format";
 import { routes } from "@/lib/routes";
@@ -23,7 +22,6 @@ import { absoluteUrl } from "@/server/web";
 
 export const metadata: Metadata = { title: "Agents" };
 
-const TH = "px-3 py-2.5 text-left text-xs font-semibold whitespace-nowrap text-muted";
 const TD = "px-3 py-3 text-xs whitespace-nowrap text-muted";
 
 export default async function AgentsPage({ params }: PageProps<"/w/[slug]/agents">) {
@@ -61,12 +59,12 @@ export default async function AgentsPage({ params }: PageProps<"/w/[slug]/agents
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-rule">
-                    <th className={cx(TH, "pl-5", PINNED_CELL)}>Agent</th>
-                    <th className={TH}>Status</th>
+                    <th className={cx(TH, "pl-5 text-left", PINNED_CELL)}>Agent</th>
+                    <th className={cx(TH, "text-left")}>Status</th>
                     <th className={cx(TH, "text-right")}>Holding</th>
                     <th className={cx(TH, "text-right")}>Done</th>
-                    <th className={TH}>Last seen</th>
-                    <th className={TH}>Connected</th>
+                    <th className={cx(TH, "text-left")}>Last seen</th>
+                    <th className={cx(TH, "text-left")}>Connected</th>
                     {canManage && (
                       <th className="px-5 py-2.5">
                         <span className="sr-only">Actions</span>
@@ -94,17 +92,16 @@ export default async function AgentsPage({ params }: PageProps<"/w/[slug]/agents
                         {canManage && (
                           <td className="px-5 py-3 text-right">
                             {status !== "revoked" && (
-                              <ActionForm
+                              <ActionButton
                                 action={revokeAgentAction}
                                 workspace={slug}
+                                fields={{ agentId: agent.id }}
                                 confirm={`Revoke ${agent.name}? It loses access immediately; its past work stays.`}
-                                quiet
+                                size="sm"
+                                variant="danger"
                               >
-                                <input type="hidden" name="agentId" value={agent.id} />
-                                <SubmitButton size="sm" variant="danger">
-                                  Revoke
-                                </SubmitButton>
-                              </ActionForm>
+                                Revoke
+                              </ActionButton>
                             )}
                           </td>
                         )}
@@ -120,9 +117,8 @@ export default async function AgentsPage({ params }: PageProps<"/w/[slug]/agents
         <div className="min-w-0 space-y-6">
           <Card>
             <CardHeader title="MCP endpoint" description="Streamable HTTP, authenticated with a bearer token." />
-            <CardBody className="flex items-center gap-2">
-              <code className="min-w-0 flex-1 truncate rounded-md border border-rule bg-sunken px-2.5 py-2 font-mono text-xs text-ink">{mcpUrl}</code>
-              <CopyButton value={mcpUrl} />
+            <CardBody>
+              <CopyField value={mcpUrl} surface="sunken" />
             </CardBody>
           </Card>
           <Card>

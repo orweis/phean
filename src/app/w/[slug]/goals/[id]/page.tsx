@@ -5,7 +5,7 @@ import { cache } from "react";
 
 import { ActivityFeed } from "@/components/activity-feed";
 import { AddTaskForm } from "@/components/add-task-form";
-import { FlowBar, FlowLegend } from "@/components/charts/flow-bar";
+import { FlowStat } from "@/components/charts/flow-bar";
 import { Timetable } from "@/components/charts/timetable";
 import { EditGoalForm, NewGoalForm } from "@/components/goal-forms";
 import { GoalStatusActions } from "@/components/goal-status-actions";
@@ -89,14 +89,7 @@ export default async function GoalPage({ params }: PageProps<"/w/[slug]/goals/[i
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {canEditGoals && (
-            <Popover
-              label={
-                <>
-                  <Pencil aria-hidden />
-                  Edit
-                </>
-              }
-            >
+            <Popover icon={<Pencil aria-hidden />} label="Edit">
               <EditGoalForm slug={slug} goal={goal} goals={goals} />
             </Popover>
           )}
@@ -113,14 +106,12 @@ export default async function GoalPage({ params }: PageProps<"/w/[slug]/goals/[i
       </div>
 
       <StatStrip className="mb-6 grid-cols-2 sm:grid-cols-4 lg:grid-cols-[minmax(0,2.2fr)_repeat(3,minmax(0,1fr))]">
-        <div className="col-span-2 min-w-0 bg-panel px-4 py-3 sm:col-span-4 lg:col-span-1">
-          <p className="flex items-baseline justify-between gap-3 text-xs text-muted">
-            {goal.childCount > 0 ? `This goal and ${pluralize(subGoals.length, "sub-goal")}` : "Tasks by status"}
-            <span className="text-sm font-bold text-ink">{percent(goal.progress)} done</span>
-          </p>
-          <FlowBar counts={goal.rollup} size="lg" label="Tasks by status" className="mt-2" />
-          <FlowLegend counts={goal.rollup} className="mt-2" />
-        </div>
+        <FlowStat
+          label="Tasks by status"
+          caption={goal.childCount > 0 ? `This goal and ${pluralize(subGoals.length, "sub-goal")}` : undefined}
+          figure={`${percent(goal.progress)} done`}
+          counts={goal.rollup}
+        />
         <Stat label="Open" value={goal.rollup.open} hint={`of ${pluralize(goal.rollup.total, "task")}`} />
         <Stat label="Late" value={late} tone={late ? "danger" : undefined} hint="past due, still open" />
         <Stat label={`Done, last ${TIMETABLE_DAYS} days`} value={doneInWindow} tone={doneInWindow ? "success" : undefined} />
@@ -157,15 +148,7 @@ export default async function GoalPage({ params }: PageProps<"/w/[slug]/goals/[i
               description={`${goal.own.open} open and ${goal.own.done} done directly under this goal.`}
               action={
                 canWrite && (
-                  <Popover
-                    variant="ghost"
-                    label={
-                      <>
-                        <Plus aria-hidden />
-                        Add task
-                      </>
-                    }
-                  >
+                  <Popover variant="ghost" icon={<Plus aria-hidden />} label="Add task">
                     <AddTaskForm slug={slug} goals={goals} goalId={goal.id} lockGoal />
                   </Popover>
                 )
@@ -192,15 +175,7 @@ export default async function GoalPage({ params }: PageProps<"/w/[slug]/goals/[i
               action={
                 canEditGoals &&
                 goal.depth < GOAL_MAX_DEPTH - 1 && (
-                  <Popover
-                    variant="ghost"
-                    label={
-                      <>
-                        <Plus aria-hidden />
-                        Add sub-goal
-                      </>
-                    }
-                  >
+                  <Popover variant="ghost" icon={<Plus aria-hidden />} label="Add sub-goal">
                     <NewGoalForm slug={slug} goals={goals} parentGoalId={goal.id} />
                   </Popover>
                 )
@@ -225,15 +200,7 @@ export default async function GoalPage({ params }: PageProps<"/w/[slug]/goals/[i
               description="What agents know about this goal."
               action={
                 can(ctx.actor, "memory:write") && (
-                  <Popover
-                    variant="ghost"
-                    label={
-                      <>
-                        <Plus aria-hidden />
-                        Add
-                      </>
-                    }
-                  >
+                  <Popover variant="ghost" icon={<Plus aria-hidden />} label="Add">
                     <RememberForm slug={slug} goals={goals} goalId={goal.id} />
                   </Popover>
                 )

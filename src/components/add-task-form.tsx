@@ -4,7 +4,7 @@ import { addTaskAction } from "@/app/w/[slug]/actions";
 import { LIMITS, PRIORITIES, PRIORITY_META } from "@/lib/domain";
 import type { GoalWithProgress } from "@/server/domain/goals";
 
-import { GoalOptions } from "./goal-options";
+import { GoalField } from "./goal-options";
 import { ActionForm } from "./ui/action-form";
 import { enumOptions, Field, Input, Select, Textarea } from "./ui/field";
 import { SubmitButton } from "./ui/submit-button";
@@ -39,16 +39,7 @@ export function AddTaskForm({ slug, goals, goalId, lockGoal = false }: AddTaskFo
           <Input id="add-task-due" name="dueDate" type="date" />
         </Field>
       </div>
-      {lockGoal && goalId ? (
-        <input type="hidden" name="goalId" value={goalId} />
-      ) : (
-        <Field label="Goal" htmlFor="add-task-goal">
-          <Select id="add-task-goal" name="goalId" defaultValue={goalId ?? ""}>
-            <option value="">No goal</option>
-            <GoalOptions goals={openGoals} />
-          </Select>
-        </Field>
-      )}
+      <GoalField id="add-task-goal" name="goalId" label="Goal" none="No goal" goals={openGoals} value={goalId} locked={lockGoal} />
       <SubmitButton variant="primary">
         <Plus aria-hidden />
         Add task

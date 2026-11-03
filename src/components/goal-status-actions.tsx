@@ -4,8 +4,7 @@ import { setGoalStatusAction } from "@/app/w/[slug]/actions";
 import type { GoalStatus } from "@/lib/domain";
 
 import type { ButtonSize, ButtonVariant } from "./ui/button";
-import { ActionForm } from "./ui/action-form";
-import { SubmitButton } from "./ui/submit-button";
+import { ActionButton } from "./ui/action-button";
 
 interface Transition {
   label: string;
@@ -33,14 +32,18 @@ export function GoalStatusActions({ goalId, status, slug, size = "md" }: { goalI
   return (
     <div className="flex shrink-0 flex-wrap gap-1.5">
       {TRANSITIONS[status].map(({ label, to, icon: Icon, variant, confirm }) => (
-        <ActionForm key={to} action={setGoalStatusAction} workspace={slug} confirm={confirm} quiet>
-          <input type="hidden" name="goalId" value={goalId} />
-          <input type="hidden" name="status" value={to} />
-          <SubmitButton size={size} variant={variant}>
-            <Icon aria-hidden />
-            {label}
-          </SubmitButton>
-        </ActionForm>
+        <ActionButton
+          key={to}
+          action={setGoalStatusAction}
+          workspace={slug}
+          fields={{ goalId, status: to }}
+          confirm={confirm}
+          size={size}
+          variant={variant}
+        >
+          <Icon aria-hidden />
+          {label}
+        </ActionButton>
       ))}
     </div>
   );

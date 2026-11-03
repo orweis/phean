@@ -3,11 +3,10 @@ import type { Metadata } from "next";
 import { cancelInvitationAction, removeMemberAction } from "@/app/w/[slug]/actions";
 import { InviteMemberForm } from "@/components/invite-member-form";
 import { PageHeader } from "@/components/page-header";
-import { ActionForm } from "@/components/ui/action-form";
+import { ActionButton } from "@/components/ui/action-button";
 import { Badge, MetaBadge } from "@/components/ui/badge";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { CopyButton } from "@/components/ui/copy-button";
-import { SubmitButton } from "@/components/ui/submit-button";
 import { ROLE_META } from "@/lib/domain";
 import { timeAgo } from "@/lib/format";
 import { routes } from "@/lib/routes";
@@ -67,12 +66,16 @@ export default async function MembersPage({ params }: PageProps<"/w/[slug]/membe
                   </div>
                   <MetaBadge meta={ROLE_META} value={person.role} />
                   {canManage && !isSelf && person.role !== "owner" && (
-                    <ActionForm action={removeMemberAction} workspace={slug} confirm={`Remove ${person.name} from this workspace?`}>
-                      <input type="hidden" name="memberId" value={person.id} />
-                      <SubmitButton size="sm" variant="ghost">
-                        Remove
-                      </SubmitButton>
-                    </ActionForm>
+                    <ActionButton
+                      action={removeMemberAction}
+                      workspace={slug}
+                      fields={{ memberId: person.id }}
+                      confirm={`Remove ${person.name} from this workspace?`}
+                      size="sm"
+                      variant="ghost"
+                    >
+                      Remove
+                    </ActionButton>
                   )}
                 </li>
               );
@@ -98,12 +101,9 @@ export default async function MembersPage({ params }: PageProps<"/w/[slug]/membe
                     <div className="flex items-center gap-1.5">
                       <span className="flex-1 text-xs text-muted">Expires {timeAgo(invitation.expiresAt)}</span>
                       <CopyButton value={new URL(routes.invite(invitation.id), origin).toString()} label="Copy link" variant="ghost" />
-                      <ActionForm action={cancelInvitationAction} workspace={slug} quiet>
-                        <input type="hidden" name="invitationId" value={invitation.id} />
-                        <SubmitButton size="sm" variant="ghost">
-                          Cancel
-                        </SubmitButton>
-                      </ActionForm>
+                      <ActionButton action={cancelInvitationAction} workspace={slug} fields={{ invitationId: invitation.id }} size="sm" variant="ghost">
+                        Cancel
+                      </ActionButton>
                     </div>
                   </li>
                 ))}

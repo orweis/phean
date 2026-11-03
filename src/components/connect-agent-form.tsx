@@ -4,27 +4,22 @@ import { KeyRound, Plus, TriangleAlert } from "lucide-react";
 import { useState } from "react";
 
 import { createAgentAction } from "@/app/w/[slug]/actions";
-import type { ActionState } from "@/lib/action-state";
-import { cx } from "@/lib/cx";
+import { stringData } from "@/lib/action-state";
 import { LIMITS } from "@/lib/domain";
 import { mcpClientSetups } from "@/lib/mcp-config";
 
 import { ActionForm } from "./ui/action-form";
-import { CopyButton } from "./ui/copy-button";
+import { CopyButton, CopyField } from "./ui/copy-button";
 import { Field, Input } from "./ui/field";
+import { segment, SEGMENTED } from "./ui/segmented";
 import { SubmitButton } from "./ui/submit-button";
-
-function issuedToken(state: ActionState): { token: string; agentName: string } | null {
-  const { token, agentName } = state.data ?? {};
-  return typeof token === "string" && typeof agentName === "string" ? { token, agentName } : null;
-}
 
 /** Issues an agent token and shows it exactly once, with setup snippets for common MCP clients. */
 export function ConnectAgentForm({ slug, mcpUrl }: { slug: string; mcpUrl: string }) {
   return (
     <ActionForm action={createAgentAction} workspace={slug}>
       {(state) => {
-        const issued = issuedToken(state);
+        const issued = stringData(state, "token", "agentName");
         return (
           <>
             <div className="flex flex-wrap items-end gap-2">
@@ -63,16 +58,13 @@ function TokenReveal({ token, agentName, slug, mcpUrl }: { token: string; agentN
           <TriangleAlert className="size-3.5" aria-hidden />
           Copy it now. Phean only keeps a hash, so it cannot be shown again.
         </p>
-        <div className="mt-2 flex items-center gap-2">
-          <code className="min-w-0 flex-1 truncate rounded-md border border-rule bg-panel px-2.5 py-2 font-mono text-xs text-ink">
-            {token}
-          </code>
-          <CopyButton value={token} />
+        <div className="mt-2">
+          <CopyField value={token} />
         </div>
       </div>
 
       <div>
-        <div role="tablist" aria-label="MCP client" className="flex gap-1">
+        <div role="tablist" aria-label="MCP client" className={`${SEGMENTED} w-fit`}>
           {setups.map((candidate) => (
             <button
               key={candidate.id}
@@ -80,10 +72,7 @@ function TokenReveal({ token, agentName, slug, mcpUrl }: { token: string; agentN
               role="tab"
               aria-selected={candidate.id === setup.id}
               onClick={() => setSelected(candidate.id)}
-              className={cx(
-                "rounded-sm px-2.5 py-1.5 text-xs font-semibold transition-colors duration-(--dur-micro)",
-                candidate.id === setup.id ? "bg-shell text-shell-ink" : "text-ink-2 hover:bg-panel hover:text-ink",
-              )}
+              className={segment(candidate.id === setup.id)}
             >
               {candidate.label}
             </button>

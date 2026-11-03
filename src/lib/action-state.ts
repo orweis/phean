@@ -8,3 +8,9 @@ export interface ActionState {
 }
 
 export const IDLE: ActionState = { status: "idle" };
+
+/** The named strings an action handed back in `data`, or null unless every one is there. */
+export function stringData<K extends string>(state: ActionState, ...keys: K[]): Record<K, string> | null {
+  const entries = keys.map((key) => [key, state.data?.[key]] as const);
+  return entries.every(([, value]) => typeof value === "string") ? (Object.fromEntries(entries) as Record<K, string>) : null;
+}

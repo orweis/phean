@@ -1,18 +1,12 @@
 "use client";
 
-import { LoaderCircle } from "lucide-react";
 import type { ComponentProps } from "react";
 import { useFormStatus } from "react-dom";
 
 import { Button } from "./button";
 
-/** A submit button that disables itself and shows a spinner while its form's action runs. */
-export function SubmitButton({ children, disabled, ...props }: ComponentProps<typeof Button>) {
+/** A submit button that shows its form's action is running. */
+export function SubmitButton(props: Omit<ComponentProps<typeof Button>, "type" | "pending">) {
   const { pending } = useFormStatus();
-  return (
-    <Button type="submit" disabled={pending || disabled} aria-busy={pending} {...props}>
-      {pending && <LoaderCircle className="motion-safe:animate-spin" aria-hidden />}
-      {children}
-    </Button>
-  );
+  return <Button type="submit" pending={pending} {...props} />;
 }

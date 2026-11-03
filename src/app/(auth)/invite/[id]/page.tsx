@@ -5,9 +5,8 @@ import type { ReactNode } from "react";
 
 import { acceptInvitationAction } from "@/app/workspaces/actions";
 import { SignOutButton } from "@/components/sign-out-button";
-import { ActionForm } from "@/components/ui/action-form";
+import { ActionButton } from "@/components/ui/action-button";
 import { ButtonLink } from "@/components/ui/button";
-import { SubmitButton } from "@/components/ui/submit-button";
 import { ROLE_META } from "@/lib/domain";
 import { routes } from "@/lib/routes";
 import { getViewer } from "@/server/auth/session";
@@ -72,13 +71,10 @@ export default async function InvitePage({ params }: PageProps<"/invite/[id]">) 
         <strong className="text-ink">{ROLE_META[invitation.role].label.toLowerCase()}</strong>. You will
         see the workspace&apos;s goals, tasks, memory, and agents.
       </p>
-      <ActionForm action={acceptInvitationAction}>
-        <input type="hidden" name="invitationId" value={invitation.id} />
-        <SubmitButton variant="primary" className="w-full">
-          <Check aria-hidden />
-          Accept invitation
-        </SubmitButton>
-      </ActionForm>
+      <ActionButton action={acceptInvitationAction} fields={{ invitationId: invitation.id }} variant="primary" className="w-full">
+        <Check aria-hidden />
+        Accept invitation
+      </ActionButton>
     </Message>
   );
 }

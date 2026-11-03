@@ -4,7 +4,7 @@ import { rememberAction } from "@/app/w/[slug]/actions";
 import { LIMITS, MEMORY_KIND_META, MEMORY_KINDS } from "@/lib/domain";
 import type { GoalWithProgress } from "@/server/domain/goals";
 
-import { GoalOptions } from "./goal-options";
+import { GoalField } from "./goal-options";
 import { ActionForm } from "./ui/action-form";
 import { enumOptions, Field, Input, Select, Textarea } from "./ui/field";
 import { SubmitButton } from "./ui/submit-button";
@@ -39,18 +39,7 @@ export function RememberForm({ slug, goals, goalId }: RememberFormProps) {
           <Input id="remember-tags" name="tags" placeholder="billing, acme" />
         </Field>
       </div>
-      {goalId ? (
-        <input type="hidden" name="goalId" value={goalId} />
-      ) : (
-        goals.length > 0 && (
-          <Field label="About goal" htmlFor="remember-goal">
-            <Select id="remember-goal" name="goalId" defaultValue="">
-              <option value="">Whole workspace</option>
-              <GoalOptions goals={goals} />
-            </Select>
-          </Field>
-        )
-      )}
+      <GoalField id="remember-goal" name="goalId" label="About goal" none="Whole workspace" goals={goals} value={goalId} locked={Boolean(goalId)} />
       <SubmitButton variant="primary">
         <Plus aria-hidden />
         Remember

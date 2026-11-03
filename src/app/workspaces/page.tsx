@@ -10,7 +10,7 @@ import { PageHeader } from "@/components/page-header";
 import { MetaBadge } from "@/components/ui/badge";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { EmptyState, Stat, StatStrip } from "@/components/ui/stat";
-import { PINNED_CELL } from "@/components/ui/table";
+import { PINNED_CELL, TH } from "@/components/ui/table";
 import { OPEN_TASK_STATUSES, ROLE_META } from "@/lib/domain";
 import { cx } from "@/lib/cx";
 import { timeAgo } from "@/lib/format";
@@ -29,7 +29,6 @@ const COLUMNS: { label: string; value: (row: WorkspaceOverview) => number; alert
 ];
 
 const ALERT_TEXT = { late: "font-bold text-late-ink", wait: "font-bold text-wait-ink" } as const;
-const TH = "px-3 py-2.5 text-xs font-semibold whitespace-nowrap text-muted";
 
 function sum(rows: readonly WorkspaceOverview[], pick: (row: WorkspaceOverview) => number): number {
   return rows.reduce((total, row) => total + pick(row), 0);

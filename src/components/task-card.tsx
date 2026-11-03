@@ -1,17 +1,15 @@
-import { Bot, CalendarClock, Target } from "lucide-react";
-import Link from "next/link";
+import { Bot, CalendarClock } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { completeTaskAction, releaseTaskAction, updateTaskAction } from "@/app/w/[slug]/actions";
 import { cx } from "@/lib/cx";
 import { isLate, isOpenTaskStatus, PRIORITY_META, SOURCE_META, TASK_STATUS_META, type TaskStatus } from "@/lib/domain";
 import { formatDueDate, truncate } from "@/lib/format";
-import { routes } from "@/lib/routes";
 import type { TaskView } from "@/server/domain/tasks";
 
-import { ActionForm } from "./ui/action-form";
+import { GoalLink } from "./goal-link";
+import { ActionButton } from "./ui/action-button";
 import { Badge, MetaBadge } from "./ui/badge";
-import { SubmitButton } from "./ui/submit-button";
 
 /** The one-click next step for each status; "done" goes through complete so it is logged as completion. */
 const NEXT_STEP: Partial<Record<TaskStatus, { label: string; status: TaskStatus }>> = {
@@ -28,39 +26,28 @@ const CARD_EXCERPT = 80;
 /** Next step, release and drop, as compact buttons. */
 function TaskActions({ task, slug }: { task: TaskView; slug: string }) {
   const next = NEXT_STEP[task.status];
+  const taskId = task.id;
   return (
     <div className="flex flex-wrap gap-1.5">
       {next &&
         (next.status === "done" ? (
-          <ActionForm action={completeTaskAction} workspace={slug} quiet>
-            <input type="hidden" name="taskId" value={task.id} />
-            <SubmitButton size="sm" variant="primary">
-              {next.label}
-            </SubmitButton>
-          </ActionForm>
+          <ActionButton action={completeTaskAction} workspace={slug} fields={{ taskId }} size="sm" variant="primary">
+            {next.label}
+          </ActionButton>
         ) : (
-          <ActionForm action={updateTaskAction} workspace={slug} quiet>
-            <input type="hidden" name="taskId" value={task.id} />
-            <input type="hidden" name="status" value={next.status} />
-            <SubmitButton size="sm">{next.label}</SubmitButton>
-          </ActionForm>
+          <ActionButton action={updateTaskAction} workspace={slug} fields={{ taskId, status: next.status }} size="sm">
+            {next.label}
+          </ActionButton>
         ))}
       {task.claimedByName && (
-        <ActionForm action={releaseTaskAction} workspace={slug} quiet>
-          <input type="hidden" name="taskId" value={task.id} />
-          <SubmitButton size="sm" variant="ghost">
-            Release
-          </SubmitButton>
-        </ActionForm>
+        <ActionButton action={releaseTaskAction} workspace={slug} fields={{ taskId }} size="sm" variant="ghost">
+          Release
+        </ActionButton>
       )}
       {isOpenTaskStatus(task.status) && (
-        <ActionForm action={updateTaskAction} workspace={slug} quiet>
-          <input type="hidden" name="taskId" value={task.id} />
-          <input type="hidden" name="status" value="dropped" />
-          <SubmitButton size="sm" variant="ghost">
-            Drop
-          </SubmitButton>
-        </ActionForm>
+        <ActionButton action={updateTaskAction} workspace={slug} fields={{ taskId, status: "dropped" }} size="sm" variant="ghost">
+          Drop
+        </ActionButton>
       )}
     </div>
   );
@@ -71,12 +58,7 @@ function TaskMeta({ task, slug, showGoal, showDue = true }: { task: TaskView; sl
   const late = isLate(task);
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
-      {showGoal && task.goalId && task.goalTitle && (
-        <Link href={routes.goal(slug, task.goalId)} className="inline-flex max-w-56 items-center gap-1 hover:text-ink link">
-          <Target className="size-3 shrink-0" aria-hidden />
-          <span className="truncate">{task.goalTitle}</span>
-        </Link>
-      )}
+      {showGoal && task.goalId && task.goalTitle && <GoalLink slug={slug} goalId={task.goalId} title={task.goalTitle} />}
       {showDue && task.dueDate && (
         <span className={cx("inline-flex items-center gap-1", late && "font-semibold text-late-ink")}>
           <CalendarClock className="size-3" aria-hidden />

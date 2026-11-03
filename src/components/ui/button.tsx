@@ -1,3 +1,4 @@
+import { LoaderCircle } from "lucide-react";
 import Link from "next/link";
 import type { ComponentProps } from "react";
 
@@ -38,8 +39,24 @@ interface ButtonStyleProps {
   size?: ButtonSize;
 }
 
-export function Button({ variant, size, className, type = "button", ...props }: ComponentProps<"button"> & ButtonStyleProps) {
-  return <button type={type} className={buttonClasses(variant, size, className)} {...props} />;
+interface ButtonProps extends ComponentProps<"button">, ButtonStyleProps {
+  /** While its work runs, the button is disabled and shows a spinner. */
+  pending?: boolean;
+}
+
+export function Button({ variant, size, className, type = "button", pending = false, disabled, children, ...props }: ButtonProps) {
+  return (
+    <button
+      type={type}
+      className={buttonClasses(variant, size, className)}
+      disabled={pending || disabled}
+      aria-busy={pending || undefined}
+      {...props}
+    >
+      {pending && <LoaderCircle className="motion-safe:animate-spin" aria-hidden />}
+      {children}
+    </button>
+  );
 }
 
 export function ButtonLink({ variant, size, className, ...props }: ComponentProps<typeof Link> & ButtonStyleProps) {

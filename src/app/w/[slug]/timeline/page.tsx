@@ -7,7 +7,7 @@ import { Timetable, TimetableLegend } from "@/components/charts/timetable";
 import { GoalFilter } from "@/components/goal-filter";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
-import { cx } from "@/lib/cx";
+import { segment, SEGMENTED } from "@/components/ui/segmented";
 import { pluralize } from "@/lib/format";
 import { queryParam, routes } from "@/lib/routes";
 import {
@@ -29,16 +29,13 @@ export const metadata: Metadata = { title: "Timeline" };
 
 function WindowSwitch({ slug, goalId, days }: { slug: string; goalId?: string; days: TimelineDays }) {
   return (
-    <nav aria-label="Time window" className="flex rounded-md border border-rule bg-panel p-0.5">
+    <nav aria-label="Time window" className={SEGMENTED}>
       {TIMELINE_WINDOWS.map((option) => (
         <Link
           key={option}
           href={routes.timeline(slug, { goal: goalId, days: String(option) })}
           aria-current={option === days ? "page" : undefined}
-          className={cx(
-            "rounded-sm px-2.5 py-1.5 text-xs font-semibold transition-colors duration-(--dur-micro)",
-            option === days ? "bg-shell text-shell-ink" : "text-ink-2 hover:bg-sunken hover:text-ink",
-          )}
+          className={segment(option === days)}
         >
           {option} days
         </Link>

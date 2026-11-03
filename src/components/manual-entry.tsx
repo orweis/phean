@@ -5,16 +5,12 @@ import type { GoalWithProgress } from "@/server/domain/goals";
 import { AddTaskForm } from "./add-task-form";
 import { NewGoalForm } from "./goal-forms";
 import { Popover } from "./ui/popover";
+import { RADIO_SEGMENT, SEGMENTED } from "./ui/segmented";
 
 const KINDS = [
   { value: "task", label: "Task" },
   { value: "goal", label: "Goal" },
 ] as const;
-
-const SWITCH_OPTION =
-  "relative flex-1 cursor-pointer rounded-sm px-2.5 py-1.5 text-center text-xs font-semibold text-ink-2 transition-colors duration-(--dur-micro) " +
-  "hover:bg-sunken hover:text-ink has-checked:bg-shell has-checked:text-shell-ink " +
-  "has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-focus";
 
 interface ManualEntryProps {
   slug: string;
@@ -35,23 +31,14 @@ export function ManualEntry({ slug, goals, goalId, canAddTask, canAddGoal }: Man
   if (!canAddTask && !canAddGoal) return null;
   const both = canAddTask && canAddGoal;
   return (
-    <Popover
-      variant="ghost"
-      className="sm:w-96"
-      label={
-        <>
-          <Plus aria-hidden />
-          Add manually
-        </>
-      }
-    >
+    <Popover variant="ghost" className="sm:w-96" icon={<Plus aria-hidden />} label="Add manually">
       <div className="group/entry">
         <p className="text-xs text-muted">Agents capture most work for you. Add what they cannot see.</p>
         {both && (
-          <fieldset className="mt-3 flex rounded-md border border-rule bg-panel p-0.5">
+          <fieldset className={`mt-3 ${SEGMENTED}`}>
             <legend className="sr-only">What to add</legend>
             {KINDS.map(({ value, label }) => (
-              <label key={value} className={SWITCH_OPTION}>
+              <label key={value} className={RADIO_SEGMENT}>
                 <input type="radio" name="manual-entry-kind" value={value} data-kind={value} defaultChecked={value === "task"} className="sr-only" />
                 {label}
               </label>
