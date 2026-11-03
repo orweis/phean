@@ -97,8 +97,19 @@ test("a visitor picks Dark on the landing page and the sign-in page opens in it"
   await page.goto("/");
   const footer = page.getByRole("contentinfo");
   await expect(footer.getByRole("radio", { name: "System" })).toBeChecked();
-  await appearanceOption(footer, "Dark").click();
-  await expect.poll(() => groundIsDark(page)).toBe(true);
+
+  const light = await page.evaluate(async () => {
+    const labels = [...document.querySelectorAll<HTMLLabelElement>("footer label")];
+    const option = (text: string) => labels.find((label) => label.textContent?.trim() === text)!;
+    const light = option("Light");
+    option("Dark").click();
+    const onSwitch = getComputedStyle(light).color;
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    return { onSwitch, settled: getComputedStyle(light).color };
+  });
+  expect(light.onSwitch, "a segment with a colour transition repaints on the frame of the switch").toBe(light.settled);
+  expect(await groundIsDark(page)).toBe(true);
+  await expect(footer.getByRole("radio", { name: "Dark" })).toBeChecked();
   await page.goto("/sign-in");
   await expect(page.locator("html")).toHaveAttribute("data-appearance", "dark");
   expect(await groundIsDark(page)).toBe(true);

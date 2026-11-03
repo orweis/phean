@@ -435,6 +435,13 @@
   }
 }
 
+/* A change of appearance lands in one frame, instead of the controls with colour transitions fading after the page. */
+:root[data-appearance-changing] *,
+:root[data-appearance-changing] *::before,
+:root[data-appearance-changing] *::after {
+  transition: none !important;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
