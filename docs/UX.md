@@ -219,20 +219,20 @@ Switching workspace tabs answers at once: a loading frame holds the page's shape
 
 ### Color language
 
-The full system (tokens, type, components, and the rules behind them) is in [DESIGN.md](../DESIGN.md). In short: a navy station-board header over a pale timetable sheet of white panels, one signal yellow for the primary action and the active tab, and four state colours that carry meaning and nothing else.
+The full system (tokens, type, components, and the rules behind them) is in [DESIGN.md](../DESIGN.md). In short: dusk on Sisyphus's slope, in Apple's design language. A Liquid Glass header floats over a lavender ground of white panels; violet is the brand and the primary action, ember (the boulder) marks what is new, and four state colours carry meaning and nothing else. The app follows the system's light or dark appearance, and both keep text at 4.5:1 or better.
 
 One table per concept (`src/lib/domain.ts`) maps each value to a label and a tone, and every badge, stat, and table cell reads from it, so a status looks the same everywhere.
 
 | Tone | Token | Used for |
 | --- | --- | --- |
-| Danger | `late` (red) | late work, urgent priority, revoked agents, the now line |
-| Warning | `wait` (amber) | proposed goals and pending decisions, high priority, read-only access |
-| Info | `move` (blue) | in-progress tasks, active goals, admin role, facts |
+| Danger | `late` (crimson) | late work, urgent priority, revoked agents, the now line |
+| Warning | `wait` (honey) | proposed goals and pending decisions, high priority, read-only access |
+| Info | `move` (violet) | in-progress tasks, active goals, admin role, facts |
 | Success | `arrive` (green) | done tasks, achieved goals, active agents, decisions |
-| Accent | `signal` (yellow) | inbox, owner role, preferences |
-| Neutral | `ink` on `sunken` | everything else |
+| Accent | `signal` (ember) | inbox, owner role, preferences |
+| Neutral | `ink-2` on `fill` | everything else |
 
-The diagrams use the station colours: inbox ochre, to do slate, in progress blue (`move`), and done green (`arrive`). Red is never a station; it only marks lateness and now.
+The diagrams use the station colours: inbox ember, to do lavender, in progress violet (`move`), and done green (`arrive`). Red is never a station; it only marks lateness and now.
 
 ### Manual entry
 

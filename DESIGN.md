@@ -1,94 +1,146 @@
 ---
 name: Phean
-description: A shared task and goal ledger for teams of AI agents, read like a railway timetable.
+description: A shared task and goal ledger for teams of AI agents, under a Liquid Glass bar at dusk on the slope.
 colors:
-  shell: "oklch(29% 0.085 266)"
-  shell-2: "oklch(36% 0.09 266)"
-  shell-ink: "oklch(98.5% 0.005 265)"
-  shell-muted: "oklch(81% 0.035 265)"
-  signal: "oklch(86% 0.165 93)"
-  signal-ink: "oklch(30% 0.06 90)"
-  signal-tint: "oklch(95.5% 0.055 95)"
-  late: "oklch(56% 0.21 27)"
-  late-ink: "oklch(47% 0.18 27)"
-  late-tint: "oklch(96.2% 0.025 25)"
-  wait: "oklch(72% 0.15 68)"
-  wait-ink: "oklch(47% 0.11 60)"
-  wait-tint: "oklch(96.5% 0.04 82)"
-  move: "oklch(53% 0.15 256)"
-  move-ink: "oklch(45% 0.14 258)"
-  move-tint: "oklch(95.6% 0.028 255)"
-  arrive: "oklch(57% 0.12 155)"
-  arrive-ink: "oklch(43% 0.1 155)"
-  arrive-tint: "oklch(95.6% 0.035 155)"
-  station-inbox: "oklch(82% 0.15 90)"
-  station-todo: "oklch(76% 0.03 262)"
-  line-inbox: "oklch(62% 0.13 78)"
-  line-todo: "oklch(57% 0.035 262)"
-  paper: "oklch(97.4% 0.007 255)"
-  panel: "oklch(99.6% 0.002 255)"
-  sunken: "oklch(94.6% 0.011 255)"
-  rule: "oklch(90% 0.012 260)"
-  edge: "oklch(60% 0.025 262)"
-  ink: "oklch(24% 0.05 266)"
-  ink-2: "oklch(37% 0.04 265)"
-  muted: "oklch(49% 0.03 262)"
-  faint: "oklch(70% 0.02 262)"
-  focus: "oklch(53% 0.15 256)"
+  paper: "oklch(97.3% 0.008 300)"
+  panel: "oklch(99.5% 0.002 300)"
+  fill: "oklch(94.4% 0.011 300)"
+  raised: "oklch(99.5% 0.002 300)"
+  rule: "oklch(90.6% 0.014 300)"
+  edge: "oklch(61% 0.03 298)"
+  ink: "oklch(22% 0.04 295)"
+  ink-2: "oklch(37% 0.035 295)"
+  muted: "oklch(49.5% 0.03 295)"
+  faint: "oklch(72% 0.02 295)"
+  accent: "oklch(50% 0.2 292)"
+  accent-2: "oklch(44% 0.19 292)"
+  accent-ink: "oklch(47% 0.19 292)"
+  accent-tint: "oklch(95% 0.026 298)"
+  on-accent: "oklch(99% 0.004 300)"
+  signal: "oklch(73% 0.165 50)"
+  signal-2: "oklch(79% 0.15 56)"
+  signal-shade: "oklch(62% 0.17 40)"
+  signal-ink: "oklch(52% 0.15 42)"
+  signal-tint: "oklch(95.6% 0.028 62)"
+  on-signal: "oklch(25% 0.06 40)"
+  late: "oklch(56% 0.2 22)"
+  late-ink: "oklch(49% 0.18 22)"
+  late-tint: "oklch(96% 0.018 18)"
+  wait: "oklch(79% 0.14 86)"
+  wait-ink: "oklch(47% 0.095 76)"
+  wait-tint: "oklch(96.5% 0.045 92)"
+  arrive: "oklch(58% 0.13 158)"
+  arrive-ink: "oklch(44% 0.1 158)"
+  arrive-tint: "oklch(95.6% 0.032 160)"
+  station-todo: "oklch(80% 0.06 300)"
+  station-progress: "oklch(55% 0.19 292)"
+  station-done: "oklch(62% 0.13 158)"
+  line-inbox: "oklch(64% 0.16 46)"
+  line-todo: "oklch(60% 0.07 298)"
+  focus: "oklch(54% 0.2 292)"
+  dusk: "oklch(27% 0.09 292)"
+  dusk-2: "oklch(34% 0.11 292)"
+  dusk-ink: "oklch(97% 0.012 300)"
+  dusk-muted: "oklch(82% 0.05 300)"
+  dusk-hill: "oklch(63% 0.17 292)"
+  glass: "oklch(98.6% 0.006 300 / 0.78)"
+  glass-thick: "oklch(99.2% 0.004 300 / 0.88)"
+  glass-rim: "oklch(22% 0.04 295 / 0.1)"
+  dark-paper: "oklch(16.5% 0.022 292)"
+  dark-panel: "oklch(21% 0.026 292)"
+  dark-fill: "oklch(26.5% 0.028 292)"
+  dark-raised: "oklch(36% 0.03 292)"
+  dark-rule: "oklch(30% 0.028 292)"
+  dark-edge: "oklch(55% 0.03 295)"
+  dark-ink: "oklch(95.5% 0.008 300)"
+  dark-ink-2: "oklch(85% 0.015 300)"
+  dark-muted: "oklch(71% 0.02 300)"
+  dark-faint: "oklch(47% 0.022 296)"
+  dark-accent: "oklch(55% 0.19 292)"
+  dark-accent-2: "oklch(50% 0.19 292)"
+  dark-accent-ink: "oklch(77% 0.13 296)"
+  dark-accent-tint: "oklch(30% 0.075 292)"
+  dark-signal: "oklch(76% 0.15 52)"
+  dark-signal-2: "oklch(81% 0.135 58)"
+  dark-signal-shade: "oklch(64% 0.16 42)"
+  dark-signal-ink: "oklch(80% 0.13 56)"
+  dark-signal-tint: "oklch(30% 0.06 45)"
+  dark-on-signal: "oklch(22% 0.05 40)"
+  dark-late: "oklch(66% 0.18 22)"
+  dark-late-ink: "oklch(77% 0.13 22)"
+  dark-late-tint: "oklch(27.5% 0.05 20)"
+  dark-wait: "oklch(81% 0.13 86)"
+  dark-wait-ink: "oklch(85% 0.11 88)"
+  dark-wait-tint: "oklch(28% 0.045 80)"
+  dark-arrive: "oklch(68% 0.13 158)"
+  dark-arrive-ink: "oklch(79% 0.12 158)"
+  dark-arrive-tint: "oklch(28% 0.05 160)"
+  dark-station-todo: "oklch(58% 0.06 298)"
+  dark-station-progress: "oklch(65% 0.17 292)"
+  dark-station-done: "oklch(68% 0.13 158)"
+  dark-line-todo: "oklch(64% 0.06 298)"
+  dark-focus: "oklch(72% 0.15 294)"
+  dark-hill: "oklch(63% 0.17 292)"
+  dark-dusk: "oklch(23% 0.07 292)"
+  dark-dusk-2: "oklch(31% 0.09 292)"
+  dark-glass: "oklch(22% 0.026 292 / 0.78)"
+  dark-glass-thick: "oklch(24% 0.028 292 / 0.88)"
+  dark-glass-rim: "oklch(95% 0.01 300 / 0.12)"
+  icon-tile-bottom: "#211541"
 typography:
   display:
-    fontFamily: "Archivo Variable, ui-sans-serif, sans-serif"
+    fontFamily: "-apple-system, Inter Variable, sans-serif"
     fontSize: "clamp(2.25rem, 6vw, 4.25rem)"
-    fontWeight: 800
-    lineHeight: 1.02
-    fontVariation: "'wdth' 82"
+    fontWeight: 700
+    lineHeight: 1.04
+    letterSpacing: "-0.028em"
   display-panel:
-    fontFamily: "Archivo Variable, ui-sans-serif, sans-serif"
+    fontFamily: "-apple-system, Inter Variable, sans-serif"
     fontSize: "2.5rem"
-    fontWeight: 800
-    lineHeight: 1.05
-    fontVariation: "'wdth' 82"
+    fontWeight: 700
+    lineHeight: 1.08
+    letterSpacing: "-0.028em"
   headline:
-    fontFamily: "Archivo Variable, ui-sans-serif, sans-serif"
+    fontFamily: "-apple-system, Inter Variable, sans-serif"
     fontSize: "1.75rem"
-    fontWeight: 800
+    fontWeight: 700
     lineHeight: "2.15rem"
-    fontVariation: "'wdth' 86"
+    letterSpacing: "-0.016em"
   title:
-    fontFamily: "Archivo Variable, ui-sans-serif, sans-serif"
+    fontFamily: "-apple-system, Inter Variable, sans-serif"
     fontSize: "1rem"
-    fontWeight: 700
+    fontWeight: 600
     lineHeight: "1.55rem"
-    fontVariation: "'wdth' 86"
   figure:
-    fontFamily: "Archivo Variable, ui-sans-serif, sans-serif"
-    fontSize: "1.4375rem"
+    fontFamily: "ui-rounded, -apple-system, Inter Variable, sans-serif"
+    fontSize: "1.375rem"
     fontWeight: 700
-    lineHeight: "1.85rem"
+    lineHeight: "1.8rem"
+    letterSpacing: "-0.016em"
     fontFeature: "'tnum'"
-    fontVariation: "'wdth' 82"
   body:
-    fontFamily: "Archivo Variable, ui-sans-serif, sans-serif"
+    fontFamily: "-apple-system, Inter Variable, sans-serif"
     fontSize: "0.875rem"
     fontWeight: 400
     lineHeight: "1.35rem"
     fontFeature: "'tnum'"
   label:
-    fontFamily: "Archivo Variable, ui-sans-serif, sans-serif"
+    fontFamily: "-apple-system, Inter Variable, sans-serif"
     fontSize: "0.75rem"
     fontWeight: 600
     lineHeight: "1.1rem"
   axis:
-    fontFamily: "Archivo Variable, ui-sans-serif, sans-serif"
+    fontFamily: "-apple-system, Inter Variable, sans-serif"
     fontSize: "0.6875rem"
     fontWeight: 400
     lineHeight: "1rem"
 rounded:
-  xs: "2px"
-  sm: "3px"
-  md: "4px"
-  lg: "6px"
-  xl: "8px"
+  xs: "4px"
+  sm: "6px"
+  md: "10px"
+  lg: "14px"
+  xl: "16px"
+  full: "9999px"
 spacing:
   gutter-phone: "16px"
   gutter: "24px"
@@ -96,43 +148,53 @@ spacing:
   card-inset: "20px"
 components:
   button-primary:
-    backgroundColor: "{colors.shell}"
-    textColor: "{colors.shell-ink}"
+    backgroundColor: "{colors.accent}"
+    textColor: "{colors.on-accent}"
     typography: "{typography.label}"
-    rounded: "{rounded.md}"
-    padding: "0 14px"
+    rounded: "{rounded.full}"
+    padding: "0 16px"
     height: "36px"
   button-primary-hover:
-    backgroundColor: "{colors.shell-2}"
-  button-primary-active:
-    backgroundColor: "{colors.ink}"
+    backgroundColor: "{colors.accent-2}"
+  button-tinted:
+    backgroundColor: "{colors.accent-tint}"
+    textColor: "{colors.accent-ink}"
+    rounded: "{rounded.full}"
+    height: "32px"
   button-secondary:
-    backgroundColor: "{colors.panel}"
+    backgroundColor: "{colors.fill}"
     textColor: "{colors.ink}"
-    rounded: "{rounded.md}"
-    padding: "0 14px"
+    rounded: "{rounded.full}"
+    padding: "0 16px"
     height: "36px"
   button-secondary-hover:
-    backgroundColor: "{colors.sunken}"
+    backgroundColor: "{colors.rule}"
   button-ghost:
     textColor: "{colors.ink-2}"
-    rounded: "{rounded.md}"
-    padding: "0 10px"
+    rounded: "{rounded.full}"
+    padding: "0 12px"
+    height: "32px"
+  button-ghost-hover:
+    backgroundColor: "{colors.fill}"
+    textColor: "{colors.ink}"
+  button-danger:
+    backgroundColor: "{colors.late-tint}"
+    textColor: "{colors.late-ink}"
+    rounded: "{rounded.full}"
     height: "32px"
   button-signal:
     backgroundColor: "{colors.signal}"
-    textColor: "{colors.signal-ink}"
-    rounded: "{rounded.md}"
-    padding: "0 20px"
-    height: "44px"
-  button-danger:
-    backgroundColor: "{colors.panel}"
-    textColor: "{colors.late-ink}"
-    rounded: "{rounded.md}"
+    textColor: "{colors.on-signal}"
+    rounded: "{rounded.full}"
+    padding: "0 16px"
+    height: "36px"
+  button-dusk:
+    textColor: "{colors.dusk-muted}"
+    rounded: "{rounded.full}"
     height: "36px"
   badge:
-    rounded: "{rounded.sm}"
-    padding: "0 6px"
+    rounded: "{rounded.full}"
+    padding: "0 8px"
     height: "20px"
     typography: "{typography.label}"
   card:
@@ -147,150 +209,209 @@ components:
     padding: "0 12px"
     height: "36px"
   header:
-    backgroundColor: "{colors.shell}"
-    textColor: "{colors.shell-ink}"
+    backgroundColor: "{colors.glass}"
+    textColor: "{colors.ink}"
+    height: "56px"
+  tab:
+    textColor: "{colors.ink-2}"
+    rounded: "{rounded.full}"
+    padding: "0 12px"
+    height: "36px"
   tab-active:
-    textColor: "{colors.shell-ink}"
-    typography: "{typography.label}"
+    backgroundColor: "{colors.accent-tint}"
+    textColor: "{colors.accent-ink}"
+  tab-count:
+    backgroundColor: "{colors.signal}"
+    textColor: "{colors.on-signal}"
+    rounded: "{rounded.full}"
+  menu:
+    backgroundColor: "{colors.glass-thick}"
+    textColor: "{colors.ink}"
+    rounded: "{rounded.xl}"
+  segmented:
+    backgroundColor: "{colors.fill}"
+    rounded: "{rounded.full}"
+  segmented-selected:
+    backgroundColor: "{colors.raised}"
+    textColor: "{colors.ink}"
 ---
 
 # Design System: Phean
 
-The tokens above mirror the `@theme` block in `src/app/globals.css`, which is the source of truth. That block resets Tailwind's default palette (`--color-*: initial`), so a class like `text-zinc-500` does not exist here: every colour is one of these names.
+The tokens above mirror the `@theme` block in `src/app/globals.css`, which is the source of truth. That block resets Tailwind's default palette (`--color-*: initial`), so a class like `text-zinc-500` does not exist here: every colour is one of these names. The `dark-` entries are the same tokens in the dark appearance, set in the `prefers-color-scheme: dark` block of the same file, so components never name a dark colour themselves.
 
 ## Overview
 
-**Creative North Star: "The Graphic Timetable"**
+**Creative North Star: "Dusk on the Slope"**
 
-Work runs on a line. Every task is a track that sets out when an agent captures it and runs through four stations (inbox, to do, in progress, done) until it arrives or is dropped, and the red line is now. The interface is set like a railway timetable: a navy station board on top, a cool timetable sheet below, ruled in hairlines, with one signal yellow for where you are and what is new.
+Phean is named for Sisyphus, so the world is his hill at dusk: a violet slope, and the ember boulder the agents keep rolling up it. The ledger itself is quiet. A lavender-white ground holds white cards ruled in hairlines, and the only material that floats is a Liquid Glass bar on top, in Apple's manner: the functional layer of navigation and menus sits on glass above the content and lets the content show through, blurred, as it scrolls beneath.
 
-The density is that of an operations screen, not a marketing page. People check in a few times a day to see what agents did, what is late, and what awaits their decision, so the overview leads with the line and the decisions, and every figure is a tabular numeral with its label. Colour carries meaning only: a hue is a station or a state, never decoration.
+The density is that of an operations screen, not a marketing page. People check in a few times a day to see what agents did, what is late, and what awaits their decision, so the overview leads with the line and the decisions, and every figure is a tabular numeral with its label. Colour carries meaning only: violet is the brand and work in motion, ember is what is new and what needs a person, and each state has one hue on every screen.
+
+The app follows the system's appearance. In dark mode the ground turns to a deep violet night and the glass to smoked violet; the hues lift to keep their contrast. There is no toggle.
 
 **Key Characteristics:**
 
-- A navy station-board header with a tab rail; the page below is a pale sheet of white panels on hairline rules.
-- One accent, signal yellow, used sparingly; four station hues shared by every chart and lane.
+- A sticky Liquid Glass header with the boulder wordmark, a workspace switcher and a capsule tab rail; content scrolls under it and fades at its edge.
+- One brand hue, violet, for primary actions, the selected tab, focus and work in progress; one ember for the boulder, the counts on the rail and the call to action on a dusk band.
+- Capsule controls throughout (buttons, tabs, badges, segmented controls); cards keep a 14px continuous-looking corner.
+- SF Pro on Apple devices, Inter Variable with optical sizing everywhere else; SF Pro Rounded for figures where it exists.
 - State is carried by line form as well as hue: dashed while waiting, solid while moving, a dot on arrival, a slash when dropped.
-- Archivo Variable throughout, narrowed on its width axis for titles and figures.
-- Flat surfaces; the only shadow belongs to things that float (menus and popovers).
+- Light and dark appearances, every text pair at 4.5:1 or better and every line and control at 3:1 or better in both.
 
 ## Colors
 
-A cool, blue-grey sheet under a deep navy board, with one yellow signal and four state hues that mean the same thing on every screen.
+A cool lavender ground under a violet brand, with one ember signal and four state hues that mean the same thing on every screen.
 
 ### Primary
 
-- **Station-board navy** (`shell`): the header, the tab rail, the primary button, the selected window in a segmented control, and the landing hero. `shell-2` is its hover. Text on it is `shell-ink`, and secondary text `shell-muted`.
+- **Slope violet** (`accent`, oklch(50% 0.2 292) · dark oklch(55% 0.19 292)): the primary button, the active tab's capsule (as `accent-tint` with `accent-ink`), the selected workspace's check, the route line on the landing, focus rings (`focus`), and the in-progress station. `accent-2` is its hover. Text on it is `on-accent` (6.5:1 in light, 5.2:1 in dark); violet text on the ground is `accent-ink`.
+- **The hill** (`hill`): the slope in the logo. It is the accent in light and a lighter cut, oklch(63% 0.17 292), in dark and on any dusk band (`dusk-hill`), so the mark holds on a dark ground.
 
 ### Secondary
 
-- **Signal yellow** (`signal`): the active tab's underline, the count chips on the tab rail, the one call to action on a navy surface, the boulder in the logo, the last station on the landing route. `signal-ink` is the text that sits on it, and `signal-tint` the text-selection colour and the accent badge.
+- **Boulder ember** (`signal`, oklch(73% 0.165 50) · dark oklch(76% 0.15 52)): the boulder in the logo, the count chips on the tab rail, the inbox station, the last station on the landing route, and the one call to action on a dusk band. Labels on it are `on-signal`. `signal-shade` is the boulder's shaded side; `signal-ink` is ember text, used only in the accent badge on `signal-tint`.
 
 ### Tertiary
 
-- **Late red** (`late`, `late-ink`, `late-tint`): the now line, late tracks and cards, urgent priority, and destructive buttons.
-- **Waiting amber** (`wait`, `wait-ink`, `wait-tint`): goals awaiting a decision, high priority, read-only access.
-- **Moving blue** (`move`, `move-ink`, `move-tint`): in-progress work, active goals, agent claims, focus rings.
+- **Late crimson** (`late`, `late-ink`, `late-tint`): the now line, late tracks and cards, urgent priority, and destructive buttons.
+- **Honey** (`wait`, `wait-ink`, `wait-tint`): goals awaiting a decision, high priority, read-only access.
+- **Moving** (`move`, `move-ink`, `move-tint`): in-progress work, active goals and agent claims. It is the violet, by reference, so moving work and the brand are one hue.
 - **Arrived green** (`arrive`, `arrive-ink`, `arrive-tint`): done tasks, achieved goals, active agents.
-- **The four stations**: inbox is ochre (`station-inbox`), to do is slate (`station-todo`), in progress is moving blue, and done is arrived green. Thin timetable lines use the darker cuts `line-inbox` and `line-todo`, which keep 3:1 against the sheet.
+- **The four stations**: inbox is ember (`station-inbox`), to do is lavender (`station-todo`), in progress is violet (`station-progress`), and done is green (`station-done`). Thin timetable lines use the darker cuts `line-inbox` and `line-todo`, which keep 3:1 against a card.
 
 ### Neutral
 
-- **Timetable sheet** (`paper`): the page background.
-- **Panel white** (`panel`): cards, inputs, popovers.
-- **Sunken grey** (`sunken`): board lanes, hover fills, the future side of the now line, skeletons.
+- **Lavender ground** (`paper`): the page background, with a faint violet glow at the top left and an ember one at the top right (`glow-violet`, `glow-ember`) for the glass to pick up.
+- **Panel** (`panel`): cards, inputs, the sample timetable.
+- **Fill** (`fill`): secondary buttons, segmented-control wells, hover fills, chart troughs, the future side of the now line, skeletons.
+- **Raised** (`raised`): the selected segment of a segmented control; white in light, a lifted violet-grey in dark.
 - **Hairline** (`rule`) and **Edge** (`edge`): dividers and card borders; `edge` outlines form controls.
 - **Ink** (`ink`), **Ink 2** (`ink-2`), **Muted** (`muted`), **Faint** (`faint`): text from titles down to empty-state icons.
+- **Dusk** (`dusk`, `dusk-2`, `dusk-ink`, `dusk-muted`): the deep violet band behind the landing hero and the sign-in story, and code blocks. The `dusk` utility is a sky that lightens from `dusk` at the top to `dusk-2` at the horizon, with no glow: on a dusk band the ember belongs to the boulder and the one call to action.
+
+### Dark appearance
+
+Every token above is redefined under `prefers-color-scheme: dark`. The ground drops to oklch(16.5% 0.022 292), panels to 21% and fills to 26.5%, all on the violet hue; text inverts to a lavender white; each `-ink` lifts to a light cut of its hue (violet ink to 77%, crimson to 77%, honey to 85%, green to 79%); and each `-tint` becomes a deep wash of its hue around 28% lightness. Glass turns to smoked violet with a light rim. The `theme-color` meta follows: `#f7f5fb` in light, `#0e0d17` in dark.
 
 ### Named Rules
 
-**The One Signal Rule.** Yellow marks where you are and what is new: the active tab, the counts on the rail, and one call to action on navy. It is never a panel fill and never text on the sheet.
+**The Two Appearances Rule.** A colour is a token with a light and a dark value, never a literal in a component. Every text pair holds 4.5:1 and every line and control 3:1 in both appearances; the dark-scheme axe scans in `e2e/quality.spec.ts` guard it.
 
-**The Station Rule.** A station hue means that status everywhere: in the flow bar, the board lane's top rail, the cumulative flow and the timetable. Nothing else borrows those hues.
+**The Prominence Rule.** A view has one or two filled violet actions at most. The forward step repeated on every row of a list (Done on each task) is tinted, and the rest are secondary or ghost.
+
+**The One Ember Rule.** Ember marks what is new and what needs a person: the boulder, the counts on the rail, the inbox, and one call to action on a dusk band. It is never a panel fill and never body text.
+
+**The Station Rule.** A station hue means that status everywhere: in the flow bar, the rail atop each board column, the cumulative flow and the timetable. Nothing else borrows those hues except the violet, which the brand and in-progress share on purpose.
 
 **The Red Line Rule.** Red is the now line and late work, plus urgent priority and destructive actions. If something is red, a person should look at it today.
 
 ## Typography
 
-**Display Font:** Archivo Variable (with ui-sans-serif)
-**Body Font:** Archivo Variable (with ui-sans-serif)
-**Label/Mono Font:** ui-monospace for tokens and digests only
+**Display Font:** SF Pro on Apple devices (`-apple-system`), Inter Variable elsewhere
+**Body Font:** the same
+**Figures:** SF Pro Rounded (`ui-rounded`) on Apple devices, Inter Variable elsewhere
+**Label/Mono Font:** ui-monospace (SF Mono on Apple devices) for tokens, digests and code
 
-**Character:** One grotesque in one variable family, condensed on its width axis for headings (86%), figures and the display (82%), and the wordmark (66%), like the narrow faces on a printed timetable. All numerals are tabular, so columns of figures line up.
+**Character:** Apple's own grotesque where the system has it, and Inter, its closest open cousin, where it does not, with optical sizing on so titles tighten and small text opens up. Only WebKit, which knows Apple's text styles, gets SF Pro: the switch sits behind `@supports (font: -apple-system-body)`, because other engines map `-apple-system` to their own UI face. Figures go rounded on Apple devices, like the numerals in Apple's own dashboards. All numerals are tabular, so columns of figures line up.
 
 ### Hierarchy
 
-- **Display** (800, clamp(2.25rem, 6vw, 4.25rem), 1.02): the landing headline only.
-- **Display panel** (800, 2.5rem, 1.05): the navy panel's statement beside sign-in and sign-up, on large screens.
-- **Headline** (800, 1.75rem, 2.15rem): the page title, one per screen.
-- **Title** (700, 1rem, 1.55rem): card and section titles.
-- **Figure** (700, 1.4375rem, condensed, tabular): stat values and due dates in lead columns.
+- **Display** (700, clamp(2.25rem, 6vw, 4.25rem), 1.04, -0.028em): the landing headline only.
+- **Display panel** (700, 2.5rem, 1.08, -0.028em): the dusk panel's statement beside sign-in and sign-up, on large screens.
+- **Headline** (700, 1.75rem, 2.15rem, -0.016em): the page title, one per screen. The auth, invitation, error and not-found pages use 1.375rem.
+- **Title** (600, 1rem, 1.55rem): card and section titles.
+- **Figure** (700, 1.375rem, rounded, tabular, -0.016em): stat values and due dates in lead columns, through the `figure` utility.
 - **Body** (400, 0.875rem, 1.35rem): running text and table cells; descriptions stay under about 70ch.
 - **Label** (600, 0.75rem, 1.1rem): buttons, field labels, badges, tab names. Sentence case, never uppercase.
 - **Axis** (400, 0.6875rem, 1rem): chart axes, track notes and the Now chip.
 
 ### Named Rules
 
-**The Four Weights Rule.** 400 for running text, 600 for labels, 700 for titles and figures, 800 only for the page title and the display.
+**The Three Weights Rule.** 400 for running text, 600 for labels and titles, 700 for page titles, figures and the display. Nothing heavier.
 
 ## Layout
 
-Workspace screens sit in an 80rem container with 16px gutters on phones and 24px from the small breakpoint. From the large breakpoint (1024px) the overview and goal pages use three columns: the main column spans two (the line, next actions, the goal map) and a rail holds late work, agents and activity. Cards stack 24px apart and pad their content 20px from the edge; card headers are a title, an optional description and one action on the right.
+Workspace screens sit in an 80rem container with 16px gutters on phones and 24px from the small breakpoint. The header is a 56px row (wordmark, switcher, account) with the tab rail below it, and it stays on top as the page scrolls. From the large breakpoint (1024px) the overview and goal pages use three columns: the main column spans two (the line, next actions, the goal map) and a rail holds late work, agents and activity. Cards stack 24px apart and pad their content 20px from the edge; card headers are a title, an optional description and one action on the right.
 
-On phones both columns dissolve into a single stack ordered by what needs a person first: the decision card, late work, the line, next actions, the goal map, agents, activity. Wide tables keep their first column pinned while the figures scroll beside it inside the card. Popovers open as a sheet across the screen. The timetable puts each task's label above its track. The tab rail scrolls sideways and fades at its right edge to say so.
+On phones both columns dissolve into a single stack ordered by what needs a person first: the decision card, late work, the line, next actions, the goal map, agents, activity. Wide tables keep their first column pinned while the figures scroll beside it inside the card. Popovers and the workspace switcher open as a glass sheet across the top of the screen, over the header. The timetable puts each task's label above its track. The tab rail scrolls sideways and fades at its right edge to say so.
 
 ## Elevation & Depth
 
-Flat by default. Depth comes from tonal layering: white panels on the pale sheet, sunken lanes and hover fills, the shaded future past the now line. Borders are hairlines.
+Two layers, as in Apple's Liquid Glass: content and the functional layer above it. The content layer is flat, and its depth is tonal: white panels on the lavender ground, filled wells and hover fills, the shaded future past the now line. The functional layer is glass: translucent, blurred and saturated, with a hairline rim, so it reads as floating over the content rather than as another band of colour.
+
+### Glass Vocabulary
+
+- **Bar** (`glass-bar`: `glass` fill, `backdrop-filter: blur(24px) saturate(1.6)`, an inset hairline at the bottom in `glass-rim`): the sticky header. The fill sits on a `::before` so the header is not a backdrop root and the switcher inside it can blur the page. Below it, a 1rem scroll edge fades the content (`glass-fade` to transparent) instead of a hard line.
+- **Float** (`glass-float`: `glass-thick` fill, `blur(28px) saturate(1.6)`, an inset rim, an inset top sheen in `glass-sheen`, and the float shadow): the workspace switcher, popovers and the phone sheet. Thicker, because these hold text and forms.
+- **Fallbacks**: without `backdrop-filter`, under `prefers-reduced-transparency`, or under `prefers-contrast: more`, glass becomes solid `panel`; under increased contrast the rim becomes `edge`, and the scroll edge is removed.
 
 ### Shadow Vocabulary
 
-- **Pop** (`box-shadow: 0 10px 28px -10px oklch(24% 0.05 266 / 0.35), 0 2px 6px -2px oklch(24% 0.05 266 / 0.18)`): menus, the workspace switcher and popovers, the only things that float over the page.
+- **Float** (`box-shadow: 0 18px 40px -16px oklch(22% 0.06 292 / 0.3), 0 3px 10px -3px oklch(22% 0.06 292 / 0.14)`; dark `0 18px 40px -16px oklch(8% 0.02 292 / 0.6)`): glass menus and popovers, the only things that float, and the cumulative flow's tooltip.
+- **Raised** (`box-shadow: 0 1px 2px oklch(22% 0.04 295 / 0.14), 0 1px 1px -0.5px oklch(22% 0.04 295 / 0.08)`; none in dark): the selected segment of a segmented control.
 
 ### Named Rules
 
-**The Flat Sheet Rule.** Cards, lanes and tables never cast a shadow. If something needs to stand out, give it a state tone, not elevation.
+**The Functional Layer Rule.** Glass is for navigation and controls that float above the content: the header, the switcher, popovers and the phone sheet. Cards, lanes, tables and charts are never glass, and nothing that is content sits on glass.
+
+**The Flat Content Rule.** Cards, task cards and tables never cast a shadow, and a card never sits inside another card. If something needs to stand out, give it a state tone, not elevation.
 
 ## Shapes
 
-Small, firm corners: 2px for chart bars and chips, 3px for badges, 4px for buttons and inputs, 6px for cards, 8px at most. Round shapes are reserved for the line: the hollow dot where a track sets out, the green dot where it arrives, and the boulder. Each board lane is topped with a 4px rail in its station colour, and a dropped track ends in a short slash.
+Controls are capsules: buttons, tabs, badges, count chips, segmented controls and the workspace switcher are fully rounded. Containers are rounded rectangles that grow with their size: 4px for chart bars, chips and the Now flag, 10px for inputs, task cards, menu rows and code blocks, 14px for cards, 16px for menus, popovers and sheets. Round shapes also belong to the line: the hollow dot where a track sets out, the green dot where it arrives, the stations on the goal map, and the boulder. Each board column is headed by a 4px capsule rail in its station colour, and its task cards stand on the ground beneath it rather than in a box; a dropped track ends in a short slash.
 
 ## Components
 
 ### Buttons
 
-- **Shape:** gently squared (4px), 36px tall; small buttons are 32px with a hit area extended to 44px.
-- **Primary:** navy with white text. Hover lightens to `shell-2`, and pressing darkens to ink.
-- **Secondary:** a white panel button with a hairline border, sunken on hover.
-- **Ghost:** text only, for the secondary actions in a row (Release, Drop, Open board) and for every manual entry point (Add manually, Add task, Add sub-goal).
-- **Signal:** yellow with dark text, used once per navy surface; the landing hero's call to action is 44px tall.
-- **Danger:** red text on white with a faint red border, and it always asks for confirmation.
-- **Focus:** a 2px moving-blue outline offset 2px; on navy the ring turns signal yellow.
+- **Shape:** capsules, 36px tall; small buttons are 32px with a hit area extended to 44px.
+- **Primary:** violet with white text, darker violet on hover. One or two per view (see The Prominence Rule).
+- **Tinted:** a violet wash with violet text, for the forward step repeated on each row (Done).
+- **Secondary:** a filled grey capsule, a shade deeper on hover.
+- **Ghost:** text only, for the secondary actions in a row (Release, Drop, Open board), the account's Sign out, and every manual entry point (Add manually, Add task, Add sub-goal).
+- **Danger:** crimson text on a crimson wash, and it always asks for confirmation.
+- **Signal:** ember with dark text, used once per dusk band, as the landing hero's call to action.
+- **Dusk:** quiet text controls on a dusk band, lifting to `dusk-2` on hover.
+- **Focus:** a 2px violet outline offset 2px; on a dusk band the ring turns ember.
 
 **The Agents First Rule.** Agents fill the ledger, so adding a task or goal by hand is always a ghost button, never primary or secondary, and never a form laid open on the page. It sits in the page header or a card header and opens a panel. Connecting an agent is what a new workspace is asked to do first.
 
 ### Chips
 
-- **Style:** badges are 20px tall, 3px corners, a tint of their tone with the tone's ink and a faint inset ring. Every status, priority, role and memory kind renders through its `{ label, tone }` table in `src/lib/domain.ts`.
-- **Counts:** the tab rail's counts are signal-yellow chips with dark numerals.
+- **Style:** badges are 20px capsules, a tint of their tone with the tone's ink. Every status, priority, role and memory kind renders through its `{ label, tone }` table in `src/lib/domain.ts`.
+- **Counts:** the tab rail's counts are ember capsules with dark numerals.
+- **Filters:** the memory kinds are capsules, violet-tinted when selected and filled grey otherwise.
 
 ### Cards / Containers
 
-- **Corner Style:** 6px.
-- **Background:** panel white; the decision card is tinted waiting amber and the late card late red, in both their border and header.
+- **Corner Style:** 14px.
+- **Background:** panel; the decision card is honey and the late card crimson, in both their border and header, and a tinted header's description takes the tone's ink rather than grey.
 - **Shadow Strategy:** none (see Elevation & Depth).
 - **Border:** one hairline.
 - **Internal Padding:** 20px; the header is ruled off from the body.
 
 ### Inputs / Fields
 
-- **Style:** white, a 1px edge border, 4px corners, 36px tall, full width of their wrapper (size the wrapper, not the control).
-- **Focus:** the border and a 2px outline turn moving blue.
-- **Error / Disabled:** errors show inline under the form in late ink; disabled controls go sunken with muted text.
+- **Style:** panel, a 1px edge border, 10px corners, 36px tall, full width of their wrapper (size the wrapper, not the control).
+- **Focus:** the border turns violet and a soft 3px violet halo grows around it, as on Apple's text fields.
+- **Error / Disabled:** errors show inline under the form in late ink; disabled controls go filled with muted text.
+
+### Segmented controls
+
+A grey capsule well with capsule segments; the selected one is raised (white with the raised shadow in light, a lifted violet-grey in dark). Used for the timeline window (14, 30 or 90 days), the MCP client tabs in Connect an agent, and the task or goal choice in manual entry.
 
 ### Navigation
 
-The station-board header is navy: the boulder wordmark, a workspace switcher, the account, and below them the tab rail (Overview, Board, Timeline, Memory, Search, Agents, Members). Tabs are muted until hovered; the active tab is white, semibold, with a 3px signal-yellow underline. Inline text links underline on hover and thicken the underline while pressed (the `link` utility).
+The glass header holds the boulder wordmark, a `/`, the workspace switcher (a capsule that opens a glass menu), and the account with a ghost Sign out. Below them, the tab rail (Overview, Board, Timeline, Memory, Search, Agents, Members) is a row of capsules: muted until hovered, which fills them grey; the active tab is a violet-tinted capsule with semibold violet text. Inline text links underline on hover and thicken the underline while pressed (the `link` utility).
+
+### Menus, popovers and sheets
+
+Glass floats with a 16px corner that grow in from their anchor (220ms, from 97% scale and 4px up). On phones they become a sheet across the top of the screen, 12px from each edge, and scroll inside themselves when taller than the screen.
+
+### Logo
+
+The mark is drawn in `src/components/logo.tsx` from one `MARK` geometry on a 32-unit square: a concave hill rising from the bottom left to the top right edge, and a boulder (a circle of radius 6.4 at 12.65, 19.17) resting on the slope partway up. The boulder is ember, lit from the upper left (`signal`) with a crescent of shade on its downhill side (`signal-shade`). The wordmark sets "Phean" beside it in 700 at title tracking. The favicon (`src/app/icon.svg`) and the Apple touch icon (`src/app/apple-icon.tsx`) put the same mark on a dusk tile, a gradient from `dark-dusk-2` (`#3b296b`) to `icon-tile-bottom` (`#211541`), with the dark-appearance hill and boulder colours and the slope carried past the tile's edges.
 
 ### Flow bar
 
@@ -298,7 +419,7 @@ Open work by station as one stacked bar in flow order, with a legend of swatches
 
 ### Timetable (signature)
 
-Every task is a track on one time axis, grouped under its goal (or flat, on the overview). Inbox and to do are dashed in their station colour, in progress is a solid blue bar, arrival is a green dot, a drop is a slash, a due date is a short ink tick, and a late stretch is shaded red up to the red now line. The Now chip sits on the date baseline and any date label it would cover is left off. Hovering a track dims the others. The window shows the last 14, 30 or 90 days plus a week ahead, and starts with the history when the history is shorter.
+Every task is a track on one time axis, grouped under its goal (or flat, on the overview). Inbox and to do are dashed in their station colour, in progress is a solid violet bar, arrival is a green dot, a drop is a slash, a due date is a short ink tick, and a late stretch is shaded crimson up to the red now line. The Now chip sits on the date baseline and any date label it would cover is left off. Hovering a track dims the others. The window shows the last 14, 30 or 90 days plus a week ahead, and starts with the history when the history is shorter.
 
 ### Cumulative flow
 
@@ -306,26 +427,30 @@ A stacked area of how many tasks stood at each station at the end of each day: d
 
 ### Goal map
 
-The goal tree as a line with stations: a navy ring per active goal, a dashed amber ring while proposed, a filled green dot when achieved, a grey one when abandoned, branches for sub-goals, and a flow bar of each goal's tasks with its percentage done.
+The goal tree as a line with stations: a violet ring per active goal, a dashed honey ring while proposed, a filled green dot when achieved, a grey one when abandoned, branches for sub-goals, and a flow bar of each goal's tasks with its percentage done.
 
 ## Do's and Don'ts
 
 ### Do:
 
-- **Do** use the token names (`bg-panel`, `text-ink-2`, `border-rule`, `bg-station-progress`) and nothing from Tailwind's default palette.
+- **Do** use the token names (`bg-panel`, `text-ink-2`, `border-rule`, `bg-accent`, `text-on-accent`, `bg-station-progress`) and nothing from Tailwind's default palette.
+- **Do** check a new colour pair in both appearances: 4.5:1 for text, 3:1 for lines and controls.
+- **Do** use `glass-bar` or `glass-float` for anything in the functional layer, so the fallbacks for reduced transparency and increased contrast come with it.
 - **Do** give every chart a text equivalent: a `role="img"` name built with `describeCounts`, track notes in words, or a "Show the numbers" table.
-- **Do** use the `link` utility for inline text links so they have hover and pressed states.
+- **Do** use the `link` utility for inline text links so they have hover and pressed states, and the `figure` utility for stat values.
 - **Do** pin the first column of a wide table with `PINNED_CELL` from `src/components/ui/table.ts`, and make its scroller `relative`.
-- **Do** put motion behind `motion-safe:` and keep it brisk: 120ms for colour changes, 220ms for the timetable's dimming.
+- **Do** put motion behind `motion-safe:` and keep it brisk: 120ms for colour changes, 220ms for menus and the timetable's dimming.
 - **Do** route manual task and goal entry through `ManualEntry` (page headers) or a ghost `Popover` (card headers).
 - **Do** add `data-*` hooks (`data-task`, `data-goal`, `data-segment`, `data-end`, `data-now`, `data-tick`) for UI tests instead of selecting by class.
 
 ### Don't:
 
 - **Don't** set small labels in uppercase or letter-spaced; use sentence case at the label size.
-- **Don't** put yellow text on the sheet or use yellow as a panel fill.
+- **Don't** put more than two filled violet buttons in a view, or ember anywhere but the boulder, the counts, the inbox and the dusk band's call to action.
+- **Don't** make a card, board column, table or chart out of glass, or put glass inside a card.
 - **Don't** use red for anything that is not late, now, urgent or destructive.
-- **Don't** add shadows to cards or lanes, or gradients anywhere.
+- **Don't** add shadows to cards, or gradients beyond the dusk band's sky and the ground's two faint top glows.
+- **Don't** use a weight above 700 or a font other than the system face and Inter.
 - **Don't** glue arrows to button text or put an eyebrow line above a heading.
 - **Don't** clamp text over another element; shorten it (task cards cut descriptions at 80 characters) or move it.
 
@@ -335,18 +460,18 @@ The locked system for Hallmark runs: every page shares it.
 
 - Genre: modern-minimal
 - Shape of the first page: app screen
-- Theme: custom (vibe: "station board navy over a timetable sheet"; idea: "work runs on a line, set like a railway timetable")
-- Axes: light/grotesk-sans/chromatic-yellow · posture: committed shell, full palette for the four stations
+- Theme: custom, by request (vibe: "Apple-calm Liquid Glass over a lavender ledger, one ember glow"; idea: "dusk on the slope: a violet hill, and the ember boulder the agents keep rolling up it")
+- Axes: light+dark/neo-grotesk/violet-ember · posture: committed tinted ground under a glass functional layer, full palette for the four stations
 
 ## Controls
 
-- Primary: navy fill · 4px · 36px
-- Secondary: white with a hairline border · same radius and height
+- Primary: violet fill · capsule · 36px
+- Secondary: grey fill · capsule · 36px
 
 ## Motion
 
-- Character: brisk; no reveals; under reduced motion every transition ends at once.
+- Character: brisk and calm; glass menus grow in from their anchor, nothing else reveals; under reduced motion every transition ends at once.
 
 ## Exports
 
-`src/app/globals.css` in this project (the `@theme` block and the `link` and `font-stretch-*` utilities).
+`src/app/globals.css` in this project (the `@theme` block, the dark-appearance block, and the `link`, `figure`, `glass-bar`, `glass-float` and `dusk` utilities); `src/components/logo.tsx` for the mark's geometry; `src/app/icon.svg` and `src/app/apple-icon.tsx` for the icons.
