@@ -1,4 +1,5 @@
 import { Bot, CalendarRange, ListTodo } from "lucide-react";
+import Link from "next/link";
 
 import { ActivityFeed } from "@/components/activity-feed";
 import { AgentWorkload } from "@/components/agent-list";
@@ -94,7 +95,12 @@ export default async function DashboardPage({ params }: PageProps<"/w/[slug]">) 
               <CardHeader
                 tone="wait"
                 title={`${pluralize(summary.awaitingInput, "agent question")} waiting on you`}
-                description="Agents paused for your answer. Resume the conversation where it stopped, or answer here."
+                description="Agents paused for your answer or decision. Resume the conversation where it stopped, or answer here."
+                action={
+                  <Link href={routes.decisions(slug)} className="text-xs font-semibold text-wait-ink link">
+                    All decisions
+                  </Link>
+                }
               />
               <CardBody className="py-1">
                 <OpenQuestions tasks={summary.awaitingInputTasks} slug={slug} canAnswer={canWrite} />
@@ -161,7 +167,7 @@ export default async function DashboardPage({ params }: PageProps<"/w/[slug]">) 
               ) : (
                 <ul>
                   {nextActions.map((task) => (
-                    <TaskRow key={task.id} task={task} slug={slug} canWrite={canWrite} />
+                    <TaskRow key={task.id} task={task} slug={slug} canWrite={canWrite} goals={goals} />
                   ))}
                 </ul>
               )}
@@ -191,7 +197,7 @@ export default async function DashboardPage({ params }: PageProps<"/w/[slug]">) 
               <CardBody className="py-1">
                 <ul>
                   {summary.overdueTasks.map((task) => (
-                    <TaskRow key={task.id} task={task} slug={slug} canWrite={canWrite} lead={<DueLead dueDate={task.dueDate!} late />} />
+                    <TaskRow key={task.id} task={task} slug={slug} canWrite={canWrite} goals={goals} lead={<DueLead dueDate={task.dueDate!} late />} />
                   ))}
                 </ul>
               </CardBody>

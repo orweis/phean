@@ -13,7 +13,9 @@ import {
   assignTasksToGoal,
   captureTasks,
   claimTask,
+  collectAnswers,
   linkSession,
+  listDecisions,
   listTasks,
   requestInput,
   updateTask,
@@ -70,6 +72,15 @@ describe("tenant isolation", () => {
       expect(await listActivity(ctx, {})).not.toContainEqual(expect.objectContaining({ actorName: "Dana" }));
       expect((await getStatusSummary(ctx, {})).openTasks).toBe(0);
     }
+  });
+
+  it("keeps questions, decisions, and answers inside their workspace", async () => {
+    await requestInput(acme.scout.ctx, { taskId: acmeTask.id, kind: "decision", question: "Sign the merger?", options: ["Yes", "No"] });
+    for (const ctx of [globexOwner, globexAgent]) expect(await listDecisions(ctx, {})).toEqual({ open: [], closed: [] });
+    await answerInput(acmeOwner, { taskId: acmeTask.id, answer: "Yes" });
+    expect(await collectAnswers(globexAgent, { taskIds: [acmeTask.id] })).toEqual([]);
+    expect((await listDecisions(globexOwner, {})).closed).toEqual([]);
+    expect((await collectAnswers(acme.scout.ctx, {})).map((answer) => answer.answer)).toEqual(["Yes"]);
   });
 
   it("rejects writes that reference another tenant's records", async () => {

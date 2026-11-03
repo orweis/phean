@@ -162,7 +162,7 @@ export default async function GoalPage({ params }: PageProps<"/w/[slug]/goals/[i
               ) : (
                 <ul>
                   {tasks.map((task) => (
-                    <TaskRow key={task.id} task={task} slug={slug} canWrite={canWrite} showGoal={false} />
+                    <TaskRow key={task.id} task={task} slug={slug} canWrite={canWrite} showGoal={false} goals={goals} />
                   ))}
                 </ul>
               )}

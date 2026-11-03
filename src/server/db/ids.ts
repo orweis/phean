@@ -3,7 +3,7 @@ import { randomBytes } from "node:crypto";
 // Crockford base32, lowercase: unambiguous when read aloud or copied by an agent.
 const ALPHABET = "0123456789abcdefghjkmnpqrstvwxyz";
 
-export type IdPrefix = "g" | "t" | "m" | "ag";
+export type IdPrefix = "g" | "t" | "m" | "ag" | "q";
 
 export function newId(prefix: IdPrefix): string {
   let suffix = "";

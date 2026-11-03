@@ -1,8 +1,8 @@
-import { ArrowUpRight, Bot, History, MessageCircleQuestionMark } from "lucide-react";
+import { ArrowUpRight, Bot, FileText, History, Link2, MessageCircleQuestionMark, MessagesSquare, Paperclip, Scale } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
-import { resumeLabel, webUrl, type AgentSession, type InputRequest } from "@/lib/agent-sessions";
+import { resumeLabel, webUrl, type AgentSession, type InputRequest, type LinkKind, type TaskLink } from "@/lib/agent-sessions";
 import { cx } from "@/lib/cx";
 import { timeAgo, truncate } from "@/lib/format";
 import { routes } from "@/lib/routes";
@@ -90,14 +90,60 @@ export function ResumePopover({ sessions }: { sessions: readonly AgentSession[] 
 }
 
 /** Marks a task an agent is waiting on, linking to where its question can be answered. */
-export function WaitingBadge({ slug }: { slug: string }) {
+export function WaitingBadge({ slug, kind = "question" }: { slug: string; kind?: InputRequest["kind"] }) {
   return (
-    <Link href={routes.questions(slug)} className="rounded-full">
+    <Link href={routes.decisions(slug)} className="rounded-full">
       <Badge tone="warning">
-        <MessageCircleQuestionMark aria-hidden />
-        Waiting on you
+        {kind === "decision" ? <Scale aria-hidden /> : <MessageCircleQuestionMark aria-hidden />}
+        {kind === "decision" ? "Decision for you" : "Waiting on you"}
       </Badge>
     </Link>
+  );
+}
+
+const LINK_ICONS: Record<LinkKind, ReactNode> = {
+  conversation: <MessagesSquare aria-hidden />,
+  source: <Paperclip aria-hidden />,
+  doc: <FileText aria-hidden />,
+  other: <Link2 aria-hidden />,
+};
+
+/** A link's own title, or where it goes when the agent gave none. */
+function linkLabel(link: TaskLink): string {
+  if (link.title) return link.title;
+  try {
+    const url = new URL(link.url);
+    return url.hostname || url.protocol.replace(/:$/, "");
+  } catch {
+    return link.url;
+  }
+}
+
+/**
+ * References an agent left: back to the conversation, to the source message, to docs. Each opens
+ * outside Phean; the kind sets its icon so the way back to the conversation stands out.
+ */
+export function TaskLinks({ links, className }: { links: readonly TaskLink[]; className?: string }) {
+  if (links.length === 0) return null;
+  return (
+    <ul aria-label="Links" className={cx("flex flex-wrap gap-1.5", className)}>
+      {links.map((link) => (
+        <li key={`${link.kind}:${link.url}`} className="min-w-0 max-w-full">
+          <OutsideLink
+            href={link.url}
+            className={cx(
+              "inline-flex max-w-full items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold hover:border-ink-2 [&_svg]:size-3 [&_svg]:shrink-0",
+              link.kind === "conversation" ? "border-accent/40 text-accent-ink" : "border-rule text-ink-2",
+            )}
+          >
+            {LINK_ICONS[link.kind]}
+            <span className="truncate" title={link.url}>
+              {linkLabel(link)}
+            </span>
+          </OutsideLink>
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -109,7 +155,8 @@ export function QuestionNote({ request, className }: { request: InputRequest; cl
   return (
     <div className={cx("rounded-md bg-wait-tint px-2.5 py-1.5 text-xs text-wait-ink", className)}>
       <p className="line-clamp-3">
-        <span className="font-semibold">{request.agentName} asks:</span> {truncate(request.question, 90)}
+        <span className="font-semibold">{request.agentName} {request.kind === "decision" ? "needs a decision:" : "asks:"}</span>{" "}
+        {truncate(request.question, 90)}
       </p>
     </div>
   );

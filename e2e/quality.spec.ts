@@ -7,6 +7,7 @@ import { card, entryKind, popover } from "./support/locators";
 const PAGES = [
   "/workspaces",
   "/w/globex",
+  "/w/globex/decisions",
   "/w/globex/board",
   "/w/globex/timeline",
   "/w/globex/timeline?days=90",
@@ -21,8 +22,10 @@ const TIMETABLES = ["/w/globex", "/w/globex/timeline", "/w/globex/timeline?days=
 
 /** Panels that only render their content once opened, by page and trigger. */
 const PANELS = [
-  ["/w/globex", "Answer here"],
+  ["/w/globex", "Other answer"],
   ["/w/globex/board", "Resume"],
+  ["/w/globex/board", "Edit"],
+  ["/w/globex/decisions", "Other answer"],
 ] as const;
 
 async function openPanel(page: Page, path: string, trigger: string) {

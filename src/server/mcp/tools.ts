@@ -16,6 +16,7 @@ import {
   assignTasksToGoal,
   captureTasks,
   claimTask,
+  collectAnswers,
   completeTask,
   linkSession,
   listTasks,
@@ -24,6 +25,7 @@ import {
   resolveInput,
   suggestNextActions,
   updateTask,
+  waitForAnswers,
 } from "../domain/tasks";
 import { planningScaffold } from "./guidance";
 import { defineTool, type PheanTool, serviceTool, type ToolContext } from "./tool";
@@ -114,7 +116,7 @@ export const TOOLS: readonly PheanTool[] = [
     name: "capture_tasks",
     title: "Capture tasks",
     description:
-      "Record up to 100 tasks found in your sources in one call. Set source and a stable sourceRef (message link, thread or event id): items any agent already captured are skipped and reported in 'duplicates'. New tasks land in the inbox unless status is 'todo'.",
+      "Record up to 100 tasks found in your sources in one call. Set source and a stable sourceRef (message link, thread or event id): items any agent already captured are skipped and reported in 'duplicates'. Add links people can click: the source message (kind 'source') and the conversation where the work came up (kind 'conversation'). New tasks land in the inbox unless status is 'todo'.",
     service: captureTasks,
   }),
   serviceTool({
@@ -128,7 +130,7 @@ export const TOOLS: readonly PheanTool[] = [
   serviceTool({
     name: "update_task",
     title: "Update task",
-    description: "Change a task's title, description, status, priority, due date (null clears), goal (null unfiles), or tags. Fails if another agent has claimed it.",
+    description: "Change a task's title, description, status, priority, due date (null clears), goal (null unfiles), tags, or links (replaces them all). Fails if another agent has claimed it.",
     service: updateTask,
     key: "task",
   }),
@@ -159,13 +161,29 @@ export const TOOLS: readonly PheanTool[] = [
     name: "request_input",
     title: "Request input",
     description:
-      "Ask the human a question you need answered to go on with a task. Phean shows it as waiting on them, with a link back to this session; include 'session' with a url whenever you have one. Ends when you call resolve_input, when the task is completed, released, or moved out of progress, or when the human answers in Phean (their answer is appended to the task and appears in get_activity as task.input_answered).",
+      "Ask the human something you need to go on with a task. kind 'decision' when they must choose or sign off (give 2-5 options), 'question' when you need information. Put the facts, trade-offs and your recommendation in context, and add links: back to this conversation (kind 'conversation') and to the sources it is about (kind 'source'). Include 'session' with a url whenever you have one. It shows on the human's Decisions page until they answer. Get the answer with wait_for_answers (blocks until they answer) or collect_answers (later). One open request per task; asking again replaces yours.",
     input: AskInput,
     run: async (ctx, input) => ({
       task: await requestInput(ctx, input),
-      questionsUrl: ctx.url(routes.questions(ctx.tenant.slug)),
-      note: "Share questionsUrl if the human is not in this conversation. Check get_activity or the task's description for the answer.",
+      decisionsUrl: ctx.url(routes.decisions(ctx.tenant.slug)),
+      note: "Share decisionsUrl if the human is not in this conversation. Then call wait_for_answers to wait for the answer, or collect_answers later.",
     }),
+  }),
+  defineTool({
+    name: "wait_for_answers",
+    title: "Wait for answers",
+    description:
+      "Block until the human answers one of your questions or decisions in Phean (only on taskIds, if given), then return the answers and mark them collected. Returns timedOut=true with stillOpen when nobody answered in time: tell the human what you are waiting on, then wait again or do other work. Answers are delivered once, here or through collect_answers.",
+    input: waitForAnswers.schema,
+    run: async (ctx, input) => waitForAnswers(ctx, input),
+  }),
+  serviceTool({
+    name: "collect_answers",
+    title: "Collect answers",
+    description:
+      "Answers the human gave to your questions and decisions since you last collected, oldest first, each delivered once. outcome 'answered' carries their answer (and chosenOption when it matches one of your options); 'answered_elsewhere' means they answered you in your conversation. Call it at the start of every session and before acting on work that had an open question.",
+    service: collectAnswers,
+    key: "answers",
   }),
   serviceTool({
     name: "resolve_input",

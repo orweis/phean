@@ -22,14 +22,17 @@ import {
   assignTasksToGoal,
   captureTasks,
   claimTask,
+  collectAnswers,
   completeTask,
   linkSession,
+  listDecisions,
   listTasks,
   releaseTask,
   requestInput,
   resolveInput,
   suggestNextActions,
   updateTask,
+  waitForAnswers,
 } from "@/server/domain/tasks";
 
 import { createTestDb, seedTenant, seedWorkspace, type TestDb, type Workspace } from "./support/db";
@@ -363,6 +366,97 @@ describe("agent sessions and questions", () => {
     await expect(ask()).rejects.toMatchObject({ code: "conflict" });
     expect((await getStatusSummary(human, {})).awaitingInput).toBe(0);
     expect(await actionsOf(human, task.id)).toEqual(expect.arrayContaining(["task.input_requested", "task.input_resolved"]));
+  });
+
+  it("asks for decisions with options and links, and delivers each answer to the asking agent once", async () => {
+    const task = await todo("Settle the Globex invoice dispute");
+    const asked = await requestInput(scout, {
+      taskId: task.id,
+      kind: "decision",
+      question: "Offer 5% this week, or escalate to their CFO?",
+      context: "I recommend 5%.",
+      options: ["Offer 5%", "Escalate", "Offer 5%"],
+      links: [
+        { url: "https://claude.ai/chat/q1", title: "This chat", kind: "conversation" },
+        { url: "HTTPS://Mail.Example.com/t/4471" },
+      ],
+    });
+    expect(asked.inputRequest).toMatchObject({ kind: "decision", context: "I recommend 5%.", options: ["Offer 5%", "Escalate"] });
+    expect(asked.inputRequest!.id).toMatch(/^q_/);
+    expect(asked.inputRequest!.links).toEqual([
+      { url: "https://claude.ai/chat/q1", title: "This chat", kind: "conversation" },
+      { url: "https://mail.example.com/t/4471", title: "", kind: "source" },
+    ]);
+    await expect(requestInput(scout, { taskId: task.id, question: "?", links: [{ url: "javascript:alert(1)" }] })).rejects.toMatchObject({ code: "invalid" });
+
+    expect(await collectAnswers(scout, {})).toEqual([]);
+    await expect(collectAnswers(human, {})).rejects.toMatchObject({ code: "invalid" });
+
+    await answerInput(human, { taskId: task.id, answer: "escalate" });
+    expect(await collectAnswers(closer, {})).toEqual([]);
+    const [answer, ...rest] = await collectAnswers(scout, {});
+    expect(rest).toEqual([]);
+    expect(answer).toMatchObject({
+      taskId: task.id,
+      requestId: asked.inputRequest!.id,
+      kind: "decision",
+      outcome: "answered",
+      answer: "escalate",
+      chosenOption: "Escalate",
+      answeredByName: "Dana",
+    });
+    expect(await collectAnswers(scout, {})).toEqual([]);
+
+    const decisions = await listDecisions(human, {});
+    expect(decisions.open).toEqual([]);
+    expect(decisions.closed).toEqual([expect.objectContaining({ task: expect.objectContaining({ id: task.id }), request: expect.objectContaining({ answer: "escalate", collected: true }) })]);
+  });
+
+  it("keeps every closed question on the task, and only delivers what a person decided", async () => {
+    const task = await todo("Book the offsite venue");
+    const ask = (question: string) => requestInput(scout, { taskId: task.id, question });
+    await ask("Lisbon or Porto?");
+    await ask("Porto: May or June?");
+    await resolveInput(scout, { taskId: task.id });
+    await ask("Which hotel?");
+    await answerInput(human, { taskId: task.id });
+    await claimTask(scout, { taskId: task.id });
+    await ask("Budget per night?");
+    const released = await releaseTask(scout, { taskId: task.id });
+    expect(released.inputAnswers.map((entry) => [entry.question, entry.outcome, entry.collected])).toEqual([
+      ["Budget per night?", "closed", true],
+      ["Which hotel?", "answered_elsewhere", false],
+      ["Porto: May or June?", "resolved", true],
+      ["Lisbon or Porto?", "resolved", true],
+    ]);
+    expect((await collectAnswers(scout, { taskIds: [task.id] })).map((entry) => entry.outcome)).toEqual(["answered_elsewhere"]);
+    expect((await listDecisions(human, {})).closed).toHaveLength(4);
+  });
+
+  it("wakes a waiting agent as soon as a person answers", async () => {
+    const task = await todo("Pick the auditor");
+    await requestInput(scout, { taskId: task.id, kind: "decision", question: "Rivera or Okafor?", options: ["Rivera", "Okafor"] });
+
+    const idle = await waitForAnswers(scout, { timeoutSeconds: 1 });
+    expect(idle).toEqual({ answers: [], timedOut: true, stillOpen: 1 });
+
+    const started = Date.now();
+    const waiting = waitForAnswers(scout, { taskIds: [task.id], timeoutSeconds: 30 });
+    setTimeout(() => void answerInput(human, { taskId: task.id, answer: "Okafor" }), 200);
+    const woken = await waiting;
+    expect(Date.now() - started).toBeLessThan(5000);
+    expect(woken).toMatchObject({ timedOut: false, stillOpen: 0, answers: [expect.objectContaining({ answer: "Okafor", chosenOption: "Okafor" })] });
+    await expect(waitForAnswers(human, { timeoutSeconds: 1 })).rejects.toMatchObject({ code: "invalid" });
+  });
+
+  it("stores and replaces a task's links", async () => {
+    const { created } = await captureTasks(scout, {
+      tasks: [{ title: "Reply to Dana", links: [{ url: "https://slack.com/archives/C1/p2", title: "Slack thread" }] }],
+    });
+    expect(created[0]!.links).toEqual([{ url: "https://slack.com/archives/C1/p2", title: "Slack thread", kind: "source" }]);
+    const updated = await updateTask(human, { taskId: created[0]!.id, links: [{ url: "slack://channel?id=C1", kind: "conversation" }] });
+    expect(updated.links).toEqual([{ url: "slack://channel?id=C1", title: "", kind: "conversation" }]);
+    await expect(updateTask(human, { taskId: created[0]!.id, links: [{ url: "data:text/html,hi" }] })).rejects.toMatchObject({ code: "invalid" });
   });
 
   it("keeps agents off questions and sessions on work another agent holds", async () => {

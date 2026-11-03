@@ -1,6 +1,6 @@
 "use client";
 
-import { Bot, Brain, CalendarRange, KanbanSquare, LayoutDashboard, Search, Users } from "lucide-react";
+import { Bot, Brain, CalendarRange, KanbanSquare, LayoutDashboard, Scale, Search, Users } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -11,11 +11,14 @@ import { routes } from "@/lib/routes";
 export interface NavCounts {
   /** Goals to decide and agent questions to answer. */
   waitingOnYou: number;
+  /** Agent questions and decisions waiting on a person. */
+  decisions: number;
   inbox: number;
 }
 
 const TABS = [
   { label: "Overview", icon: LayoutDashboard, href: routes.workspace, exact: true, count: "waitingOnYou" },
+  { label: "Decisions", icon: Scale, href: routes.decisions, count: "decisions" },
   { label: "Board", icon: KanbanSquare, href: routes.board, count: "inbox" },
   { label: "Timeline", icon: CalendarRange, href: routes.timeline },
   { label: "Memory", icon: Brain, href: routes.memory },
@@ -26,6 +29,7 @@ const TABS = [
 
 const COUNT_LABELS: Record<keyof NavCounts, string> = {
   waitingOnYou: "waiting on you",
+  decisions: "waiting for your answer",
   inbox: "in the inbox",
 };
 

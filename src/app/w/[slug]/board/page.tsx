@@ -25,7 +25,7 @@ export default async function BoardPage({ params, searchParams }: PageProps<"/w/
     <>
       <PageHeader
         title="Board"
-        description="Every task by status. Done shows the 20 most recently completed."
+        description={canWrite ? "Every task by status. Drag a card to another lane to move it, or open Edit to change it. Done shows the 20 most recently completed." : "Every task by status. Done shows the 20 most recently completed."}
         actions={
           <>
             <ManualEntry slug={slug} goals={goals} goalId={goalId} canAddTask={canWrite} canAddGoal={can(ctx.actor, "goal:write")} />
@@ -35,7 +35,7 @@ export default async function BoardPage({ params, searchParams }: PageProps<"/w/
           </>
         }
       />
-      <KanbanBoard board={board} slug={slug} canWrite={canWrite} />
+      <KanbanBoard board={board} slug={slug} canWrite={canWrite} goals={goals} />
     </>
   );
 }

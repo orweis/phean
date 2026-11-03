@@ -64,6 +64,8 @@ function sampleGroups(now: Date): TimetableGroup[] {
           completedAt: last.status === "done" ? last.at : null,
           agentSessions: [],
           inputRequest: null,
+          inputAnswers: [],
+          links: [],
           createdByType: "agent",
           createdById: "sample",
           createdByName: "Sample",

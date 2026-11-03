@@ -14,7 +14,7 @@ import {
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 
-import type { AgentSession, InputRequest } from "../../../lib/agent-sessions";
+import type { AgentSession, InputAnswer, InputRequest, TaskLink } from "../../../lib/agent-sessions";
 import {
   ACTOR_TYPES,
   GOAL_STATUSES,
@@ -139,6 +139,16 @@ export const tasks = pgTable(
       .default(sql`'[]'::jsonb`),
     /** The question an agent is waiting on a person to answer, if any. */
     inputRequest: jsonb("input_request").$type<InputRequest>(),
+    /** Closed questions and decisions, newest first, with each person's answer. */
+    inputAnswers: jsonb("input_answers")
+      .$type<InputAnswer[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    /** References agents left for people: the conversation, the source message, docs. */
+    links: jsonb("links")
+      .$type<TaskLink[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
     ...createdBy,
     ...timestamps,
     search: searchVector(titleDescriptionSearch),

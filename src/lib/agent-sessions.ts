@@ -30,14 +30,65 @@ export interface AgentSession {
   linkedAt: string;
 }
 
+/** What a reference points at, so people can tell a link back to the conversation from a source. */
+export const LINK_KINDS = ["conversation", "source", "doc", "other"] as const;
+export type LinkKind = (typeof LINK_KINDS)[number];
+
+/** Links kept per task, and per question. */
+export const MAX_LINKS = 10;
+
+/** A reference an agent leaves for people to click: the conversation, the email, the doc. */
+export interface TaskLink {
+  url: string;
+  title: string;
+  kind: LinkKind;
+}
+
+/** "question" asks for information; "decision" asks a person to choose, usually between options. */
+export const REQUEST_KINDS = ["question", "decision"] as const;
+export type RequestKind = (typeof REQUEST_KINDS)[number];
+
 /** A question an agent needs a person to answer before it can go on. */
 export interface InputRequest {
+  /** Stable id for the request; older rows were backfilled by migration 0003. */
+  id: string;
+  kind: RequestKind;
   question: string;
+  /** What the agent knows, the trade-offs, and its recommendation. */
+  context: string;
+  /** Answers to pick from; a person may still write their own. */
+  options: string[];
+  links: TaskLink[];
   agentId: string;
   agentName: string;
   /** ISO timestamp. */
   askedAt: string;
 }
+
+/**
+ * How a request ended: a person answered in Phean, or said it was answered elsewhere; the agent
+ * resolved it itself; or the task moved on (completed, released, out of progress) and closed it.
+ */
+export const REQUEST_OUTCOMES = ["answered", "answered_elsewhere", "resolved", "closed"] as const;
+export type RequestOutcome = (typeof REQUEST_OUTCOMES)[number];
+
+/** A closed request, kept on the task so people see what they decided and agents collect it once. */
+export interface InputAnswer extends InputRequest {
+  outcome: RequestOutcome;
+  /** The person's answer; empty unless the outcome is "answered". */
+  answer: string;
+  answeredByName: string | null;
+  /** ISO timestamp the request closed. */
+  closedAt: string;
+  /** Whether the asking agent has collected it. Only a person's answer waits to be collected. */
+  collected: boolean;
+}
+
+/** Closed requests kept per task, newest first. */
+export const MAX_ANSWERS = 20;
+
+/** Outcomes a person produced, which the asking agent must learn about. */
+export const DELIVERED_OUTCOMES: readonly RequestOutcome[] = ["answered", "answered_elsewhere"];
 
 function parseUrl(value: string): URL | null {
   try {
@@ -78,6 +129,12 @@ export function resumeLabel(session: Pick<AgentSession, "app">): string {
 }
 
 /** The session of the agent that asked, which is where its question is best answered. */
-export function sessionOfAsker(sessions: readonly AgentSession[], request: InputRequest): AgentSession | undefined {
+export function sessionOfAsker(sessions: readonly AgentSession[], request: Pick<InputRequest, "agentId">): AgentSession | undefined {
   return sessions.find((session) => session.agentId === request.agentId);
+}
+
+/** Whether `answer` picks one of the request's options, compared the way people type. */
+export function chosenOption(request: Pick<InputRequest, "options">, answer: string): string | null {
+  const wanted = answer.trim().toLowerCase();
+  return request.options.find((option) => option.trim().toLowerCase() === wanted) ?? null;
 }
