@@ -3,7 +3,6 @@ import Link from "next/link";
 import { Suspense } from "react";
 
 import { CumulativeFlow } from "@/components/charts/cumulative-flow";
-import { FlowLegend } from "@/components/charts/flow-bar";
 import { groupByGoal, Timetable, TimetableLegend } from "@/components/charts/timetable";
 import { GoalFilter } from "@/components/goal-filter";
 import { PageHeader } from "@/components/page-header";
@@ -12,7 +11,15 @@ import { isOpenTaskStatus } from "@/lib/domain";
 import { cx } from "@/lib/cx";
 import { isPastDue, pluralize } from "@/lib/format";
 import { queryParam, routes } from "@/lib/routes";
-import { cumulativeFlow, parseTimelineDays, TIMELINE_WINDOWS, type Journey, type TimelineDays, type TimeWindow } from "@/lib/timeline";
+import {
+  cumulativeFlow,
+  parseTimelineDays,
+  TIMELINE_WINDOWS,
+  windowSpan,
+  type Journey,
+  type TimelineDays,
+  type TimeWindow,
+} from "@/lib/timeline";
 import { requireWorkspace } from "@/server/auth/session";
 import { listGoals } from "@/server/domain/goals";
 import { getJourneys } from "@/server/domain/overview";
@@ -64,7 +71,7 @@ export default async function TimelinePage({ params, searchParams }: PageProps<"
     <>
       <PageHeader
         title="Timeline"
-        description={`Where every task stood each day for the last ${days} days. ${windowSummary(journeys, window)}`}
+        description={`Where every task stood each day ${windowSpan(window, days)}. ${windowSummary(journeys, window)}`}
         actions={
           <>
             <WindowSwitch slug={slug} goalId={goalId} days={days} />
@@ -79,7 +86,6 @@ export default async function TimelinePage({ params, searchParams }: PageProps<"
         <CardHeader title="How the work moved" description="Tasks at each status at the end of each day. A widening band is work piling up." />
         <CardBody>
           <CumulativeFlow flow={cumulativeFlow(journeys, window)} />
-          <FlowLegend className="mt-4" />
         </CardBody>
       </Card>
 

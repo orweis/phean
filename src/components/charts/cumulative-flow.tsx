@@ -1,12 +1,18 @@
+import { ChartArea } from "lucide-react";
+
 import { cx } from "@/lib/cx";
 import { formatDay } from "@/lib/format";
 import type { FlowCounts, Station } from "@/lib/timeline";
 
+import { EmptyState } from "../ui/stat";
+import { FlowLegend } from "./flow-bar";
 import { describeCounts, STATION_STYLE } from "./stations";
 
 /** Bottom to top: finished work is the floor the open stations ride on. */
 const LAYERS: readonly Station[] = ["done", "in_progress", "todo", "inbox"];
 const LEGEND_ORDER: readonly Station[] = [...LAYERS].reverse();
+/** Days with tasks on the line before the flow is drawn; fewer show no trend. */
+const MIN_HISTORY_DAYS = 3;
 
 interface FlowPoint {
   day: Date;
@@ -25,7 +31,14 @@ const below = (counts: FlowCounts, layer: number) => LAYERS.slice(0, layer).redu
  * band means work is piling up there; a rising green floor means work is arriving.
  */
 export function CumulativeFlow({ flow, className }: { flow: readonly FlowPoint[]; className?: string }) {
-  if (flow.length === 0) return null;
+  const started = flow.findIndex((point) => below(point.counts, LAYERS.length) > 0);
+  if (started === -1 || flow.length - started < MIN_HISTORY_DAYS) {
+    return (
+      <EmptyState icon={<ChartArea />} title="The flow fills in after a few days">
+        It draws how many tasks stood at each status at the end of every day, so it needs {MIN_HISTORY_DAYS} days of work to show a trend.
+      </EmptyState>
+    );
+  }
   const points = flow.length === 1 ? [flow[0]!, flow[0]!] : flow;
   const max = niceCeiling(Math.max(1, ...points.map((point) => below(point.counts, LAYERS.length))));
   const x = (index: number) => (index / (points.length - 1)) * 100;
@@ -71,7 +84,7 @@ export function CumulativeFlow({ flow, className }: { flow: readonly FlowPoint[]
               />
               <span
                 className={cx(
-                  "pointer-events-none invisible absolute top-2 z-10 w-max rounded-md border border-rule bg-panel px-2.5 py-1.5 text-xs shadow-pop group-hover/day:visible",
+                  "pointer-events-none absolute top-2 z-10 hidden w-max rounded-md border border-rule bg-panel px-2.5 py-1.5 text-xs shadow-pop group-hover/day:block",
                   index < flow.length / 2 ? "left-1/2" : "right-1/2",
                 )}
               >
@@ -95,29 +108,45 @@ export function CumulativeFlow({ flow, className }: { flow: readonly FlowPoint[]
         <span>Today</span>
       </div>
 
-      <table className="sr-only">
-        <caption>Tasks at each status at the end of each day</caption>
-        <thead>
-          <tr>
-            <th scope="col">Day</th>
-            {LEGEND_ORDER.map((station) => (
-              <th key={station} scope="col">
-                {STATION_STYLE[station].label}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {flow.map((point) => (
-            <tr key={point.day.toISOString()}>
-              <th scope="row">{formatDay(point.day)}</th>
-              {LEGEND_ORDER.map((station) => (
-                <td key={station}>{point.counts[station]}</td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <div className="mt-4 flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
+        <FlowLegend stations={LEGEND_ORDER} />
+        <details className="text-xs open:basis-full">
+          <summary className="cursor-pointer list-none font-semibold text-ink-2 link hover:text-ink [&::-webkit-details-marker]:hidden">
+            Show the numbers
+          </summary>
+          <div className="relative mt-2 overflow-x-auto">
+            <table className="w-full">
+              <caption className="sr-only">Tasks at each status at the end of each day</caption>
+              <thead>
+                <tr className="border-b border-rule text-muted">
+                  <th scope="col" className="py-1.5 pr-3 text-left font-semibold">
+                    Day
+                  </th>
+                  {LEGEND_ORDER.map((station) => (
+                    <th key={station} scope="col" className="px-3 py-1.5 text-right font-semibold whitespace-nowrap">
+                      {STATION_STYLE[station].label}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-rule">
+                {flow.map((point) => (
+                  <tr key={point.day.toISOString()}>
+                    <th scope="row" className="py-1.5 pr-3 text-left font-semibold whitespace-nowrap text-ink">
+                      {formatDay(point.day)}
+                    </th>
+                    {LEGEND_ORDER.map((station) => (
+                      <td key={station} className={cx("px-3 py-1.5 text-right", point.counts[station] ? "text-ink" : "text-muted")}>
+                        {point.counts[station]}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </details>
+      </div>
       <figcaption className="sr-only">
         From {formatDay(first.day)} to today. Now: {describeCounts(last.counts, LEGEND_ORDER)}.
       </figcaption>

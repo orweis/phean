@@ -2,7 +2,7 @@ import { CalendarRange } from "lucide-react";
 import Link from "next/link";
 import type { CSSProperties, ReactNode } from "react";
 
-import { TASK_STATUS_META } from "@/lib/domain";
+import { isOpenTaskStatus, PRIORITIES, TASK_STATUS_META } from "@/lib/domain";
 import { cx } from "@/lib/cx";
 import { formatDay, formatDueDate, pluralize } from "@/lib/format";
 import { routes } from "@/lib/routes";
@@ -88,6 +88,9 @@ function Track({ journey, window }: { journey: Journey<TaskView>; window: TimeWi
   );
 }
 
+/** On phones a label sits above its track, so it is lifted over the now and day lines. */
+const ROW_LABEL = "min-w-0 max-sm:relative max-sm:z-10 max-sm:bg-panel";
+
 function TrackRow({ journey, window }: { journey: Journey<TaskView>; window: TimeWindow }) {
   const { task } = journey;
   const note = dueNote(task, window.now);
@@ -100,8 +103,8 @@ function TrackRow({ journey, window }: { journey: Journey<TaskView>; window: Tim
         "group-has-[li:hover]/tt:opacity-45 hover:opacity-100! motion-safe:transition-opacity motion-safe:duration-(--dur-short)",
       )}
     >
-      <div className="min-w-0">
-        <p className={cx("truncate text-sm font-medium", dropped ? "text-muted line-through" : "text-ink")} title={task.title}>
+      <div className={ROW_LABEL}>
+        <p className={cx("truncate text-sm", dropped ? "text-muted line-through" : "text-ink")} title={task.title}>
           {task.title}
         </p>
         <p className="flex flex-wrap gap-x-2 text-2xs text-muted">
@@ -121,21 +124,45 @@ interface Tick {
   week: boolean;
 }
 
-/** Day lines when a day is wide enough to see, week lines otherwise; Mondays are labelled. */
-function ticksOf(window: TimeWindow): Tick[] {
+/** Share of the axis a date label or the Now chip covers on the narrowest track, a phone's. */
+const LABEL_SPAN = 0.14;
+
+/**
+ * Day lines when a day is wide enough to see, week lines otherwise. Mondays are labelled, or
+ * every day in a window under a week; a label the Now chip would cover is left off.
+ */
+function ticksOf(window: TimeWindow, now: number): Tick[] {
   const dense = window.days.length > 40;
+  const daily = window.days.length <= 7;
   return window.days.flatMap((day): Tick[] => {
     const monday = day.getUTCDay() === 1;
     if (dense && !monday) return [];
-    return [{ at: fractionOf(window, day), week: monday, label: monday ? formatDay(day) : undefined }];
+    const at = fractionOf(window, day);
+    const labelled = (daily || monday) && Math.abs(at - now) >= LABEL_SPAN;
+    return [{ at, week: monday, label: labelled ? formatDay(day) : undefined }];
   });
 }
 
 export interface TimetableGroup {
   key: string;
-  title: string;
+  /** Untitled groups draw their tracks without a heading, as one flat list. */
+  title?: string;
   href?: string;
   journeys: Journey<TaskView>[];
+}
+
+/**
+ * The `limit` most pressing open tracks: late first, then by priority, due date and age.
+ * They keep the order they set out in, so the timetable still reads as a timetable.
+ */
+export function mostPressing(journeys: readonly Journey<TaskView>[], limit: number, now: Date): Journey<TaskView>[] {
+  const rank = ({ task }: Journey<TaskView>) => [isLate(task, now) ? 0 : 1, PRIORITIES.indexOf(task.priority), task.dueDate ?? "9999-12-31"] as const;
+  const open = journeys.map((journey, order) => ({ journey, order, rank: rank(journey) })).filter(({ journey }) => isOpenTaskStatus(journey.task.status));
+  return open
+    .sort((a, b) => a.rank[0] - b.rank[0] || a.rank[1] - b.rank[1] || a.rank[2].localeCompare(b.rank[2]) || a.order - b.order)
+    .slice(0, limit)
+    .sort((a, b) => a.order - b.order)
+    .map(({ journey }) => journey);
 }
 
 /** Groups journeys under their goals in goal-tree order; unfiled tasks come last. */
@@ -167,8 +194,8 @@ export function Timetable({ window, groups, empty }: TimetableProps) {
       )
     );
   }
-  const ticks = ticksOf(window);
   const now = fractionOf(window, window.now);
+  const ticks = ticksOf(window, now);
   const dense = window.days.length > 40;
 
   return (
@@ -181,13 +208,14 @@ export function Timetable({ window, groups, empty }: TimetableProps) {
       </div>
 
       <div aria-hidden className="relative grid h-7 grid-cols-1 gap-x-4 sm:grid-cols-[var(--label)_minmax(0,1fr)]">
-        <span className="hidden self-end pb-1 text-2xs text-muted sm:block">Task</span>
+        <span className="hidden sm:block" />
         <div className="relative">
           {ticks
             .filter((tick) => tick.label)
             .map((tick, index) => (
               <span
                 key={tick.at}
+                data-tick
                 className={cx("absolute bottom-1 pl-1 text-2xs whitespace-nowrap text-muted", dense && index % 2 === 1 && "max-sm:hidden")}
                 style={at(tick.at)}
               >
@@ -197,29 +225,37 @@ export function Timetable({ window, groups, empty }: TimetableProps) {
         </div>
       </div>
 
-      {groups.map((group) => (
-        <section key={group.key} aria-label={group.title} className="relative">
-          <h3 className="relative flex items-baseline gap-2 border-t border-rule bg-panel py-1.5 text-xs font-bold text-ink-2">
-            {group.href ? (
-              <Link href={group.href} className="truncate hover:text-ink hover:underline">
-                {group.title}
-              </Link>
-            ) : (
-              <span className="truncate">{group.title}</span>
-            )}
-            <span className="shrink-0 font-normal text-muted">{pluralize(group.journeys.length, "task")}</span>
-          </h3>
-          <ol>
+      {groups.map((group) => {
+        const tracks = (
+          <ol className={cx(!group.title && "relative border-t border-rule")}>
             {group.journeys.map((journey) => (
               <TrackRow key={journey.task.id} journey={journey} window={window} />
             ))}
           </ol>
-        </section>
-      ))}
+        );
+        if (!group.title) return <div key={group.key}>{tracks}</div>;
+        return (
+          <section key={group.key} aria-label={group.title} className="relative">
+            <h3 className="relative flex items-baseline gap-2 border-t border-rule bg-panel py-1.5 text-xs font-bold text-ink-2 max-sm:z-10">
+              {group.href ? (
+                <Link href={group.href} className="truncate hover:text-ink link">
+                  {group.title}
+                </Link>
+              ) : (
+                <span className="truncate">{group.title}</span>
+              )}
+              <span className="shrink-0 font-normal text-muted">{pluralize(group.journeys.length, "task")}</span>
+            </h3>
+            {tracks}
+          </section>
+        );
+      })}
 
       <div aria-hidden className="pointer-events-none absolute inset-y-0 right-0 left-0 sm:left-[calc(var(--label)+1rem)]">
         <div data-now className="absolute top-0 bottom-0 w-0.5 -translate-x-1/2 bg-late" style={at(now)}>
-          <span className="absolute top-1 left-1.5 rounded-xs bg-late-ink px-1 text-2xs font-bold text-panel">Now</span>
+          <span className="absolute top-6 left-0 -translate-y-full rounded-xs bg-late-ink px-1 text-2xs leading-4 font-bold text-panel">
+            Now
+          </span>
         </div>
       </div>
     </div>

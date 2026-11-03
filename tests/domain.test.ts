@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
+import { TIMELINE_AHEAD_DAYS, TIMELINE_MIN_DAYS } from "@/lib/timeline";
 import type { Ctx } from "@/server/domain/context";
 import { listActivity } from "@/server/domain/events";
 import { createGoal, findGoal, listGoals, setGoalStatus, updateGoal } from "@/server/domain/goals";
@@ -307,7 +308,8 @@ describe("read models", () => {
 
     const { journeys, window, truncated } = await getJourneys(human, { goalId: goal.id, days: 14 });
     expect(truncated).toBe(false);
-    expect(window.days).toHaveLength(14 + 7);
+    // Both tasks were captured today, so the 14-day window is fitted down to the shortest one.
+    expect(window.days).toHaveLength(TIMELINE_MIN_DAYS + TIMELINE_AHEAD_DAYS);
     const stops = Object.fromEntries(journeys.map(({ task, stops }) => [task.title, stops.map((stop) => stop.status)]));
     expect(stops).toEqual({
       "Rewrite the pricing page": ["inbox", "todo", "in_progress", "done"],

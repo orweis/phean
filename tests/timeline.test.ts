@@ -1,18 +1,23 @@
 import { describe, expect, it } from "vitest";
 
-import type { TaskStatus } from "@/lib/domain";
+import { mostPressing } from "@/components/charts/timetable";
+import type { Priority, TaskStatus } from "@/lib/domain";
 import {
   buildJourneys,
   cumulativeFlow,
   daysBetween,
+  fitWindow,
   fractionOf,
   parseTimelineDays,
   statusAt,
   timeWindow,
   trackOf,
+  windowSpan,
+  type Journey,
   type JourneyTask,
   type TaskEventLike,
 } from "@/lib/timeline";
+import type { TaskView } from "@/server/domain/tasks";
 
 const NOW = new Date("2026-03-15T12:00:00Z");
 const day = (offset: number, hour = 9) => new Date(Date.UTC(2026, 2, 15 + offset, hour));
@@ -38,6 +43,23 @@ describe("time windows", () => {
     expect(fractionOf(window, new Date("2026-12-01T00:00:00Z"))).toBe(1);
     expect(fractionOf(window, new Date("2026-03-12T12:00:00Z"))).toBeCloseTo(10.5 / 21);
     expect(daysBetween(day(-3, 23), NOW)).toBe(3);
+  });
+
+  it("fits a window to a shorter history, but never under a week", () => {
+    const requested = timeWindow(90, NOW, 7);
+    const capturedOn = (offset: number) => buildJourneys([task(`t${offset}`, "inbox", offset)], []);
+
+    const fitted = fitWindow(requested, capturedOn(-20));
+    expect(fitted.start.toISOString()).toBe("2026-02-23T00:00:00.000Z");
+    expect(fitted.end).toEqual(requested.end);
+    expect(fitted.days).toHaveLength(21 + 7);
+
+    expect(fitWindow(requested, capturedOn(-1)).days).toHaveLength(7 + 7);
+    expect(fitWindow(requested, []).days).toHaveLength(7 + 7);
+    expect(fitWindow(requested, capturedOn(-120))).toBe(requested);
+
+    expect(windowSpan(fitted, 90)).toBe("since Feb 23");
+    expect(windowSpan(requested, 90)).toBe("over the last 90 days");
   });
 
   it("only accepts the offered windows", () => {
@@ -123,6 +145,19 @@ describe("tracks and flow", () => {
     expect(arrived.segments).toHaveLength(1);
     expect(arrived.end).toEqual({ kind: "arrived", at: fractionOf(window, day(-1)) });
     expect(trackOf(journeys[3]!, window).end.kind).toBe("dropped");
+  });
+
+  it("picks the most pressing open tracks and keeps them in the order they set out", () => {
+    const track = (id: string, priority: Priority, dueDate: string | null, status: TaskStatus = "todo") =>
+      ({ task: { id, priority, dueDate, status }, stops: [{ status, at: NOW }] }) as unknown as Journey<TaskView>;
+    const tracks = [
+      track("low", "low", null),
+      track("late", "medium", "2026-03-10"),
+      track("urgent", "urgent", null),
+      track("finished", "urgent", null, "done"),
+      track("soon", "medium", "2026-03-16"),
+    ];
+    expect(mostPressing(tracks, 3, NOW).map(({ task }) => task.id)).toEqual(["late", "urgent", "soon"]);
   });
 
   it("counts each station at the end of every day, and only arrivals inside the window", () => {

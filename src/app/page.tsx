@@ -1,5 +1,3 @@
-import { ArrowRight } from "lucide-react";
-
 import { TimetableLegend } from "@/components/charts/timetable";
 import { Logo } from "@/components/logo";
 import { SampleTimetable } from "@/components/sample-timetable";
@@ -13,7 +11,7 @@ const FEATURES = [
     body: "Connected agents sweep email, Slack, and calendars, and capture what needs doing. Duplicates across agents are skipped automatically.",
   },
   {
-    title: "People approve the goals",
+    title: "Humans approve the goals",
     body: "Agents group tasks under goals they propose. Only a person can approve, complete, or abandon a goal.",
   },
   {
@@ -44,7 +42,6 @@ export default async function LandingPage() {
             {signedIn ? (
               <ButtonLink href={routes.workspaces()} variant="shell">
                 Open Phean
-                <ArrowRight aria-hidden />
               </ButtonLink>
             ) : (
               <>
@@ -60,18 +57,16 @@ export default async function LandingPage() {
         </header>
 
         <section className="mx-auto max-w-6xl px-4 pt-12 pb-16 sm:px-6 sm:pt-20 sm:pb-24">
-          <p className="text-sm font-semibold text-shell-muted">An MCP server for teams of AI agents</p>
-          <h1 className="mt-4 max-w-4xl text-[clamp(2.25rem,6vw,4.25rem)] leading-[1.02] font-extrabold font-stretch-condensed">
-            People set the goals. Agents roll the boulder.
+          <h1 className="max-w-4xl text-[clamp(2.25rem,6vw,4.25rem)] leading-[1.02] font-extrabold font-stretch-condensed">
+            Humans set the goals. Agents roll the boulder.
           </h1>
           <p className="mt-6 max-w-2xl text-md text-shell-muted">
-            Phean is a shared task and goal ledger. Your agents gather work from every inbox, sort it, and get it done, while you decide
-            what matters and read progress like a timetable.
+            Phean is a shared task and goal ledger, served over MCP to your team of AI agents. They gather work from every inbox, sort it,
+            and get it done, while you decide what matters and read progress like a timetable.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <ButtonLink href={signedIn ? routes.workspaces() : routes.signUp()} variant="signal" className="h-11 px-5">
               {signedIn ? "Go to your workspaces" : "Create a workspace"}
-              <ArrowRight aria-hidden />
             </ButtonLink>
           </div>
         </section>
@@ -95,16 +90,16 @@ export default async function LandingPage() {
 
         <section aria-labelledby="features-heading" className="mx-auto max-w-6xl px-4 py-16 sm:px-6">
           <h2 id="features-heading" className="text-xl font-extrabold text-ink">
-            What Phean does
+            How the line runs
           </h2>
-          <dl className="mt-6 grid border-t border-rule sm:grid-cols-2 sm:gap-x-10">
+          <ul className="mt-6 grid border-t border-rule sm:grid-cols-2 sm:gap-x-10">
             {FEATURES.map(({ title, body }) => (
-              <div key={title} className="border-b border-rule py-5">
-                <dt className="text-md font-bold text-ink">{title}</dt>
-                <dd className="mt-1 text-sm text-ink-2">{body}</dd>
-              </div>
+              <li key={title} className="border-b border-rule py-5">
+                <h3 className="text-md font-bold text-ink">{title}</h3>
+                <p className="mt-1 text-sm text-ink-2">{body}</p>
+              </li>
             ))}
-          </dl>
+          </ul>
         </section>
 
         <section aria-labelledby="route-heading" className="border-t border-rule bg-sunken">

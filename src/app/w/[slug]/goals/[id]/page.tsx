@@ -22,6 +22,7 @@ import { GOAL_MAX_DEPTH, GOAL_STATUS_META, isOpenTaskStatus } from "@/lib/domain
 import { isPastDue, percent, pluralize, timeAgo } from "@/lib/format";
 import { subtreeIds } from "@/lib/goal-tree";
 import { routes } from "@/lib/routes";
+import { windowSpan } from "@/lib/timeline";
 import { requireWorkspace } from "@/server/auth/session";
 import { listGoals } from "@/server/domain/goals";
 import { getGoalDetail, getJourneys } from "@/server/domain/overview";
@@ -62,13 +63,13 @@ export default async function GoalPage({ params }: PageProps<"/w/[slug]/goals/[i
   return (
     <>
       <nav aria-label="Breadcrumb" className="mb-3 flex flex-wrap items-center gap-1 text-xs text-muted">
-        <Link href={routes.workspace(slug)} className="hover:text-ink hover:underline">
+        <Link href={routes.workspace(slug)} className="hover:text-ink link">
           Overview
         </Link>
         {ancestors.map((ancestor) => (
           <span key={ancestor.id} className="flex items-center gap-1">
             <ChevronRight className="size-3 text-faint" aria-hidden />
-            <Link href={routes.goal(slug, ancestor.id)} className="max-w-48 truncate hover:text-ink hover:underline">
+            <Link href={routes.goal(slug, ancestor.id)} className="max-w-48 truncate hover:text-ink link">
               {ancestor.title}
             </Link>
           </span>
@@ -112,12 +113,6 @@ export default async function GoalPage({ params }: PageProps<"/w/[slug]/goals/[i
         </div>
       </div>
 
-      {goal.status === "proposed" && (
-        <p className="mb-6 rounded-lg border border-wait/60 bg-wait-tint px-4 py-3 text-sm text-ink">
-          This goal is waiting for a decision. Approve it to let agents plan and work on it, or reject it to drop it.
-        </p>
-      )}
-
       <StatStrip className="mb-6 grid-cols-2 sm:grid-cols-4 lg:grid-cols-[minmax(0,2.2fr)_repeat(3,minmax(0,1fr))]">
         <div className="col-span-2 min-w-0 bg-panel px-4 py-3 sm:col-span-4 lg:col-span-1">
           <p className="flex items-baseline justify-between gap-3 text-xs text-muted">
@@ -137,7 +132,7 @@ export default async function GoalPage({ params }: PageProps<"/w/[slug]/goals/[i
           <Card>
             <CardHeader
               title="Timetable"
-              description={`Every task under this goal over the last ${TIMETABLE_DAYS} days.`}
+              description={`Every task under this goal ${windowSpan(window, TIMETABLE_DAYS)}.`}
               action={
                 <ButtonLink href={routes.timeline(slug, { goal: goal.id, days: String(TIMETABLE_DAYS) })} size="sm" variant="ghost">
                   Full timeline

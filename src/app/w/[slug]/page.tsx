@@ -1,9 +1,8 @@
-import { Bot, CalendarClock, Plus } from "lucide-react";
+import { Bot, CalendarRange, ListTodo, Plus } from "lucide-react";
 
 import { ActivityFeed } from "@/components/activity-feed";
 import { AgentWorkload } from "@/components/agent-list";
-import { CumulativeFlow } from "@/components/charts/cumulative-flow";
-import { FlowLegend } from "@/components/charts/flow-bar";
+import { mostPressing, Timetable, TimetableLegend } from "@/components/charts/timetable";
 import { GoalTree } from "@/components/goal-tree";
 import { NewGoalForm } from "@/components/goal-forms";
 import { PageHeader } from "@/components/page-header";
@@ -14,14 +13,19 @@ import { ButtonLink } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Popover } from "@/components/ui/popover";
 import { EmptyState } from "@/components/ui/stat";
+import { isOpenTaskStatus } from "@/lib/domain";
 import { formatDueDate, pluralize, relativeDue } from "@/lib/format";
 import { routes } from "@/lib/routes";
-import { cumulativeFlow } from "@/lib/timeline";
 import { requireWorkspace } from "@/server/auth/session";
 import { listActivity } from "@/server/domain/events";
 import { listGoals } from "@/server/domain/goals";
 import { getAgentWorkload, getJourneys, getStatusSummary, type WorkspaceStats } from "@/server/domain/overview";
 import { can } from "@/server/domain/policy";
+import { suggestNextActions } from "@/server/domain/tasks";
+
+const NEXT_ACTIONS = 6;
+/** Tracks the overview's timetable draws; the Timeline tab has the rest. */
+const PRESSING_TRACKS = 8;
 
 const list = new Intl.ListFormat("en", { type: "conjunction" });
 
@@ -47,14 +51,17 @@ function DueLead({ dueDate, late }: { dueDate: string; late?: boolean }) {
 export default async function DashboardPage({ params }: PageProps<"/w/[slug]">) {
   const { slug } = await params;
   const { ctx } = await requireWorkspace(slug);
-  const [summary, goals, activity, workload, { window, journeys }] = await Promise.all([
+  const [summary, goals, activity, workload, nextActions, { window, journeys }] = await Promise.all([
     getStatusSummary(ctx, {}),
     listGoals(ctx, {}),
     listActivity(ctx, { limit: 30 }),
     getAgentWorkload(ctx, {}),
+    suggestNextActions(ctx, { limit: NEXT_ACTIONS }),
     getJourneys(ctx, { days: 14 }),
   ]);
   const proposed = goals.filter((goal) => goal.status === "proposed");
+  const pressing = mostPressing(journeys, PRESSING_TRACKS, window.now);
+  const openTracks = journeys.filter(({ task }) => isOpenTaskStatus(task.status)).length;
   const canWrite = can(ctx.actor, "task:write");
   const newGoal = can(ctx.actor, "goal:write") && (
     <Popover
@@ -69,13 +76,15 @@ export default async function DashboardPage({ params }: PageProps<"/w/[slug]">) 
     </Popover>
   );
 
+  const connectFirst = workload.length === 0 && can(ctx.actor, "agent:manage");
+
   return (
     <>
       <PageHeader
         title={ctx.tenant.name}
         description={statusSentence(summary)}
         actions={
-          workload.length === 0 && can(ctx.actor, "agent:manage") ? (
+          connectFirst ? (
             <ButtonLink href={routes.agents(slug)} variant="primary">
               <Bot aria-hidden />
               Connect an agent
@@ -88,10 +97,11 @@ export default async function DashboardPage({ params }: PageProps<"/w/[slug]">) 
 
       <TodayStrip stats={summary} slug={slug} />
 
+      {/* On phones both columns dissolve into one stack, ordered by what needs a person first. */}
       <div className="mt-6 grid gap-6 lg:grid-cols-3">
-        <div className="min-w-0 space-y-6 lg:col-span-2">
+        <div className="min-w-0 max-lg:contents lg:col-span-2 lg:space-y-6">
           {proposed.length > 0 && (
-            <Card tone="wait">
+            <Card tone="wait" className="max-lg:order-1">
               <CardHeader
                 tone="wait"
                 title={`${pluralize(proposed.length, "goal")} awaiting your decision`}
@@ -103,10 +113,14 @@ export default async function DashboardPage({ params }: PageProps<"/w/[slug]">) 
             </Card>
           )}
 
-          <Card>
+          <Card className="max-lg:order-3">
             <CardHeader
-              title="How the work moved"
-              description="Tasks at each status at the end of each day, over the last 14 days."
+              title="On the line"
+              description={
+                pressing.length < openTracks
+                  ? `The ${pressing.length} most pressing of ${openTracks} open tasks: late first, then by priority. A long flat run is stuck work.`
+                  : "Every open task, from the day it was captured. A long flat run is stuck work."
+              }
               action={
                 <ButtonLink href={routes.timeline(slug)} size="sm" variant="ghost">
                   Open timeline
@@ -114,15 +128,23 @@ export default async function DashboardPage({ params }: PageProps<"/w/[slug]">) 
               }
             />
             <CardBody>
-              <CumulativeFlow flow={cumulativeFlow(journeys, window)} />
-              <FlowLegend className="mt-4" stations={["inbox", "todo", "in_progress", "done"]} />
+              {pressing.length > 0 && <TimetableLegend className="mb-4" />}
+              <Timetable
+                window={window}
+                groups={pressing.length ? [{ key: "pressing", journeys: pressing }] : []}
+                empty={
+                  <EmptyState icon={<CalendarRange />} title="Nothing on the line">
+                    Open tasks appear here from the day an agent captures them, with their due dates and the red line for now.
+                  </EmptyState>
+                }
+              />
             </CardBody>
           </Card>
 
-          <Card>
+          <Card className="max-lg:order-4">
             <CardHeader
-              title="Coming due"
-              description="Open tasks with a due date, soonest first."
+              title="Next actions"
+              description="Most urgent first: priority, then due date, then age."
               action={
                 <ButtonLink href={routes.board(slug)} size="sm" variant="ghost">
                   Open board
@@ -130,22 +152,26 @@ export default async function DashboardPage({ params }: PageProps<"/w/[slug]">) 
               }
             />
             <CardBody className="py-1">
-              {summary.dueSoonTasks.length === 0 ? (
-                <EmptyState icon={<CalendarClock />} title="Nothing coming due">
-                  Tasks with a due date show up here, soonest first.
+              {nextActions.length === 0 ? (
+                <EmptyState icon={<ListTodo />} title="Nothing to do right now">
+                  Tasks move here once they are triaged out of the inbox.
                 </EmptyState>
               ) : (
                 <ul>
-                  {summary.dueSoonTasks.map((task) => (
-                    <TaskRow key={task.id} task={task} slug={slug} canWrite={canWrite} lead={<DueLead dueDate={task.dueDate!} />} />
+                  {nextActions.map((task) => (
+                    <TaskRow key={task.id} task={task} slug={slug} canWrite={canWrite} />
                   ))}
                 </ul>
               )}
             </CardBody>
           </Card>
 
-          <Card>
-            <CardHeader title="Goal map" description="Each goal with its tasks by status, rolled up from its sub-goals." action={newGoal} />
+          <Card className="max-lg:order-5">
+            <CardHeader
+              title="Goal map"
+              description="Each goal with its tasks by status, rolled up from its sub-goals."
+              action={connectFirst && newGoal}
+            />
             <CardBody className="py-1">
               <GoalTree
                 goals={goals.filter((goal) => goal.status !== "proposed")}
@@ -160,9 +186,9 @@ export default async function DashboardPage({ params }: PageProps<"/w/[slug]">) 
           </Card>
         </div>
 
-        <div className="min-w-0 space-y-6">
+        <div className="min-w-0 max-lg:contents lg:space-y-6">
           {summary.overdueTasks.length > 0 && (
-            <Card tone="late">
+            <Card tone="late" className="max-lg:order-2">
               <CardHeader tone="late" title="Late" description="Past their due date and still open." />
               <CardBody className="py-1">
                 <ul>
@@ -173,7 +199,7 @@ export default async function DashboardPage({ params }: PageProps<"/w/[slug]">) 
               </CardBody>
             </Card>
           )}
-          <Card>
+          <Card className="max-lg:order-6">
             <CardHeader
               title="Agents"
               description="What each holds now and finished this week."
@@ -187,7 +213,7 @@ export default async function DashboardPage({ params }: PageProps<"/w/[slug]">) 
               <AgentWorkload loads={workload} />
             </CardBody>
           </Card>
-          <Card>
+          <Card className="max-lg:order-7">
             <CardHeader title="Activity" description="Humans and agents, newest first." />
             <CardBody className="max-h-[36rem] overflow-y-auto">
               <ActivityFeed events={activity} slug={slug} />

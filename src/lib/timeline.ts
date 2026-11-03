@@ -4,6 +4,7 @@
  * Client-safe; every date is a UTC calendar day, matching how due dates are compared.
  */
 import { isOpenTaskStatus, TASK_STATUSES, type TaskStatus } from "./domain";
+import { formatDay } from "./format";
 
 const DAY_MS = 86_400_000;
 
@@ -15,6 +16,8 @@ export const TIMELINE_WINDOWS = [14, 30, 90] as const;
 export type TimelineDays = (typeof TIMELINE_WINDOWS)[number];
 /** Days after today the timetable shows, so upcoming due dates are on the chart. */
 export const TIMELINE_AHEAD_DAYS = 7;
+/** The shortest window a short history is fitted to, so a new workspace still has an axis. */
+export const TIMELINE_MIN_DAYS = 7;
 
 export function parseTimelineDays(value: string | undefined): TimelineDays {
   const days = Number(value);
@@ -51,6 +54,27 @@ export function timeWindow(days: number, now: Date, ahead = 0): TimeWindow {
   const end = addDays(today, ahead + 1);
   const count = days + ahead;
   return { start, end, now, days: Array.from({ length: count }, (_, index) => addDays(start, index)) };
+}
+
+/**
+ * Starts the window on the day the earliest journey began when that is later than the window's
+ * start, so a short history spreads across the axis instead of filling a sliver at its end.
+ */
+export function fitWindow(window: TimeWindow, journeys: readonly Journey[]): TimeWindow {
+  const first = journeys.reduce<Date | undefined>((earliest, { stops }) => (!earliest || stops[0]!.at < earliest ? stops[0]!.at : earliest), undefined);
+  const history = first ? daysBetween(first, window.now) + 1 : 0;
+  const days = Math.max(TIMELINE_MIN_DAYS, history);
+  return days < pastDays(window) ? timeWindow(days, window.now, daysBetween(window.now, window.end) - 1) : window;
+}
+
+/** Days the window shows up to and including today. */
+function pastDays(window: TimeWindow): number {
+  return daysBetween(window.start, window.now) + 1;
+}
+
+/** "over the last 30 days", or "since Oct 12" when the window was fitted to a shorter history. */
+export function windowSpan(window: TimeWindow, requestedDays: number): string {
+  return pastDays(window) < requestedDays ? `since ${formatDay(window.start)}` : `over the last ${requestedDays} days`;
 }
 
 /** Position of a moment in the window as a fraction from 0 (start) to 1 (end), clamped. */

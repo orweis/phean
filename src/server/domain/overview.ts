@@ -9,7 +9,7 @@ import {
   type TaskStatus,
 } from "@/lib/domain";
 import { subtreeIds } from "@/lib/goal-tree";
-import { buildJourneys, TIMELINE_AHEAD_DAYS, timeWindow, type Journey, type TimeWindow } from "@/lib/timeline";
+import { buildJourneys, fitWindow, TIMELINE_AHEAD_DAYS, timeWindow, type Journey, type TimeWindow } from "@/lib/timeline";
 
 import type { Db } from "../db/client";
 import { countWhere } from "../db/raw";
@@ -222,6 +222,7 @@ export const getTimeline = service(GoalScopeInput, async (ctx, { goalId }): Prom
 });
 
 export interface Journeys {
+  /** The requested window, or a shorter one when the history it covers starts later. */
   window: TimeWindow;
   /** Oldest task first. */
   journeys: Journey<TaskView>[];
@@ -259,7 +260,8 @@ export const getJourneys = service(JourneysInput, async (ctx, { goalId, days }):
         .orderBy(asc(events.createdAt), asc(events.id))
     : [];
 
-  return { window, journeys: buildJourneys(shown, log), truncated: rows.length > JOURNEY_LIMIT };
+  const journeys = buildJourneys(shown, log);
+  return { window: fitWindow(window, journeys), journeys, truncated: rows.length > JOURNEY_LIMIT };
 });
 
 export interface AgentLoad {
