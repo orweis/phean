@@ -63,11 +63,12 @@ export const LIMITS = {
  */
 export const WORKSPACE_SLUG_PATTERN = `[a-z0-9](?:[a-z0-9\\-]{0,${LIMITS.slug - 2}}[a-z0-9])?`;
 
-/** A slug suggestion for a workspace name: "Acme Corp." becomes "acme-corp". */
+/** A slug suggestion for a workspace name: "Acme Corp." becomes "acme-corp", "Café Zürich" "cafe-zurich". */
 export function slugify(name: string): string {
   return name
     .toLowerCase()
     .normalize("NFKD")
+    .replace(/\p{M}/gu, "")
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, LIMITS.slug)
