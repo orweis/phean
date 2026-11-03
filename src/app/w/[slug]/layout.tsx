@@ -26,7 +26,7 @@ export default async function WorkspaceLayout({ children, params }: LayoutProps<
         <WorkspaceNav slug={slug} counts={{ awaitingApproval: stats.pendingApprovals, inbox: stats.inbox }} />
       </AppHeader>
       {membership.role === "platform_admin" && (
-        <p className="flex items-center justify-center gap-1.5 border-b border-wait/40 bg-wait-tint px-4 py-2 text-xs font-medium text-wait-ink">
+        <p className="flex items-center justify-center gap-1.5 border-b border-wait/40 bg-wait-tint px-4 py-2 text-xs font-semibold text-wait-ink">
           <Eye className="size-3.5" aria-hidden />
           You are viewing this workspace as a platform admin. It is read-only for you.
         </p>

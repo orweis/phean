@@ -103,7 +103,7 @@ export function AuthForm({ mode, next, providers }: AuthFormProps) {
         {signingUp ? "Already have an account? " : "New to Phean? "}
         <Link
           href={signingUp ? routes.signIn(next) : routes.signUp(next)}
-          className="font-semibold text-ink underline decoration-rule hover:decoration-ink"
+          className="font-semibold text-ink underline decoration-rule underline-offset-2 hover:decoration-ink active:decoration-2"
         >
           {signingUp ? "Sign in" : "Create an account"}
         </Link>

@@ -10,6 +10,7 @@ import { PageHeader } from "@/components/page-header";
 import { MetaBadge } from "@/components/ui/badge";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { EmptyState, Stat, StatStrip } from "@/components/ui/stat";
+import { PINNED_CELL } from "@/components/ui/table";
 import { OPEN_TASK_STATUSES, ROLE_META } from "@/lib/domain";
 import { cx } from "@/lib/cx";
 import { timeAgo } from "@/lib/format";
@@ -69,11 +70,11 @@ export default async function WorkspacesPage() {
               Create your first workspace below, then connect an agent to it.
             </EmptyState>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="relative overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-rule">
-                    <th className={cx(TH, "pl-5 text-left")}>Workspace</th>
+                    <th className={cx(TH, "pl-5 text-left", PINNED_CELL)}>Workspace</th>
                     <th className={cx(TH, "min-w-48 text-left")}>Open work</th>
                     {COLUMNS.map((column) => (
                       <th key={column.label} className={cx(TH, "text-right")}>
@@ -87,8 +88,8 @@ export default async function WorkspacesPage() {
                 <tbody className="divide-y divide-rule">
                   {rows.map((row) => (
                     <tr key={row.tenant.id} className="transition-colors duration-(--dur-micro) hover:bg-sunken/60">
-                      <td className="py-3 pr-3 pl-5">
-                        <Link href={routes.workspace(row.tenant.slug)} className="font-semibold text-ink hover:underline">
+                      <td className={cx("py-3 pr-3 pl-5", PINNED_CELL)}>
+                        <Link href={routes.workspace(row.tenant.slug)} className="font-semibold text-ink link">
                           {row.tenant.name}
                         </Link>
                         <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted">

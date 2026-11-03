@@ -14,7 +14,7 @@ export function PendingApprovals({ goals, slug, canDecide }: { goals: readonly G
       {goals.map((goal) => (
         <li key={goal.id} data-goal={goal.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-rule py-3 last:border-b-0">
           <div className="min-w-0 flex-1 basis-56">
-            <Link href={routes.goal(slug, goal.id)} className="block truncate text-sm font-semibold text-ink hover:underline">
+            <Link href={routes.goal(slug, goal.id)} className="block truncate text-sm font-semibold text-ink link">
               {goal.title}
             </Link>
             <p className="flex items-center gap-1 text-xs text-muted">

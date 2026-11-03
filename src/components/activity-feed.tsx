@@ -38,7 +38,7 @@ export function ActivityFeed({ events, slug }: { events: readonly Activity[]; sl
               <p className="text-ink-2">
                 <span className="font-semibold text-ink">{latest.actorName}</span>{" "}
                 {goalLink ? (
-                  <Link href={goalLink} className="hover:text-ink hover:underline">
+                  <Link href={goalLink} className="hover:text-ink link">
                     {summary}
                   </Link>
                 ) : (

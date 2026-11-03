@@ -44,7 +44,7 @@ export function MemoryList({ memories, slug, canWrite, goalTitles, empty = "Noth
                   <Badge key={tag}>#{tag}</Badge>
                 ))}
                 {memory.goalId && goalTitle && (
-                  <Link href={routes.goal(slug, memory.goalId)} className="inline-flex max-w-56 items-center gap-1 hover:text-ink hover:underline">
+                  <Link href={routes.goal(slug, memory.goalId)} className="inline-flex max-w-56 items-center gap-1 hover:text-ink link">
                     <Target className="size-3 shrink-0" aria-hidden />
                     <span className="truncate">{goalTitle}</span>
                   </Link>

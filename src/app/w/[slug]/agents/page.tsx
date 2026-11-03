@@ -11,6 +11,7 @@ import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { CopyButton } from "@/components/ui/copy-button";
 import { EmptyState } from "@/components/ui/stat";
 import { SubmitButton } from "@/components/ui/submit-button";
+import { PINNED_CELL } from "@/components/ui/table";
 import { cx } from "@/lib/cx";
 import { timeAgo } from "@/lib/format";
 import { routes } from "@/lib/routes";
@@ -56,11 +57,11 @@ export default async function AgentsPage({ params }: PageProps<"/w/[slug]/agents
               {canManage ? "Issue a token to connect your first agent." : "Ask a workspace admin to connect an agent."}
             </EmptyState>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="relative overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-rule">
-                    <th className={cx(TH, "pl-5")}>Agent</th>
+                    <th className={cx(TH, "pl-5", PINNED_CELL)}>Agent</th>
                     <th className={TH}>Status</th>
                     <th className={cx(TH, "text-right")}>Holding</th>
                     <th className={cx(TH, "text-right")}>Done</th>
@@ -79,7 +80,7 @@ export default async function AgentsPage({ params }: PageProps<"/w/[slug]/agents
                     const load = loadById.get(agent.id);
                     return (
                       <tr key={agent.id} className={cx(status === "revoked" && "text-muted")}>
-                        <td className="py-3 pr-3 pl-5">
+                        <td className={cx("py-3 pr-3 pl-5", PINNED_CELL)}>
                           <p className={cx("font-semibold", status !== "revoked" && "text-ink")}>{agent.name}</p>
                           <p className="font-mono text-xs text-muted">{agent.tokenPrefix}…</p>
                         </td>

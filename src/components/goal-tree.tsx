@@ -73,7 +73,7 @@ export function GoalTree({ goals, slug, baseDepth = 0, empty = DEFAULT_EMPTY }: 
               <div className="flex min-w-0 flex-1 basis-48 items-center gap-2">
                 <Link
                   href={routes.goal(slug, goal.id)}
-                  className={cx("truncate text-sm font-semibold hover:underline", inactive ? "text-muted" : "text-ink")}
+                  className={cx("truncate text-sm font-semibold link", inactive ? "text-muted" : "text-ink")}
                 >
                   {goal.title}
                 </Link>

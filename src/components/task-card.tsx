@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
 import { completeTaskAction, releaseTaskAction, updateTaskAction } from "@/app/w/[slug]/actions";
 import { isOpenTaskStatus, PRIORITY_META, SOURCE_META, TASK_STATUS_META, type TaskStatus } from "@/lib/domain";
 import { cx } from "@/lib/cx";
-import { formatDueDate, isPastDue } from "@/lib/format";
+import { formatDueDate, isPastDue, truncate } from "@/lib/format";
 import { routes } from "@/lib/routes";
 import type { TaskView } from "@/server/domain/tasks";
 
@@ -23,6 +23,9 @@ const NEXT_STEP: Partial<Record<TaskStatus, { label: string; status: TaskStatus 
 };
 
 const isLate = (task: TaskView) => isOpenTaskStatus(task.status) && isPastDue(task.dueDate);
+
+/** Fits two lines in the narrowest lane, so no clamped text sits hidden under the meta row. */
+const CARD_EXCERPT = 80;
 
 /** Next step, release and drop, as compact buttons. */
 function TaskActions({ task, slug }: { task: TaskView; slug: string }) {
@@ -71,7 +74,7 @@ function TaskMeta({ task, slug, showGoal, showDue = true }: { task: TaskView; sl
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
       {showGoal && task.goalId && task.goalTitle && (
-        <Link href={routes.goal(slug, task.goalId)} className="inline-flex max-w-56 items-center gap-1 hover:text-ink hover:underline">
+        <Link href={routes.goal(slug, task.goalId)} className="inline-flex max-w-56 items-center gap-1 hover:text-ink link">
           <Target className="size-3 shrink-0" aria-hidden />
           <span className="truncate">{task.goalTitle}</span>
         </Link>
@@ -115,7 +118,7 @@ export function TaskCard({ task, slug, canWrite, showGoal = true }: TaskViewProp
   return (
     <article data-task={task.id} className={cx("rounded-md border bg-panel p-3", isLate(task) ? "border-late/45" : "border-rule")}>
       <TaskTitle task={task} />
-      {task.description && <p className="mt-1 line-clamp-2 text-xs whitespace-pre-line text-muted">{task.description}</p>}
+      {task.description && <p className="mt-1 line-clamp-2 text-xs text-muted">{truncate(task.description, CARD_EXCERPT)}</p>}
       <div className="mt-2">
         <TaskMeta task={task} slug={slug} showGoal={showGoal} />
       </div>

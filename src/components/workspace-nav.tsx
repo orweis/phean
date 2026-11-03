@@ -31,7 +31,7 @@ const COUNT_LABELS: Record<keyof NavCounts, string> = {
 export function WorkspaceNav({ slug, counts }: { slug: string; counts: NavCounts }) {
   const pathname = usePathname();
   return (
-    <nav aria-label="Workspace" className="-mx-2 flex overflow-x-auto">
+    <nav aria-label="Workspace" className="relative -mx-2 flex overflow-x-auto max-sm:pr-10 max-sm:mask-r-from-[calc(100%-2.5rem)]">
       {TABS.map(({ label, icon: Icon, href, ...tab }) => {
         const target = href(slug);
         const active = "exact" in tab ? pathname === target : pathname.startsWith(target);
