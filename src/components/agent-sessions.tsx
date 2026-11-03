@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 
 import { resumeLabel, webUrl, type AgentSession, type InputRequest } from "@/lib/agent-sessions";
 import { cx } from "@/lib/cx";
-import { timeAgo } from "@/lib/format";
+import { timeAgo, truncate } from "@/lib/format";
 import { routes } from "@/lib/routes";
 
 import { Badge } from "./ui/badge";
@@ -100,12 +100,15 @@ export function WaitingBadge({ slug }: { slug: string }) {
   );
 }
 
-/** The question on a task's card, cut at three lines; the overview shows it whole. */
+/**
+ * The question on a task's card, cut to about three lines of the narrowest board lane; the clamp
+ * catches a long agent name. The overview shows it whole.
+ */
 export function QuestionNote({ request, className }: { request: InputRequest; className?: string }) {
   return (
     <div className={cx("rounded-md bg-wait-tint px-2.5 py-1.5 text-xs text-wait-ink", className)}>
       <p className="line-clamp-3">
-        <span className="font-semibold">{request.agentName} asks:</span> {request.question}
+        <span className="font-semibold">{request.agentName} asks:</span> {truncate(request.question, 90)}
       </p>
     </div>
   );
