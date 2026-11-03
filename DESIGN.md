@@ -246,7 +246,7 @@ The tokens above mirror the `@theme` block in `src/app/globals.css`, which is th
 
 Phean is named for Sisyphus, so the world is his hill at dusk: a violet slope, and the ember boulder the agents keep rolling up it. The ledger itself is quiet. A lavender-white ground holds white cards ruled in hairlines, and the only material that floats is a Liquid Glass bar on top, in Apple's manner: the functional layer of navigation and menus sits on glass above the content and lets the content show through, blurred, as it scrolls beneath.
 
-The density is that of an operations screen, not a marketing page. People check in a few times a day to see what agents did, what is late, and what awaits their decision, so the overview leads with the line and the decisions, and every figure is a tabular numeral with its label. Colour carries meaning only: violet is the brand and work in motion, ember is what is new and what needs a person, and each state has one hue on every screen.
+The density is that of an operations screen, not a marketing page. People check in a few times a day to see what agents did, what is late, and what awaits their decision or answer, so the overview leads with the line, the agents' questions and the decisions, and every figure is a tabular numeral with its label. Colour carries meaning only: violet is the brand and work in motion, ember is what is new and what needs a person, and each state has one hue on every screen.
 
 Each person picks Light, Dark, or System (the default, which follows the device and changes with it) in the account menu, or in the landing page's footer before signing in. In dark the ground turns to a deep violet night and the glass to smoked violet; the hues lift to keep their contrast.
 
@@ -275,7 +275,7 @@ A cool lavender ground under a violet brand, with one ember signal and four stat
 ### Tertiary
 
 - **Late crimson** (`late`, `late-ink`, `late-tint`): the now line, late tracks and cards, urgent priority, and destructive buttons.
-- **Honey** (`wait`, `wait-ink`, `wait-tint`): goals awaiting a decision, high priority, read-only access.
+- **Honey** (`wait`, `wait-ink`, `wait-tint`): what waits on a person (goals awaiting a decision, and agent questions: the Waiting on you badge, the question under it on a card, the rule beside it on the overview), high priority, read-only access.
 - **Moving** (`move`, `move-ink`, `move-tint`): in-progress work, active goals and agent claims. It is the violet, by reference, so moving work and the brand are one hue.
 - **Arrived green** (`arrive`, `arrive-ink`, `arrive-tint`): done tasks, achieved goals, active agents.
 - **The four stations**: inbox is ember (`station-inbox`), to do is lavender (`station-todo`), in progress is violet (`station-progress`), and done is green (`station-done`). Thin timetable lines use the darker cuts `line-inbox` and `line-todo`, which keep 3:1 against a card.
@@ -332,9 +332,9 @@ Every token above is redefined under the custom `dark` variant, which holds when
 
 ## Layout
 
-Workspace screens sit in an 80rem container with 16px gutters on phones and 24px from the small breakpoint. The header is a 56px row (wordmark, switcher, account) with the tab rail below it, and it stays on top as the page scrolls. From the large breakpoint (1024px) the overview and goal pages use three columns: the main column spans two (the line, next actions, the goal map) and a rail holds late work, agents and activity. Cards stack 24px apart and pad their content 20px from the edge; card headers are a title, an optional description and one action on the right.
+Workspace screens sit in an 80rem container with 16px gutters on phones and 24px from the small breakpoint. The header is a 56px row (wordmark, switcher, account) with the tab rail below it, and it stays on top as the page scrolls. From the large breakpoint (1024px) the overview and goal pages use three columns: the main column spans two (questions and decisions, the line, next actions, the goal map) and a rail holds late work, agents and activity. Cards stack 24px apart and pad their content 20px from the edge; card headers are a title, an optional description and one action on the right.
 
-On phones both columns dissolve into a single stack ordered by what needs a person first: the decision card, late work, the line, next actions, the goal map, agents, activity. Wide tables keep their first column pinned while the figures scroll beside it inside the card. Popovers and the workspace switcher open as a glass sheet across the top of the screen, over the header. The timetable puts each task's label above its track. The tab rail scrolls sideways and fades at its right edge to say so.
+On phones both columns dissolve into a single stack ordered by what needs a person first: the questions card, the decision card, late work, the line, next actions, the goal map, agents, activity. Wide tables keep their first column pinned while the figures scroll beside it inside the card. Popovers and the workspace switcher open as a glass sheet across the top of the screen, over the header. The timetable puts each task's label above its track. The tab rail scrolls sideways and fades at its right edge to say so.
 
 ## Elevation & Depth
 
@@ -369,7 +369,7 @@ Controls are capsules: buttons, tabs, badges, count chips, segmented controls an
 - **Primary:** violet with white text, darker violet on hover. One or two per view (see The Prominence Rule).
 - **Tinted:** a violet wash with violet text, for the forward step repeated on each row (Done).
 - **Secondary:** a filled grey capsule, a shade deeper on hover.
-- **Ghost:** text only, for the secondary actions in a row (Release, Drop, Open board), the account menu's trigger and its Sign out, and every manual entry point (Add manually, Add task, Add sub-goal).
+- **Ghost:** text only, for the secondary actions in a row (Release, Drop, Open board, Mark answered), the account menu's trigger and its Sign out, and every manual entry point (Add manually, Add task, Add sub-goal).
 - **Danger:** crimson text on a crimson wash, and it always asks for confirmation.
 - **Signal:** ember with dark text, used once per dusk band, as the landing hero's call to action.
 - **Dusk:** quiet text controls on a dusk band, lifting to `dusk-2` on hover.
@@ -386,7 +386,7 @@ Controls are capsules: buttons, tabs, badges, count chips, segmented controls an
 ### Cards / Containers
 
 - **Corner Style:** 14px.
-- **Background:** panel; the decision card is honey and the late card crimson, in both their border and header, and a tinted header's description takes the tone's ink rather than grey.
+- **Background:** panel; the question and decision cards are honey and the late card crimson, in both their border and header, and a tinted header's description takes the tone's ink rather than grey.
 - **Shadow Strategy:** none (see Elevation & Depth).
 - **Border:** one hairline.
 - **Internal Padding:** 20px; the header is ruled off from the body.
@@ -408,6 +408,12 @@ The glass header holds the boulder wordmark, a `/`, the workspace switcher (a ca
 ### Menus, popovers and sheets
 
 Glass floats with a 16px corner that grow in from their anchor (220ms, from 97% scale and 4px up). On phones they become a sheet across the top of the screen, 12px from each edge, and scroll inside themselves when taller than the screen.
+
+A popover's trigger is a small button, except where the panel leads elsewhere rather than acts: **Resume** uses the link trigger (`Popover look="link"`), violet semibold text with its icon, underlined on hover, with the same 44px hit area as a small button. It sits at the end of a task card's action row, after the state actions, and never wraps onto a line of its own in a board lane. Its panel lists each agent's session: the agent, its app and when it linked, the brief, a tinted **Resume in …** link, and the ids and command as monospace values, cut to one line, each with a ghost copy button named for what it copies ("Copy session id").
+
+### Outside links
+
+Everything that leaves Phean goes through `OutsideLink` and ends with an up-right arrow icon, the one arrow a control may carry. Web links open in a new tab, with `rel="noopener noreferrer"` and "(opens in a new tab)" for screen readers; app links (`cursor://`, `slack://`) open their app in place. On the overview, the asking agent's **Resume in Claude** is the entry's primary button, because answering in the agent's own conversation is the quickest way through; a task's source label ("From email") becomes a quiet outside link when the agent recorded a web link to the message.
 
 ### Logo
 
@@ -451,8 +457,8 @@ The goal tree as a line with stations: a violet ring per active goal, a dashed h
 - **Don't** use red for anything that is not late, now, urgent or destructive.
 - **Don't** add shadows to cards, or gradients beyond the dusk band's sky and the ground's two faint top glows.
 - **Don't** use a weight above 700 or a font other than the system face and Inter.
-- **Don't** glue arrows to button text or put an eyebrow line above a heading.
-- **Don't** clamp text over another element; shorten it (task cards cut descriptions at 80 characters) or move it.
+- **Don't** glue arrows to button text or put an eyebrow line above a heading. The up-right icon on an outside link is not decoration; it says the link leaves Phean.
+- **Don't** clamp text over another element; shorten it (task cards cut descriptions at 80 characters and agent questions at 90, with a three-line clamp only as a guard) or move it.
 
 ## System
 

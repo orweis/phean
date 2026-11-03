@@ -36,14 +36,15 @@ Connectors stay with the agents. Phean never holds email or Slack credentials. I
 3. **Goals as a hierarchy.** Goals and sub-goals up to four levels deep, with progress rolled up from every descendant. Agents propose goals, and only people approve, achieve, or abandon them.
 4. **Task intake and triage.** Bulk capture with source metadata. Items already captured by another agent, matched on source plus source reference, are skipped. New items land in the inbox, and filing them under a goal triages them.
 5. **Coordination.** Agents claim tasks before working on them, and a second claim is refused with the claimant's name. Next-action suggestions skip work claimed by others. A shared activity feed lets each agent catch up on what the rest did.
-6. **Long-term memory.** Facts, preferences, decisions, and context that any agent can save and every agent in the workspace can recall, optionally linked to a goal or task.
-7. **Search.** Full-text, prefix-matching search across goals, tasks, and memory.
-8. **Planning and views.** `plan_goal` returns a planning scaffold. Mermaid goal tree, kanban, and timeline views render in the agent's chat.
-9. **Web status views.**
-   - Status per workspace: open, inbox, overdue, due this week, done in the last 7 days, awaiting approval, active agents, last activity.
+6. **Hand-offs between agents and people.** An agent leaves its session on each task it works on: a link to its conversation or message where it has one (ideal: one click from Phean), otherwise its session and message ids and the command that resumes it, plus a one-line brief. When it needs a person, it asks one question on the task. The question waits on the person's overview with the way back into the agent's conversation, and can be answered there or in Phean, where the agent reads the answer on the task.
+7. **Long-term memory.** Facts, preferences, decisions, and context that any agent can save and every agent in the workspace can recall, optionally linked to a goal or task.
+8. **Search.** Full-text, prefix-matching search across goals, tasks, and memory.
+9. **Planning and views.** `plan_goal` returns a planning scaffold. Mermaid goal tree, kanban, and timeline views render in the agent's chat.
+10. **Web status views.**
+   - Status per workspace: open, inbox, overdue, due this week, done in the last 7 days, waiting on you (goals to decide and agent questions), active agents, last activity.
    - A workspace dashboard, kanban board, goal pages, memory, search, agent management, and members.
    - Platform admins get the same per-customer view across every workspace, read-only.
-10. **Hosting.** Runs entirely on Vercel, with Neon Postgres as the single store.
+11. **Hosting.** Runs entirely on Vercel, with Neon Postgres as the single store.
 
 ### Out of scope (for now)
 
@@ -67,10 +68,11 @@ The agent proposes; the human disposes. This is enforced by the server, not left
 
 1. Someone can go from sign-up to a connected agent in under two minutes: create a workspace, issue a token, paste the generated config.
 2. Two agents connected to the same workspace never capture the same source item twice and never both work on the same task.
-3. The owner sees what the agents did, what is overdue, and what awaits a decision on one screen, refreshed without reloading.
-4. An operator sees status across all customer workspaces in one table.
-5. No request can read or change another workspace's data. This is covered by isolation tests at the service, MCP, and database levels.
-6. State survives across sessions and agents: a new agent connecting days later picks up the goals, claims, and memory exactly where the others left them.
+3. The owner sees what the agents did, what is overdue, and what awaits a decision or an answer on one screen, refreshed without reloading.
+4. From any task an agent worked on, a person gets back into that agent's conversation in one click when the agent gave a link, or with ids and a command ready to copy when it did not.
+5. An operator sees status across all customer workspaces in one table.
+6. No request can read or change another workspace's data. This is covered by isolation tests at the service, MCP, and database levels.
+7. State survives across sessions and agents: a new agent connecting days later picks up the goals, claims, and memory exactly where the others left them.
 
 ## Risks
 
@@ -79,5 +81,7 @@ The agent proposes; the human disposes. This is enforced by the server, not left
 | Agents ignore the guidance | Critical rules are enforced in services (approval, claims, dedupe, memory ownership), not just written in prompts |
 | Cross-tenant leaks | The tenant comes only from a verified token or session. Every query is tenant-scoped, composite foreign keys make cross-tenant links impossible, and isolation tests cover all of it |
 | Leaked agent token | Hashed at rest, shown once, last-seen visible, revocable instantly |
+| A task stalls silently on a person | Agents ask with `request_input`; open questions lead the overview and count on the Overview tab and in the workspaces table, and `suggest_next_actions` skips tasks waiting on a person |
+| A session link that is not what it says | Only `https`, `http`, and known agent and chat app schemes are accepted; web links open in a new tab without access to Phean's window, and the guidance tells agents to link only their own conversations |
 | Inbox rot | The dashboard and status summary surface the inbox count, and the `daily_review` prompt pushes triage |
 | Mermaid rendering varies by client | Widely supported diagram types only, always with text alongside |

@@ -4,7 +4,7 @@
 
 Phean is a hosted, multi-tenant service where people set direction and AI agents do the legwork. Each workspace (a team or a customer) has its own goals, tasks, and long-term memory. Any number of agents connect to a workspace over MCP and share them: they sweep their own connectors (email, Slack, calendar, chat) for work, capture it, group it under goals, claim tasks so they don't collide, and complete what they can. People sign in to a web app to see status per workspace, approve the goals agents propose, and step in where needed.
 
-- **Remote MCP server** at `/mcp`: 21 tools and 4 prompts, plus operating instructions that teach agents the loop and the multi-agent rules.
+- **Remote MCP server** at `/mcp`: 24 tools and 4 prompts, plus operating instructions that teach agents the loop and the multi-agent rules.
 - **Web app**: status across workspaces, an overview per workspace, a kanban board, a timeline, goal pages, shared memory, search, agent tokens, and members. Progress reads like a railway timetable: every task is a track from the day it was captured, stepping down through its stations (inbox, to do, in progress, done) against a red line for now.
 - **Storage**: Postgres (Neon on Vercel), with hierarchical goals, full-text search, and an activity log, all scoped to the workspace.
 
@@ -28,7 +28,7 @@ Sign in as `demo@phean.dev` / `phean-demo-password`. To watch two agents share t
 pnpm demo:agents http://localhost:3000 phn_first_token phn_second_token
 ```
 
-The demo captures tasks (one duplicate is skipped), proposes goals, races two claims on one task (one is refused), completes work, and saves shared memory. The dashboard updates within 15 seconds, with the proposed goals waiting for your approval.
+The demo captures tasks (one duplicate is skipped), proposes goals, races two claims on one task (one is refused), completes work, asks you a question about another, and saves shared memory. The dashboard updates within 15 seconds, with the question and the proposed goals waiting on you.
 
 PGlite allows one process at a time, so stop `pnpm dev` before running `pnpm db:seed`. To use a real Postgres instead, set `DATABASE_URL` (see [`.env.example`](.env.example)).
 
@@ -61,9 +61,10 @@ The token identifies both the agent and its workspace. Each agent gets its own t
 2. **Scan and capture**: sweep the agent's own connectors and capture tasks with their source. Items any agent already captured are skipped.
 3. **Triage**: file tasks under goals, set priorities and due dates, propose new goals.
 4. **Approve**: a person approves or rejects proposed goals in the web app. Agents cannot.
-5. **Execute**: claim a task, do it, complete it with a note. Claims keep agents from colliding.
-6. **Review**: status summaries and Mermaid views (goal tree, kanban, timeline) in chat, or the web app's overview, timetable, and cumulative flow.
-7. **Remember**: durable facts, preferences, and decisions go into memory that every agent in the workspace can recall.
+5. **Execute**: claim a task with the agent's session (a link to its conversation, or its session id and resume command), do it, complete it with a note. Claims keep agents from colliding.
+6. **Ask**: when a task needs a person, the agent asks one question with `request_input`. It shows on the overview as waiting on you, with a one-click link back into the agent's conversation, and can be answered there or in Phean.
+7. **Review**: status summaries and Mermaid views (goal tree, kanban, timeline) in chat, or the web app's overview, timetable, and cumulative flow.
+8. **Remember**: durable facts, preferences, and decisions go into memory that every agent in the workspace can recall.
 
 ## MCP tools
 
@@ -73,6 +74,7 @@ The token identifies both the agent and its workspace. Each agent gets its own t
 | Goals | `create_goal`, `update_goal`, `list_goals`, `get_goal` |
 | Tasks | `capture_tasks`, `list_tasks`, `update_task`, `assign_tasks_to_goal` |
 | Coordination | `claim_task`, `release_task`, `complete_task`, `suggest_next_actions`, `get_activity` |
+| Hand-offs to people | `link_session`, `request_input`, `resolve_input` |
 | Memory | `remember`, `recall`, `forget` |
 | Search and planning | `search`, `plan_goal` |
 | Views | `visualize` (goal tree, kanban, timeline), `get_status_summary` |
@@ -83,15 +85,17 @@ Prompts: `sync_up`, `scan_sources`, `triage_inbox`, `daily_review`.
 
 | Page | What it shows |
 | --- | --- |
-| `/workspaces` | Status per workspace: open, inbox, overdue, due this week, done, awaiting approval, active agents, last activity |
-| `/w/:slug` | Overview: a status sentence, open work by station, goals awaiting your decision, late tasks, the timetable of the most pressing open tasks, next actions, the goal map, agent workload, and activity |
-| `/w/:slug/board` | Kanban by status, filterable by goal, with quick task actions; Done shows the latest five and folds the rest |
+| `/workspaces` | Status per workspace: open, inbox, overdue, due this week, done, waiting on you (goals to decide and agent questions), active agents, last activity |
+| `/w/:slug` | Overview: a status sentence, open work by station, agent questions waiting on you, goals awaiting your decision, late tasks, the timetable of the most pressing open tasks, next actions, the goal map, agent workload, and activity |
+| `/w/:slug/board` | Kanban by status, filterable by goal, with quick task actions and a Resume control on tasks agents worked on; Done shows the latest five and folds the rest |
 | `/w/:slug/timeline` | Cumulative flow and a timetable of every task over 14, 30, or 90 days, grouped by goal and filterable by goal |
 | `/w/:slug/goals/:id` | One goal: decisions, progress by station, its timetable, tasks, sub-goals, memory, activity |
 | `/w/:slug/memory` | Shared long-term memory, by kind and text |
 | `/w/:slug/search` | Full-text search across goals, tasks, and memory |
 | `/w/:slug/agents` | Issue and revoke agent tokens, with MCP client setup |
 | `/w/:slug/members` | Members, roles, and invitations |
+
+Each agent that works on a task can leave its session on it: a link that opens its conversation or message (`https://`, or an app link such as `cursor://` or `slack://`), its session and message ids, a resume command such as `claude --resume <id>`, and a one-line brief. **Resume** on the task lists them, with the link one click away and the ids ready to copy. When an agent asks a question, **Resume in Claude** (or the agent's app) leads its entry on the overview, beside **Answer here** for a short reply that the agent reads on the task.
 
 Agents are meant to fill the ledger, but people can add a task or goal by hand: a quiet **Add manually** button on the overview and board, and **Add task** or **Add sub-goal** on a goal page.
 
@@ -104,7 +108,7 @@ Pages refresh every 15 seconds while open. Owners and admins manage agents and m
 | `pnpm dev` | Apply migrations and start the dev server |
 | `pnpm check` | Typecheck, lint, and run the tests |
 | `pnpm test` | Vitest: domain services, policy, tenant isolation, members and invitations, configuration, timelines, and MCP over HTTP, against in-memory PGlite |
-| `pnpm test:e2e` | Playwright UI tests: builds, serves on port 3200 against a fresh seeded PGlite, and drives Chromium through sign-up, agents over MCP, approvals and goal edits, manual entry, the board, memory, search, invitations, the diagrams, accessibility (axe), and phone layouts |
+| `pnpm test:e2e` | Playwright UI tests: builds, serves on port 3200 against a fresh seeded PGlite, and drives Chromium through sign-up, agents over MCP, approvals and goal edits, resuming an agent's session and answering its question, manual entry, the board, memory, search, invitations, the diagrams, accessibility (axe), and phone layouts |
 | `pnpm build` | Production build (never connects to the database) |
 | `pnpm db:generate` | Generate a SQL migration from schema changes in `src/server/db/schema` |
 | `pnpm db:migrate` | Apply pending migrations |

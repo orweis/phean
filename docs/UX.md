@@ -13,7 +13,7 @@ The two meet in one shared ledger per workspace. Anything an agent does appears 
 2. **One ledger, many agents.** Several agents work in the same workspace. They coordinate through Phean (claims, duplicate detection, the activity log, shared memory) instead of through the human.
 3. **Show, then tell.** Status answers lead with a picture (a diagram in chat, the timetable and flow bars in the web app), then a short read, then one suggested next step.
 4. **Zero data entry for people.** People state intent ("track that audit thread"); agents structure it. The web forms exist for corrections and quick additions, not as the main way work gets in, so manual entry is always a quiet ghost button (see [Manual entry](#manual-entry)).
-5. **Every hand-off is a link.** Agents return deep links (`reviewUrl` from `create_goal`, `dashboardUrl` from `whoami` and `get_status_summary`) so a person can go straight from the chat to the decision.
+5. **Every hand-off is a link, both ways.** Agents return deep links (`reviewUrl` from `create_goal`, `dashboardUrl` from `whoami` and `get_status_summary`, `questionsUrl` from `request_input`) so a person can go straight from the chat to the decision. In the other direction, agents leave their session on the tasks they work on, so a person can go from Phean straight back into the conversation (see [Resuming with an agent](#resuming-with-an-agent)).
 6. **Read-only means read-only.** Platform admins see every workspace with a banner that says so, and the controls they cannot use are not rendered.
 
 ## The loops
@@ -24,6 +24,8 @@ flowchart LR
     Intake --> Triage[2 Triage]
     Triage --> Approve["3 Approve (web app)"]
     Approve --> Execute[4 Execute]
+    Execute -->|needs a person| Ask["Ask (web app or chat)"]
+    Ask -->|answered| Execute
     Execute --> Review[5 Review]
     Review -->|new work discovered| Intake
     Memory[(Shared memory)] -.-> Intake
@@ -35,7 +37,7 @@ flowchart LR
 
 **Trigger:** the start of every agent session, via the `sync_up` prompt.
 
-**Flow:** `whoami` (identity, workspace, permissions, dashboard link), then `get_activity` to see what other agents and people did, then `list_tasks` with `claimed="mine"` to decide whether to continue or release held work, then `get_status_summary` for pending approvals and overdue tasks.
+**Flow:** `whoami` (identity, workspace, permissions, dashboard link), then `get_activity` to see what other agents and people did, then `list_tasks` with `claimed="mine"` to decide whether to continue or release held work (calling `link_session` on what it continues, so the task points at the new session), then answers to its questions (`task.input_answered` events, or the answer appended to the task), then `get_status_summary` for questions waiting on people, pending approvals, and overdue tasks.
 
 > **Agent:** Since yesterday: Calendar planner captured 4 tasks and finished "Book auditor call"; you approved **Close Q3 books**. I still hold "Send contract redlines" and will finish it now. 1 goal is waiting for your approval: [Board pack sent](https://phean.example/w/acme/goals/...).
 
@@ -82,6 +84,33 @@ Goal decisions available in the web app:
 > **Human:** Handle what you can.
 > **Agent:** Took 3: drafted the redlines reply (in your drafts), booked the auditor call for Tuesday 10:00, filed the incident report. "Prepare board pack" is claimed by Calendar planner, so I left it. 2 need you: sign the contract and approve the relaunch budget.
 
+### Resuming with an agent
+
+**Trigger:** an agent needs something only a person has (a decision, a figure, a login), or a person wants to pick up where an agent left off.
+
+**Flow:** the agent passes its **session** when it claims a task (`claim_task` with `session`), or later with `link_session`. A session is how a person gets back to that agent:
+
+| Field | Example | Shown as |
+| --- | --- | --- |
+| `url` | `https://claude.ai/chat/…`, `cursor://…`, a Slack message link | **Resume in Claude**, one click. Web links open in a new tab; app links open their app. |
+| `sessionId`, `messageId` | `4f1c9e2a-…`, `1730812345.000200` | Ids with copy buttons |
+| `command` | `claude --resume 4f1c9e2a-…` | A command with a copy button |
+| `app`, `brief` | `Claude Code`, "Screened 12 of 20; four look strong." | Where the agent runs and where it stopped |
+
+A link is best, and at least one of the link, the session id, or the command is required. Links are limited to `https`, `http`, and the app schemes of known agent and chat clients (`cursor`, `vscode`, `vscode-insiders`, `windsurf`, `zed`, `claude`, `slack`, `msteams`), so a session can never carry a script. Each agent keeps one session per task, its latest; a task keeps up to eight agents' sessions, newest first.
+
+When it is blocked, the agent calls `request_input` with one clear question (and its session, if it has not linked one), tells the person in chat, and moves on to other work. The task now shows as **waiting on you**: a honey badge on its card, the question beneath, and a count on the Overview tab. The overview leads with an **Agent questions waiting on you** card. Each entry names the task, the agent, and when and where it asked, quotes the question, and offers:
+
+- **Resume in Claude** (the agent's app): the fastest answer is in the agent's own conversation, with everything it knows in front of you. When the agent left ids and a command instead of a link, **Resume** opens them with copy buttons.
+- **Answer here**: a short reply. It is appended to the task's description ("Question from …: … / Answer from …: …") and logged as `task.input_answered`, where the agent finds it at its next sync.
+- **Mark answered**: for questions already answered in the conversation.
+
+The agent closes its own question with `resolve_input` once it can act. Completing or releasing the task, or moving it to any status but in progress, closes it too. Only the agent that asked, or a person, can close a question, and while one agent's question is open no other agent can ask on the same task.
+
+> **Agent:** Globex disputes invoice #4471 and wants 10% off. I've asked in Phean so it's on your overview: offer 5% to settle this week, or escalate to their CFO? Meanwhile I'll chase the other two.
+> *(Later, in Phean: **Answer here**, "Offer 5%, and copy their CFO.")*
+> **Agent:** Got your answer on the task. Sent the 5% offer with the CFO copied, and closed the question.
+
 ### Loop 5: Review
 
 **Trigger:** "where do we stand?", or the overview.
@@ -121,6 +150,8 @@ These rules are in the server instructions every agent receives at connection ti
 | Do not duplicate | `search` before capturing; identical `source` and `sourceRef` are skipped (*enforced*) |
 | Claim before working | `claim_task`; agents cannot change a task another agent holds (*enforced*) |
 | Let go cleanly | `release_task` returns the task to **to do** |
+| Leave a way back | `claim_task` with `session`, or `link_session`, so a person can resume with you |
+| Never stall silently | `request_input`; only the asking agent or a person closes the question (*enforced*) |
 | People decide goals | goal approval, completion, and abandonment are human-only (*enforced*) |
 | Share what you learn | `remember` and `recall` |
 | Do not bulk-drop | drop only items a person confirmed by name |
@@ -148,26 +179,27 @@ flowchart TD
     Overview --- Members["/w/:slug/members"]
 ```
 
-Each workspace has a tab bar: **Overview, Board, Timeline, Memory, Search, Agents, Members**. Overview carries the number of goals awaiting a decision and Board the number of tasks in the inbox, so what waits is visible from every tab. On phones the tab bar scrolls sideways and fades at its right edge to show there is more. The header has a workspace switcher and the account menu. A workspace slug the viewer cannot see returns the same 404 as one that does not exist, so slugs do not leak.
+Each workspace has a tab bar: **Overview, Board, Timeline, Memory, Search, Agents, Members**. Overview carries the number of things waiting on you (goals to decide and agent questions to answer) and Board the number of tasks in the inbox, so what waits is visible from every tab. On phones the tab bar scrolls sideways and fades at its right edge to show there is more. The header has a workspace switcher and the account menu. A workspace slug the viewer cannot see returns the same 404 as one that does not exist, so slugs do not leak.
 
 ### Screens
 
-**Workspaces** (`/workspaces`): the status-per-customer view. Totals sit above the table (workspaces, open tasks, late, agents active). One row per workspace shows its open work as a flow bar by station, then late, due this week, done in the last 7 days, awaiting decision, agents active in the last 24 hours out of those connected, and last activity. Late counts are red and pending decisions amber; zeros are faded so the rows that need attention stand out. The workspace column stays pinned while the table scrolls sideways on narrow screens. A form below creates a new workspace (the creator becomes its owner). Platform admins see every workspace, marked **Read-only**.
+**Workspaces** (`/workspaces`): the status-per-customer view. Totals sit above the table (workspaces, open tasks, late, agents active). One row per workspace shows its open work as a flow bar by station, then late, due this week, done in the last 7 days, waiting on you (goals to decide and agent questions), agents active in the last 24 hours out of those connected, and last activity. Late counts are red and what waits on you amber; zeros are faded so the rows that need attention stand out. The workspace column stays pinned while the table scrolls sideways on narrow screens. A form below creates a new workspace (the creator becomes its owner). Platform admins see every workspace, marked **Read-only**.
 
-**Overview** (`/w/:slug`): one sentence first ("2 goals await your decision, 3 tasks are late, and 14 tasks are open."), then, in order of what needs a person:
+**Overview** (`/w/:slug`): one sentence first ("1 agent question awaits your answer, 2 goals await your decision, 3 tasks are late, and 14 tasks are open."), then, in order of what needs a person:
 
 1. **Today on the line**: open work as one flow bar by station, then late, due this week, done in the last 7 days, and agents active.
-2. **Goals awaiting your decision** (amber), shown only when goals are proposed, with Approve and Reject in place.
-3. **Late** (red), shown only when open tasks are past due, each led by its due date.
-4. **On the line**: the timetable of the eight most pressing open tasks (late first, then priority, due date, and age), with a link to the full Timeline.
-5. **Next actions**: the same ranking agents get from `suggest_next_actions`, with quick actions on each row.
-6. **Goal map**: every approved goal with its tasks by station, rolled up from sub-goals.
-7. **Agents**: what each agent holds now and has finished this week, on one shared scale.
-8. **Activity**: people and agents, newest first.
+2. **Agent questions waiting on you** (amber), shown only when agents have asked, longest waiting first, each with **Resume in …**, **Answer here**, and **Mark answered** (see [Resuming with an agent](#resuming-with-an-agent)).
+3. **Goals awaiting your decision** (amber), shown only when goals are proposed, with Approve and Reject in place.
+4. **Late** (red), shown only when open tasks are past due, each led by its due date.
+5. **On the line**: the timetable of the eight most pressing open tasks (late first, then priority, due date, and age), with a link to the full Timeline.
+6. **Next actions**: the same ranking agents get from `suggest_next_actions`, with quick actions on each row.
+7. **Goal map**: every approved goal with its tasks by station, rolled up from sub-goals.
+8. **Agents**: what each agent holds now and has finished this week, on one shared scale.
+9. **Activity**: people and agents, newest first.
 
-On a desktop the decisions, the timetable, next actions, and the goal map form the wide left column, with late work, agents, and activity on the right. On a phone both columns dissolve into one stack in the order above. The header holds a quiet **Add manually** button for a task or goal, and when no agent is connected yet, a primary **Connect an agent** button beside it.
+On a desktop the questions, the decisions, the timetable, next actions, and the goal map form the wide left column, with late work, agents, and activity on the right. On a phone both columns dissolve into one stack in the order above. The header holds a quiet **Add manually** button for a task or goal, and when no agent is connected yet, a primary **Connect an agent** button beside it.
 
-**Board** (`/w/:slug/board`): a kanban with Inbox, To do, In progress, and Done lanes, each topped with its station colour. Dropped tasks leave the board; they stay findable in search and on the timeline. Done shows the latest five and folds the rest of the 20 most recent behind **Show N more**, so it does not outrun the open lanes. It can be filtered to one goal and its sub-goals, and **Add manually** in the header files a new task under the filtered goal. Each card shows priority, due date, goal, source, and the agent holding it, plus one next-step button (Accept, Start, Done, Reopen, Restore), Release when it is claimed, and Drop while it is open.
+**Board** (`/w/:slug/board`): a kanban with Inbox, To do, In progress, and Done lanes, each topped with its station colour. Dropped tasks leave the board; they stay findable in search and on the timeline. Done shows the latest five and folds the rest of the 20 most recent behind **Show N more**, so it does not outrun the open lanes. It can be filtered to one goal and its sub-goals, and **Add manually** in the header files a new task under the filtered goal. Each card shows priority, due date, goal, source (linked to the original message when the agent recorded a web link), and the agent holding it, plus one next-step button (Accept, Start, Done, Reopen, Restore), Release when it is claimed, and Drop while it is open. A task an agent is waiting on carries a **Waiting on you** badge, which links to its question on the overview, and the question itself, cut at three lines. **Resume**, a text link at the end of the card's actions, lists every agent's session on the task. Task rows elsewhere (late work, next actions, a goal's tasks) carry the same badge and **Resume**.
 
 **Timeline** (`/w/:slug/timeline`): the deep dive on how work moved, over the last 14, 30, or 90 days, for the whole workspace or one goal and its sub-goals. A workspace with less history than the window shows only what it has ("since Oct 12") rather than weeks of empty axis. The header sums the window up ("23 tasks on the line: 9 done, 2 dropped, 12 still open (3 late)."). Below it, **How the work moved** (the cumulative flow) and the **Timetable** of every task, grouped by goal.
 
@@ -228,7 +260,7 @@ One table per concept (`src/lib/domain.ts`) maps each value to a label and a ton
 | Tone | Token | Used for |
 | --- | --- | --- |
 | Danger | `late` (crimson) | late work, urgent priority, revoked agents, the now line |
-| Warning | `wait` (honey) | proposed goals and pending decisions, high priority, read-only access |
+| Warning | `wait` (honey) | what waits on a person (proposed goals, agent questions), high priority, read-only access |
 | Info | `move` (violet) | in-progress tasks, active goals, admin role, facts |
 | Success | `arrive` (green) | done tasks, achieved goals, active agents, decisions |
 | Accent | `signal` (ember) | inbox, owner role, preferences |
@@ -257,6 +289,6 @@ Every mutation is a server action with the same behavior: fields are validated w
 
 - Lead with outcomes and counts ("Captured 6, 2 urgent, 1 duplicate skipped"), never tool mechanics.
 - Name the other agents when their work matters ("claimed by Calendar planner").
-- Batch questions for the person into one message, and include the review link when a decision is needed.
+- Batch questions for the person into one message, and include the review link when a decision is needed. Record each question that blocks a task with `request_input`, so it waits on the person's overview with the way back to you.
 - Never say a goal is approved until a person has approved it.
 - Mention inbox rot unprompted: more than 10 items, or anything older than a week.

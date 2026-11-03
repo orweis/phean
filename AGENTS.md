@@ -31,6 +31,8 @@ Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) first. The rules below are the
 - Labels and colors for statuses, priorities, roles, and kinds come from the `{ label, tone }` tables in `src/lib/domain.ts`. Paths come from `routes` in `src/lib/routes.ts`. Field limits come from `LIMITS` and the slug rule from `WORKSPACE_SLUG_PATTERN`, for the schema and the form alike. Do not hard-code any of them.
 - Dates are UTC calendar days through `src/lib/dates.ts` (`isoDayFromToday`, `daysBetween`, `isPastDue`), in the app, the scripts, and the tests.
 - `src/lib` is client-safe and must not import from `src/server`.
+- Agent sessions and questions are JSONB on `tasks`, shaped by `src/lib/agent-sessions.ts`. Change them inside `inTransaction` on a row read with `findTask(tx, id, { lock: true })`, so concurrent agents never drop each other's sessions. A session URL is checked with `isResumeUrl` in its schema and stored normalized; anything rendered as a link from agent input goes through `OutsideLink`, and only `webUrl` decides what is a web link. Never widen `RESUME_URL_SCHEMES` to schemes that run code (`javascript:`, `data:`, `file:`).
+- A service that ends a task's run (complete, release, any status change except to in progress) clears its `inputRequest`, so no question outlives the work it was about.
 
 ### Database
 
@@ -46,6 +48,7 @@ Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) first. The rules below are the
 - Liquid Glass belongs to the functional layer only: `glass-bar` for the sticky header and `glass-float` for menus, popovers and sheets. Never make a card, lane or chart glass. Controls are capsules (`rounded-full`); cards are `rounded-lg`.
 - Three weights only: `font-normal` for running text, `font-semibold` for labels and titles, `font-bold` for page titles, figures and the display. Stat values take the `figure` utility (rounded, tabular figures). Inline text links get the `link` utility; the first cell of a wide table gets `PINNED_CELL` from `components/ui/table.ts`.
 - Manual task and goal entry stays quiet (DESIGN.md's Agents First Rule): `ManualEntry` in a page header, or a ghost `Popover` in a card header. Never lay an add form open on a page. `ManualEntry`'s Task/Goal radios share one name, so render it once per page.
+- A panel that leads elsewhere rather than acts (Resume) is `Popover look="link"`, after a row's actions. The way back into an agent's session is `ResumeLink` or `ResumePopover` from `components/agent-sessions.tsx`; a `CopyButton` that sits beside others takes a `subject` ("session id") so screen readers can tell them apart.
 - `cx` joins classes; it does not merge them. Pass a class that conflicts with a component's own and both apply, so add a prop or a variant instead.
 - Charts are server-rendered spans placed by `lib/timeline.ts` fractions. Keep the maths in `lib` (with unit tests) and the layout in `components/charts`. Every diagram needs a text equivalent for screen readers, and state must not rely on colour alone.
 - Form controls are `w-full` by design and class order cannot override it. Size the wrapper (a grid column or a `div` with a width) instead of the control.
@@ -60,4 +63,5 @@ Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) first. The rules below are the
 - Specs share the seeded demo account through the `setup` project because sign-in is rate limited. Read-only specs use the seeded Globex workspace and its three weeks of history; a spec that writes creates its own account and workspace with `newWorkspace` (`e2e/support/accounts.ts`), so specs can run in parallel.
 - Sign-up allows three per 10 seconds from one client, and the specs together already use most of that. A spec signs up at most one person; a second person is the demo account in its own browser context (`DEMO_SESSION`), and the spec undoes what it changed for them.
 - Move between workspace tabs with `openTab` (`e2e/support/navigation.ts`), which waits for the new URL. Pages share controls (memory and search both have a search box), so acting before navigation finishes can hit the page being left.
-- Every new page goes into `PAGES` in `e2e/quality.spec.ts` (axe and the 375px checks), and every new timetable into `TIMETABLES`.
+- Every new page goes into `PAGES` in `e2e/quality.spec.ts` (axe and the 375px checks), every new timetable into `TIMETABLES`, and every popover whose content matters into `PANELS` (axe scans skip a closed panel).
+- The tab rail's counts are in the workspace layout, which client navigation keeps; after an agent changes something over MCP, load the page with `page.goto` before asserting on them.
