@@ -18,7 +18,7 @@ Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) first. The rules below are the
 - `pnpm test:e2e` builds and runs the Playwright UI tests on port 3200 against `.data/e2e`. Run it after any UI change. It needs `pnpm exec playwright install chromium` once, and it reuses a server already listening on 3200, so stop a stale one after rebuilding. To rerun without rebuilding: `pnpm exec playwright test`.
 - CI (`.github/workflows/ci.yml`) runs `pnpm check` and `pnpm test:e2e` on every pull request.
 - `pnpm dev` and `pnpm db:seed` both use the on-disk PGlite database by default, and PGlite allows one process at a time. Stop the dev server before seeding.
-- `PageProps<"/route">` and `LayoutProps<"/route">` are generated types. If typecheck cannot find them, run `pnpm exec next typegen`.
+- `PageProps<"/route">` and `LayoutProps<"/route">` are generated types. `pnpm typecheck` runs `next typegen` first, so a fresh checkout has them; a bare `tsc` will not.
 
 ### Where code goes
 
