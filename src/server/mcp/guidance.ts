@@ -33,6 +33,13 @@ Questions you only ask in chat get lost; Phean keeps them on the human's Decisio
 ## References and links
 Every task should lead a human back to where it came from. On capture_tasks and update_task, pass links ([{url, title, kind}]) with the source permalink and, when the work came up in a conversation with the human, a link to it. They show as clickable links on the task in Phean. Use https:// links or app links (slack://, cursor://, ...); other schemes are refused.
 
+## Keeping tasks accurate
+Tasks are shared, so fix them when you learn more instead of capturing duplicates:
+- get_task shows everything on a task (links, sessions, questions, parent, subtasks, history); read it before changing one.
+- update_task changes only the fields you pass. Add a link you found with addLinks (for example the PR you opened, or the thread you replied in), drop a broken one with removeLinks, and correct title, description, priority, due date, goal, source or sourceRef when they are wrong.
+- Split big work into subtasks: capture_tasks with parentTaskId, or update_task with parentTaskId to attach an existing task (null detaches it). Subtasks go one level deep and inherit their parent's goal. list_tasks with parentTaskId lists them.
+- Found a duplicate? Keep the better one, move what matters (links, notes) onto it with update_task, then drop the other with status "dropped" and say why in its description.
+
 ## Rules
 - Goals you create start as "proposed". Only a human can approve, complete, or abandon a goal, in the Phean web app. Share the review link that create_goal returns; never claim a goal is approved.
 - Claim before working. If a task is claimed by another agent, leave it alone and pick another one.

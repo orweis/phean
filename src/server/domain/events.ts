@@ -59,3 +59,13 @@ export const listActivity = service(ActivityInput, async (ctx, { since, goalId, 
     .orderBy(desc(events.createdAt), desc(events.id))
     .limit(limit);
 });
+
+/** The latest events about one task, newest first. */
+export async function taskActivity(ctx: Ctx, taskId: string, limit = 20): Promise<Activity[]> {
+  return ctx.db
+    .select(activityColumns)
+    .from(events)
+    .where(and(inTenant(ctx, events), eq(events.entityType, "task"), eq(events.entityId, taskId)))
+    .orderBy(desc(events.createdAt), desc(events.id))
+    .limit(limit);
+}

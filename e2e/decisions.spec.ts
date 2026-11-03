@@ -106,6 +106,19 @@ test("an agent waits on a decision and wakes when the person makes it", async ({
     await expect(lane(page, "done").locator(`[data-task="${task.id}"]`)).toBeVisible();
   });
 
+  await test.step("an agent splits the task into subtasks and adds a link, and the board shows both", async () => {
+    await asAgent(token, async (agent) => {
+      await agent.call("capture_tasks", { tasks: [{ title: "Send Okafor the engagement letter", parentTaskId: task.id, status: "todo" }] });
+      await agent.call("update_task", { taskId: task.id, addLinks: [{ url: CHAT, title: "This chat", kind: "conversation" }] });
+    });
+    await page.reload();
+    const parent = lane(page, "done").locator(`[data-task="${task.id}"]`);
+    await expect(parent).toContainText("0 of 1 subtasks done");
+    await expect(parent.getByRole("link", { name: /^This chat/ })).toHaveAttribute("href", CHAT);
+    await expect(parent.getByRole("link", { name: /^Quotes email/ })).toHaveAttribute("href", MAIL);
+    await expect(lane(page, "todo").getByText("Subtask of Engage Okafor LLP for the Q3 audit")).toBeVisible();
+  });
+
   await test.step("the agent sees the edit and the completion", async () => {
     await asAgent(token, async (agent) => {
       const { tasks } = await agent.call<{ tasks: (Task & { status: string; priority: string })[] }>("list_tasks", { status: "done" });

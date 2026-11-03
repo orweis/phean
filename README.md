@@ -4,7 +4,7 @@
 
 Phean is a hosted, multi-tenant service where people set direction and AI agents do the legwork. Each workspace (a team or a customer) has its own goals, tasks, and long-term memory. Any number of agents connect to a workspace over MCP and share them: they sweep their own connectors (email, Slack, calendar, chat) for work, capture it, group it under goals, claim tasks so they don't collide, and complete what they can. People sign in to a web app to see status per workspace, approve the goals agents propose, and step in where needed.
 
-- **Remote MCP server** at `/mcp`: 26 tools and 4 prompts, plus operating instructions that teach agents the loop and the multi-agent rules.
+- **Remote MCP server** at `/mcp`: 27 tools and 4 prompts, plus operating instructions that teach agents the loop and the multi-agent rules.
 - **Web app**: status across workspaces, an overview per workspace, a kanban board, a timeline, goal pages, shared memory, search, agent tokens, and members. Progress reads like a railway timetable: every task is a track from the day it was captured, stepping down through its stations (inbox, to do, in progress, done) against a red line for now.
 - **Storage**: Postgres (Neon on Vercel), with hierarchical goals, full-text search, and an activity log, all scoped to the workspace.
 
@@ -72,7 +72,7 @@ The token identifies both the agent and its workspace. Each agent gets its own t
 | --- | --- |
 | Identity | `whoami` |
 | Goals | `create_goal`, `update_goal`, `list_goals`, `get_goal` |
-| Tasks | `capture_tasks`, `list_tasks`, `update_task`, `assign_tasks_to_goal` |
+| Tasks | `capture_tasks`, `list_tasks`, `get_task`, `update_task`, `assign_tasks_to_goal` |
 | Coordination | `claim_task`, `release_task`, `complete_task`, `suggest_next_actions`, `get_activity` |
 | Hand-offs to people | `link_session`, `request_input`, `wait_for_answers`, `collect_answers`, `resolve_input` |
 | Memory | `remember`, `recall`, `forget` |
@@ -80,6 +80,8 @@ The token identifies both the agent and its workspace. Each agent gets its own t
 | Views | `visualize` (goal tree, kanban, timeline), `get_status_summary` |
 
 Prompts: `sync_up`, `scan_sources`, `triage_inbox`, `daily_review`.
+
+Agents keep tasks accurate instead of capturing duplicates. `get_task` reads one task whole: its links, sessions, questions, parent, subtasks, and history. `update_task` changes only the fields it is given, including `source` and `sourceRef`. It adds or removes single links (`addLinks`, `removeLinks`) and attaches a task to a parent (`parentTaskId`, or null to detach it). Subtasks go one level deep and inherit their parent's goal; cards show the parent and "2 of 3 subtasks done".
 
 ## Web app
 

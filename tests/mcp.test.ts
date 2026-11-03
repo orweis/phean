@@ -82,7 +82,7 @@ describe("MCP surface", () => {
   it("advertises every tool with annotations, plus prompts and instructions", async () => {
     const { tools } = await scout.listTools();
     expect(tools.map((tool) => tool.name).sort()).toEqual(TOOLS.map((tool) => tool.name).sort());
-    expect(tools).toHaveLength(26);
+    expect(tools).toHaveLength(27);
     const byName = new Map(tools.map((tool) => [tool.name, tool]));
     expect(byName.get("list_tasks")?.annotations?.readOnlyHint).toBe(true);
     expect(byName.get("forget")?.annotations?.destructiveHint).toBe(true);
@@ -235,6 +235,22 @@ describe("multiple agents sharing a workspace", () => {
     );
     expect(woken).toMatchObject({ timedOut: false, answers: [{ answer: "Okafor", chosenOption: "Okafor" }] });
     expect(dataOf(await call(scout, "collect_answers"))).toEqual({ answers: [] });
+  });
+
+  it("lets an agent read a task whole and fix it in place", async () => {
+    const {
+      created: [parent],
+    } = dataOf<{ created: { id: string }[] }>(await call(scout, "capture_tasks", { tasks: [{ title: "Launch the pricing page", status: "todo" }] }));
+    dataOf(await call(scout, "capture_tasks", { tasks: [{ title: "Write the FAQ", parentTaskId: parent!.id }] }));
+    const fixed = dataOf<{ task: { title: string; links: { url: string }[] } }>(
+      await call(closer, "update_task", { taskId: parent!.id, title: "Launch the new pricing page", addLinks: [{ url: "https://github.com/acme/site/pull/7", kind: "doc" }] }),
+    );
+    expect(fixed.task).toMatchObject({ title: "Launch the new pricing page", links: [{ url: "https://github.com/acme/site/pull/7" }] });
+    const detail = dataOf<{ task: { subtaskCount: number }; subtasks: { title: string }[]; activity: { action: string }[]; boardUrl: string }>(
+      await call(scout, "get_task", { taskId: parent!.id }),
+    );
+    expect(detail).toMatchObject({ task: { subtaskCount: 1 }, subtasks: [{ title: "Write the FAQ" }], boardUrl: `${TEST_ORIGIN}/w/${ws.tenant.slug}/board` });
+    expect(detail.activity.map((event) => event.action)).toEqual(["task.updated", "task.captured"]);
   });
 
   it("hands back the cursor it was given when nothing happened since", async () => {

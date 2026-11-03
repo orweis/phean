@@ -18,6 +18,7 @@ import {
   claimTask,
   collectAnswers,
   completeTask,
+  getTask,
   linkSession,
   listTasks,
   releaseTask,
@@ -116,21 +117,31 @@ export const TOOLS: readonly PheanTool[] = [
     name: "capture_tasks",
     title: "Capture tasks",
     description:
-      "Record up to 100 tasks found in your sources in one call. Set source and a stable sourceRef (message link, thread or event id): items any agent already captured are skipped and reported in 'duplicates'. Add links people can click: the source message (kind 'source') and the conversation where the work came up (kind 'conversation'). New tasks land in the inbox unless status is 'todo'.",
+      "Record up to 100 tasks found in your sources in one call. Set source and a stable sourceRef (message link, thread or event id): items any agent already captured are skipped and reported in 'duplicates'. Add links people can click: the source message (kind 'source') and the conversation where the work came up (kind 'conversation'). Pass parentTaskId to capture the steps of a bigger task as its subtasks. New tasks land in the inbox unless status is 'todo'.",
     service: captureTasks,
   }),
   serviceTool({
     name: "list_tasks",
     title: "List tasks",
-    description: "Tasks filtered by status, goal, priority, claim (mine, unclaimed), or due date, most urgent first. Each includes its goal title and who has claimed it.",
+    description: "Tasks filtered by status, goal, parent task (its subtasks), priority, claim (mine, unclaimed), or due date, most urgent first. Each includes its goal title, who has claimed it, its parent's title, and its subtask progress.",
     readOnly: true,
     service: listTasks,
     key: "tasks",
   }),
+  defineTool({
+    name: "get_task",
+    title: "Get task",
+    description:
+      "One task with everything on it: links, agent sessions, its open question and answered ones, its parent task, its subtasks, and its recent activity. Read it before fixing a task.",
+    input: getTask.schema,
+    readOnly: true,
+    run: async (ctx, input) => ({ ...(await getTask(ctx, input)), boardUrl: ctx.url(routes.board(ctx.tenant.slug)) }),
+  }),
   serviceTool({
     name: "update_task",
     title: "Update task",
-    description: "Change a task's title, description, status, priority, due date (null clears), goal (null unfiles), tags, or links (replaces them all). Fails if another agent has claimed it.",
+    description:
+      "Fix or update a task: title, description, status, priority, due date (null clears), goal (null unfiles), tags, source and sourceRef (must not match another task's), or parentTaskId (make it a subtask of another task, null detaches it; one level deep). Links: addLinks adds or updates links by url, removeLinks removes urls, links replaces them all. Only the fields you pass change. Status changes fail if another agent has claimed the task.",
     service: updateTask,
     key: "task",
   }),

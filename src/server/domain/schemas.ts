@@ -76,6 +76,7 @@ export const TaskDraft = z.object({
   goalId: goalId.optional(),
   tags: tags.default([]),
   status: z.enum(["inbox", "todo"]).default("inbox"),
+  parentTaskId: taskId.optional().describe("Make this a subtask of an existing task (one level: not of a subtask). Inherits the parent's goal unless goalId is set"),
   links: links.default([]).describe("References people can click: the conversation (kind conversation) and the source message (kind source)"),
 });
 
@@ -90,7 +91,12 @@ export const UpdateTaskInput = z.object({
   dueDate: isoDate.nullable().optional(),
   goalId: goalId.nullable().optional(),
   tags: tags.optional(),
-  links: links.optional().describe("Replaces the task's links; [] removes them"),
+  source: z.enum(SOURCES).optional(),
+  sourceRef: z.string().trim().max(LIMITS.sourceRef).optional().describe("Fix the origin reference; must not match another task's"),
+  parentTaskId: taskId.nullable().optional().describe("Make it a subtask of another task, or null to detach it"),
+  links: links.optional().describe("Replaces all of the task's links; [] removes them. To add or remove some, use addLinks and removeLinks"),
+  addLinks: links.optional().describe("Links to add; a link whose url is already on the task is updated in place"),
+  removeLinks: z.array(z.string().trim().min(1).max(LIMITS.url)).max(MAX_LINKS).optional().describe("URLs of links to remove"),
 });
 
 export const TaskRefInput = z.object({ taskId });
@@ -174,6 +180,7 @@ export const AssignTasksInput = z.object({ taskIds: z.array(taskId).min(1).max(1
 export const ListTasksInput = z.object({
   status: z.enum(TASK_STATUSES).optional(),
   goalId: goalId.optional(),
+  parentTaskId: taskId.optional().describe("Only the subtasks of this task"),
   priority: z.enum(PRIORITIES).optional(),
   claimed: z.enum(["any", "mine", "unclaimed"]).default("any"),
   due: z

@@ -24,6 +24,7 @@ import {
   claimTask,
   collectAnswers,
   completeTask,
+  getTask,
   linkSession,
   listDecisions,
   listTasks,
@@ -457,6 +458,73 @@ describe("agent sessions and questions", () => {
     const updated = await updateTask(human, { taskId: created[0]!.id, links: [{ url: "slack://channel?id=C1", kind: "conversation" }] });
     expect(updated.links).toEqual([{ url: "slack://channel?id=C1", title: "", kind: "conversation" }]);
     await expect(updateTask(human, { taskId: created[0]!.id, links: [{ url: "data:text/html,hi" }] })).rejects.toMatchObject({ code: "invalid" });
+  });
+
+  it("lets agents add and remove links without replacing the rest", async () => {
+    const {
+      created: [task],
+    } = await captureTasks(scout, { tasks: [{ title: "Ship the pricing page", links: [{ url: "https://mail.example.com/t/1", title: "Brief" }] }] });
+    const added = await updateTask(scout, {
+      taskId: task!.id,
+      addLinks: [
+        { url: "https://github.com/acme/site/pull/42", title: "PR", kind: "doc" },
+        { url: "https://mail.example.com/t/1", title: "Marketing brief" },
+      ],
+    });
+    expect(added.links).toEqual([
+      { url: "https://github.com/acme/site/pull/42", title: "PR", kind: "doc" },
+      { url: "https://mail.example.com/t/1", title: "Marketing brief", kind: "source" },
+    ]);
+    const removed = await updateTask(scout, { taskId: task!.id, removeLinks: ["https://mail.example.com/t/1"] });
+    expect(removed.links.map((link) => link.title)).toEqual(["PR"]);
+    await expect(updateTask(scout, { taskId: task!.id, links: [], addLinks: [{ url: "https://x.test" }] })).rejects.toMatchObject({ code: "invalid" });
+  });
+
+  it("lets agents fix a task's source, but not onto another task's", async () => {
+    const { created } = await captureTasks(scout, {
+      tasks: [
+        { title: "Reply to Dana", source: "email", sourceRef: "thread-1" },
+        { title: "Reply to Eli", source: "email", sourceRef: "thread-2" },
+      ],
+    });
+    const fixed = await updateTask(scout, { taskId: created[1]!.id, source: "slack", sourceRef: "C1/p9" });
+    expect(fixed).toMatchObject({ source: "slack", sourceRef: "C1/p9" });
+    await expect(updateTask(scout, { taskId: created[1]!.id, source: "email", sourceRef: "thread-1" })).rejects.toMatchObject({ code: "conflict" });
+  });
+
+  it("nests subtasks one level deep under a task, inheriting its goal", async () => {
+    const goal = await createGoal(human, { title: "Launch the partner portal" });
+    const {
+      created: [parent],
+    } = await captureTasks(scout, { tasks: [{ title: "Build the signup flow", goalId: goal.id, status: "todo" }] });
+    const { created: steps } = await captureTasks(scout, {
+      tasks: [
+        { title: "Design the form", parentTaskId: parent!.id },
+        { title: "Wire up email verification", parentTaskId: parent!.id },
+      ],
+    });
+    expect(steps.map((step) => [step.parentTaskId, step.goalId])).toEqual([
+      [parent!.id, goal.id],
+      [parent!.id, goal.id],
+    ]);
+    const {
+      created: [loose],
+    } = await captureTasks(scout, { tasks: [{ title: "Write the launch post" }] });
+    expect((await updateTask(scout, { taskId: loose!.id, parentTaskId: parent!.id })).parentTaskId).toBe(parent!.id);
+    await completeTask(scout, { taskId: steps[0]!.id });
+
+    const detail = await getTask(human, { taskId: parent!.id });
+    expect(detail.task).toMatchObject({ subtaskCount: 3, subtasksDone: 1, parentTitle: null });
+    expect(detail.subtasks.map((step) => step.title).sort()).toEqual(["Design the form", "Wire up email verification", "Write the launch post"]);
+    expect(detail.activity[0]).toMatchObject({ action: "task.captured" });
+    expect((await getTask(human, { taskId: steps[1]!.id })).parent).toMatchObject({ id: parent!.id, title: "Build the signup flow" });
+    expect((await listTasks(scout, { parentTaskId: parent!.id })).map((step) => step.parentTitle)).toEqual(["Build the signup flow", "Build the signup flow", "Build the signup flow"]);
+
+    await expect(captureTasks(scout, { tasks: [{ title: "Too deep", parentTaskId: steps[1]!.id }] })).rejects.toMatchObject({ code: "invalid" });
+    await expect(updateTask(scout, { taskId: parent!.id, parentTaskId: loose!.id })).rejects.toMatchObject({ code: "invalid" });
+    await expect(updateTask(scout, { taskId: parent!.id, parentTaskId: parent!.id })).rejects.toMatchObject({ code: "invalid" });
+    expect((await updateTask(scout, { taskId: loose!.id, parentTaskId: null })).parentTaskId).toBeNull();
+    await expect(getTask(human, { taskId: "t_missing" })).rejects.toMatchObject({ code: "not_found" });
   });
 
   it("keeps agents off questions and sessions on work another agent holds", async () => {

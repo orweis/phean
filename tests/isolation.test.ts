@@ -14,6 +14,7 @@ import {
   captureTasks,
   claimTask,
   collectAnswers,
+  getTask,
   linkSession,
   listDecisions,
   listTasks,
@@ -92,6 +93,8 @@ describe("tenant isolation", () => {
     await expect(claimTask(globexAgent, { taskId: acmeTask.id })).rejects.toMatchObject({ code: "not_found" });
     await expect(linkSession(globexAgent, { taskId: acmeTask.id, session: { sessionId: "s1" } })).rejects.toMatchObject({ code: "not_found" });
     await expect(requestInput(globexAgent, { taskId: acmeTask.id, question: "Who signs?" })).rejects.toMatchObject({ code: "not_found" });
+    await expect(captureTasks(globexAgent, { tasks: [{ title: "Sneaky step", parentTaskId: acmeTask.id }] })).rejects.toMatchObject({ code: "not_found" });
+    await expect(getTask(globexOwner, { taskId: acmeTask.id })).rejects.toMatchObject({ code: "not_found" });
     await expect(answerInput(globexOwner, { taskId: acmeTask.id, answer: "Me" })).rejects.toMatchObject({ code: "not_found" });
     await expect(
       assignTasksToGoal(globexAgent, { taskIds: [acmeTask.id], goalId: globexGoal.id }),

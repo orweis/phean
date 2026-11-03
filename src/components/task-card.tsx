@@ -1,4 +1,4 @@
-import { Bot, CalendarClock } from "lucide-react";
+import { Bot, CalendarClock, CornerDownRight, ListChecks } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { completeTaskAction, releaseTaskAction, updateTaskAction } from "@/app/w/[slug]/actions";
@@ -76,7 +76,19 @@ function TaskMeta({ task, slug, showGoal, showDue = true }: { task: TaskView; sl
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
       {task.inputRequest && <WaitingBadge slug={slug} kind={task.inputRequest.kind} />}
+      {task.parentTitle && (
+        <span className="inline-flex max-w-56 items-center gap-1">
+          <CornerDownRight className="size-3 shrink-0" aria-hidden />
+          <span className="truncate">Subtask of {task.parentTitle}</span>
+        </span>
+      )}
       {showGoal && task.goalId && task.goalTitle && <GoalLink slug={slug} goalId={task.goalId} title={task.goalTitle} />}
+      {task.subtaskCount > 0 && (
+        <span className={cx("inline-flex items-center gap-1", task.subtasksDone === task.subtaskCount && "text-arrive-ink")}>
+          <ListChecks className="size-3" aria-hidden />
+          {task.subtasksDone} of {task.subtaskCount} subtasks done
+        </span>
+      )}
       {showDue && task.dueDate && (
         <span className={cx("inline-flex items-center gap-1", late && "font-semibold text-late-ink")}>
           <CalendarClock className="size-3" aria-hidden />

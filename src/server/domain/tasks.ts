@@ -1,4 +1,5 @@
 import { and, asc, eq, inArray, isNotNull, isNull, or, sql, type SQL } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import type { z } from "zod";
 
 import {
@@ -21,7 +22,7 @@ import { newId } from "../db/ids";
 import { agents, goals, tasks, type TaskRow } from "../db/schema";
 import { createdByFields, inTenant, inTransaction, tenantRow, type Ctx } from "./context";
 import { conflict, invalid, notFound } from "./errors";
-import { recordEvent, recordEvents } from "./events";
+import { recordEvent, recordEvents, taskActivity, type Activity } from "./events";
 import { assertGoalsExist, findGoal } from "./goals";
 import { assertCan } from "./policy";
 import {
@@ -45,8 +46,17 @@ import {
 import { service } from "./service";
 
 export type Task = Omit<TaskRow, "tenantId" | "search">;
-/** A task with the labels every list needs: its goal's title and who has claimed it. */
-export type TaskView = Task & { goalTitle: string | null; claimedByName: string | null };
+/**
+ * A task with the labels every list needs: its goal's title, who has claimed it, the task it is a
+ * subtask of, and how many subtasks of its own are done.
+ */
+export type TaskView = Task & {
+  goalTitle: string | null;
+  claimedByName: string | null;
+  parentTitle: string | null;
+  subtaskCount: number;
+  subtasksDone: number;
+};
 
 export const taskColumns = publicColumns(tasks, ["tenantId", "search"]);
 
@@ -74,14 +84,61 @@ export const isDueWithinWeek = and(
 )!;
 export const isAwaitingInput = and(isOpenTask, isNotNull(tasks.inputRequest))!;
 
+const parentTask = alias(tasks, "parent_task");
+
+const subtaskTally = (filter: SQL) =>
+  sql<number>`(select count(*)::int from tasks as sub where sub.tenant_id = ${tasks.tenantId} and sub.parent_task_id = ${tasks.id} and ${filter})`;
+
 /** Selects tenant tasks as `TaskView`s; callers add filters, ordering, and limits. */
 export function selectTaskViews(ctx: Ctx, where?: SQL) {
   return ctx.db
-    .select({ ...taskColumns, goalTitle: goals.title, claimedByName: agents.name })
+    .select({
+      ...taskColumns,
+      goalTitle: goals.title,
+      claimedByName: agents.name,
+      parentTitle: parentTask.title,
+      // Dropped subtasks are not part of the work any more.
+      subtaskCount: subtaskTally(sql`sub.status <> 'dropped'`),
+      subtasksDone: subtaskTally(sql`sub.status = 'done'`),
+    })
     .from(tasks)
     .leftJoin(goals, and(eq(goals.tenantId, tasks.tenantId), eq(goals.id, tasks.goalId)))
     .leftJoin(agents, and(eq(agents.tenantId, tasks.tenantId), eq(agents.id, tasks.claimedByAgentId)))
+    .leftJoin(parentTask, and(eq(parentTask.tenantId, tasks.tenantId), eq(parentTask.id, tasks.parentTaskId)))
     .where(and(inTenant(ctx, tasks), where));
+}
+
+/**
+ * Checks that `parentId` can take `childId` (or new tasks) as a subtask: it exists in the tenant,
+ * is not itself a subtask, and is not the task. A task that has subtasks cannot become one.
+ */
+async function assertValidParent(ctx: Ctx, parentId: string, childId?: string): Promise<Task> {
+  if (parentId === childId) throw invalid("A task cannot be its own subtask.");
+  const parent = await findTask(ctx, parentId);
+  if (parent.parentTaskId) {
+    throw invalid(`"${parent.title}" is already a subtask. Subtasks go one level deep: attach this to "${parent.parentTaskId}" instead.`);
+  }
+  if (childId) {
+    const [child] = await ctx.db.select({ id: tasks.id }).from(tasks).where(and(inTenant(ctx, tasks), eq(tasks.parentTaskId, childId))).limit(1);
+    if (child) throw invalid("This task has subtasks of its own, so it cannot become a subtask. Move its subtasks first.");
+  }
+  return parent;
+}
+
+/** Postgres' unique violation, however the driver wraps it. */
+function isUniqueViolation(error: unknown): boolean {
+  for (let current = error; current && typeof current === "object"; current = (current as { cause?: unknown }).cause) {
+    if ((current as { code?: unknown }).code === "23505") return true;
+  }
+  return false;
+}
+
+/** Applies addLinks and removeLinks to a task's links: added urls replace links with the same url. */
+function mergedLinks(current: readonly TaskLink[], add: readonly TaskLink[] = [], remove: readonly string[] = []): TaskLink[] {
+  const normalized = normalizeLinks(add);
+  const removed = new Set(remove.map((url) => { try { return new URL(url).href; } catch { return url; } }));
+  const added = new Set(normalized.map((link) => link.url));
+  return [...current.filter((link) => !removed.has(link.url) && !added.has(link.url)), ...normalized];
 }
 
 /** With `lock`, holds the row until the transaction ends, for read-modify-write updates. */
@@ -178,13 +235,19 @@ export const addTask = service(TaskDraft, (ctx, draft) => capture(ctx, [draft]))
 async function capture(ctx: Ctx, drafts: z.output<typeof TaskDraft>[]): Promise<CaptureResult> {
   assertCan(ctx, "task:write");
   await assertGoalsExist(ctx, drafts.flatMap((draft) => (draft.goalId ? [draft.goalId] : [])));
+  const parents = new Map<string, Task>();
+  for (const parentId of new Set(drafts.flatMap((draft) => (draft.parentTaskId ? [draft.parentTaskId] : [])))) {
+    parents.set(parentId, await assertValidParent(ctx, parentId));
+  }
 
   const rows = drafts.map((draft) => ({
     ...draft,
     id: newId("t"),
     tenantId: ctx.tenant.id,
     dueDate: draft.dueDate ?? null,
-    goalId: draft.goalId ?? null,
+    // A subtask belongs to its parent's goal unless it says otherwise.
+    goalId: draft.goalId ?? (draft.parentTaskId ? parents.get(draft.parentTaskId)!.goalId : null),
+    parentTaskId: draft.parentTaskId ?? null,
     links: normalizeLinks(draft.links),
     ...createdByFields(ctx.actor),
   }));
@@ -233,11 +296,14 @@ async function capture(ctx: Ctx, drafts: z.output<typeof TaskDraft>[]): Promise<
 
 export const updateTask = service(UpdateTaskInput, async (ctx, input): Promise<Task> => {
   assertCan(ctx, "task:write");
-  const { taskId, ...fields } = input;
+  const { taskId, addLinks, removeLinks, ...fields } = input;
+  if (fields.links && (addLinks || removeLinks)) throw invalid("Pass links to replace them all, or addLinks and removeLinks to change some, not both.");
   const current = await findTask(ctx, taskId);
   if (fields.goalId) await assertGoalsExist(ctx, [fields.goalId]);
+  if (fields.parentTaskId) await assertValidParent(ctx, fields.parentTaskId, current.id);
 
-  const patch: Partial<typeof tasks.$inferInsert> = patchOf({ ...fields, links: fields.links && normalizeLinks(fields.links) });
+  const links = fields.links ? normalizeLinks(fields.links) : addLinks || removeLinks ? mergedLinks(current.links, addLinks, removeLinks) : undefined;
+  const patch: Partial<typeof tasks.$inferInsert> = patchOf({ ...fields, links });
   const changed = Object.keys(patch);
   if (changed.length === 0) throw invalid("Nothing to update: pass at least one field to change.");
 
@@ -254,7 +320,11 @@ export const updateTask = service(UpdateTaskInput, async (ctx, input): Promise<T
       .update(tasks)
       .set(patch)
       .where(tenantRow(tx, tasks, current.id))
-      .returning(taskColumns);
+      .returning(taskColumns)
+      .catch((error: unknown) => {
+        if (isUniqueViolation(error)) throw conflict(`Another task already tracks ${fields.source ?? current.source} "${fields.sourceRef ?? current.sourceRef}". Update that task instead.`);
+        throw error;
+      });
     await recordEvent(tx, {
       action: "task.updated",
       entityType: "task",
@@ -558,6 +628,7 @@ export const listTasks = service(ListTasksInput, async (ctx, input): Promise<Tas
     and(
       input.status ? eq(tasks.status, input.status) : undefined,
       input.goalId ? eq(tasks.goalId, input.goalId) : undefined,
+      input.parentTaskId ? eq(tasks.parentTaskId, input.parentTaskId) : undefined,
       input.priority ? eq(tasks.priority, input.priority) : undefined,
       claimed,
       due,
@@ -708,4 +779,25 @@ export const listDecisions = service(DecisionsInput, async (ctx, { limit }): Pro
     .sort((a, b) => b.request.closedAt.localeCompare(a.request.closedAt))
     .slice(0, limit);
   return { open, closed: closedRecords };
+});
+
+export interface TaskDetail {
+  task: TaskView;
+  /** The task it is a step of, if any. */
+  parent: Pick<Task, "id" | "title" | "status"> | null;
+  subtasks: TaskView[];
+  activity: Activity[];
+}
+
+/** One task with everything on it: links, sessions, open and answered questions, subtasks, history. */
+export const getTask = service(TaskRefInput, async (ctx, { taskId }): Promise<TaskDetail> => {
+  assertCan(ctx, "workspace:read");
+  const [task] = await selectTaskViews(ctx, eq(tasks.id, taskId));
+  if (!task) throw notFound("task", taskId);
+  const [parent, subtasks, activity] = await Promise.all([
+    task.parentTaskId ? findTask(ctx, task.parentTaskId).then(({ id, title, status }) => ({ id, title, status })) : null,
+    selectTaskViews(ctx, eq(tasks.parentTaskId, task.id)).orderBy(asc(tasks.createdAt)),
+    taskActivity(ctx, task.id),
+  ]);
+  return { task, parent, subtasks, activity };
 });

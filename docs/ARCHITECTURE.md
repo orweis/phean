@@ -145,7 +145,7 @@ Auth tables (`user`, `session`, `account`, `verification`, `organization`, `memb
 | --- | --- |
 | `agents` | `token_hash` (SHA-256, unique), `token_prefix` for display, `last_seen_at` (written at most once a minute), `revoked_at` |
 | `goals` | Adjacency list (`parent_id`), max depth 4, cycle-checked with a recursive CTE. `status` enum; approval recorded in `approved_by_*` |
-| `tasks` | Status, priority, source, `source_ref`, `due_date`, `tags text[]`, `claimed_by_agent_id`. Unique `(tenant_id, source, source_ref)` when `source_ref` is set, so agents scanning the same inbox never capture an item twice. `agent_sessions jsonb` (one `AgentSession` per agent, newest first, at most 8), `input_request jsonb` (the open question or decision, or null), `input_answers jsonb` (closed requests with their outcome and answer, newest first, at most 20) and `links jsonb` (references agents left, at most 10) hold the hand-offs to people |
+| `tasks` | Status, priority, source, `source_ref`, `due_date`, `tags text[]`, `claimed_by_agent_id`. Unique `(tenant_id, source, source_ref)` when `source_ref` is set, so agents scanning the same inbox never capture an item twice. `agent_sessions jsonb` (one `AgentSession` per agent, newest first, at most 8), `input_request jsonb` (the open question or decision, or null), `input_answers jsonb` (closed requests with their outcome and answer, newest first, at most 20) and `links jsonb` (references agents left, at most 10) hold the hand-offs to people. `parent_task_id` makes a task a subtask (composite FK within the tenant; one level deep, checked in `assertValidParent`) |
 | `memories` | Long-term workspace memory: `kind` (fact, preference, decision, context, note), content, tags, optional goal or task link |
 | `events` | Append-only activity log with actor, action, entity, summary, and JSONB `data`; indexed on `(tenant_id, created_at desc)` |
 
@@ -187,7 +187,7 @@ Endpoint `POST /mcp` (Streamable HTTP, stateless, via `mcp-handler`), header `Au
 | --- | --- |
 | Identity | `whoami` |
 | Goals | `create_goal`, `update_goal`, `list_goals`, `get_goal` |
-| Tasks | `capture_tasks` (bulk, deduplicated), `list_tasks`, `update_task`, `assign_tasks_to_goal`, `claim_task` (optionally with the agent's `session`), `release_task`, `complete_task` |
+| Tasks | `capture_tasks` (bulk, deduplicated; `parentTaskId` for subtasks), `list_tasks`, `get_task` (one task with links, sessions, questions, parent, subtasks, activity), `update_task` (any field, `addLinks`/`removeLinks`, `parentTaskId`), `assign_tasks_to_goal`, `claim_task` (optionally with the agent's `session`), `release_task`, `complete_task` |
 | Hand-offs to people | `link_session` (where a person resumes with the agent), `request_input` (a question, or a decision with options, context and links; returns `decisionsUrl`), `wait_for_answers` (block until a person answers), `collect_answers` (answers since last time, each once), `resolve_input` (close one's own question) |
 | Memory | `remember`, `recall`, `forget` (agents can forget only what they saved) |
 | Search and planning | `search`, `plan_goal`, `suggest_next_actions` (skips other agents' claims) |
