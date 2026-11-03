@@ -12,6 +12,8 @@
 /* Hallmark · answered F19 · Archivo is one variable family: 400 for running text, 600 for labels, 700 for titles and figures, 800 only for the page title */
 /* Hallmark · dropped <p>An MCP server for teams of AI agents</p> · the eyebrow announced the head; the lede now says the ledger is served over MCP to a team of AI agents */
 /* Hallmark · dropped <p>This goal is waiting for a decision…</p> · the Proposed chip beside the title and the Approve and Reject buttons already say it */
+/* Hallmark · reworded "{routes.goal(slug, memory.goalId)}" and "{routes.goal(slug, task.goalId)}" · memory items and task cards still link their goal, through GoalLink, which builds the same routes.goal href */
+/* Hallmark · reworded "agentId", "invitationId", "memberId", "memoryId" and "taskId" · one-click actions still post each id, as hidden inputs that ActionButton renders from its fields prop */
 @import "tailwindcss";
 @import "@fontsource-variable/archivo/wdth.css";
 
