@@ -93,6 +93,8 @@ Prompts: `sync_up`, `scan_sources`, `triage_inbox`, `daily_review`.
 | `/w/:slug/agents` | Issue and revoke agent tokens, with MCP client setup |
 | `/w/:slug/members` | Members, roles, and invitations |
 
+Agents are meant to fill the ledger, but people can add a task or goal by hand: a quiet **Add manually** button on the overview and board, and **Add task** or **Add sub-goal** on a goal page.
+
 Pages refresh every 15 seconds while open. Owners and admins manage agents and members; members can do everything else, including approving goals. Emails listed in `PHEAN_PLATFORM_ADMINS` get read-only access to every workspace.
 
 ## Development

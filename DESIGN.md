@@ -42,6 +42,12 @@ typography:
     fontWeight: 800
     lineHeight: 1.02
     fontVariation: "'wdth' 82"
+  display-panel:
+    fontFamily: "Archivo Variable, ui-sans-serif, sans-serif"
+    fontSize: "2.5rem"
+    fontWeight: 800
+    lineHeight: 1.05
+    fontVariation: "'wdth' 82"
   headline:
     fontFamily: "Archivo Variable, ui-sans-serif, sans-serif"
     fontSize: "1.75rem"
@@ -215,6 +221,7 @@ A cool, blue-grey sheet under a deep navy board, with one yellow signal and four
 ### Hierarchy
 
 - **Display** (800, clamp(2.25rem, 6vw, 4.25rem), 1.02): the landing headline only.
+- **Display panel** (800, 2.5rem, 1.05): the navy panel's statement beside sign-in and sign-up, on large screens.
 - **Headline** (800, 1.75rem, 2.15rem): the page title, one per screen.
 - **Title** (700, 1rem, 1.55rem): card and section titles.
 - **Figure** (700, 1.4375rem, condensed, tabular): stat values and due dates in lead columns.
@@ -255,10 +262,12 @@ Small, firm corners: 2px for chart bars and chips, 3px for badges, 4px for butto
 - **Shape:** gently squared (4px), 36px tall; small buttons are 32px with a hit area extended to 44px.
 - **Primary:** navy with white text. Hover lightens to `shell-2`, and pressing darkens to ink.
 - **Secondary:** a white panel button with a hairline border, sunken on hover.
-- **Ghost:** text only, for the secondary actions in a row (Release, Drop, Open board).
+- **Ghost:** text only, for the secondary actions in a row (Release, Drop, Open board) and for every manual entry point (Add manually, Add task, Add sub-goal).
 - **Signal:** yellow with dark text, used once per navy surface; the landing hero's call to action is 44px tall.
 - **Danger:** red text on white with a faint red border, and it always asks for confirmation.
 - **Focus:** a 2px moving-blue outline offset 2px; on navy the ring turns signal yellow.
+
+**The Agents First Rule.** Agents fill the ledger, so adding a task or goal by hand is always a ghost button, never primary or secondary, and never a form laid open on the page. It sits in the page header or a card header and opens a panel. Connecting an agent is what a new workspace is asked to do first.
 
 ### Chips
 
@@ -308,6 +317,7 @@ The goal tree as a line with stations: a navy ring per active goal, a dashed amb
 - **Do** use the `link` utility for inline text links so they have hover and pressed states.
 - **Do** pin the first column of a wide table with `PINNED_CELL` from `src/components/ui/table.ts`, and make its scroller `relative`.
 - **Do** put motion behind `motion-safe:` and keep it brisk: 120ms for colour changes, 220ms for the timetable's dimming.
+- **Do** route manual task and goal entry through `ManualEntry` (page headers) or a ghost `Popover` (card headers).
 - **Do** add `data-*` hooks (`data-task`, `data-goal`, `data-segment`, `data-end`, `data-now`, `data-tick`) for UI tests instead of selecting by class.
 
 ### Don't:

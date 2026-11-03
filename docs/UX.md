@@ -12,7 +12,7 @@ The two meet in one shared ledger per workspace. Anything an agent does appears 
 1. **Agents do the labor, people make the decisions.** Agents propose goals; only a person can approve, complete, or abandon one. This is enforced on the server, not just in the guidance, and the web app is where the decision happens.
 2. **One ledger, many agents.** Several agents work in the same workspace. They coordinate through Phean (claims, duplicate detection, the activity log, shared memory) instead of through the human.
 3. **Show, then tell.** Status answers lead with a picture (a diagram in chat, the timetable and flow bars in the web app), then a short read, then one suggested next step.
-4. **Zero data entry for people.** People state intent ("track that audit thread"); agents structure it. The web forms exist for corrections and quick additions, not as the main way work gets in.
+4. **Zero data entry for people.** People state intent ("track that audit thread"); agents structure it. The web forms exist for corrections and quick additions, not as the main way work gets in, so manual entry is always a quiet ghost button (see [Manual entry](#manual-entry)).
 5. **Every hand-off is a link.** Agents return deep links (`reviewUrl` from `create_goal`, `dashboardUrl` from `whoami` and `get_status_summary`) so a person can go straight from the chat to the decision.
 6. **Read-only means read-only.** Platform admins see every workspace with a banner that says so, and the controls they cannot use are not rendered.
 
@@ -161,17 +161,17 @@ Each workspace has a tab bar: **Overview, Board, Timeline, Memory, Search, Agent
 3. **Late** (red), shown only when open tasks are past due, each led by its due date.
 4. **On the line**: the timetable of the eight most pressing open tasks (late first, then priority, due date, and age), with a link to the full Timeline.
 5. **Next actions**: the same ranking agents get from `suggest_next_actions`, with quick actions on each row.
-6. **Goal map**: every approved goal with its tasks by station, rolled up from sub-goals, and a **New goal** popover.
+6. **Goal map**: every approved goal with its tasks by station, rolled up from sub-goals.
 7. **Agents**: what each agent holds now and has finished this week, on one shared scale.
 8. **Activity**: people and agents, newest first.
 
-On a desktop the decisions, the timetable, next actions, and the goal map form the wide left column, with late work, agents, and activity on the right. On a phone both columns dissolve into one stack in the order above. When no agent is connected yet, a **Connect an agent** button replaces **New goal** in the header.
+On a desktop the decisions, the timetable, next actions, and the goal map form the wide left column, with late work, agents, and activity on the right. On a phone both columns dissolve into one stack in the order above. The header holds a quiet **Add manually** button for a task or goal, and when no agent is connected yet, a primary **Connect an agent** button beside it.
 
-**Board** (`/w/:slug/board`): a kanban with Inbox, To do, In progress, and Done lanes, each topped with its station colour. Dropped tasks leave the board; they stay findable in search and on the timeline. Done shows the latest five and folds the rest of the 20 most recent behind **Show N more**, so it does not outrun the open lanes. It can be filtered to one goal and its sub-goals. A one-line add-task form sits above it. Each card shows priority, due date, goal, source, and the agent holding it, plus one next-step button (Accept, Start, Done, Reopen, Restore), Release when it is claimed, and Drop while it is open.
+**Board** (`/w/:slug/board`): a kanban with Inbox, To do, In progress, and Done lanes, each topped with its station colour. Dropped tasks leave the board; they stay findable in search and on the timeline. Done shows the latest five and folds the rest of the 20 most recent behind **Show N more**, so it does not outrun the open lanes. It can be filtered to one goal and its sub-goals, and **Add manually** in the header files a new task under the filtered goal. Each card shows priority, due date, goal, source, and the agent holding it, plus one next-step button (Accept, Start, Done, Reopen, Restore), Release when it is claimed, and Drop while it is open.
 
 **Timeline** (`/w/:slug/timeline`): the deep dive on how work moved, over the last 14, 30, or 90 days, for the whole workspace or one goal and its sub-goals. A workspace with less history than the window shows only what it has ("since Oct 12") rather than weeks of empty axis. The header sums the window up ("23 tasks on the line: 9 done, 2 dropped, 12 still open (3 late)."). Below it, **How the work moved** (the cumulative flow) and the **Timetable** of every task, grouped by goal.
 
-**Goal detail** (`/w/:slug/goals/:id`): a breadcrumb of ancestor goals, the status badge and decision buttons, and links to the board and timeline filtered to the goal. A stat strip shows progress as a flow bar by station with the percent done, then open, late, and done in the window. Below: the goal's timetable, its tasks with an add-task form locked to the goal, sub-goals as a goal map, linked memories with a remember form, and the goal's activity. Edit and move controls let a person retitle the goal or move it under another one; the parent picker excludes the goal's own subtree, goals already at maximum depth, and abandoned goals.
+**Goal detail** (`/w/:slug/goals/:id`): a breadcrumb of ancestor goals, the status badge and decision buttons, and links to the board and timeline filtered to the goal. A stat strip shows progress as a flow bar by station with the percent done, then open, late, and done in the window. Below: the goal's timetable, its tasks (with **Add task**, filed under the goal), sub-goals as a goal map (with **Add sub-goal**), linked memories (with **Add**), and the goal's activity. Edit and move controls let a person retitle the goal or move it under another one; the parent picker excludes the goal's own subtree, goals already at maximum depth, and abandoned goals.
 
 **Memory** (`/w/:slug/memory`): everything agents and people have remembered, filtered by kind (fact, preference, decision, context, note) or text. Each entry shows its kind, tags, linked goal, author, and age. A form adds a memory, and Forget asks for confirmation.
 
@@ -233,6 +233,19 @@ One table per concept (`src/lib/domain.ts`) maps each value to a label and a ton
 | Neutral | `ink` on `sunken` | everything else |
 
 The diagrams use the station colours: inbox ochre, to do slate, in progress blue (`move`), and done green (`arrive`). Red is never a station; it only marks lateness and now.
+
+### Manual entry
+
+Agents capture and structure the work, so adding it by hand is available everywhere it makes sense but never the loudest thing on a page. Every entry point is a ghost button (text and an icon, no fill or border) and opens a small panel:
+
+| Where | Button | Adds |
+| --- | --- | --- |
+| Overview header | **Add manually** | A task or a goal, chosen with a Task/Goal switch. The panel opens on Task and reminds people that agents capture most work for them. |
+| Board header | **Add manually** | The same panel, with the task's goal preset to the board's goal filter. |
+| Goal page, Tasks card | **Add task** | A task filed under this goal. |
+| Goal page, Sub-goals card | **Add sub-goal** | A goal under this one, while the depth limit allows. |
+
+A task added by hand has a title, optional notes, priority, due date, and goal. It skips the inbox, because a person adding it has already triaged it, and it is recorded with the source **Manual**. A goal added by hand starts **active**, because people do not need their own approval, and the panel goes to the new goal's page. After a task is added the panel stays open with the form cleared, so several can be added in a row. Escape or a click outside closes it. On phones the panel opens as a sheet over the page with its own close button. Members, admins, and owners see these buttons; read-only platform admins do not.
 
 ### Forms and feedback
 
