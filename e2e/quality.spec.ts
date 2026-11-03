@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 import { expectAccessible, expectNothingCutOff, expectNowClearOfDates } from "./support/checks";
 import { DEMO_SESSION } from "./support/env";
-import { card } from "./support/locators";
+import { card, entryKind, popover } from "./support/locators";
 
 const PAGES = [
   "/workspaces",
@@ -80,11 +80,16 @@ test.describe("signed in", () => {
       expect(tops).toEqual([...tops].sort((a, b) => a - b));
     });
 
-    test("the new goal panel opens inside the screen", async ({ page }) => {
+    test("the manual entry sheet opens inside the screen and closes on its own", async ({ page }) => {
       await page.goto("/w/globex");
-      await page.locator("summary").filter({ hasText: "New goal" }).first().click();
-      await expect(page.getByLabel("Title")).toBeInViewport();
+      const entry = popover(page, "Add manually");
+      await entry.locator("summary").click();
+      await entryKind(entry, "Goal").click();
+      await expect(entry.getByRole("textbox", { name: "Title" })).toBeInViewport();
       await expectNothingCutOff(page);
+      await expectAccessible(page);
+      await entry.getByRole("button", { name: "Close" }).click();
+      await expect(entry.getByRole("textbox", { name: "Title" })).toBeHidden();
     });
   });
 });
