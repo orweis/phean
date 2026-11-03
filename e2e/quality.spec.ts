@@ -94,6 +94,33 @@ test.describe("signed in", () => {
   });
 });
 
+test.describe("in the dark appearance", () => {
+  test.use({ colorScheme: "dark" });
+
+  for (const path of ["/", "/sign-in", "/sign-up"]) {
+    test(`${path} has no detectable accessibility violations`, async ({ page }) => {
+      await page.goto(path);
+      await expectAccessible(page);
+    });
+  }
+
+  test.describe("signed in", () => {
+    test.use({ storageState: DEMO_SESSION });
+
+    for (const path of PAGES) {
+      test(`${path} has no detectable accessibility violations`, async ({ page }) => {
+        await page.goto(path);
+        await expectAccessible(page);
+      });
+    }
+
+    test("a goal page has no detectable accessibility violations", async ({ page }) => {
+      await page.goto(await goalPage(page));
+      await expectAccessible(page);
+    });
+  });
+});
+
 test.describe("signed out, on a 375px phone", () => {
   test.use({ viewport: { width: 375, height: 812 } });
 
