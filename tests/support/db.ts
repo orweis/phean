@@ -56,8 +56,3 @@ export async function connectAgent(owner: Ctx, name: string): Promise<{ ctx: Ctx
   if (!principal) throw new Error("freshly issued token did not authenticate");
   return { ctx: agentContext(owner.db, principal), token, agentId: agent.id };
 }
-
-/** Today's date (UTC) shifted by `days`, as YYYY-MM-DD. */
-export function isoDay(days = 0): string {
-  return new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10);
-}

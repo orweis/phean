@@ -2,7 +2,7 @@ import { Bot, CalendarRange, ListTodo } from "lucide-react";
 
 import { ActivityFeed } from "@/components/activity-feed";
 import { AgentWorkload } from "@/components/agent-list";
-import { mostPressing, Timetable, TimetableLegend } from "@/components/charts/timetable";
+import { Timetable, TimetableLegend } from "@/components/charts/timetable";
 import { GoalTree } from "@/components/goal-tree";
 import { ManualEntry } from "@/components/manual-entry";
 import { PageHeader } from "@/components/page-header";
@@ -12,9 +12,9 @@ import { TodayStrip } from "@/components/today-strip";
 import { ButtonLink } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/stat";
-import { isOpenTaskStatus } from "@/lib/domain";
 import { formatDueDate, pluralize, relativeDue } from "@/lib/format";
 import { routes } from "@/lib/routes";
+import { journeyTotals, mostPressing } from "@/lib/timeline";
 import { requireWorkspace } from "@/server/auth/session";
 import { listActivity } from "@/server/domain/events";
 import { listGoals } from "@/server/domain/goals";
@@ -60,7 +60,7 @@ export default async function DashboardPage({ params }: PageProps<"/w/[slug]">) 
   ]);
   const proposed = goals.filter((goal) => goal.status === "proposed");
   const pressing = mostPressing(journeys, PRESSING_TRACKS, window.now);
-  const openTracks = journeys.filter(({ task }) => isOpenTaskStatus(task.status)).length;
+  const openTracks = journeyTotals(journeys, window).open;
   const canWrite = can(ctx.actor, "task:write");
   const connectFirst = workload.length === 0 && can(ctx.actor, "agent:manage");
 

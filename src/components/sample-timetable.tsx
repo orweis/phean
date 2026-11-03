@@ -1,5 +1,5 @@
-import { todayIso } from "@/lib/format";
-import { addDays, startOfUtcDay, timeWindow, type Journey, type Stop } from "@/lib/timeline";
+import { addDays, isoDate, startOfUtcDay } from "@/lib/dates";
+import { timeWindow, type Journey, type Stop } from "@/lib/timeline";
 import type { TaskView } from "@/server/domain/tasks";
 
 import { Timetable, type TimetableGroup } from "./charts/timetable";
@@ -56,7 +56,7 @@ function sampleGroups(now: Date): TimetableGroup[] {
           priority: "medium",
           source: "manual",
           sourceRef: "",
-          dueDate: due === undefined ? null : todayIso(addDays(today, due)),
+          dueDate: due === undefined ? null : isoDate(addDays(today, due)),
           tags: [],
           claimedByAgentId: null,
           claimedByName: claimedBy ?? null,

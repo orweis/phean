@@ -5,6 +5,7 @@
  *   pnpm demo:agents <base-url> <token-a> <token-b>
  *   pnpm demo:agents http://localhost:3000 phn_... phn_...
  */
+import { isoDayFromToday as day } from "../src/lib/dates";
 import { connectAgent, type ToolArgs as Data } from "./mcp-agent";
 
 const [baseUrl, tokenA, tokenB] = process.argv.slice(2);
@@ -17,8 +18,6 @@ interface Task {
   id: string;
   title: string;
 }
-
-const day = (offset: number) => new Date(Date.now() + offset * 86_400_000).toISOString().slice(0, 10);
 
 const sweeper = await connectAgent(baseUrl, tokenA, "inbox-sweeper");
 const planner = await connectAgent(baseUrl, tokenB, "calendar-planner");

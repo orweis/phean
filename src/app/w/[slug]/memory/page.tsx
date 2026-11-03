@@ -7,7 +7,7 @@ import { RememberForm } from "@/components/remember-form";
 import { SearchForm } from "@/components/search-form";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { cx } from "@/lib/cx";
-import { MEMORY_KIND_META, MEMORY_KINDS, type MemoryKind } from "@/lib/domain";
+import { isOneOf, MEMORY_KIND_META, MEMORY_KINDS } from "@/lib/domain";
 import { pluralize } from "@/lib/format";
 import { queryParam, routes } from "@/lib/routes";
 import { requireWorkspace } from "@/server/auth/session";
@@ -19,15 +19,12 @@ export const metadata: Metadata = { title: "Memory" };
 
 const MEMORY_PAGE_SIZE = 100;
 
-function asMemoryKind(value: string | undefined): MemoryKind | undefined {
-  return MEMORY_KINDS.find((kind) => kind === value);
-}
-
 export default async function MemoryPage({ params, searchParams }: PageProps<"/w/[slug]/memory">) {
   const { slug } = await params;
   const query = await searchParams;
   const q = queryParam(query.q);
-  const kind = asMemoryKind(queryParam(query.kind));
+  const kindParam = queryParam(query.kind);
+  const kind = isOneOf(MEMORY_KINDS, kindParam) ? kindParam : undefined;
   const { ctx } = await requireWorkspace(slug);
   const [memories, goals] = await Promise.all([recall(ctx, { query: q, kind, limit: MEMORY_PAGE_SIZE }), listGoals(ctx, {})]);
   const canWrite = can(ctx.actor, "memory:write");

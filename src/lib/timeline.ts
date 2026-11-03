@@ -3,14 +3,10 @@
  * (its journey), the segments a track draws, and the cumulative flow of work per day.
  * Client-safe; every date is a UTC calendar day, matching how due dates are compared.
  */
-import { isOpenTaskStatus, TASK_STATUSES, type TaskStatus } from "./domain";
+import { addDays, daysBetween, startOfUtcDay } from "./dates";
+import { isLate, isOneOf, isOpenTaskStatus, PRIORITIES, STATIONS, TASK_STATUSES, zeroCounts, type Priority, type Station, type TaskStatus } from "./domain";
 import { formatDay } from "./format";
-
-const DAY_MS = 86_400_000;
-
-/** The stations a task passes through, in chart order; "dropped" is an end, not a station. */
-export const STATIONS = ["inbox", "todo", "in_progress", "done"] as const satisfies readonly TaskStatus[];
-export type Station = (typeof STATIONS)[number];
+import { routes } from "./routes";
 
 export const TIMELINE_WINDOWS = [14, 30, 90] as const;
 export type TimelineDays = (typeof TIMELINE_WINDOWS)[number];
@@ -21,20 +17,7 @@ export const TIMELINE_MIN_DAYS = 7;
 
 export function parseTimelineDays(value: string | undefined): TimelineDays {
   const days = Number(value);
-  return (TIMELINE_WINDOWS as readonly number[]).includes(days) ? (days as TimelineDays) : 14;
-}
-
-export function startOfUtcDay(date: Date): Date {
-  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
-}
-
-export function addDays(date: Date, days: number): Date {
-  return new Date(date.getTime() + days * DAY_MS);
-}
-
-/** Parses a YYYY-MM-DD due date as the start of that UTC day. */
-export function dayOf(isoDate: string): Date {
-  return new Date(`${isoDate}T00:00:00Z`);
+  return isOneOf(TIMELINE_WINDOWS, days) ? days : 14;
 }
 
 export interface TimeWindow {
@@ -109,7 +92,7 @@ export interface Journey<T extends JourneyTask = JourneyTask> {
   stops: Stop[];
 }
 
-const isStatus = (value: unknown): value is TaskStatus => (TASK_STATUSES as readonly unknown[]).includes(value);
+const isStatus = (value: unknown): value is TaskStatus => isOneOf(TASK_STATUSES, value);
 
 /** The status a task moves to after one of its logged events. */
 function statusAfter(current: TaskStatus, event: TaskEventLike): TaskStatus {
@@ -219,7 +202,7 @@ export function cumulativeFlow(journeys: readonly Journey[], window: TimeWindow)
     .filter((day) => day <= lastDay)
     .map((day) => {
       const at = day.getTime() === lastDay.getTime() ? window.now : addDays(day, 1);
-      const counts: FlowCounts = { inbox: 0, todo: 0, in_progress: 0, done: 0 };
+      const counts = zeroCounts(STATIONS);
       for (const journey of journeys) {
         const status = statusAt(journey, at);
         if (!status || status === "dropped") continue;
@@ -233,7 +216,65 @@ export function cumulativeFlow(journeys: readonly Journey[], window: TimeWindow)
     });
 }
 
-/** Whole days between two calendar dates, positive when `to` is later. */
-export function daysBetween(from: Date, to: Date): number {
-  return Math.round((startOfUtcDay(to).getTime() - startOfUtcDay(from).getTime()) / DAY_MS);
+/** A task with what the timeline ranks and groups it by. */
+export interface PlannedTask extends JourneyTask {
+  priority: Priority;
+  dueDate: string | null;
+  goalId: string | null;
+}
+
+export interface JourneyTotals {
+  total: number;
+  /** Arrived inside the window; older arrivals are history, not this window's work. */
+  done: number;
+  dropped: number;
+  open: number;
+  late: number;
+}
+
+export function journeyTotals(journeys: readonly Journey<PlannedTask>[], window: TimeWindow): JourneyTotals {
+  const totals: JourneyTotals = { total: journeys.length, done: 0, dropped: 0, open: 0, late: 0 };
+  for (const { task } of journeys) {
+    if (task.status === "done" && task.completedAt && task.completedAt >= window.start) totals.done += 1;
+    if (task.status === "dropped") totals.dropped += 1;
+    if (isOpenTaskStatus(task.status)) totals.open += 1;
+    if (isLate(task, window.now)) totals.late += 1;
+  }
+  return totals;
+}
+
+/**
+ * The `limit` most pressing open tracks: late first, then by priority, due date and age.
+ * They keep the order they set out in, so the timetable still reads as a timetable.
+ */
+export function mostPressing<T extends PlannedTask>(journeys: readonly Journey<T>[], limit: number, now: Date): Journey<T>[] {
+  const rank = ({ task }: Journey<T>) => [isLate(task, now) ? 0 : 1, PRIORITIES.indexOf(task.priority), task.dueDate ?? "9999-12-31"] as const;
+  return journeys
+    .map((journey, order) => ({ journey, order, rank: rank(journey) }))
+    .filter(({ journey }) => isOpenTaskStatus(journey.task.status))
+    .sort((a, b) => a.rank[0] - b.rank[0] || a.rank[1] - b.rank[1] || a.rank[2].localeCompare(b.rank[2]) || a.order - b.order)
+    .slice(0, limit)
+    .sort((a, b) => a.order - b.order)
+    .map(({ journey }) => journey);
+}
+
+export interface JourneyGroup<T extends JourneyTask = PlannedTask> {
+  key: string;
+  /** Untitled groups draw their tracks without a heading, as one flat list. */
+  title?: string;
+  href?: string;
+  journeys: Journey<T>[];
+}
+
+/** Groups journeys under their goals in goal-tree order; unfiled tasks come last. */
+export function groupByGoal<T extends PlannedTask>(
+  journeys: readonly Journey<T>[],
+  goals: readonly { id: string; title: string }[],
+  slug: string,
+): JourneyGroup<T>[] {
+  const groups: JourneyGroup<T>[] = goals.map((goal) => ({ key: goal.id, title: goal.title, href: routes.goal(slug, goal.id), journeys: [] }));
+  const unfiled: JourneyGroup<T> = { key: "unfiled", title: "Not filed under a goal", journeys: [] };
+  const byId = new Map(groups.map((group) => [group.key, group]));
+  for (const journey of journeys) (byId.get(journey.task.goalId ?? "") ?? unfiled).journeys.push(journey);
+  return [...groups, unfiled].filter((group) => group.journeys.length > 0);
 }

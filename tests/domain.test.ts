@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
+import { isoDayFromToday } from "@/lib/dates";
 import { TIMELINE_AHEAD_DAYS, TIMELINE_MIN_DAYS } from "@/lib/timeline";
 import type { Ctx } from "@/server/domain/context";
 import { listActivity } from "@/server/domain/events";
@@ -18,7 +19,7 @@ import {
   updateTask,
 } from "@/server/domain/tasks";
 
-import { asUser, connectAgent, createTestDb, isoDay, seedTenant, seedUser, type TestDb } from "./support/db";
+import { asUser, connectAgent, createTestDb, seedTenant, seedUser, type TestDb } from "./support/db";
 
 let testDb: TestDb;
 let human: Ctx;
@@ -176,8 +177,8 @@ describe("tasks", () => {
     await captureTasks(human, {
       tasks: [
         { title: "Overdue filing", dueDate: "2001-01-01", priority: "low", status: "todo" },
-        { title: "Urgent and due soon", dueDate: isoDay(2), priority: "urgent", status: "todo" },
-        { title: "Due next month", dueDate: isoDay(30), status: "todo" },
+        { title: "Urgent and due soon", dueDate: isoDayFromToday(2), priority: "urgent", status: "todo" },
+        { title: "Due next month", dueDate: isoDayFromToday(30), status: "todo" },
       ],
     });
     const overdue = await listTasks(human, { due: "overdue" });

@@ -6,7 +6,7 @@ import { cache } from "react";
 import { ActivityFeed } from "@/components/activity-feed";
 import { AddTaskForm } from "@/components/add-task-form";
 import { FlowBar, FlowLegend } from "@/components/charts/flow-bar";
-import { groupByGoal, Timetable } from "@/components/charts/timetable";
+import { Timetable } from "@/components/charts/timetable";
 import { EditGoalForm, NewGoalForm } from "@/components/goal-forms";
 import { GoalStatusActions } from "@/components/goal-status-actions";
 import { GoalTree } from "@/components/goal-tree";
@@ -18,11 +18,11 @@ import { ButtonLink } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Popover } from "@/components/ui/popover";
 import { EmptyState, Stat, StatStrip } from "@/components/ui/stat";
-import { GOAL_MAX_DEPTH, GOAL_STATUS_META, isOpenTaskStatus } from "@/lib/domain";
-import { isPastDue, percent, pluralize, timeAgo } from "@/lib/format";
+import { GOAL_MAX_DEPTH, GOAL_STATUS_META } from "@/lib/domain";
+import { percent, pluralize, timeAgo } from "@/lib/format";
 import { subtreeIds } from "@/lib/goal-tree";
 import { routes } from "@/lib/routes";
-import { windowSpan } from "@/lib/timeline";
+import { groupByGoal, journeyTotals, windowSpan } from "@/lib/timeline";
 import { requireWorkspace } from "@/server/auth/session";
 import { listGoals } from "@/server/domain/goals";
 import { getGoalDetail, getJourneys } from "@/server/domain/overview";
@@ -56,8 +56,7 @@ export default async function GoalPage({ params }: PageProps<"/w/[slug]/goals/[i
   const below = new Set(subtreeIds(goals, goal.id));
   const subtree = goals.filter((candidate) => below.has(candidate.id));
   const subGoals = subtree.filter((candidate) => candidate.id !== goal.id);
-  const late = journeys.filter(({ task }) => isOpenTaskStatus(task.status) && isPastDue(task.dueDate)).length;
-  const doneInWindow = journeys.filter(({ task }) => task.status === "done" && task.completedAt && task.completedAt >= window.start).length;
+  const { late, done: doneInWindow } = journeyTotals(journeys, window);
   const CreatorIcon = goal.createdByType === "agent" ? Bot : Target;
 
   return (

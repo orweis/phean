@@ -1,7 +1,8 @@
 import { expect, test } from "@playwright/test";
 
+import { isoDayFromToday } from "../src/lib/dates";
 import { newWorkspace } from "./support/accounts";
-import { card, entryKind, lane, popover, utcDay } from "./support/locators";
+import { card, entryKind, lane, popover } from "./support/locators";
 
 /**
  * Agents fill the ledger; people can still add a task or goal by hand. These tests cover every
@@ -58,7 +59,7 @@ test("a person adds tasks and goals by hand from quiet entry points", async ({ p
     await addTask.locator("summary").click();
     await expect(addTask.getByRole("combobox", { name: "Goal" })).toHaveCount(0);
     await addTask.getByRole("textbox", { name: "Task" }).fill("Book the movers");
-    await addTask.getByLabel("Due date").fill(utcDay(5));
+    await addTask.getByLabel("Due date").fill(isoDayFromToday(5));
     await addTask.getByRole("button", { name: "Add task" }).click();
     await expect(addTask.getByRole("status")).toHaveText("Task added.");
     await expect(card(page, "Tasks").locator("li[data-task]")).toContainText(["Book the movers"]);

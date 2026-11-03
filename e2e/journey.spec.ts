@@ -1,8 +1,9 @@
 import { expect, test } from "@playwright/test";
 
 import { connectAgent } from "../scripts/mcp-agent";
+import { isoDayFromToday } from "../src/lib/dates";
 import { BASE_URL } from "./support/env";
-import { card, lane, utcDay } from "./support/locators";
+import { card, lane } from "./support/locators";
 
 interface Task {
   id: string;
@@ -68,8 +69,8 @@ test("an owner and an agent run a workspace end to end", async ({ page }) => {
 
       const { created } = await agent.call<{ created: Task[] }>("capture_tasks", {
         tasks: [
-          { title: "Reconcile the payouts", source: "email", sourceRef: `gmail:${run}/1`, dueDate: utcDay(-1), goalId },
-          { title: "Send the board pack", source: "calendar", sourceRef: `gcal:${run}/2`, dueDate: utcDay(3), goalId, status: "todo" },
+          { title: "Reconcile the payouts", source: "email", sourceRef: `gmail:${run}/1`, dueDate: isoDayFromToday(-1), goalId },
+          { title: "Send the board pack", source: "calendar", sourceRef: `gcal:${run}/2`, dueDate: isoDayFromToday(3), goalId, status: "todo" },
           { title: "Book the offsite venue", source: "slack", sourceRef: `slack:${run}/3` },
         ],
       });

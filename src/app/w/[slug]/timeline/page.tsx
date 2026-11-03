@@ -3,27 +3,26 @@ import Link from "next/link";
 import { Suspense } from "react";
 
 import { CumulativeFlow } from "@/components/charts/cumulative-flow";
-import { groupByGoal, Timetable, TimetableLegend } from "@/components/charts/timetable";
+import { Timetable, TimetableLegend } from "@/components/charts/timetable";
 import { GoalFilter } from "@/components/goal-filter";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
-import { isOpenTaskStatus } from "@/lib/domain";
 import { cx } from "@/lib/cx";
-import { isPastDue, pluralize } from "@/lib/format";
+import { pluralize } from "@/lib/format";
 import { queryParam, routes } from "@/lib/routes";
 import {
   cumulativeFlow,
+  groupByGoal,
+  journeyTotals,
   parseTimelineDays,
   TIMELINE_WINDOWS,
   windowSpan,
-  type Journey,
+  type JourneyTotals,
   type TimelineDays,
-  type TimeWindow,
 } from "@/lib/timeline";
 import { requireWorkspace } from "@/server/auth/session";
 import { listGoals } from "@/server/domain/goals";
 import { getJourneys } from "@/server/domain/overview";
-import type { TaskView } from "@/server/domain/tasks";
 import { orNotFound } from "@/server/web";
 
 export const metadata: Metadata = { title: "Timeline" };
@@ -48,15 +47,11 @@ function WindowSwitch({ slug, goalId, days }: { slug: string; goalId?: string; d
   );
 }
 
-/** "23 tasks were on the line: 9 done, 2 dropped, 12 still open (3 late)." */
-function windowSummary(journeys: readonly Journey<TaskView>[], window: TimeWindow): string {
-  if (journeys.length === 0) return "No task was open in this window.";
-  const doneInWindow = journeys.filter(({ task }) => task.status === "done" && task.completedAt && task.completedAt >= window.start).length;
-  const dropped = journeys.filter(({ task }) => task.status === "dropped").length;
-  const open = journeys.filter(({ task }) => isOpenTaskStatus(task.status));
-  const late = open.filter(({ task }) => isPastDue(task.dueDate)).length;
-  const parts = [`${doneInWindow} done`, dropped > 0 && `${dropped} dropped`, `${open.length} still open${late ? ` (${late} late)` : ""}`].filter(Boolean);
-  return `${pluralize(journeys.length, "task")} on the line: ${parts.join(", ")}.`;
+/** "23 tasks on the line: 9 done, 2 dropped, 12 still open (3 late)." */
+function windowSummary({ total, done, dropped, open, late }: JourneyTotals): string {
+  if (total === 0) return "No task was open in this window.";
+  const parts = [`${done} done`, dropped > 0 && `${dropped} dropped`, `${open} still open${late ? ` (${late} late)` : ""}`].filter(Boolean);
+  return `${pluralize(total, "task")} on the line: ${parts.join(", ")}.`;
 }
 
 export default async function TimelinePage({ params, searchParams }: PageProps<"/w/[slug]/timeline">) {
@@ -71,7 +66,7 @@ export default async function TimelinePage({ params, searchParams }: PageProps<"
     <>
       <PageHeader
         title="Timeline"
-        description={`Where every task stood each day ${windowSpan(window, days)}. ${windowSummary(journeys, window)}`}
+        description={`Where every task stood each day ${windowSpan(window, days)}. ${windowSummary(journeyTotals(journeys, window))}`}
         actions={
           <>
             <WindowSwitch slug={slug} goalId={goalId} days={days} />

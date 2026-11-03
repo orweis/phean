@@ -3,9 +3,9 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { completeTaskAction, releaseTaskAction, updateTaskAction } from "@/app/w/[slug]/actions";
-import { isOpenTaskStatus, PRIORITY_META, SOURCE_META, TASK_STATUS_META, type TaskStatus } from "@/lib/domain";
 import { cx } from "@/lib/cx";
-import { formatDueDate, isPastDue, truncate } from "@/lib/format";
+import { isLate, isOpenTaskStatus, PRIORITY_META, SOURCE_META, TASK_STATUS_META, type TaskStatus } from "@/lib/domain";
+import { formatDueDate, truncate } from "@/lib/format";
 import { routes } from "@/lib/routes";
 import type { TaskView } from "@/server/domain/tasks";
 
@@ -21,8 +21,6 @@ const NEXT_STEP: Partial<Record<TaskStatus, { label: string; status: TaskStatus 
   done: { label: "Reopen", status: "todo" },
   dropped: { label: "Restore", status: "todo" },
 };
-
-const isLate = (task: TaskView) => isOpenTaskStatus(task.status) && isPastDue(task.dueDate);
 
 /** Fits two lines in the narrowest lane, so no clamped text sits hidden under the meta row. */
 const CARD_EXCERPT = 80;

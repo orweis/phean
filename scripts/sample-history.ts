@@ -5,6 +5,7 @@
  */
 import { count, eq } from "drizzle-orm";
 
+import { addDays, isoDayFromToday, startOfUtcDay } from "../src/lib/dates";
 import { SOURCE_META, TASK_STATUS_META, type GoalStatus, type Priority, type Source, type TaskStatus } from "../src/lib/domain";
 import type { Db } from "../src/server/db/client";
 import { newId } from "../src/server/db/ids";
@@ -83,7 +84,6 @@ const MEMORIES: { content: string; goal?: GoalKey; kind: "fact" | "preference" |
   { content: "Support lead interviews need someone from engineering on every panel.", goal: "hire", kind: "fact" },
 ];
 
-const DAY_MS = 86_400_000;
 const HOUR_MS = 3_600_000;
 
 export async function seedSampleHistory(db: Db, tenant: Tenant, owner: { id: string; name: string }): Promise<number> {
@@ -91,10 +91,9 @@ export async function seedSampleHistory(db: Db, tenant: Tenant, owner: { id: str
   if (total > 0) return 0;
 
   const now = new Date();
-  const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  const today = startOfUtcDay(now);
   /** Office hours on a past day, never later than a few minutes ago. */
-  const at = (daysAgo: number, hour: number) => new Date(Math.min(today - daysAgo * DAY_MS + hour * HOUR_MS, now.getTime() - 5 * 60_000));
-  const isoDay = (daysFromToday: number) => new Date(today + daysFromToday * DAY_MS).toISOString().slice(0, 10);
+  const at = (daysAgo: number, hour: number) => new Date(Math.min(addDays(today, -daysAgo).getTime() + hour * HOUR_MS, now.getTime() - 5 * 60_000));
   const human = { actorType: "user" as const, actorId: owner.id, actorName: owner.name };
 
   const agentIds = {} as Record<AgentKey, string>;
@@ -162,7 +161,7 @@ export async function seedSampleHistory(db: Db, tenant: Tenant, owner: { id: str
       priority: sample.priority ?? "medium",
       source: sample.source,
       sourceRef: sample.source === "manual" ? "" : `sample:${index}`,
-      dueDate: sample.due === undefined ? null : isoDay(sample.due),
+      dueDate: sample.due === undefined ? null : isoDayFromToday(sample.due, now),
       claimedByAgentId: last.status === "in_progress" ? agentIds[sample.agent] : null,
       claimedAt: last.status === "in_progress" ? last.at : null,
       completedAt: last.status === "done" ? last.at : null,

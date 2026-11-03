@@ -1,11 +1,13 @@
 import { and, asc, count, desc, eq, gte, inArray, isNotNull, max, ne, or, sql, type Column, type SQL } from "drizzle-orm";
 
 import {
-  BOARD_COLUMNS,
   GOAL_STATUSES,
   OPEN_TASK_STATUSES,
+  STATIONS,
   TASK_STATUSES,
+  zeroCounts,
   type GoalStatus,
+  type Station,
   type TaskStatus,
 } from "@/lib/domain";
 import { subtreeIds } from "@/lib/goal-tree";
@@ -40,9 +42,6 @@ export interface WorkspaceStats {
   activeAgents: number;
   lastActivityAt: Date | null;
 }
-
-const zeroCounts = <V extends string>(values: readonly V[]) =>
-  Object.fromEntries(values.map((value) => [value, 0])) as Record<V, number>;
 
 const countByValue = <V extends string>(column: Column, values: readonly V[]) =>
   Object.fromEntries(values.map((value) => [value, countWhere(sql`${column} = ${value}`)])) as Record<V, SQL<number>>;
@@ -185,10 +184,8 @@ async function goalScope(ctx: Ctx, goalId: string | undefined): Promise<SQL | un
   return inArray(tasks.goalId, subtreeIds(hierarchy, goalId));
 }
 
-export type BoardStatus = (typeof BOARD_COLUMNS)[number];
-
 export interface Board {
-  columns: { status: BoardStatus; tasks: TaskView[] }[];
+  columns: { status: Station; tasks: TaskView[] }[];
 }
 
 const BOARD_OPEN_LIMIT = 500;
@@ -205,7 +202,7 @@ export const getBoard = service(BoardInput, async (ctx, { goalId, doneLimit }): 
       .limit(doneLimit),
   ]);
   return {
-    columns: BOARD_COLUMNS.map((status) => ({
+    columns: STATIONS.map((status) => ({
       status,
       tasks: status === "done" ? done : open.filter((task) => task.status === status),
     })),

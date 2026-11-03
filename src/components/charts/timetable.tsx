@@ -2,20 +2,11 @@ import { CalendarRange } from "lucide-react";
 import Link from "next/link";
 import type { CSSProperties, ReactNode } from "react";
 
-import { isOpenTaskStatus, PRIORITIES, TASK_STATUS_META } from "@/lib/domain";
 import { cx } from "@/lib/cx";
+import { addDays, dayOf, daysBetween } from "@/lib/dates";
+import { isLate, TASK_STATUS_META } from "@/lib/domain";
 import { formatDay, formatDueDate, pluralize } from "@/lib/format";
-import { routes } from "@/lib/routes";
-import {
-  addDays,
-  dayOf,
-  daysBetween,
-  fractionOf,
-  trackOf,
-  type Journey,
-  type Segment,
-  type TimeWindow,
-} from "@/lib/timeline";
+import { fractionOf, trackOf, type Journey, type JourneyGroup, type Segment, type TimeWindow } from "@/lib/timeline";
 import type { TaskView } from "@/server/domain/tasks";
 
 import { EmptyState } from "../ui/stat";
@@ -32,10 +23,6 @@ const span = (from: number, to: number): CSSProperties => ({ left: `${from * 100
 
 /** The end of the due day, which is when an open task becomes late. */
 const dueAt = (dueDate: string) => addDays(dayOf(dueDate), 1);
-
-function isLate(task: TaskView, now: Date): boolean {
-  return task.dueDate !== null && (task.status === "inbox" || task.status === "todo" || task.status === "in_progress") && dueAt(task.dueDate) <= now;
-}
 
 /** "In progress for 3 days" or "Done Nov 1": where the task stands, in words. */
 function standing(journey: Journey<TaskView>, now: Date): string {
@@ -143,36 +130,7 @@ function ticksOf(window: TimeWindow, now: number): Tick[] {
   });
 }
 
-export interface TimetableGroup {
-  key: string;
-  /** Untitled groups draw their tracks without a heading, as one flat list. */
-  title?: string;
-  href?: string;
-  journeys: Journey<TaskView>[];
-}
-
-/**
- * The `limit` most pressing open tracks: late first, then by priority, due date and age.
- * They keep the order they set out in, so the timetable still reads as a timetable.
- */
-export function mostPressing(journeys: readonly Journey<TaskView>[], limit: number, now: Date): Journey<TaskView>[] {
-  const rank = ({ task }: Journey<TaskView>) => [isLate(task, now) ? 0 : 1, PRIORITIES.indexOf(task.priority), task.dueDate ?? "9999-12-31"] as const;
-  const open = journeys.map((journey, order) => ({ journey, order, rank: rank(journey) })).filter(({ journey }) => isOpenTaskStatus(journey.task.status));
-  return open
-    .sort((a, b) => a.rank[0] - b.rank[0] || a.rank[1] - b.rank[1] || a.rank[2].localeCompare(b.rank[2]) || a.order - b.order)
-    .slice(0, limit)
-    .sort((a, b) => a.order - b.order)
-    .map(({ journey }) => journey);
-}
-
-/** Groups journeys under their goals in goal-tree order; unfiled tasks come last. */
-export function groupByGoal(journeys: readonly Journey<TaskView>[], goals: readonly { id: string; title: string }[], slug: string): TimetableGroup[] {
-  const groups: TimetableGroup[] = goals.map((goal) => ({ key: goal.id, title: goal.title, href: routes.goal(slug, goal.id), journeys: [] }));
-  const unfiled: TimetableGroup = { key: "unfiled", title: "Not filed under a goal", journeys: [] };
-  const byId = new Map(groups.map((group) => [group.key, group]));
-  for (const journey of journeys) (byId.get(journey.task.goalId ?? "") ?? unfiled).journeys.push(journey);
-  return [...groups, unfiled].filter((group) => group.journeys.length > 0);
-}
+export type TimetableGroup = JourneyGroup<TaskView>;
 
 interface TimetableProps {
   window: TimeWindow;

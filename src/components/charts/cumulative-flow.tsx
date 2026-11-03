@@ -1,8 +1,9 @@
 import { ChartArea } from "lucide-react";
 
 import { cx } from "@/lib/cx";
+import type { Station } from "@/lib/domain";
 import { formatDay } from "@/lib/format";
-import type { FlowCounts, Station } from "@/lib/timeline";
+import type { FlowCounts } from "@/lib/timeline";
 
 import { EmptyState } from "../ui/stat";
 import { FlowLegend } from "./flow-bar";

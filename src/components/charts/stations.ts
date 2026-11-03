@@ -1,5 +1,4 @@
-import { TASK_STATUS_META } from "@/lib/domain";
-import { STATIONS, type Station } from "@/lib/timeline";
+import { STATIONS, TASK_STATUS_META, type Station } from "@/lib/domain";
 
 /** One colour per station, used by every chart so a hue means the same status everywhere. */
 export const STATION_STYLE: Record<Station, { label: string; fill: string; svg: string }> = {

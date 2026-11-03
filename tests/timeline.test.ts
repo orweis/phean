@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { mostPressing } from "@/components/charts/timetable";
+import { daysBetween } from "@/lib/dates";
 import type { Priority, TaskStatus } from "@/lib/domain";
 import {
   buildJourneys,
   cumulativeFlow,
-  daysBetween,
   fitWindow,
   fractionOf,
+  mostPressing,
   parseTimelineDays,
   statusAt,
   timeWindow,
@@ -15,9 +15,9 @@ import {
   windowSpan,
   type Journey,
   type JourneyTask,
+  type PlannedTask,
   type TaskEventLike,
 } from "@/lib/timeline";
-import type { TaskView } from "@/server/domain/tasks";
 
 const NOW = new Date("2026-03-15T12:00:00Z");
 const day = (offset: number, hour = 9) => new Date(Date.UTC(2026, 2, 15 + offset, hour));
@@ -149,7 +149,7 @@ describe("tracks and flow", () => {
 
   it("picks the most pressing open tracks and keeps them in the order they set out", () => {
     const track = (id: string, priority: Priority, dueDate: string | null, status: TaskStatus = "todo") =>
-      ({ task: { id, priority, dueDate, status }, stops: [{ status, at: NOW }] }) as unknown as Journey<TaskView>;
+      ({ task: { ...task(id, status, 0), priority, dueDate, goalId: null }, stops: [{ status, at: NOW }] }) satisfies Journey<PlannedTask>;
     const tracks = [
       track("low", "low", null),
       track("late", "medium", "2026-03-10"),

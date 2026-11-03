@@ -1,5 +1,5 @@
 import { cx } from "@/lib/cx";
-import { STATIONS, type Station } from "@/lib/timeline";
+import { STATIONS, type Station } from "@/lib/domain";
 
 import { describeCounts, STATION_STYLE, type StationCounts } from "./stations";
 
