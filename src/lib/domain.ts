@@ -39,8 +39,40 @@ export type ActorType = (typeof ACTOR_TYPES)[number];
 export const MEMBER_ROLES = ["owner", "admin", "member"] as const;
 export type MemberRole = (typeof MEMBER_ROLES)[number];
 
+export const INVITABLE_ROLES = ["member", "admin"] as const satisfies readonly MemberRole[];
+
 export const GOAL_MAX_DEPTH = 4;
 export const AGENT_TOKEN_PREFIX = "phn_";
+
+/** Longest accepted values, shared by the input schemas and the forms' `maxLength`. */
+export const LIMITS = {
+  title: 200,
+  text: 5000,
+  memory: 4000,
+  note: 2000,
+  name: 80,
+  query: 200,
+  tag: 40,
+  sourceRef: 500,
+  slug: 40,
+} as const;
+
+/**
+ * A workspace's URL slug, as a pattern source rather than a RegExp so forms can use it too: the
+ * escaped hyphen keeps it valid under the `v` flag browsers apply to the HTML `pattern` attribute.
+ */
+export const WORKSPACE_SLUG_PATTERN = `[a-z0-9](?:[a-z0-9\\-]{0,${LIMITS.slug - 2}}[a-z0-9])?`;
+
+/** A slug suggestion for a workspace name: "Acme Corp." becomes "acme-corp". */
+export function slugify(name: string): string {
+  return name
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, LIMITS.slug)
+    .replace(/-+$/, "");
+}
 
 export type Tone = "neutral" | "info" | "success" | "warning" | "danger" | "accent";
 

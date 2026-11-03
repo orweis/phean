@@ -1,5 +1,7 @@
 import { Search } from "lucide-react";
 
+import { LIMITS } from "@/lib/domain";
+
 import { Input } from "./ui/field";
 
 interface SearchFormProps {
@@ -26,7 +28,7 @@ export function SearchForm({ action, defaultValue, placeholder, keep = {}, autoF
         type="search"
         defaultValue={defaultValue}
         placeholder={placeholder}
-        maxLength={200}
+        maxLength={LIMITS.query}
         autoFocus={autoFocus}
         className="pl-9"
       />

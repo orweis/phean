@@ -6,6 +6,7 @@ import { useState } from "react";
 import { createAgentAction } from "@/app/w/[slug]/actions";
 import type { ActionState } from "@/lib/action-state";
 import { cx } from "@/lib/cx";
+import { LIMITS } from "@/lib/domain";
 import { mcpClientSetups } from "@/lib/mcp-config";
 
 import { ActionForm } from "./ui/action-form";
@@ -28,7 +29,7 @@ export function ConnectAgentForm({ slug, mcpUrl }: { slug: string; mcpUrl: strin
           <>
             <div className="flex flex-wrap items-end gap-2">
               <Field label="Agent name" htmlFor="agent-name" className="min-w-56 flex-1">
-                <Input id="agent-name" name="name" required maxLength={80} placeholder="Claude on Or's laptop" />
+                <Input id="agent-name" name="name" required maxLength={LIMITS.name} placeholder="Claude on Or's laptop" />
               </Field>
               <SubmitButton variant="primary">
                 <Plus aria-hidden />

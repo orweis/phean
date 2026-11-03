@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition, type FormEvent } from "react";
 
 import { authClient } from "@/lib/auth-client";
+import { LIMITS } from "@/lib/domain";
 import { routes } from "@/lib/routes";
 
 import { Button } from "./ui/button";
@@ -72,7 +73,7 @@ export function AuthForm({ mode, next, providers }: AuthFormProps) {
       <form onSubmit={onSubmit} className="space-y-4">
         {signingUp && (
           <Field label="Name" htmlFor="name">
-            <Input id="name" name="name" autoComplete="name" required maxLength={80} />
+            <Input id="name" name="name" autoComplete="name" required maxLength={LIMITS.name} />
           </Field>
         )}
         <Field label="Email" htmlFor="email">

@@ -4,20 +4,11 @@ import { Plus } from "lucide-react";
 import { useState } from "react";
 
 import { createWorkspaceAction } from "@/app/workspaces/actions";
+import { LIMITS, slugify, WORKSPACE_SLUG_PATTERN } from "@/lib/domain";
 
 import { ActionForm } from "./ui/action-form";
 import { Field, Input } from "./ui/field";
 import { SubmitButton } from "./ui/submit-button";
-
-function slugify(name: string): string {
-  return name
-    .toLowerCase()
-    .normalize("NFKD")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 40)
-    .replace(/-+$/, "");
-}
 
 export function CreateWorkspaceForm() {
   const [name, setName] = useState("");
@@ -31,7 +22,7 @@ export function CreateWorkspaceForm() {
           id="workspace-name"
           name="name"
           required
-          maxLength={80}
+          maxLength={LIMITS.name}
           placeholder="Acme Corp"
           value={name}
           onChange={(event) => {
@@ -47,7 +38,7 @@ export function CreateWorkspaceForm() {
             id="workspace-slug"
             name="slug"
             required
-            pattern="[a-z0-9](?:[a-z0-9\-]{0,38}[a-z0-9])?"
+            pattern={WORKSPACE_SLUG_PATTERN}
             title="Lowercase letters, numbers, and dashes"
             placeholder="acme"
             value={slug}

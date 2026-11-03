@@ -4,11 +4,12 @@ import { Link2, UserPlus } from "lucide-react";
 
 import { inviteMemberAction } from "@/app/w/[slug]/actions";
 import type { ActionState } from "@/lib/action-state";
+import { INVITABLE_ROLES, ROLE_META } from "@/lib/domain";
 import { routes } from "@/lib/routes";
 
 import { ActionForm } from "./ui/action-form";
 import { CopyButton } from "./ui/copy-button";
-import { Field, Input, Select } from "./ui/field";
+import { enumOptions, Field, Input, Select } from "./ui/field";
 import { SubmitButton } from "./ui/submit-button";
 
 function createdInvitation(state: ActionState): { invitationId: string; email: string } | null {
@@ -31,8 +32,7 @@ export function InviteMemberForm({ slug, origin }: { slug: string; origin: strin
               </Field>
               <Field label="Role" htmlFor="invite-role" className="w-32">
                 <Select id="invite-role" name="role" defaultValue="member">
-                  <option value="member">Member</option>
-                  <option value="admin">Admin</option>
+                  {enumOptions(INVITABLE_ROLES, ROLE_META)}
                 </Select>
               </Field>
               <SubmitButton variant="primary">

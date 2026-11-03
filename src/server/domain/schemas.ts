@@ -2,19 +2,23 @@ import { z } from "zod";
 
 import {
   GOAL_STATUSES,
+  INVITABLE_ROLES,
+  LIMITS,
   MEMORY_KINDS,
   PRIORITIES,
   SOURCES,
   TASK_STATUSES,
+  WORKSPACE_SLUG_PATTERN,
 } from "@/lib/domain";
 import { TIMELINE_WINDOWS } from "@/lib/timeline";
 
 const goalId = z.string().trim().min(1).describe("Goal id (g_...)");
 const taskId = z.string().trim().min(1).describe("Task id (t_...)");
-const title = z.string().trim().min(1).max(200);
-const longText = z.string().trim().max(5000);
+const title = z.string().trim().min(1).max(LIMITS.title);
+const longText = z.string().trim().max(LIMITS.text);
+const name = z.string().trim().min(1).max(LIMITS.name);
 const isoDate = z.iso.date().describe("Date as YYYY-MM-DD");
-const tags = z.array(z.string().trim().min(1).max(40)).max(20);
+const tags = z.array(z.string().trim().min(1).max(LIMITS.tag)).max(20);
 const limit = (max: number, fallback: number) => z.number().int().min(1).max(max).default(fallback);
 
 export const Empty = z.object({});
@@ -45,7 +49,7 @@ export const TaskDraft = z.object({
   sourceRef: z
     .string()
     .trim()
-    .max(500)
+    .max(LIMITS.sourceRef)
     .default("")
     .describe("Stable origin reference (message link, thread id, event id). Used to skip duplicates."),
   dueDate: isoDate.optional(),
@@ -71,7 +75,7 @@ export const UpdateTaskInput = z.object({
 export const TaskRefInput = z.object({ taskId });
 export const CompleteTaskInput = z.object({
   taskId,
-  note: z.string().trim().max(2000).default("").describe("What was done, in one or two sentences"),
+  note: z.string().trim().max(LIMITS.note).default("").describe("What was done, in one or two sentences"),
 });
 export const AssignTasksInput = z.object({ taskIds: z.array(taskId).min(1).max(100), goalId });
 
@@ -101,7 +105,7 @@ export const JourneysInput = GoalScopeInput.extend({
 
 // Memory
 export const RememberInput = z.object({
-  content: z.string().trim().min(1).max(4000),
+  content: z.string().trim().min(1).max(LIMITS.memory),
   kind: z.enum(MEMORY_KINDS).default("note"),
   tags: tags.default([]),
   goalId: goalId.optional(),
@@ -109,7 +113,7 @@ export const RememberInput = z.object({
 });
 
 export const RecallInput = z.object({
-  query: z.string().trim().max(200).optional(),
+  query: z.string().trim().max(LIMITS.query).optional(),
   kind: z.enum(MEMORY_KINDS).optional(),
   goalId: goalId.optional(),
   limit: limit(100, 20),
@@ -122,7 +126,7 @@ export const SEARCH_KINDS = ["goal", "task", "memory"] as const;
 export type SearchKind = (typeof SEARCH_KINDS)[number];
 
 export const SearchInput = z.object({
-  query: z.string().trim().min(1).max(200),
+  query: z.string().trim().min(1).max(LIMITS.query),
   kinds: z.array(z.enum(SEARCH_KINDS)).min(1).optional(),
   limit: limit(50, 20),
 });
@@ -140,22 +144,21 @@ export const VIEW_KINDS = ["goal_tree", "kanban", "timeline"] as const;
 export const VisualizeInput = z.object({ kind: z.enum(VIEW_KINDS), goalId: goalId.optional() });
 
 // Workspace administration
-export const CreateAgentInput = z.object({ name: z.string().trim().min(1).max(80) });
+export const CreateAgentInput = z.object({ name });
 export const AgentRefInput = z.object({ agentId: z.string().trim().min(1) });
 
-export const WORKSPACE_SLUG_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$/;
 export const CreateWorkspaceInput = z.object({
-  name: z.string().trim().min(1).max(80),
+  name,
   slug: z
     .string()
     .trim()
     .toLowerCase()
-    .regex(WORKSPACE_SLUG_PATTERN, "Use lowercase letters, numbers, and dashes (max 40)."),
+    .regex(new RegExp(`^${WORKSPACE_SLUG_PATTERN}$`), `Use lowercase letters, numbers, and dashes (max ${LIMITS.slug}).`),
 });
 
 export const InviteMemberInput = z.object({
   email: z.email().trim().toLowerCase(),
-  role: z.enum(["admin", "member"]).default("member"),
+  role: z.enum(INVITABLE_ROLES).default("member"),
 });
 export const InvitationRefInput = z.object({ invitationId: z.string().trim().min(1) });
 export const MemberRefInput = z.object({ memberId: z.string().trim().min(1) });

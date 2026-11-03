@@ -1,7 +1,7 @@
 import { Plus } from "lucide-react";
 
 import { rememberAction } from "@/app/w/[slug]/actions";
-import { MEMORY_KIND_META, MEMORY_KINDS } from "@/lib/domain";
+import { LIMITS, MEMORY_KIND_META, MEMORY_KINDS } from "@/lib/domain";
 import type { GoalWithProgress } from "@/server/domain/goals";
 
 import { GoalOptions } from "./goal-options";
@@ -25,7 +25,7 @@ export function RememberForm({ slug, goals, goalId }: RememberFormProps) {
           id="remember-content"
           name="content"
           required
-          maxLength={4000}
+          maxLength={LIMITS.memory}
           placeholder="Invoices from Acme go to finance@acme.com, never to the account manager."
         />
       </Field>

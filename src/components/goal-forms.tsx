@@ -1,7 +1,7 @@
 import { Plus } from "lucide-react";
 
 import { createGoalAction, updateGoalAction } from "@/app/w/[slug]/actions";
-import { GOAL_MAX_DEPTH } from "@/lib/domain";
+import { GOAL_MAX_DEPTH, LIMITS } from "@/lib/domain";
 import { subtreeIds } from "@/lib/goal-tree";
 import type { Goal, GoalWithProgress } from "@/server/domain/goals";
 
@@ -24,10 +24,10 @@ export function NewGoalForm({ slug, goals, parentGoalId }: { slug: string; goals
   return (
     <ActionForm action={createGoalAction} workspace={slug} className="space-y-3">
       <Field label="Title" htmlFor="new-goal-title">
-        <Input id="new-goal-title" name="title" required maxLength={200} placeholder="Close Q3 books" />
+        <Input id="new-goal-title" name="title" required maxLength={LIMITS.title} placeholder="Close Q3 books" />
       </Field>
       <Field label="Description" htmlFor="new-goal-description">
-        <Textarea id="new-goal-description" name="description" maxLength={5000} placeholder="What does done look like?" />
+        <Textarea id="new-goal-description" name="description" maxLength={LIMITS.text} placeholder="What does done look like?" />
       </Field>
       {parentGoalId ? (
         <input type="hidden" name="parentGoalId" value={parentGoalId} />
@@ -54,10 +54,10 @@ export function EditGoalForm({ slug, goal, goals }: { slug: string; goal: Goal; 
     <ActionForm action={updateGoalAction} workspace={slug} className="space-y-3">
       <input type="hidden" name="goalId" value={goal.id} />
       <Field label="Title" htmlFor="edit-goal-title">
-        <Input id="edit-goal-title" name="title" required maxLength={200} defaultValue={goal.title} />
+        <Input id="edit-goal-title" name="title" required maxLength={LIMITS.title} defaultValue={goal.title} />
       </Field>
       <Field label="Description" htmlFor="edit-goal-description">
-        <Textarea id="edit-goal-description" name="description" maxLength={5000} defaultValue={goal.description} />
+        <Textarea id="edit-goal-description" name="description" maxLength={LIMITS.text} defaultValue={goal.description} />
       </Field>
       <Field label="Part of" htmlFor="edit-goal-parent">
         <Select id="edit-goal-parent" name="parentGoalId" defaultValue={goal.parentId ?? ""}>

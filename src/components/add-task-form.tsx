@@ -1,7 +1,7 @@
 import { Plus } from "lucide-react";
 
 import { addTaskAction } from "@/app/w/[slug]/actions";
-import { PRIORITIES, PRIORITY_META } from "@/lib/domain";
+import { LIMITS, PRIORITIES, PRIORITY_META } from "@/lib/domain";
 import type { GoalWithProgress } from "@/server/domain/goals";
 
 import { GoalOptions } from "./goal-options";
@@ -24,10 +24,10 @@ export function AddTaskForm({ slug, goals, goalId, lockGoal = false }: AddTaskFo
     <ActionForm action={addTaskAction} workspace={slug} className="space-y-3">
       <input type="hidden" name="status" value="todo" />
       <Field label="Task" htmlFor="add-task-title">
-        <Input id="add-task-title" name="title" required maxLength={200} placeholder="Renew the parking permits" />
+        <Input id="add-task-title" name="title" required maxLength={LIMITS.title} placeholder="Renew the parking permits" />
       </Field>
       <Field label="Notes" htmlFor="add-task-description">
-        <Textarea id="add-task-description" name="description" maxLength={5000} placeholder="Optional" />
+        <Textarea id="add-task-description" name="description" maxLength={LIMITS.text} placeholder="Optional" />
       </Field>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Priority" htmlFor="add-task-priority">
