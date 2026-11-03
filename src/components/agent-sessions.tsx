@@ -44,21 +44,22 @@ function SessionEntry({ session }: { session: AgentSession }) {
   const references = REFERENCES.flatMap(({ key, ...reference }) => (session[key] ? [{ ...reference, value: session[key] }] : []));
   return (
     <li className="space-y-2 border-b border-rule pb-3 last:border-b-0 last:pb-0">
-      <p className="flex flex-wrap items-center gap-x-1.5 text-xs text-muted">
-        <Bot className="size-3" aria-hidden />
-        <span className="font-semibold text-ink">{session.agentName}</span>
-        {session.app && <span>in {session.app}</span>}
-        <span aria-hidden>·</span>
+      <p className="flex flex-wrap items-center justify-between gap-x-2 text-xs text-muted">
+        <span className="inline-flex items-center gap-1.5">
+          <Bot className="size-3" aria-hidden />
+          <span className="font-semibold text-ink">{session.agentName}</span>
+          {session.app && <span>in {session.app}</span>}
+        </span>
         <time dateTime={session.linkedAt}>{timeAgo(session.linkedAt)}</time>
       </p>
       {session.brief && <p className="text-sm text-ink-2">{session.brief}</p>}
       <ResumeLink session={session} variant="tinted" />
       {references.length > 0 && (
-        <dl className="space-y-1">
+        <dl className="space-y-1.5">
           {references.map(({ label, subject, value }) => (
-            <div key={label} className="flex items-center gap-2">
-              <dt className="w-16 shrink-0 text-xs text-muted">{label}</dt>
-              <dd className="flex min-w-0 flex-1 items-center gap-1">
+            <div key={label}>
+              <dt className="text-xs text-muted">{label}</dt>
+              <dd className="mt-0.5 flex min-w-0 items-center gap-1">
                 <code title={value} className="min-w-0 flex-1 truncate rounded-sm bg-fill px-1.5 py-1 font-mono text-xs text-ink">
                   {value}
                 </code>
