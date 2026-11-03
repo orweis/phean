@@ -1,17 +1,16 @@
-import { Bot, CalendarRange, ListTodo, Plus } from "lucide-react";
+import { Bot, CalendarRange, ListTodo } from "lucide-react";
 
 import { ActivityFeed } from "@/components/activity-feed";
 import { AgentWorkload } from "@/components/agent-list";
 import { mostPressing, Timetable, TimetableLegend } from "@/components/charts/timetable";
 import { GoalTree } from "@/components/goal-tree";
-import { NewGoalForm } from "@/components/goal-forms";
+import { ManualEntry } from "@/components/manual-entry";
 import { PageHeader } from "@/components/page-header";
 import { PendingApprovals } from "@/components/pending-approvals";
 import { TaskRow } from "@/components/task-card";
 import { TodayStrip } from "@/components/today-strip";
 import { ButtonLink } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
-import { Popover } from "@/components/ui/popover";
 import { EmptyState } from "@/components/ui/stat";
 import { isOpenTaskStatus } from "@/lib/domain";
 import { formatDueDate, pluralize, relativeDue } from "@/lib/format";
@@ -63,19 +62,6 @@ export default async function DashboardPage({ params }: PageProps<"/w/[slug]">) 
   const pressing = mostPressing(journeys, PRESSING_TRACKS, window.now);
   const openTracks = journeys.filter(({ task }) => isOpenTaskStatus(task.status)).length;
   const canWrite = can(ctx.actor, "task:write");
-  const newGoal = can(ctx.actor, "goal:write") && (
-    <Popover
-      label={
-        <>
-          <Plus aria-hidden />
-          New goal
-        </>
-      }
-    >
-      <NewGoalForm slug={slug} goals={goals} />
-    </Popover>
-  );
-
   const connectFirst = workload.length === 0 && can(ctx.actor, "agent:manage");
 
   return (
@@ -84,14 +70,15 @@ export default async function DashboardPage({ params }: PageProps<"/w/[slug]">) 
         title={ctx.tenant.name}
         description={statusSentence(summary)}
         actions={
-          connectFirst ? (
-            <ButtonLink href={routes.agents(slug)} variant="primary">
-              <Bot aria-hidden />
-              Connect an agent
-            </ButtonLink>
-          ) : (
-            newGoal
-          )
+          <>
+            <ManualEntry slug={slug} goals={goals} canAddTask={canWrite} canAddGoal={can(ctx.actor, "goal:write")} />
+            {connectFirst && (
+              <ButtonLink href={routes.agents(slug)} variant="primary">
+                <Bot aria-hidden />
+                Connect an agent
+              </ButtonLink>
+            )}
+          </>
         }
       />
 
@@ -167,11 +154,7 @@ export default async function DashboardPage({ params }: PageProps<"/w/[slug]">) 
           </Card>
 
           <Card className="max-lg:order-5">
-            <CardHeader
-              title="Goal map"
-              description="Each goal with its tasks by status, rolled up from its sub-goals."
-              action={connectFirst && newGoal}
-            />
+            <CardHeader title="Goal map" description="Each goal with its tasks by status, rolled up from its sub-goals." />
             <CardBody className="py-1">
               <GoalTree
                 goals={goals.filter((goal) => goal.status !== "proposed")}

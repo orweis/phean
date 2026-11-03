@@ -1,13 +1,12 @@
 import { Plus } from "lucide-react";
 
 import { addTaskAction } from "@/app/w/[slug]/actions";
-import { cx } from "@/lib/cx";
 import { PRIORITIES, PRIORITY_META } from "@/lib/domain";
 import type { GoalWithProgress } from "@/server/domain/goals";
 
 import { GoalOptions } from "./goal-options";
 import { ActionForm } from "./ui/action-form";
-import { enumOptions, Input, Select } from "./ui/field";
+import { enumOptions, Field, Input, Select, Textarea } from "./ui/field";
 import { SubmitButton } from "./ui/submit-button";
 
 interface AddTaskFormProps {
@@ -20,48 +19,40 @@ interface AddTaskFormProps {
 
 /** Tasks people add are already triaged, so they skip the inbox. */
 export function AddTaskForm({ slug, goals, goalId, lockGoal = false }: AddTaskFormProps) {
-  const pickGoal = !(lockGoal && goalId);
+  const openGoals = goals.filter((goal) => goal.status === "active" || goal.status === "proposed");
   return (
-    <ActionForm action={addTaskAction} workspace={slug}>
+    <ActionForm action={addTaskAction} workspace={slug} className="space-y-3">
       <input type="hidden" name="status" value="todo" />
-      <div
-        className={cx(
-          "grid gap-2 sm:items-center",
-          pickGoal ? "sm:grid-cols-[minmax(0,1fr)_8.5rem_10rem_minmax(0,14rem)_auto]" : "sm:grid-cols-[minmax(0,1fr)_8.5rem_10rem_auto]",
-        )}
-      >
-        <label className="sr-only" htmlFor="add-task-title">
-          Task
-        </label>
-        <Input id="add-task-title" name="title" required maxLength={200} placeholder="Add a task…" />
-        <label className="sr-only" htmlFor="add-task-priority">
-          Priority
-        </label>
-        <Select id="add-task-priority" name="priority" defaultValue="medium">
-          {enumOptions(PRIORITIES, PRIORITY_META)}
-        </Select>
-        <label className="sr-only" htmlFor="add-task-due">
-          Due date
-        </label>
-        <Input id="add-task-due" name="dueDate" type="date" />
-        {pickGoal ? (
-          <>
-            <label className="sr-only" htmlFor="add-task-goal">
-              Goal
-            </label>
-            <Select id="add-task-goal" name="goalId" defaultValue={goalId ?? ""}>
-              <option value="">No goal</option>
-              <GoalOptions goals={goals} />
-            </Select>
-          </>
-        ) : (
-          <input type="hidden" name="goalId" value={goalId} />
-        )}
-        <SubmitButton variant="primary">
-          <Plus aria-hidden />
-          Add
-        </SubmitButton>
+      <Field label="Task" htmlFor="add-task-title">
+        <Input id="add-task-title" name="title" required maxLength={200} placeholder="Renew the parking permits" />
+      </Field>
+      <Field label="Notes" htmlFor="add-task-description">
+        <Textarea id="add-task-description" name="description" maxLength={5000} placeholder="Optional" />
+      </Field>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Priority" htmlFor="add-task-priority">
+          <Select id="add-task-priority" name="priority" defaultValue="medium">
+            {enumOptions(PRIORITIES, PRIORITY_META)}
+          </Select>
+        </Field>
+        <Field label="Due date" htmlFor="add-task-due">
+          <Input id="add-task-due" name="dueDate" type="date" />
+        </Field>
       </div>
+      {lockGoal && goalId ? (
+        <input type="hidden" name="goalId" value={goalId} />
+      ) : (
+        <Field label="Goal" htmlFor="add-task-goal">
+          <Select id="add-task-goal" name="goalId" defaultValue={goalId ?? ""}>
+            <option value="">No goal</option>
+            <GoalOptions goals={openGoals} />
+          </Select>
+        </Field>
+      )}
+      <SubmitButton variant="primary">
+        <Plus aria-hidden />
+        Add task
+      </SubmitButton>
     </ActionForm>
   );
 }

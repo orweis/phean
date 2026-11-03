@@ -5,7 +5,8 @@
  * axes: light/grotesk-sans/chromatic-yellow · posture: committed shell, full palette for the four stations · contrast: pass · v2.0.0 */
 /* Hallmark · pre-emit critique: P4 H4 E4 S5 R4 V5 · weakest: E, many screens share one system; every surface goes through the same primitives and tokens */
 /* Hallmark · reworded "How it works" to "The route in" · the three steps are drawn as stations on one line, so the heading names the route */
-/* Hallmark · dropped <NewGoalForm slug={slug} goals={goals} /> · the overview renders one New goal popover, in the header, or in the goal map card until an agent is connected */
+/* Hallmark · dropped <NewGoalForm slug={slug} goals={goals} /> · the overview renders one ghost Add manually popover in the header, which holds both the task and the goal form, because agents do most of the capturing */
+/* Hallmark · reworded "<RememberForm slug={slug} goals={goals} goalId={goal.id} />" and "<NewGoalForm slug={slug} goals={goals} parentGoalId={goal.id} />" · both goal-page popovers stay with the same forms; only their triggers became ghost buttons, so manual entry stays quieter than the agents' work */
 /* Hallmark · waive 49b · a real phrase that cannot shorten, two lines at most · an activity line links the sentence that names the goal, and on a 320px phone the goal title wraps with it */
 /* Hallmark · dismissed F25 · on phones the first column is pinned, so each agent or workspace stays named while its figures and the revoke action scroll beside it inside the card */
 /* Hallmark · answered F19 · Archivo is one variable family: 400 for running text, 600 for labels, 700 for titles and figures, 800 only for the page title */

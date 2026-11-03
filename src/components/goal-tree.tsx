@@ -27,7 +27,7 @@ interface GoalTreeProps {
   empty?: { title: string; hint: string };
 }
 
-const DEFAULT_EMPTY = { title: "No goals yet", hint: "Create one, or let an agent propose goals while it triages the inbox." };
+const DEFAULT_EMPTY = { title: "No goals yet", hint: "Agents propose goals as they triage the inbox. You can also start one with Add manually." };
 
 /**
  * The goal map: goals in depth-first order joined by rails, each with its tasks by station

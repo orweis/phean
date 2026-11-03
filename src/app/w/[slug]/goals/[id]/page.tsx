@@ -153,16 +153,29 @@ export default async function GoalPage({ params }: PageProps<"/w/[slug]/goals/[i
           </Card>
 
           <Card>
-            <CardHeader title="Tasks" description={`${goal.own.open} open and ${goal.own.done} done directly under this goal.`} />
+            <CardHeader
+              title="Tasks"
+              description={`${goal.own.open} open and ${goal.own.done} done directly under this goal.`}
+              action={
+                canWrite && (
+                  <Popover
+                    variant="ghost"
+                    label={
+                      <>
+                        <Plus aria-hidden />
+                        Add task
+                      </>
+                    }
+                  >
+                    <AddTaskForm slug={slug} goals={goals} goalId={goal.id} lockGoal />
+                  </Popover>
+                )
+              }
+            />
             <CardBody className="py-1">
-              {canWrite && (
-                <div className="border-b border-rule py-3">
-                  <AddTaskForm slug={slug} goals={goals} goalId={goal.id} lockGoal />
-                </div>
-              )}
               {tasks.length === 0 ? (
                 <EmptyState icon={<ListTodo />} title="No tasks yet">
-                  Add one above, or ask an agent to break this goal down with plan_goal.
+                  Agents file tasks here as they triage. Ask one to break this goal down with plan_goal.
                 </EmptyState>
               ) : (
                 <ul>
@@ -181,6 +194,7 @@ export default async function GoalPage({ params }: PageProps<"/w/[slug]/goals/[i
                 canEditGoals &&
                 goal.depth < GOAL_MAX_DEPTH - 1 && (
                   <Popover
+                    variant="ghost"
                     label={
                       <>
                         <Plus aria-hidden />
@@ -213,6 +227,7 @@ export default async function GoalPage({ params }: PageProps<"/w/[slug]/goals/[i
               action={
                 can(ctx.actor, "memory:write") && (
                   <Popover
+                    variant="ghost"
                     label={
                       <>
                         <Plus aria-hidden />
