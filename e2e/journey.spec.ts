@@ -1,9 +1,11 @@
 import { expect, test } from "@playwright/test";
 
-import { connectAgent } from "../scripts/mcp-agent";
 import { isoDayFromToday } from "../src/lib/dates";
-import { BASE_URL } from "./support/env";
+import { slugify } from "../src/lib/domain";
+import { createWorkspace, newPerson, runId, signUp } from "./support/accounts";
+import { asAgent, issueToken } from "./support/agents";
 import { card, lane } from "./support/locators";
+import { openTab } from "./support/navigation";
 
 interface Task {
   id: string;
@@ -17,27 +19,19 @@ interface Task {
  */
 test("an owner and an agent run a workspace end to end", async ({ page }) => {
   test.slow();
-  const run = Date.now().toString(36);
-  const workspace = { name: `Initech ${run}`, slug: `initech-${run}` };
+  const run = runId();
+  const workspace = { name: `Initech ${run}`, slug: slugify(`Initech ${run}`) };
   let token = "";
   let goalId = "";
   let tasks: Record<"late" | "claimed" | "unfiled", Task>;
 
   await test.step("sign up", async () => {
-    await page.goto("/sign-up");
-    await page.getByLabel("Name").fill("Olive Owner");
-    await page.getByLabel("Email").fill(`olive-${run}@example.com`);
-    await page.getByLabel("Password").fill("correct-horse-battery");
-    await page.getByRole("button", { name: "Create account" }).click();
-    await expect(page).toHaveURL("/workspaces");
+    await signUp(page, newPerson("Olive Owner"));
     await expect(page.getByText("No workspaces yet")).toBeVisible();
   });
 
   await test.step("create a workspace", async () => {
-    await page.getByLabel("Workspace name").fill(workspace.name);
-    await expect(page.getByLabel("URL")).toHaveValue(workspace.slug);
-    await page.getByRole("button", { name: "Create", exact: true }).click();
-    await expect(page).toHaveURL(`/w/${workspace.slug}`);
+    await createWorkspace(page, workspace.name);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(workspace.name);
     await expect(page.getByText("Nothing is waiting on you.")).toBeVisible();
   });
@@ -45,18 +39,13 @@ test("an owner and an agent run a workspace end to end", async ({ page }) => {
   await test.step("issue an agent token", async () => {
     await page.getByRole("link", { name: "Connect an agent" }).click();
     await expect(page).toHaveURL(`/w/${workspace.slug}/agents`);
-    await page.getByLabel("Agent name").fill("Inbox sweeper");
-    await page.getByRole("button", { name: "Issue token" }).click();
-    const reveal = page.locator("code").filter({ hasText: /^phn_/ });
-    await expect(reveal).toBeVisible();
-    token = (await reveal.textContent())!.trim();
+    token = await issueToken(page, "Inbox sweeper");
     await expect(page.getByRole("tablist", { name: "MCP client" }).getByRole("tab")).not.toHaveCount(0);
     await expect(page.getByRole("tabpanel")).toContainText(token);
   });
 
   await test.step("the agent proposes a goal and captures work over MCP", async () => {
-    const agent = await connectAgent(BASE_URL, token, "inbox-sweeper");
-    try {
+    await asAgent(token, async (agent) => {
       const me = await agent.call<{ workspace: { slug: string } }>("whoami");
       expect(me.workspace.slug).toBe(workspace.slug);
 
@@ -77,13 +66,11 @@ test("an owner and an agent run a workspace end to end", async ({ page }) => {
       const [late, claimed, unfiled] = created;
       tasks = { late: late!, claimed: claimed!, unfiled: unfiled! };
       await agent.call("claim_task", { taskId: tasks.claimed.id });
-    } finally {
-      await agent.client.close();
-    }
+    });
   });
 
   await test.step("the owner approves the proposed goal", async () => {
-    await page.getByRole("navigation", { name: "Workspace" }).getByRole("link", { name: /Overview/ }).click();
+    await openTab(page, workspace.slug, "Overview");
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(workspace.name);
     await expect(page.getByText("1 goal awaits your decision, 1 task is late, and 3 tasks are open.")).toBeVisible();
 
@@ -104,8 +91,7 @@ test("an owner and an agent run a workspace end to end", async ({ page }) => {
   });
 
   await test.step("move a task across the board", async () => {
-    await page.getByRole("navigation", { name: "Workspace" }).getByRole("link", { name: /Board/ }).click();
-    await expect(page).toHaveURL(`/w/${workspace.slug}/board`);
+    await openTab(page, workspace.slug, "Board");
     const task = (status: Parameters<typeof lane>[1]) => lane(page, status).locator(`[data-task="${tasks.unfiled.id}"]`);
 
     await task("inbox").getByRole("button", { name: "Accept" }).click();
@@ -116,7 +102,7 @@ test("an owner and an agent run a workspace end to end", async ({ page }) => {
   });
 
   await test.step("the timeline draws every task's journey", async () => {
-    await page.getByRole("navigation", { name: "Workspace" }).getByRole("link", { name: "Timeline" }).click();
+    await openTab(page, workspace.slug, "Timeline");
     await expect(page.getByRole("navigation", { name: "Time window" }).getByRole("link", { name: "14 days" })).toHaveAttribute("aria-current", "page");
 
     const goalTracks = page.getByRole("region", { name: "Close the quarter" });
