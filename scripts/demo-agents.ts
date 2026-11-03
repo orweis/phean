@@ -77,8 +77,16 @@ const conflict = await sweeper.client.callTool({ name: "claim_task", arguments: 
 console.log(`Planner claimed "${first.title}"; sweeper's claim was ${conflict.isError ? "refused" : "accepted (unexpected)"}`);
 await planner.call("complete_task", { taskId: first.id, note: "Sent a reminder with the invoice attached, cc ar@acme.example." });
 
+// The sweeper says where a person can resume the work with it, then asks the one thing it cannot decide.
 const stripe = captured.created.find((task) => task.title.startsWith("Reconcile"))!;
-await sweeper.call("claim_task", { taskId: stripe.id });
+await sweeper.call("claim_task", {
+  taskId: stripe.id,
+  session: { app: "Claude Code", sessionId: "demo-sweeper-1", command: "claude --resume demo-sweeper-1", brief: "Matching August payouts against the bank feed." },
+});
+await sweeper.call("request_input", {
+  taskId: stripe.id,
+  question: "Two August payouts ($1,180 and $96) match no invoice. Book them as unapplied cash, or hold the close until Finance explains them?",
+});
 await planner.call("remember", {
   kind: "decision",
   content: "Board pack uses the new KPI template agreed in the Sept 12 leadership sync.",
@@ -87,6 +95,6 @@ await planner.call("remember", {
 
 const summary = await sweeper.call<Data>("get_status_summary");
 console.log(
-  `Status: ${summary.openTasks} open, ${summary.overdue} overdue, ${summary.pendingApprovals} goals awaiting approval → ${summary.dashboardUrl}`,
+  `Status: ${summary.openTasks} open, ${summary.overdue} overdue, ${summary.pendingApprovals} goals awaiting approval, ${summary.awaitingInput} agent questions waiting on you → ${summary.dashboardUrl}`,
 );
 await Promise.all([sweeper.client.close(), planner.client.close()]);

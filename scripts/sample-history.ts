@@ -5,8 +5,10 @@
  */
 import { count, eq } from "drizzle-orm";
 
+import type { AgentSession } from "../src/lib/agent-sessions";
 import { addDays, isoDayFromToday, startOfUtcDay } from "../src/lib/dates";
 import { SOURCE_META, TASK_STATUS_META, type GoalStatus, type Priority, type Source, type TaskStatus } from "../src/lib/domain";
+import { truncate } from "../src/lib/format";
 import type { Db } from "../src/server/db/client";
 import { newId } from "../src/server/db/ids";
 import { agents, events, goals, memories, tasks } from "../src/server/db/schema";
@@ -28,6 +30,8 @@ interface SampleTask {
   legs: Leg[];
   /** Who claims and completes it. */
   agent: AgentKey;
+  /** A link to the source message; other samples get an opaque reference. */
+  ref?: string;
 }
 
 const AGENTS: Record<AgentKey, { name: string; seenHoursAgo: number }> = {
@@ -73,10 +77,48 @@ const TASKS: SampleTask[] = [
   { title: "Retire the old CRM logins", goal: "crm", source: "email", legs: [["inbox", 9], ["todo", 8], ["done", 4]], agent: "sweeper" },
   { title: "Compare the three lease offers", goal: "lease", source: "email", due: 9, legs: [["inbox", 2]], agent: "sweeper" },
   { title: "Reply to the conference sponsorship email", source: "email", legs: [["inbox", 2]], agent: "sweeper" },
-  { title: "Renew the SSL certificate", source: "email", priority: "high", due: 3, legs: [["inbox", 1]], agent: "sweeper" },
-  { title: "Read the Slack thread about on-call pay", source: "slack", legs: [["inbox", 0]], agent: "sweeper" },
+  { title: "Renew the SSL certificate", source: "email", priority: "high", due: 3, legs: [["inbox", 1]], agent: "sweeper", ref: "https://mail.google.com/mail/u/0/#inbox/FMfcgzQXJWDsKkmPqRtVbHnLcZxTwMvB" },
+  { title: "Read the Slack thread about on-call pay", source: "slack", legs: [["inbox", 0]], agent: "sweeper", ref: "https://globex.slack.com/archives/C02ONCALL/p1730900000000100" },
   { title: "Update the office Wi-Fi password", source: "slack", legs: [["inbox", 6], ["todo", 5], ["done", 5]], agent: "planner" },
 ];
+
+/** Where each working agent can be resumed, and the one question waiting on the owner. */
+const HANDOFFS: Record<string, { session: Omit<AgentSession, "agentId" | "agentName" | "linkedAt">; hoursAgo: number; question?: string }> = {
+  "Chase three overdue invoices": {
+    session: {
+      app: "Claude",
+      url: "https://claude.ai/chat/5d0c2e7a-91b4-4a8e-b1f3-2c6e8a4d7f10",
+      sessionId: null,
+      messageId: null,
+      command: null,
+      brief: "Two of the three are paid. Globex disputes #4471 and wants a discount.",
+    },
+    hoursAgo: 3,
+    question: "Globex disputes invoice #4471 ($2,400) and asks for 10% off. Offer 5% to settle this week, or escalate to their CFO?",
+  },
+  "Screen the first twenty applicants": {
+    session: {
+      app: "Claude Code",
+      url: null,
+      sessionId: "4f1c9e2a-7b3d-4e61-9a0c-d25b8e3f6a17",
+      messageId: null,
+      command: "claude --resume 4f1c9e2a-7b3d-4e61-9a0c-d25b8e3f6a17",
+      brief: "Screened 12 of 20. Four look strong; notes are on each candidate.",
+    },
+    hoursAgo: 5,
+  },
+  "Record the onboarding walkthrough": {
+    session: {
+      app: "Slack",
+      url: "https://globex.slack.com/archives/C07ONBOARD/p1730812345000200",
+      sessionId: "C07ONBOARD",
+      messageId: "1730812345.000200",
+      command: null,
+      brief: "The script is approved; recording on Thursday with the partner team.",
+    },
+    hoursAgo: 20,
+  },
+};
 
 const MEMORIES: { content: string; goal?: GoalKey; kind: "fact" | "preference" | "decision" }[] = [
   { content: "Partners are paid monthly, net 30, in their own currency.", goal: "billing", kind: "decision" },
@@ -151,6 +193,9 @@ export async function seedSampleHistory(db: Db, tenant: Tenant, owner: { id: str
     const last = stops.at(-1)!;
     const capturedBy = sample.source === "manual" ? human : asAgent(sample.source === "calendar" ? "planner" : "sweeper");
     const worker = asAgent(sample.agent);
+    const handoff = HANDOFFS[sample.title];
+    const handedOffAt = handoff && new Date(now.getTime() - handoff.hoursAgo * HOUR_MS);
+    const who = { agentId: agentIds[sample.agent], agentName: AGENTS[sample.agent].name };
 
     await db.insert(tasks).values({
       id,
@@ -160,11 +205,13 @@ export async function seedSampleHistory(db: Db, tenant: Tenant, owner: { id: str
       status: last.status,
       priority: sample.priority ?? "medium",
       source: sample.source,
-      sourceRef: sample.source === "manual" ? "" : `sample:${index}`,
+      sourceRef: sample.source === "manual" ? "" : (sample.ref ?? `sample:${index}`),
       dueDate: sample.due === undefined ? null : isoDayFromToday(sample.due, now),
       claimedByAgentId: last.status === "in_progress" ? agentIds[sample.agent] : null,
       claimedAt: last.status === "in_progress" ? last.at : null,
       completedAt: last.status === "done" ? last.at : null,
+      agentSessions: handoff ? [{ ...who, ...handoff.session, linkedAt: handedOffAt!.toISOString() }] : [],
+      inputRequest: handoff?.question ? { ...who, question: handoff.question, askedAt: handedOffAt!.toISOString() } : null,
       createdByType: capturedBy.actorType,
       createdById: capturedBy.actorId,
       createdByName: capturedBy.actorName,
@@ -183,6 +230,14 @@ export async function seedSampleHistory(db: Db, tenant: Tenant, owner: { id: str
       else if (from === "in_progress" && stop.status === "todo") event(worker, "task.released", `released "${sample.title}"`, stop.at);
       else if (from === "inbox" && stop.status === "todo" && goalId) event(worker, "task.assigned", `filed "${sample.title}" under "${GOALS[sample.goal!].title}"`, stop.at);
       else event(human, "task.updated", `moved "${sample.title}" to ${TASK_STATUS_META[stop.status].label}`, stop.at, { changed: ["status"], status: stop.status });
+    }
+    if (handoff) {
+      const session = { app: handoff.session.app, url: handoff.session.url, sessionId: handoff.session.sessionId };
+      if (handoff.question) {
+        event(worker, "task.input_requested", `asked about "${sample.title}": ${truncate(handoff.question, 120)}`, handedOffAt!, { question: handoff.question, session });
+      } else {
+        event(worker, "task.session_linked", `linked a session to "${sample.title}"`, handedOffAt!, { session });
+      }
     }
   }
 
