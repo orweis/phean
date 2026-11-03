@@ -5,10 +5,10 @@
 Phean is a hosted, multi-tenant service where people set direction and AI agents do the legwork. Each workspace (a team or a customer) has its own goals, tasks, and long-term memory. Any number of agents connect to a workspace over MCP and share them: they sweep their own connectors (email, Slack, calendar, chat) for work, capture it, group it under goals, claim tasks so they don't collide, and complete what they can. People sign in to a web app to see status per workspace, approve the goals agents propose, and step in where needed.
 
 - **Remote MCP server** at `/mcp`: 21 tools and 4 prompts, plus operating instructions that teach agents the loop and the multi-agent rules.
-- **Web app**: status across workspaces, a dashboard per workspace, a kanban board, goal pages, shared memory, search, agent tokens, and members.
+- **Web app**: status across workspaces, an overview per workspace, a kanban board, a timeline, goal pages, shared memory, search, agent tokens, and members. Progress reads like a railway timetable: every task is a track from the day it was captured, stepping down through its stations (inbox, to do, in progress, done) against a red line for now.
 - **Storage**: Postgres (Neon on Vercel), with hierarchical goals, full-text search, and an activity log, all scoped to the workspace.
 
-Docs: [PRD](docs/PRD.md) · [UX](docs/UX.md) · [Architecture](docs/ARCHITECTURE.md) · [Deployment](docs/DEPLOYMENT.md) · [Hosted multi-tenant plan](docs/plans/hosted-multi-tenant.md)
+Docs: [PRD](docs/PRD.md) · [UX](docs/UX.md) · [Design system](DESIGN.md) · [Product context](PRODUCT.md) · [Architecture](docs/ARCHITECTURE.md) · [Deployment](docs/DEPLOYMENT.md) · [Hosted multi-tenant plan](docs/plans/hosted-multi-tenant.md)
 
 ## Quickstart
 
@@ -18,7 +18,7 @@ Requires Node.js 22 and pnpm 10 (`corepack enable`). Locally, Phean uses an embe
 git clone https://github.com/orweis/phean.git
 cd phean
 pnpm install
-pnpm db:seed      # demo account, two workspaces, two agent tokens
+pnpm db:seed      # demo account, two workspaces, two agent tokens, three weeks of Globex history
 pnpm dev          # applies migrations, then serves http://localhost:3000
 ```
 
@@ -62,7 +62,7 @@ The token identifies both the agent and its workspace. Each agent gets its own t
 3. **Triage**: file tasks under goals, set priorities and due dates, propose new goals.
 4. **Approve**: a person approves or rejects proposed goals in the web app. Agents cannot.
 5. **Execute**: claim a task, do it, complete it with a note. Claims keep agents from colliding.
-6. **Review**: status summaries and Mermaid views (goal tree, kanban, timeline) in chat, or the dashboard.
+6. **Review**: status summaries and Mermaid views (goal tree, kanban, timeline) in chat, or the web app's overview, timetable, and cumulative flow.
 7. **Remember**: durable facts, preferences, and decisions go into memory that every agent in the workspace can recall.
 
 ## MCP tools
@@ -84,9 +84,10 @@ Prompts: `sync_up`, `scan_sources`, `triage_inbox`, `daily_review`.
 | Page | What it shows |
 | --- | --- |
 | `/workspaces` | Status per workspace: open, inbox, overdue, due this week, done, awaiting approval, active agents, last activity |
-| `/w/:slug` | Dashboard: headline numbers, goals awaiting approval, goal tree, next actions, overdue, activity, agents |
-| `/w/:slug/board` | Kanban by status, filterable by goal, with quick task actions |
-| `/w/:slug/goals/:id` | One goal: decisions, progress, tasks, sub-goals, memory, activity |
+| `/w/:slug` | Overview: a status sentence, open work by station, goals awaiting your decision, late tasks, the timetable of the most pressing open tasks, next actions, the goal map, agent workload, and activity |
+| `/w/:slug/board` | Kanban by status, filterable by goal, with quick task actions; Done shows the latest five and folds the rest |
+| `/w/:slug/timeline` | Cumulative flow and a timetable of every task over 14, 30, or 90 days, grouped by goal and filterable by goal |
+| `/w/:slug/goals/:id` | One goal: decisions, progress by station, its timetable, tasks, sub-goals, memory, activity |
 | `/w/:slug/memory` | Shared long-term memory, by kind and text |
 | `/w/:slug/search` | Full-text search across goals, tasks, and memory |
 | `/w/:slug/agents` | Issue and revoke agent tokens, with MCP client setup |
@@ -100,14 +101,17 @@ Pages refresh every 15 seconds while open. Owners and admins manage agents and m
 | --- | --- |
 | `pnpm dev` | Apply migrations and start the dev server |
 | `pnpm check` | Typecheck, lint, and run the tests |
-| `pnpm test` | Vitest: domain services, policy, tenant isolation, and MCP over HTTP, against in-memory PGlite |
+| `pnpm test` | Vitest: domain services, policy, tenant isolation, timelines, and MCP over HTTP, against in-memory PGlite |
+| `pnpm test:e2e` | Playwright UI tests: builds, serves on port 3200 against a fresh seeded PGlite, and drives Chromium through sign-up, agents over MCP, approvals, the board, the diagrams, accessibility (axe), and phone layouts |
 | `pnpm build` | Production build (never connects to the database) |
 | `pnpm db:generate` | Generate a SQL migration from schema changes in `src/server/db/schema` |
 | `pnpm db:migrate` | Apply pending migrations |
 | `pnpm db:seed` | Create the demo account, workspaces, and agent tokens |
 | `pnpm demo:agents <url> <token> <token>` | Run two agents against a deployment |
 
-Code layout and conventions are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [AGENTS.md](AGENTS.md).
+Run `pnpm exec playwright install chromium` once before the first `pnpm test:e2e`. CI runs `pnpm check` and `pnpm test:e2e` on every pull request.
+
+Code layout and conventions are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [AGENTS.md](AGENTS.md). The visual system (tokens, type, components, and the rules behind them) is in [DESIGN.md](DESIGN.md).
 
 ## Deployment
 

@@ -47,11 +47,15 @@ src/
 │   ├── api/health               # Liveness + database round trip
 │   ├── (auth)/                  # sign-in, sign-up, invite/[id] (shared centered layout)
 │   ├── workspaces/              # Status per customer + create workspace
-│   └── w/[slug]/                # Dashboard, board, goals/[id], memory, search, agents, members
-│       └── actions.ts           # Every workspace mutation, one line each via tenantAction
-├── components/                  # Domain components (TaskCard, GoalTree, ActivityFeed, ...)
-│   └── ui/                      # Design-system primitives (Button, Card, Badge, Field, Popover, ActionForm)
-├── lib/                         # Client-safe: domain vocabulary + labels, routes, formatting, pure helpers
+│   ├── w/[slug]/                # Overview, board, timeline, goals/[id], memory, search, agents, members
+│   │   ├── actions.ts           # Every workspace mutation, one line each via tenantAction
+│   │   └── loading.tsx, error.tsx  # Tab-switch frame and in-workspace error boundary
+│   ├── error.tsx                # App-wide error boundary (both render ErrorNotice)
+│   └── globals.css              # The design tokens: Tailwind @theme, utilities, motion (see DESIGN.md)
+├── components/                  # Domain components (TaskCard, GoalTree, KanbanBoard, ActivityFeed, ...)
+│   ├── charts/                  # FlowBar, Timetable, CumulativeFlow, station colours
+│   └── ui/                      # Design-system primitives (Button, Card, Badge, Field, Popover, ActionForm, table cells)
+├── lib/                         # Client-safe: domain vocabulary + labels, routes, formatting, timeline geometry, pure helpers
 ├── server/
 │   ├── domain/                  # Services, policy, zod schemas, errors, context, read models
 │   ├── mcp/                     # defineTool registry, tools, prompts and instructions, Mermaid views, handler
@@ -62,8 +66,10 @@ src/
 │   └── web.ts                   # Page helpers (orNotFound, absoluteUrl)
 └── proxy.ts                     # Optimistic sign-in redirect (Next 16 "proxy")
 drizzle/                         # Generated SQL migrations (committed)
-scripts/                         # migrate, seed, demo-agents (env.ts loads .env files the way Next does)
+scripts/                         # migrate, seed, demo-agents, mcp-agent (env.ts loads .env files the way Next does)
 tests/                           # Vitest suites on in-memory PGlite
+e2e/                             # Playwright UI tests against a production build
+.github/workflows/ci.yml         # check and ui jobs on every pull request
 ```
 
 ## Interfaces
@@ -100,6 +106,7 @@ Other single sources of truth:
 - **Routes** (`lib/routes.ts`): every in-app path, used by pages, redirects, and the links MCP tools hand to agents.
 - **Read models** (`domain/overview.ts`): `getWorkspaceStats` computes headline numbers for any number of workspaces in four grouped queries. It powers both the per-customer table and the `get_status_summary` tool.
 - **Hierarchy helpers** (`lib/goal-tree.ts`): `toTree`, `withProgress`, and `subtreeIds` are pure functions shared by the MCP Mermaid views and the web pages.
+- **Timeline model** (`lib/timeline.ts`): a task's history is a `Journey`, its stops at each station replayed by `buildJourneys` from the activity log (`task.captured`, `task.claimed`, `task.released`, `task.completed`, `task.updated`). `trackOf` turns a journey into the segments the timetable draws, `cumulativeFlow` counts each station at the end of every day, and `fitWindow` trims a window to the history a workspace actually has (at least `TIMELINE_MIN_DAYS`). `getJourneys` (`domain/overview.ts`) loads them for a workspace or a goal subtree, capped so a 90-day window stays bounded. All of it is pure and unit tested; the chart components only lay it out.
 
 ## Storage
 
@@ -180,7 +187,11 @@ Prompts: `sync_up`, `scan_sources`, `triage_inbox`, and `daily_review`. The serv
 
 ## Web UI
 
-Server components read through the same services. Mutations are server actions created by `tenantAction` and rendered with `ActionForm` (`useActionState`), so forms work without client JavaScript and show errors inline. Workspace pages refresh every 15 seconds while the tab is visible, so people watch agents work in near real time without websockets. See [UX.md](UX.md) for the screens.
+Server components read through the same services. Mutations are server actions created by `tenantAction` and rendered with `ActionForm` (`useActionState`), so forms work without client JavaScript and show errors inline. Workspace pages refresh every 15 seconds while the tab is visible, so people watch agents work in near real time without websockets. See [UX.md](UX.md) for the screens and [DESIGN.md](../DESIGN.md) for the visual system.
+
+The diagrams are server-rendered HTML and CSS, not a charting library: tracks and bars are absolutely positioned spans placed by fractions of the time window, and the cumulative flow is one inline SVG. They ship no client JavaScript and stay accessible: each diagram has a text equivalent (per-row status notes, `aria-label` counts, or a numbers table). Hover effects are CSS only (`group-has-[li:hover]`), and motion respects `prefers-reduced-motion`.
+
+Styling is Tailwind 4 with the default palette switched off (`--color-*: initial`), so only the tokens in `globals.css` exist. Status colour comes from the `{ label, tone }` tables in `lib/domain.ts` and the station colours in `components/charts/stations.ts`; components never pick a hue directly.
 
 ## Testing
 
@@ -192,8 +203,16 @@ Vitest, with a fresh in-memory PGlite database per suite and the real migrations
 - `agents`: token entropy and hashing, authentication, last-seen tracking, revocation.
 - `mcp`: an MCP SDK client over Streamable HTTP against the real route handler, covering auth failures, tool list and annotations, prompts, errors, and two agents coordinating.
 - `views`, `lib`, `web`: Mermaid builders, pure helpers, routes, MCP client snippets, and form-to-schema parsing.
+- `timeline`: journeys replayed from events, track segments and ends, window fitting, cumulative flow, and which tracks the overview picks as most pressing.
 
-`pnpm check` runs typecheck, lint, and tests. `next build` runs in CI on Vercel.
+Playwright drives Chromium against a production build (`next start` on port 3200) with a fresh on-disk PGlite seeded with the demo account. A setup project signs in once and the specs reuse its session, because sign-in is rate limited.
+
+- `journey`: the whole loop on a fresh account. A person signs up, creates a workspace, and issues a token; an agent connects over real MCP, proposes a goal, and captures and claims work; the person approves the goal and moves a task across the board; the overview, timeline, goal page, and workspaces table show the result.
+- `diagrams`: the overview's order and its pressing tracks, the timetable's stations, ends, late notes, window switch and hover, the cumulative flow and its numbers table, window fitting, goal filtering, the goal page roll-up, board lanes and the folded Done lane, and the workspaces flow bars.
+- `quality`: axe accessibility scans on every page, nothing cut off at 375px, the phone card order, popovers inside the screen, and the Now chip clear of every date label at desktop and phone widths.
+- `public`: the landing page's sample timetable, sign-in redirects, a refused password, and accessibility of the signed-out pages.
+
+`pnpm check` runs typecheck, lint, and unit tests; `pnpm test:e2e` builds and runs the UI tests. GitHub Actions runs both on every pull request (`check` and `ui` jobs) and keeps the Playwright report and traces when the UI job fails. `next build` also runs on Vercel for every deployment.
 
 ## Design decisions
 

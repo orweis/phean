@@ -11,7 +11,7 @@ The two meet in one shared ledger per workspace. Anything an agent does appears 
 
 1. **Agents do the labor, people make the decisions.** Agents propose goals; only a person can approve, complete, or abandon one. This is enforced on the server, not just in the guidance, and the web app is where the decision happens.
 2. **One ledger, many agents.** Several agents work in the same workspace. They coordinate through Phean (claims, duplicate detection, the activity log, shared memory) instead of through the human.
-3. **Show, then tell.** Status answers lead with a picture (a diagram in chat, a stat row on the dashboard), then a short read, then one suggested next step.
+3. **Show, then tell.** Status answers lead with a picture (a diagram in chat, the timetable and flow bars in the web app), then a short read, then one suggested next step.
 4. **Zero data entry for people.** People state intent ("track that audit thread"); agents structure it. The web forms exist for corrections and quick additions, not as the main way work gets in.
 5. **Every hand-off is a link.** Agents return deep links (`reviewUrl` from `create_goal`, `dashboardUrl` from `whoami` and `get_status_summary`) so a person can go straight from the chat to the decision.
 6. **Read-only means read-only.** Platform admins see every workspace with a banner that says so, and the controls they cannot use are not rendered.
@@ -60,7 +60,7 @@ flowchart LR
 
 ### Loop 3: Approve (web app)
 
-**Trigger:** a proposed goal. The dashboard shows an amber "N goals awaiting your approval" card at the top, and the workspaces table highlights the count in amber.
+**Trigger:** a proposed goal. The overview shows an amber "N goals awaiting your decision" card at the top, the Overview tab carries the count, and the workspaces table highlights it in amber.
 
 **Flow:** a person clicks **Approve** or **Reject** in the card, or opens the goal for context first (its tasks, memories, and the agent that proposed it). Approved goals join the goal tree with their progress; rejected ones become **abandoned**. Agents that try to approve a goal get a clear refusal that tells them to ask a person.
 
@@ -84,7 +84,7 @@ Goal decisions available in the web app:
 
 ### Loop 5: Review
 
-**Trigger:** "where do we stand?", or the dashboard.
+**Trigger:** "where do we stand?", or the overview.
 
 **In chat:** `get_status_summary` plus `visualize` with one of three views:
 
@@ -100,7 +100,7 @@ flowchart TD
     g1 --> t2["Book auditor call - done"]
 ```
 
-**In the web app:** the same information as the dashboard and board, described below.
+**In the web app:** the same information as pictures you can read at a glance: the overview's timetable and flow bars, the board, and the Timeline tab, described below.
 
 ### Planning a goal
 
@@ -138,31 +138,40 @@ flowchart TD
     Invite["/invite/:id"] --> Workspaces
     Workspaces --> Overview["/w/:slug overview"]
     Overview --- Board["/w/:slug/board"]
+    Overview --- Timeline["/w/:slug/timeline"]
     Overview --- Goal["/w/:slug/goals/:id"]
+    Goal -.->|filtered to the goal| Board
+    Goal -.->|filtered to the goal| Timeline
     Overview --- MemoryPage["/w/:slug/memory"]
     Overview --- SearchPage["/w/:slug/search"]
     Overview --- AgentsPage["/w/:slug/agents"]
     Overview --- Members["/w/:slug/members"]
 ```
 
-Each workspace has a tab bar: **Overview, Board, Memory, Search, Agents, Members**. The header has a workspace switcher and the account menu. A workspace slug the viewer cannot see returns the same 404 as one that does not exist, so slugs do not leak.
+Each workspace has a tab bar: **Overview, Board, Timeline, Memory, Search, Agents, Members**. Overview carries the number of goals awaiting a decision and Board the number of tasks in the inbox, so what waits is visible from every tab. On phones the tab bar scrolls sideways and fades at its right edge to show there is more. The header has a workspace switcher and the account menu. A workspace slug the viewer cannot see returns the same 404 as one that does not exist, so slugs do not leak.
 
 ### Screens
 
-**Workspaces** (`/workspaces`): the status-per-customer view. One row per workspace with open, inbox, overdue, due this week, done in the last 7 days, awaiting approval, agents active in the last 24 hours out of those connected, and last activity. Overdue counts are red and pending approvals amber; zeros are faded so the rows that need attention stand out. Totals sit above the table, and a form below it creates a new workspace (the creator becomes its owner). Platform admins see every workspace, marked **Read-only**.
+**Workspaces** (`/workspaces`): the status-per-customer view. Totals sit above the table (workspaces, open tasks, late, agents active). One row per workspace shows its open work as a flow bar by station, then late, due this week, done in the last 7 days, awaiting decision, agents active in the last 24 hours out of those connected, and last activity. Late counts are red and pending decisions amber; zeros are faded so the rows that need attention stand out. The workspace column stays pinned while the table scrolls sideways on narrow screens. A form below creates a new workspace (the creator becomes its owner). Platform admins see every workspace, marked **Read-only**.
 
-**Overview** (`/w/:slug`): the workspace dashboard.
+**Overview** (`/w/:slug`): one sentence first ("2 goals await your decision, 3 tasks are late, and 14 tasks are open."), then, in order of what needs a person:
 
-- A stat row: open tasks, inbox (amber above 10), overdue (red), due this week, done in the last 7 days, active agents.
-- The approval card, shown only when goals are proposed.
-- The goal tree with rolled-up progress, and a **New goal** popover.
-- Next actions (the same ranking agents get) and an overdue card when anything is late.
-- Right column: the activity feed (people and agents, newest first) and the connected agents.
-- A **Connect an agent** button when no agent is connected yet.
+1. **Today on the line**: open work as one flow bar by station, then late, due this week, done in the last 7 days, and agents active.
+2. **Goals awaiting your decision** (amber), shown only when goals are proposed, with Approve and Reject in place.
+3. **Late** (red), shown only when open tasks are past due, each led by its due date.
+4. **On the line**: the timetable of the eight most pressing open tasks (late first, then priority, due date, and age), with a link to the full Timeline.
+5. **Next actions**: the same ranking agents get from `suggest_next_actions`, with quick actions on each row.
+6. **Goal map**: every approved goal with its tasks by station, rolled up from sub-goals, and a **New goal** popover.
+7. **Agents**: what each agent holds now and has finished this week, on one shared scale.
+8. **Activity**: people and agents, newest first.
 
-**Board** (`/w/:slug/board`): a kanban with Inbox, To do, In progress, Done (the 20 most recent), and Dropped. It can be filtered to one goal and its sub-goals. A one-line add-task form sits above it. Each card shows priority, due date, goal, source, and the agent holding it, plus one next-step button (Accept, Start, Done, Reopen, Restore), Release when it is claimed, and Drop while it is open.
+On a desktop the decisions, the timetable, next actions, and the goal map form the wide left column, with late work, agents, and activity on the right. On a phone both columns dissolve into one stack in the order above. When no agent is connected yet, a **Connect an agent** button replaces **New goal** in the header.
 
-**Goal detail** (`/w/:slug/goals/:id`): a breadcrumb of ancestor goals, the status badge and decision buttons, progress, the goal's tasks with an add-task form locked to the goal, sub-goals, linked memories with a remember form, and the goal's activity. Edit and move controls let a person retitle the goal or move it under another one; the parent picker excludes the goal's own subtree, goals already at maximum depth, and abandoned goals.
+**Board** (`/w/:slug/board`): a kanban with Inbox, To do, In progress, and Done lanes, each topped with its station colour. Dropped tasks leave the board; they stay findable in search and on the timeline. Done shows the latest five and folds the rest of the 20 most recent behind **Show N more**, so it does not outrun the open lanes. It can be filtered to one goal and its sub-goals. A one-line add-task form sits above it. Each card shows priority, due date, goal, source, and the agent holding it, plus one next-step button (Accept, Start, Done, Reopen, Restore), Release when it is claimed, and Drop while it is open.
+
+**Timeline** (`/w/:slug/timeline`): the deep dive on how work moved, over the last 14, 30, or 90 days, for the whole workspace or one goal and its sub-goals. A workspace with less history than the window shows only what it has ("since Oct 12") rather than weeks of empty axis. The header sums the window up ("23 tasks on the line: 9 done, 2 dropped, 12 still open (3 late)."). Below it, **How the work moved** (the cumulative flow) and the **Timetable** of every task, grouped by goal.
+
+**Goal detail** (`/w/:slug/goals/:id`): a breadcrumb of ancestor goals, the status badge and decision buttons, and links to the board and timeline filtered to the goal. A stat strip shows progress as a flow bar by station with the percent done, then open, late, and done in the window. Below: the goal's timetable, its tasks with an add-task form locked to the goal, sub-goals as a goal map, linked memories with a remember form, and the goal's activity. Edit and move controls let a person retitle the goal or move it under another one; the parent picker excludes the goal's own subtree, goals already at maximum depth, and abandoned goals.
 
 **Memory** (`/w/:slug/memory`): everything agents and people have remembered, filtered by kind (fact, preference, decision, context, note) or text. Each entry shows its kind, tags, linked goal, author, and age. A form adds a memory, and Forget asks for confirmation.
 
@@ -174,22 +183,56 @@ Each workspace has a tab bar: **Overview, Board, Memory, Search, Agents, Members
 
 **Invitation** (`/invite/:id`): signed-out visitors are sent to sign in or sign up and come back. Accepting requires being signed in with the invited email; a different account sees "Wrong account" with a sign-out option, and an expired or used link says so.
 
+### Diagrams
+
+The web app reads like a railway's graphic timetable: every task is a train, its statuses are the stations it passes (inbox, to do, in progress, done), and a red line marks now. Five diagrams carry that idea from a glance down to the detail, and each one uses the same station colours, so a hue means the same status everywhere.
+
+| Diagram | Answers | Where |
+| --- | --- | --- |
+| **Flow bar** | How much work sits at each station right now? One stacked bar in the order work flows, with a legend of counts. | Overview strip, each workspaces row, each goal in the goal map, the goal page |
+| **Timetable** | Where has each task been, and is it stuck or late? | Overview (the eight most pressing), Timeline (every task, by goal), goal page |
+| **Cumulative flow** | Is work piling up or draining? A stacked area of each station at the end of every day; a widening band is a queue growing. | Timeline |
+| **Goal map** | How do goals ladder up, and how far along is each? The goal tree with a flow bar per goal, rolled up from sub-goals. | Overview, goal page (sub-goals) |
+| **Agent workload** | Who holds what, and who is finishing? Two bars per agent on one shared scale: holding now and done this week. | Overview, Agents |
+
+**Reading the timetable.** One row per task: the title on the left, its track on a shared time axis on the right. The track starts with an open circle on the day the task was captured and changes form as it moves, so state never depends on colour alone:
+
+- **Inbox** and **to do**: a thin dashed line (waiting).
+- **In progress**: a thick solid bar (moving).
+- **Done**: a filled dot at the arrival day. **Dropped**: a slash, with the title struck through.
+- **Due date**: a short tick on the track. Once an open task passes it, the stretch from the due date to now is shaded red and the row reads "Late, due Oct 28".
+- **Now**: a red vertical line with a "Now" chip, and the days ahead of it shaded. Date labels near the chip are dropped so the two never collide.
+
+Under each title the row says in words where the task stands ("In progress for 3 days"), when it is due, and which agent holds it. Hovering a track brings it forward and dims the rest. On the Timeline, tracks are grouped under their goals, each heading linking to the goal, with unfiled tasks last. On a phone the titles sit above their tracks on an opaque panel so the now line never runs through them. A long flat run on any track is stuck work, which is the first thing the overview's "On the line" card is there to show.
+
+**Small histories.** The timetable fits its axis to the history it has (at least 7 days), and the cumulative flow waits for three days of work before drawing a trend; until then it says "The flow fills in after a few days". The flow also offers **Show the numbers**, a table of the same counts by day for screen readers and anyone who prefers figures.
+
+**In chat** the same questions are answered with Mermaid views from `visualize`: the goal tree, the kanban, and a Gantt timeline of due dates.
+
 ### Live refresh
 
 Workspace pages and the workspaces table re-render every 15 seconds while the tab is visible, and every change made in the web app refreshes all of that workspace's pages immediately. There is no reload button to remember.
 
-### Status color language
+### Loading and errors
+
+Switching workspace tabs answers at once: a loading frame holds the page's shape (a title bar and panels whose rows are a label and an empty dashed track, like a timetable before it fills) and announces "Loading" to screen readers. If a page fails, an error notice ("Something went wrong") offers **Try again**, a way back to your workspaces, and the reference support can look up. Inside a workspace the header and tab bar stay in place around it.
+
+### Color language
+
+The full system (tokens, type, components, and the rules behind them) is in [DESIGN.md](../DESIGN.md). In short: a navy station-board header over a pale timetable sheet of white panels, one signal yellow for the primary action and the active tab, and four state colours that carry meaning and nothing else.
 
 One table per concept (`src/lib/domain.ts`) maps each value to a label and a tone, and every badge, stat, and table cell reads from it, so a status looks the same everywhere.
 
-| Tone | Color | Used for |
+| Tone | Token | Used for |
 | --- | --- | --- |
-| Danger | red | overdue, urgent priority, revoked agents |
-| Warning | amber | proposed goals and pending approvals, high priority, a full inbox, read-only access |
-| Info | sky | in-progress tasks, active goals, agent claims, admin role, facts |
-| Success | emerald | done tasks, achieved goals, active agents, decisions |
-| Accent | violet | inbox, owner role, preferences |
-| Neutral | zinc | everything else |
+| Danger | `late` (red) | late work, urgent priority, revoked agents, the now line |
+| Warning | `wait` (amber) | proposed goals and pending decisions, high priority, read-only access |
+| Info | `move` (blue) | in-progress tasks, active goals, admin role, facts |
+| Success | `arrive` (green) | done tasks, achieved goals, active agents, decisions |
+| Accent | `signal` (yellow) | inbox, owner role, preferences |
+| Neutral | `ink` on `sunken` | everything else |
+
+The diagrams use the station colours: inbox ochre, to do slate, in progress blue (`move`), and done green (`arrive`). Red is never a station; it only marks lateness and now.
 
 ### Forms and feedback
 
