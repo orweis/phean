@@ -19,6 +19,19 @@ const PAGES = [
 /** Pages that draw a timetable, so the Now marker can be checked against the date labels. */
 const TIMETABLES = ["/w/globex", "/w/globex/timeline", "/w/globex/timeline?days=90", "/w/globex/timeline?days=30"];
 
+/** Panels that only render their content once opened, by page and trigger. */
+const PANELS = [
+  ["/w/globex", "Answer here"],
+  ["/w/globex/board", "Resume"],
+] as const;
+
+async function openPanel(page: Page, path: string, trigger: string) {
+  await page.goto(path);
+  const panel = popover(page, trigger).first();
+  await panel.locator("summary").click();
+  return panel;
+}
+
 /** The first goal on the overview's goal map, whose id is only known at run time. */
 async function goalPage(page: Page): Promise<string> {
   await page.goto("/w/globex");
@@ -41,6 +54,13 @@ test.describe("signed in", () => {
     await page.goto(await goalPage(page));
     await expectAccessible(page);
   });
+
+  for (const [path, trigger] of PANELS) {
+    test(`${path} has no detectable accessibility violations with ${trigger} open`, async ({ page }) => {
+      await openPanel(page, path, trigger);
+      await expectAccessible(page);
+    });
+  }
 
   for (const path of TIMETABLES) {
     test(`${path} keeps the Now chip clear of the dates`, async ({ page }) => {
@@ -72,10 +92,18 @@ test.describe("signed in", () => {
       });
     }
 
-    test("the overview puts decisions and late work first", async ({ page }) => {
+    for (const [path, trigger] of PANELS) {
+      test(`${path} opens ${trigger} as a sheet inside the screen`, async ({ page }) => {
+        const panel = await openPanel(page, path, trigger);
+        await expect(panel.getByRole("button", { name: "Close" })).toBeInViewport();
+        await expectNothingCutOff(page);
+      });
+    }
+
+    test("the overview puts questions, decisions and late work first", async ({ page }) => {
       await page.goto("/w/globex");
       const top = async (title: string) => (await card(page, title).boundingBox())!.y;
-      const order = ["1 goal awaiting your decision", "Late", "On the line", "Next actions", "Goal map", "Agents", "Activity"];
+      const order = ["1 agent question waiting on you", "1 goal awaiting your decision", "Late", "On the line", "Next actions", "Goal map", "Agents", "Activity"];
       const tops = await Promise.all(order.map(top));
       expect(tops).toEqual([...tops].sort((a, b) => a - b));
     });
@@ -118,6 +146,13 @@ test.describe("in the dark appearance", () => {
       await page.goto(await goalPage(page));
       await expectAccessible(page);
     });
+
+    for (const [path, trigger] of PANELS) {
+      test(`${path} has no detectable accessibility violations with ${trigger} open`, async ({ page }) => {
+        await openPanel(page, path, trigger);
+        await expectAccessible(page);
+      });
+    }
   });
 });
 
