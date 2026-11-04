@@ -287,6 +287,10 @@ export const webhooks = pgTable(
     url: text("url").notNull(),
     /** The signing secret, encrypted with the server's webhook key (AES-256-GCM). */
     secretCiphertext: text("secret_ciphertext").notNull(),
+    /** Headers the endpoint requires (its own API key, say), as encrypted JSON; sent with every request. */
+    headersCiphertext: text("headers_ciphertext"),
+    /** Their names only, so people and the agent can see which are set without the values. */
+    headerNames: text("header_names").array().notNull().default(sql`'{}'::text[]`),
     topics: text("topics", { enum: WEBHOOK_TOPICS }).array().notNull(),
     /** "related": what the agent follows. "all": every change in the workspace, within the topics. */
     scope: text("scope", { enum: ["related", "all"] }).notNull().default("related"),

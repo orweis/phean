@@ -265,6 +265,42 @@ export const InvitationRefInput = z.object({ invitationId: z.string().trim().min
 export const MemberRefInput = z.object({ memberId: z.string().trim().min(1) });
 
 // Webhooks and watches
+/** Custom headers a webhook endpoint may require. */
+export const MAX_WEBHOOK_HEADERS = 10;
+/** Headers Phean sets itself, or that would change how the request is framed or routed. */
+const RESERVED_HEADERS = new Set([
+  "host",
+  "content-type",
+  "content-length",
+  "content-encoding",
+  "transfer-encoding",
+  "connection",
+  "keep-alive",
+  "upgrade",
+  "expect",
+  "te",
+  "trailer",
+  "user-agent",
+  "proxy-authorization",
+]);
+const HEADER_NAME = /^[A-Za-z0-9!#$%&'*+.^_`|~-]{1,64}$/;
+
+const WebhookHeaders = z
+  .record(z.string(), z.string().max(LIMITS.headerValue))
+  .superRefine((headers, issue) => {
+    const names = Object.keys(headers);
+    if (names.length > MAX_WEBHOOK_HEADERS) issue.addIssue({ code: "custom", message: `At most ${MAX_WEBHOOK_HEADERS} headers.` });
+    const seen = new Set<string>();
+    for (const name of names) {
+      const lower = name.toLowerCase();
+      if (!HEADER_NAME.test(name)) issue.addIssue({ code: "custom", message: `"${name}" is not a valid header name.` });
+      else if (RESERVED_HEADERS.has(lower) || lower.startsWith("phean-")) issue.addIssue({ code: "custom", message: `Phean sets "${name}" itself; use another header.` });
+      if (seen.has(lower)) issue.addIssue({ code: "custom", message: `"${name}" is given twice.` });
+      seen.add(lower);
+      if (/[\r\n\0]/.test(headers[name]!)) issue.addIssue({ code: "custom", message: `The value of "${name}" must be one line.` });
+    }
+  });
+
 export const RegisterWebhookInput = z.object({
   url: z.string().trim().min(1).max(LIMITS.url).describe("Your HTTPS endpoint. Phean POSTs signed JSON to it"),
   topics: z
@@ -276,6 +312,9 @@ export const RegisterWebhookInput = z.object({
     .enum(["related", "all"])
     .default("related")
     .describe("related: only what you follow (what you worked on, plus watch). all: every change in the workspace within the topics"),
+  headers: WebhookHeaders.optional().describe(
+    "Headers your endpoint requires on every request, e.g. {\"Authorization\": \"Bearer <your endpoint's key>\"}. Stored encrypted and never shown again. Omit to keep the ones already registered; {} removes them",
+  ),
 });
 export const WebhookRefInput = z.object({
   agentId: z.string().trim().min(1).optional().describe("For owners and admins: whose webhook. Agents always act on their own"),

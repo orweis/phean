@@ -70,6 +70,7 @@ export const LIMITS = {
   brief: 500,
   question: 1000,
   option: 200,
+  headerValue: 2000,
   linkTitle: 120,
 } as const;
 
