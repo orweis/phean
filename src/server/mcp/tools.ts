@@ -28,6 +28,8 @@ import {
   updateTask,
   waitForAnswers,
 } from "../domain/tasks";
+import { deleteWebhook, getWebhook, listWatches, pingWebhook, registerWebhook, unwatch, watch } from "../domain/webhooks";
+import { SIGNATURE_HEADER } from "../webhooks/signing";
 import { planningScaffold } from "./guidance";
 import { defineTool, type PheanTool, serviceTool, type ToolContext } from "./tool";
 import { fenced, goalTreeMermaid, kanbanMermaid, timelineMermaid } from "./views";
@@ -311,5 +313,65 @@ export const TOOLS: readonly PheanTool[] = [
       const events = await listActivity(ctx, input);
       return { events, latestAt: events[0]?.createdAt.toISOString() ?? input.since ?? null };
     },
+  }),
+
+  // Webhooks: Phean calls you when something you follow changes
+  defineTool({
+    name: "register_webhook",
+    title: "Register webhook",
+    description:
+      "Have Phean call your HTTPS endpoint as soon as something you follow changes: a human answers your question or decides on your goal (topic decisions), or a task, goal or memory you follow changes (tasks, goals, memory). You follow what you work on automatically; add more with watch. scope 'all' sends every change in the workspace instead. One webhook per agent: registering again replaces it and rotates the secret. The secret is returned once; verify each request with it.",
+    input: registerWebhook.schema,
+    run: async (ctx, input) => {
+      const { webhook, secret } = await registerWebhook(ctx, input);
+      return {
+        webhook,
+        secret,
+        verify: `Each request is a POST with JSON {type: "phean.events", events: [...]} and a ${SIGNATURE_HEADER} header "t=<unix seconds>,v1=<hex>": v1 = HMAC-SHA256(secret, "<t>.<raw body>"). Reject it if v1 differs or t is over 5 minutes old. Answer 2xx quickly; Phean retries failures with backoff, so de-duplicate by eventId. Events say what changed and why you got them; call get_task, collect_answers or get_goal for the current state.`,
+        next: "Call ping_webhook to check your endpoint now.",
+      };
+    },
+  }),
+  serviceTool({
+    name: "get_webhook",
+    title: "Get webhook",
+    description: "Your webhook: its URL, topics and scope, whether it is active (or why it was disabled), delivery counts, and the latest deliveries with any errors.",
+    readOnly: true,
+    service: getWebhook,
+  }),
+  serviceTool({
+    name: "ping_webhook",
+    title: "Ping webhook",
+    description: "Send a signed test request (type phean.ping, no events) to your webhook now and report the status code, latency, or error.",
+    service: pingWebhook,
+    key: "result",
+  }),
+  serviceTool({
+    name: "delete_webhook",
+    title: "Delete webhook",
+    description: "Remove your webhook. Anything not yet sent to it is dropped; your watches stay.",
+    destructive: true,
+    service: deleteWebhook,
+  }),
+  serviceTool({
+    name: "watch",
+    title: "Watch",
+    description:
+      "Follow a task, goal or memory, so its changes reach your webhook. You already follow everything you created, claimed, asked about, updated or saved. Watching a goal also covers the tasks and memories filed under it and new sub-goals created under it.",
+    service: watch,
+  }),
+  serviceTool({
+    name: "unwatch",
+    title: "Unwatch",
+    description: "Stop following a task, goal or memory.",
+    service: unwatch,
+  }),
+  serviceTool({
+    name: "list_watches",
+    title: "List watches",
+    description: "Everything you follow, with titles, and whether you chose it (manual) or Phean added it because you worked on it (auto).",
+    readOnly: true,
+    service: listWatches,
+    key: "watches",
   }),
 ];

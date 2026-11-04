@@ -5,9 +5,11 @@ import {
   date,
   foreignKey,
   index,
+  integer,
   jsonb,
   pgEnum,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   unique,
@@ -22,6 +24,8 @@ import {
   PRIORITIES,
   SOURCES,
   TASK_STATUSES,
+  WATCHED_ENTITY_TYPES,
+  WEBHOOK_TOPICS,
 } from "../../../lib/domain";
 
 import { organization, user } from "./auth";
@@ -242,3 +246,105 @@ export type GoalRow = typeof goals.$inferSelect;
 export type TaskRow = typeof tasks.$inferSelect;
 export type MemoryRow = typeof memories.$inferSelect;
 export type EventRow = typeof events.$inferSelect;
+
+
+/**
+ * The objects each agent follows. Phean adds a watch whenever an agent acts on a task, goal or
+ * memory (it captured, claimed, asked about, updated, created or saved it); agents can also add
+ * and remove watches themselves. Webhook routing reads this table.
+ */
+export const watches = pgTable(
+  "watches",
+  {
+    tenantId: tenantId(),
+    agentId: text("agent_id").notNull(),
+    entityType: text("entity_type", { enum: WATCHED_ENTITY_TYPES }).notNull(),
+    entityId: text("entity_id").notNull(),
+    /** Why the agent follows it: "auto" (it acted on it) or "manual" (it asked to). */
+    reason: text("reason", { enum: ["auto", "manual"] }).notNull(),
+    createdAt: timestampTz("created_at").notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ name: "watches_pk", columns: [t.agentId, t.entityType, t.entityId] }),
+    foreignKey({
+      name: "watches_agent_fk",
+      columns: [t.tenantId, t.agentId],
+      foreignColumns: [agents.tenantId, agents.id],
+    }).onDelete("cascade"),
+    // Routing looks watchers up by the object an event is about.
+    index("watches_entity_idx").on(t.tenantId, t.entityType, t.entityId),
+  ],
+);
+
+
+/** One endpoint per agent, registered by the agent, called when something it follows changes. */
+export const webhooks = pgTable(
+  "webhooks",
+  {
+    id: text("id").primaryKey(),
+    tenantId: tenantId(),
+    agentId: text("agent_id").notNull(),
+    url: text("url").notNull(),
+    /** The signing secret, encrypted with the server's webhook key (AES-256-GCM). */
+    secretCiphertext: text("secret_ciphertext").notNull(),
+    topics: text("topics", { enum: WEBHOOK_TOPICS }).array().notNull(),
+    /** "related": what the agent follows. "all": every change in the workspace, within the topics. */
+    scope: text("scope", { enum: ["related", "all"] }).notNull().default("related"),
+    status: text("status", { enum: ["active", "disabled"] }).notNull().default("active"),
+    disabledReason: text("disabled_reason"),
+    /** Failed sends in a row; resets on success. Drives backoff and disabling. */
+    consecutiveFailures: integer("consecutive_failures").notNull().default(0),
+    /** Earliest time the dispatcher may send again (backoff after a failure). */
+    nextAttemptAt: timestampTz("next_attempt_at").notNull().defaultNow(),
+    /** Held by the dispatcher sending to this webhook, so sends stay one at a time and in order. */
+    leaseUntil: timestampTz("lease_until"),
+    lastSuccessAt: timestampTz("last_success_at"),
+    lastFailureAt: timestampTz("last_failure_at"),
+    lastStatus: integer("last_status"),
+    lastError: text("last_error"),
+    ...timestamps,
+  },
+  (t) => [
+    unique("webhooks_agent_uq").on(t.agentId),
+    foreignKey({
+      name: "webhooks_agent_fk",
+      columns: [t.tenantId, t.agentId],
+      foreignColumns: [agents.tenantId, agents.id],
+    }).onDelete("cascade"),
+    index("webhooks_tenant_idx").on(t.tenantId, t.status),
+  ],
+);
+
+/**
+ * The outbox: one row per (webhook, event), written in the same transaction as the event, so a
+ * committed change always has its notifications and a rolled-back one never does.
+ */
+export const webhookDeliveries = pgTable(
+  "webhook_deliveries",
+  {
+    id: bigint("id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+    tenantId: tenantId(),
+    webhookId: text("webhook_id")
+      .notNull()
+      .references(() => webhooks.id, { onDelete: "cascade" }),
+    eventId: bigint("event_id", { mode: "number" })
+      .notNull()
+      .references(() => events.id, { onDelete: "cascade" }),
+    /** Why this agent gets the event, e.g. "watching:task", "asked_by_you". */
+    reasons: text("reasons").array().notNull(),
+    status: text("status", { enum: ["pending", "delivered", "dead"] }).notNull().default("pending"),
+    attempts: integer("attempts").notNull().default(0),
+    lastError: text("last_error"),
+    createdAt: timestampTz("created_at").notNull().defaultNow(),
+    deliveredAt: timestampTz("delivered_at"),
+  },
+  (t) => [
+    unique("webhook_deliveries_event_uq").on(t.webhookId, t.eventId),
+    // The dispatcher reads a webhook's pending deliveries oldest first.
+    index("webhook_deliveries_pending_idx").on(t.webhookId, t.status, t.id),
+  ],
+);
+
+export type WatchRow = typeof watches.$inferSelect;
+export type WebhookRow = typeof webhooks.$inferSelect;
+export type WebhookDeliveryRow = typeof webhookDeliveries.$inferSelect;

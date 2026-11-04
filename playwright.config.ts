@@ -33,6 +33,8 @@ export default defineConfig({
       // Test-only: signs sessions on a throwaway local database.
       BETTER_AUTH_SECRET: "phean-e2e-only-secret-not-for-real-deployments",
       PORT: String(PORT),
+      // The webhooks spec delivers to a receiver on 127.0.0.1; production never allows this.
+      PHEAN_WEBHOOK_ALLOW_PRIVATE: "1",
     },
   },
 });

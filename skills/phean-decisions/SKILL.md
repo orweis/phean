@@ -72,6 +72,7 @@ Rules:
 
 - **You can wait in this session:** call `wait_for_answers` with the `taskIds` you are blocked on. It returns the moment the person answers. If it comes back with `timedOut: true`, say what you are still waiting on, then wait again or do other work. Keep `timeoutSeconds` at the default (55) unless you know your client allows longer tool calls; the maximum is 240.
 - **You are moving on:** call `collect_answers` at the start of every session and before you touch work that had an open request.
+- **You run as a service with an HTTPS endpoint:** register it once with `register_webhook`. Phean then POSTs a signed event the moment the person answers (topic `decisions`), so you need neither to hold a tool call open nor to poll. On that event, call `collect_answers` to take the answer.
 
 Each answer is delivered to you once, through either tool. An answer has:
 

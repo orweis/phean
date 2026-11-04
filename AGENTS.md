@@ -36,6 +36,8 @@ Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) first. The rules below are the
 - Links agents leave (`tasks.links`, `InputRequest.links`) are validated by `LinkInput` with `isResumeUrl` and stored normalized by `normalizeLinks`; render them with `TaskLinks`, which goes through `OutsideLink`.
 - Subtasks are one level deep: `assertValidParent` in `tasks.ts` refuses a subtask as a parent and a task with subtasks as a child. `TaskView` carries `parentTitle`, `subtaskCount` and `subtasksDone` from `selectTaskViews`; build task lists from it, not from raw rows.
 - `skills/phean-decisions/SKILL.md` is the installable skill for agents that ask people for decisions. Keep it in step with "Asking the human" in `src/server/mcp/guidance.ts` and with `AskInput`; `tests/skills.test.ts` checks its tool names, kinds, fields, limits, and its example request against the server.
+- Webhooks hang off `recordEvents`: it records the acting agent's watches and queues `webhook_deliveries` in the caller's transaction, and wakes the dispatcher with `onCommit`. Log every change through `recordEvents` inside the service's `inTransaction`, never by inserting into `events` directly, or bots will not hear about it. Payloads carry the event, not the object, so put what a bot needs to act in the event's `data` (ids, `goalId`, `taskId`), never secrets.
+- Anything that calls an agent-supplied URL goes through `assertWebhookUrlSafe` and `postSigned` in `src/server/webhooks`; never `fetch` one directly.
 - `answered` and `answered_elsewhere` are the only outcomes delivered to agents (`DELIVERED_OUTCOMES`); deliver them through `collectAnswers` so each answer arrives once.
 
 ### Database

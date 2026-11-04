@@ -19,16 +19,35 @@ export interface Tenant {
   name: string;
 }
 
+/** Work to run once the surrounding transaction has committed, given the database outside it. */
+export type CommitHook = (db: Db) => void;
+
 /** Everything a domain service needs: where to read/write, which tenant, and who is acting. */
 export interface Ctx {
   db: Db;
   tenant: Tenant;
   actor: Actor;
+  /** Set inside `inTransaction`: queues a hook for after the outermost transaction commits. */
+  afterCommit?: (hook: CommitHook) => void;
 }
 
-/** Runs `fn` in one database transaction; the callback receives a context bound to it. */
-export function inTransaction<T>(ctx: Ctx, fn: (tx: Ctx) => Promise<T>): Promise<T> {
-  return ctx.db.transaction((db) => fn({ ...ctx, db }));
+/**
+ * Runs `fn` in one database transaction; the callback receives a context bound to it. Hooks queued
+ * with `onCommit` run after the outermost transaction commits, and never if it rolls back.
+ */
+export async function inTransaction<T>(ctx: Ctx, fn: (tx: Ctx) => Promise<T>): Promise<T> {
+  // Nested: a savepoint inside the outer transaction, whose commit is the one that counts.
+  if (ctx.afterCommit) return ctx.db.transaction((db) => fn({ ...ctx, db }));
+  const hooks: CommitHook[] = [];
+  const result = await ctx.db.transaction((db) => fn({ ...ctx, db, afterCommit: (hook) => hooks.push(hook) }));
+  for (const hook of hooks) hook(ctx.db);
+  return result;
+}
+
+/** Runs `hook` once the work done through `ctx` is durable: now, or after its transaction commits. */
+export function onCommit(ctx: Ctx, hook: CommitHook): void {
+  if (ctx.afterCommit) ctx.afterCommit(hook);
+  else hook(ctx.db);
 }
 
 interface TenantOwned {

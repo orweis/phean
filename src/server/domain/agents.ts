@@ -14,6 +14,7 @@ import { recordEvent } from "./events";
 import { assertCan } from "./policy";
 import { AgentRefInput, CreateAgentInput, Empty } from "./schemas";
 import { service } from "./service";
+import { disableWebhooksOf } from "./webhooks";
 
 export type Agent = Omit<AgentRow, "tenantId" | "tokenHash">;
 
@@ -74,6 +75,7 @@ export const revokeAgent = service(AgentRefInput, async (ctx, { agentId }): Prom
       .where(and(inTenant(tx, agents), eq(agents.id, agentId), isNull(agents.revokedAt)))
       .returning(agentColumns);
     if (!agent) throw notFound("active agent", agentId);
+    await disableWebhooksOf(tx, agentId);
     await recordEvent(tx, {
       action: "agent.revoked",
       entityType: "agent",

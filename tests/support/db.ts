@@ -8,6 +8,7 @@ import { migratePgliteClient } from "@/server/db/migrate";
 import { member, organization, user } from "@/server/db/schema";
 import { agentContext, authenticateAgentToken, createAgent } from "@/server/domain/agents";
 import type { Ctx, Tenant, UserRole } from "@/server/domain/context";
+import { setDispatchScheduler } from "@/server/webhooks/trigger";
 
 export interface TestDb {
   db: Db;
@@ -16,6 +17,8 @@ export interface TestDb {
 
 /** A fresh in-memory Postgres with the real migrations applied. */
 export async function createTestDb(): Promise<TestDb> {
+  // Tests dispatch webhooks themselves, with a fake fetch; nothing may call out on its own.
+  setDispatchScheduler(() => undefined);
   const client = new PGlite();
   await migratePgliteClient(client);
   return { db: createPgliteDb(client), close: () => client.close() };

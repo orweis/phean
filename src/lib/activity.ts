@@ -23,6 +23,8 @@ const ACTION_BATCH_PHRASES = {
   "memory.forgotten": ["forgot", "memory"],
   "agent.created": ["connected", "agent"],
   "agent.revoked": ["revoked", "agent"],
+  "webhook.registered": ["registered webhooks for", "agent"],
+  "webhook.removed": ["removed webhooks for", "agent"],
   "member.invited": ["invited", "member"],
 } as const satisfies Record<string, readonly [verb: string, noun: string]>;
 

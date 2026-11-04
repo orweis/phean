@@ -7,6 +7,7 @@ import { cancelInvitation, inviteMember, removeMember } from "@/server/auth/work
 import { createAgent, revokeAgent } from "@/server/domain/agents";
 import { createGoal, setGoalStatus, updateGoal } from "@/server/domain/goals";
 import { forget, remember } from "@/server/domain/memory";
+import { deleteWebhook } from "@/server/domain/webhooks";
 import { addTask, answerInput, completeTask, releaseTask, updateTask } from "@/server/domain/tasks";
 
 // Goals
@@ -38,6 +39,7 @@ export const createAgentAction = tenantAction(createAgent, {
 export const revokeAgentAction = tenantAction(revokeAgent, {
   success: (agent) => `Revoked ${agent.name}.`,
 });
+export const deleteWebhookAction = tenantAction(deleteWebhook, { success: "Webhook removed." });
 
 // Members
 export const inviteMemberAction = tenantAction(inviteMember, {

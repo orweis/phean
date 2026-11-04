@@ -1,11 +1,12 @@
 import type { Client } from "@modelcontextprotocol/client";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { isoDayFromToday } from "@/lib/dates";
 import { createAgent, revokeAgent } from "@/server/domain/agents";
 import { answerInput } from "@/server/domain/tasks";
 import { createPheanMcpHandler } from "@/server/mcp/handler";
 import { TOOLS } from "@/server/mcp/tools";
+import { dispatchDue } from "@/server/webhooks/dispatch";
 
 import { createTestDb, seedWorkspace, type TestDb, type Workspace } from "./support/db";
 import { connectMcpClient, dataOf, MCP_URL, TEST_ORIGIN, textOf } from "./support/mcp";
@@ -82,7 +83,7 @@ describe("MCP surface", () => {
   it("advertises every tool with annotations, plus prompts and instructions", async () => {
     const { tools } = await scout.listTools();
     expect(tools.map((tool) => tool.name).sort()).toEqual(TOOLS.map((tool) => tool.name).sort());
-    expect(tools).toHaveLength(27);
+    expect(tools).toHaveLength(34);
     const byName = new Map(tools.map((tool) => [tool.name, tool]));
     expect(byName.get("list_tasks")?.annotations?.readOnlyHint).toBe(true);
     expect(byName.get("forget")?.annotations?.destructiveHint).toBe(true);
@@ -251,6 +252,41 @@ describe("multiple agents sharing a workspace", () => {
     );
     expect(detail).toMatchObject({ task: { subtaskCount: 1 }, subtasks: [{ title: "Write the FAQ" }], boardUrl: `${TEST_ORIGIN}/w/${ws.tenant.slug}/board` });
     expect(detail.activity.map((event) => event.action)).toEqual(["task.updated", "task.captured"]);
+  });
+
+  it("lets an agent register a webhook and receive the human's answer on it", async () => {
+    vi.stubEnv("PHEAN_WEBHOOK_ALLOW_PRIVATE", "1");
+    try {
+      const registered = dataOf<{ webhook: { id: string; status: string; topics: string[] }; secret: string; verify: string }>(
+        await call(scout, "register_webhook", { url: "https://bots.example.com/scout", topics: ["decisions"] }),
+      );
+      expect(registered.webhook).toMatchObject({ status: "active", topics: ["decisions"] });
+      expect(registered.secret).toMatch(/^whsec_/);
+      expect(registered.verify).toContain("HMAC-SHA256");
+      expect(JSON.stringify(dataOf(await call(scout, "get_webhook")))).not.toContain(registered.secret);
+
+      const {
+        created: [task],
+      } = dataOf<{ created: { id: string }[] }>(await call(scout, "capture_tasks", { tasks: [{ title: "Pick a venue", status: "todo" }] }));
+      dataOf(await call(scout, "request_input", { taskId: task!.id, kind: "decision", question: "Lisbon or Porto?", options: ["Lisbon", "Porto"] }));
+      expect(dataOf<{ watches: { entityId: string }[] }>(await call(scout, "list_watches")).watches).toEqual([expect.objectContaining({ entityId: task!.id, reason: "auto" })]);
+      await answerInput(ws.human, { taskId: task!.id, answer: "Porto" });
+
+      const bodies: string[] = [];
+      const fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
+        bodies.push(String(init!.body));
+        return new Response(null, { status: 204 });
+      }) as typeof globalThis.fetch;
+      await dispatchDue(testDb.db, { fetch, resolve: async () => [], allowPrivate: true, baseUrl: TEST_ORIGIN, budgetMs: 5_000 });
+      const delivered = bodies.map((body) => JSON.parse(body)).find((payload) => payload.webhookId === registered.webhook.id);
+      expect(delivered.events).toEqual([expect.objectContaining({ action: "task.input_answered", reasons: expect.arrayContaining(["asked_by_you"]) })]);
+
+      const status = dataOf<{ counts: { delivered: number } }>(await call(scout, "get_webhook"));
+      expect(status.counts.delivered).toBe(1);
+      expect(dataOf(await call(scout, "delete_webhook"))).toEqual({ removed: true });
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it("hands back the cursor it was given when nothing happened since", async () => {

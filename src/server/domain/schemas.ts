@@ -9,6 +9,8 @@ import {
   PRIORITIES,
   SOURCES,
   TASK_STATUSES,
+  WATCHED_ENTITY_TYPES,
+  WEBHOOK_TOPICS,
   WORKSPACE_SLUG_PATTERN,
 } from "@/lib/domain";
 import { TIMELINE_WINDOWS } from "@/lib/timeline";
@@ -261,3 +263,25 @@ export const InviteMemberInput = z.object({
 });
 export const InvitationRefInput = z.object({ invitationId: z.string().trim().min(1) });
 export const MemberRefInput = z.object({ memberId: z.string().trim().min(1) });
+
+// Webhooks and watches
+export const RegisterWebhookInput = z.object({
+  url: z.string().trim().min(1).max(LIMITS.url).describe("Your HTTPS endpoint. Phean POSTs signed JSON to it"),
+  topics: z
+    .array(z.enum(WEBHOOK_TOPICS))
+    .min(1)
+    .default([...WEBHOOK_TOPICS])
+    .describe("decisions: a human answered you, or approved or closed a goal. tasks, goals, memory: changes to the ones you follow"),
+  scope: z
+    .enum(["related", "all"])
+    .default("related")
+    .describe("related: only what you follow (what you worked on, plus watch). all: every change in the workspace within the topics"),
+});
+export const WebhookRefInput = z.object({
+  agentId: z.string().trim().min(1).optional().describe("For owners and admins: whose webhook. Agents always act on their own"),
+});
+export const WatchInput = z.object({
+  entityType: z.enum(WATCHED_ENTITY_TYPES),
+  entityId: z.string().trim().min(1).describe("The task (t_...), goal (g_...) or memory (m_...) id"),
+});
+export const ListWatchesInput = z.object({ entityType: z.enum(WATCHED_ENTITY_TYPES).optional() });
