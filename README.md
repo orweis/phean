@@ -55,6 +55,23 @@ claude mcp add --transport http phean-acme https://<your-domain>/mcp --header "A
 
 The token identifies both the agent and its workspace. Each agent gets its own token, so its work is attributed to it and it can be revoked on its own.
 
+### Agent skill: asking for decisions
+
+[`skills/phean-decisions/SKILL.md`](skills/phean-decisions/SKILL.md) teaches an agent how to ask you for decisions through Phean:
+
+- when to mark a request `kind: "decision"` (with options) and when `"question"`;
+- how to write the question, the context, and its recommendation;
+- which links to attach (`conversation`, `source`, `doc`);
+- how to tell you, then wait for or collect your answer, and act on it.
+
+The server instructions carry the same rules in short; the skill adds a worked example, and loads only when the agent needs it. Install it where your client reads skills. For Claude Code:
+
+```bash
+mkdir -p ~/.claude/skills && cp -r skills/phean-decisions ~/.claude/skills/
+```
+
+Use `.claude/skills/` inside a project instead to share it with everyone working there. Other clients that support Agent Skills take the same folder.
+
 ## The loop
 
 1. **Sync up**: see what other agents and people did since last time.

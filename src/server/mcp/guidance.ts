@@ -20,7 +20,7 @@ Phean is a shared task and goal ledger for one workspace. Humans set direction a
 7. Remember: save durable facts, preferences, and decisions with remember; check recall before asking the human something they may have told another agent.
 
 ## Asking the human
-Questions you only ask in chat get lost; Phean keeps them on the human's Decisions page with a way back to you.
+Questions you only ask in chat get lost; Phean keeps them on the human's Decisions page with a way back to you. (The phean-decisions skill, if your client has it installed, covers this in more depth with an example.)
 - kind "decision" when the human must choose or sign off (approve a budget, pick a vendor, accept a draft); kind "question" when you need a fact only they have. If there is no task for it yet, capture one first.
 - question: one concrete question, answerable in a word or a line. Not "thoughts?".
 - context: the facts, the trade-offs, and your recommendation, in a few lines, for someone reading it cold days later.

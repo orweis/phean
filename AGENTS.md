@@ -35,6 +35,7 @@ Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) first. The rules below are the
 - A service that ends a task's run (complete, release, any status change except to in progress) closes its `inputRequest` with `closeOpenRequest()`, which archives it in `inputAnswers`, so no question outlives the work it was about and the Decisions page keeps its history.
 - Links agents leave (`tasks.links`, `InputRequest.links`) are validated by `LinkInput` with `isResumeUrl` and stored normalized by `normalizeLinks`; render them with `TaskLinks`, which goes through `OutsideLink`.
 - Subtasks are one level deep: `assertValidParent` in `tasks.ts` refuses a subtask as a parent and a task with subtasks as a child. `TaskView` carries `parentTitle`, `subtaskCount` and `subtasksDone` from `selectTaskViews`; build task lists from it, not from raw rows.
+- `skills/phean-decisions/SKILL.md` is the installable skill for agents that ask people for decisions. Keep it in step with "Asking the human" in `src/server/mcp/guidance.ts` and with `AskInput`; `tests/skills.test.ts` checks its tool names, kinds, fields, limits, and its example request against the server.
 - `answered` and `answered_elsewhere` are the only outcomes delivered to agents (`DELIVERED_OUTCOMES`); deliver them through `collectAnswers` so each answer arrives once.
 
 ### Database
