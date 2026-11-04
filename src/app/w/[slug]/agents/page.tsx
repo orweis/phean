@@ -1,19 +1,22 @@
 import { Bot } from "lucide-react";
 import type { Metadata } from "next";
+import Link from "next/link";
 
 import { deleteWebhookAction, revokeAgentAction } from "@/app/w/[slug]/actions";
 import { AGENT_STATUS_META, agentStatus } from "@/components/agent-list";
 import { ConnectAgentForm } from "@/components/connect-agent-form";
 import { PageHeader } from "@/components/page-header";
 import { ActionButton } from "@/components/ui/action-button";
-import { MetaBadge } from "@/components/ui/badge";
+import { ActorAvatar } from "@/components/ui/avatar";
+import { Badge, MetaBadge } from "@/components/ui/badge";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { CopyField } from "@/components/ui/copy-button";
+import { ScrollX } from "@/components/ui/scroll-x";
 import { EmptyState } from "@/components/ui/stat";
 import { PINNED_CELL, TH } from "@/components/ui/table";
 import { cx } from "@/lib/cx";
 import { WEBHOOK_STATE_META, webhookState } from "@/lib/domain";
-import { timeAgo } from "@/lib/format";
+import { pluralize, timeAgo } from "@/lib/format";
 import { routes } from "@/lib/routes";
 import { requireWorkspace } from "@/server/auth/session";
 import { listAgents } from "@/server/domain/agents";
@@ -25,6 +28,30 @@ import { absoluteUrl } from "@/server/web";
 export const metadata: Metadata = { title: "Agents" };
 
 const TD = "px-3 py-3 text-xs whitespace-nowrap text-muted";
+
+/** What an agent with a token gets, beside the endpoint it connects to. */
+function WhatAgentsGet({ mcpUrl }: { mcpUrl: string }) {
+  return (
+    <div className="space-y-4">
+      <div>
+        <p className="text-xs font-semibold text-ink-2">MCP endpoint</p>
+        <p className="mt-0.5 mb-2 text-xs text-muted">Streamable HTTP, authenticated with a bearer token.</p>
+        <CopyField value={mcpUrl} surface="fill" />
+      </div>
+      <div>
+        <p className="text-xs font-semibold text-ink-2">What agents get</p>
+        <ul className="mt-1.5 list-disc space-y-1.5 pl-4 text-xs text-ink-2 marker:text-faint">
+          <li>An operating guide and prompts for syncing, scanning sources, and triage.</li>
+          <li>Tools to capture, claim, and complete tasks, and to propose and plan goals.</li>
+          <li>Shared memory, so one agent&apos;s findings are every agent&apos;s context.</li>
+          <li>Mermaid views of the goal tree, board, and timeline.</li>
+          <li>A webhook each, so a bot hears about your decisions and changes to the work it follows as they happen.</li>
+        </ul>
+        <p className="mt-3 text-xs text-muted">Agents can propose goals but only people can approve, complete, or abandon them.</p>
+      </div>
+    </div>
+  );
+}
 
 export default async function AgentsPage({ params }: PageProps<"/w/[slug]/agents">) {
   const { slug } = await params;
@@ -46,122 +73,123 @@ export default async function AgentsPage({ params }: PageProps<"/w/[slug]/agents
         description="Every agent connected to this workspace shares its goals, tasks, and memory. Each has its own token, so its work is attributed and it can be cut off on its own."
       />
 
-      {canManage && (
-        <Card className="mb-6">
-          <CardHeader title="Connect an agent" description="Issue a token, then paste the snippet into your MCP client." />
-          <CardBody>
-            <ConnectAgentForm slug={slug} mcpUrl={mcpUrl} />
-          </CardBody>
-        </Card>
-      )}
-
-      <div className="grid gap-6 lg:grid-cols-3">
-        <Card className="min-w-0 lg:col-span-2">
-          <CardHeader title="Connected agents" description="Holding counts open tasks an agent has claimed; done counts the last 7 days." />
-          {agents.length === 0 ? (
-            <EmptyState icon={<Bot />} title="No agents yet">
-              {canManage ? "Issue a token to connect your first agent." : "Ask a workspace admin to connect an agent."}
-            </EmptyState>
-          ) : (
-            <div className="relative overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-rule">
-                    <th className={cx(TH, "pl-5 text-left", PINNED_CELL)}>Agent</th>
-                    <th className={cx(TH, "text-left")}>Status</th>
-                    <th className={cx(TH, "text-right")}>Holding</th>
-                    <th className={cx(TH, "text-right")}>Done</th>
-                    <th className={cx(TH, "text-left")}>Webhook</th>
-                    <th className={cx(TH, "text-left")}>Last seen</th>
-                    <th className={cx(TH, "text-left")}>Connected</th>
-                    {canManage && (
-                      <th className="px-5 py-2.5">
-                        <span className="sr-only">Actions</span>
-                      </th>
-                    )}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-rule">
-                  {agents.map((agent) => {
-                    const status = agentStatus(agent);
-                    const load = loadById.get(agent.id);
-                    return (
-                      <tr key={agent.id} className={cx(status === "revoked" && "text-muted")}>
-                        <td className={cx("py-3 pr-3 pl-5", PINNED_CELL)}>
-                          <p className={cx("font-semibold", status !== "revoked" && "text-ink")}>{agent.name}</p>
-                          <p className="font-mono text-xs text-muted">{agent.tokenPrefix}…</p>
-                        </td>
-                        <td className="px-3 py-3">
-                          <MetaBadge meta={AGENT_STATUS_META} value={status} />
-                        </td>
-                        <td className="px-3 py-3 text-right font-semibold text-ink">{load?.claimed ?? 0}</td>
-                        <td className="px-3 py-3 text-right font-semibold text-ink">{load?.completedLast7Days ?? 0}</td>
-                        <td className="px-3 py-3 text-xs">
-                          <WebhookCell hook={hookByAgent.get(agent.id)} />
-                        </td>
-                        <td className={TD}>{timeAgo(agent.lastSeenAt)}</td>
-                        <td className={TD}>{timeAgo(agent.createdAt)}</td>
-                        {canManage && (
-                          <td className="px-5 py-3 text-right">
-                            <div className="flex justify-end gap-1.5">
-                              {hookByAgent.has(agent.id) && (
-                                <ActionButton
-                                  action={deleteWebhookAction}
-                                  workspace={slug}
-                                  fields={{ agentId: agent.id }}
-                                  confirm={`Remove ${agent.name}'s webhook? Phean stops calling it; the agent can register a new one.`}
-                                  size="sm"
-                                  variant="ghost"
-                                >
-                                  Remove webhook
-                                </ActionButton>
-                              )}
-                              {status !== "revoked" && (
-                                <ActionButton
-                                  action={revokeAgentAction}
-                                  workspace={slug}
-                                  fields={{ agentId: agent.id }}
-                                  confirm={`Revoke ${agent.name}? It loses access immediately; its past work stays.`}
-                                  size="sm"
-                                  variant="danger"
-                                >
-                                  Revoke
-                                </ActionButton>
-                              )}
-                            </div>
-                          </td>
-                        )}
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+      <Card className="mb-6">
+        <CardHeader
+          title={canManage ? "Connect an agent" : "How agents connect"}
+          description={canManage ? "Issue a token, then paste the snippet into your MCP client." : "A workspace admin issues each agent its token."}
+        />
+        <CardBody className="grid gap-6 lg:grid-cols-3">
+          {canManage && (
+            <div className="min-w-0 lg:col-span-2">
+              <ConnectAgentForm slug={slug} mcpUrl={mcpUrl} />
             </div>
           )}
-        </Card>
+          <div className={cx("min-w-0", canManage ? "lg:border-l lg:border-rule lg:pl-6" : "lg:col-span-3")}>
+            <WhatAgentsGet mcpUrl={mcpUrl} />
+          </div>
+        </CardBody>
+      </Card>
 
-        <div className="min-w-0 space-y-6">
-          <Card>
-            <CardHeader title="MCP endpoint" description="Streamable HTTP, authenticated with a bearer token." />
-            <CardBody>
-              <CopyField value={mcpUrl} surface="fill" />
-            </CardBody>
-          </Card>
-          <Card>
-            <CardHeader title="What agents get" />
-            <CardBody>
-              <ul className="list-disc space-y-1.5 pl-4 text-xs text-ink-2 marker:text-faint">
-                <li>An operating guide and prompts for syncing, scanning sources, and triage.</li>
-                <li>Tools to capture, claim, and complete tasks, and to propose and plan goals.</li>
-                <li>Shared memory, so one agent&apos;s findings are every agent&apos;s context.</li>
-                <li>Mermaid views of the goal tree, board, and timeline.</li>
-                <li>A webhook each, so a bot hears about your decisions and changes to the work it follows as they happen.</li>
-              </ul>
-              <p className="mt-3 text-xs text-muted">Agents can propose goals but only people can approve, complete, or abandon them.</p>
-            </CardBody>
-          </Card>
-        </div>
-      </div>
+      <Card className="min-w-0">
+        <CardHeader title="Connected agents" description="Holding counts open tasks an agent has claimed; done counts the last 7 days." />
+        {agents.length === 0 ? (
+          <EmptyState icon={<Bot />} title="No agents yet">
+            {canManage ? "Issue a token to connect your first agent." : "Ask a workspace admin to connect an agent."}
+          </EmptyState>
+        ) : (
+          <ScrollX>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-rule">
+                  <th className={cx(TH, "pl-5 text-left", PINNED_CELL)}>Agent</th>
+                  <th className={cx(TH, "text-left")}>Status</th>
+                  <th className={cx(TH, "text-right")}>Holding</th>
+                  <th className={cx(TH, "text-right")}>Done</th>
+                  <th className={cx(TH, "text-left")}>Webhook</th>
+                  <th className={cx(TH, "text-left")}>Seen</th>
+                  {canManage && (
+                    <th className="px-5 py-2.5">
+                      <span className="sr-only">Actions</span>
+                    </th>
+                  )}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-rule">
+                {agents.map((agent) => {
+                  const status = agentStatus(agent);
+                  const load = loadById.get(agent.id);
+                  const holding = load?.claimed ?? 0;
+                  return (
+                    <tr key={agent.id} data-agent={agent.id} className={cx(status === "revoked" && "text-muted")}>
+                      <td className={cx("min-w-44 py-3 pr-3 pl-5", PINNED_CELL)}>
+                        <div className="flex items-center gap-2.5">
+                          <ActorAvatar type="agent" className="mt-0" />
+                          <div className="min-w-0">
+                            <p className={cx("font-semibold whitespace-nowrap", status !== "revoked" && "text-ink")}>{agent.name}</p>
+                            <p className="font-mono text-xs whitespace-nowrap text-muted" title={`Token starting ${agent.tokenPrefix}`}>
+                              {agent.tokenPrefix}…
+                            </p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-3 py-3 whitespace-nowrap">
+                        {status === "idle" && holding > 0 ? (
+                          // An idle agent sitting on work is the case a person needs to notice: show it, and lead to that work.
+                          <Link href={routes.board(slug, { agent: agent.id })} className="rounded-full">
+                            <Badge tone="warning">Idle · holding {holding}</Badge>
+                            <span className="sr-only">: see the {pluralize(holding, "task")} it holds</span>
+                          </Link>
+                        ) : (
+                          <MetaBadge meta={AGENT_STATUS_META} value={status} />
+                        )}
+                      </td>
+                      <td className="px-3 py-3 text-right font-semibold text-ink">{holding}</td>
+                      <td className="px-3 py-3 text-right font-semibold text-ink">{load?.completedLast7Days ?? 0}</td>
+                      <td className="px-3 py-3 text-xs">
+                        <WebhookCell hook={hookByAgent.get(agent.id)} />
+                      </td>
+                      <td className={TD}>
+                        {agent.lastSeenAt ? `Seen ${timeAgo(agent.lastSeenAt)}` : "Never seen"}
+                        <span className="block">connected {timeAgo(agent.createdAt)}</span>
+                      </td>
+                      {canManage && (
+                        <td className="px-5 py-3 text-right">
+                          <div className="flex justify-end gap-1.5">
+                            {hookByAgent.has(agent.id) && (
+                              <ActionButton
+                                action={deleteWebhookAction}
+                                workspace={slug}
+                                fields={{ agentId: agent.id }}
+                                confirm={`Remove ${agent.name}'s webhook? Phean stops calling it; the agent can register a new one.`}
+                                size="sm"
+                                variant="ghost"
+                              >
+                                Remove webhook
+                              </ActionButton>
+                            )}
+                            {status !== "revoked" && (
+                              <ActionButton
+                                action={revokeAgentAction}
+                                workspace={slug}
+                                fields={{ agentId: agent.id }}
+                                confirm={`Revoke ${agent.name}? It loses access immediately; its past work stays.`}
+                                size="sm"
+                                variant="danger"
+                              >
+                                Revoke
+                              </ActionButton>
+                            )}
+                          </div>
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </ScrollX>
+        )}
+      </Card>
     </>
   );
 }

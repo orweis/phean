@@ -113,12 +113,12 @@ With Flask use `request.get_data()`, and with FastAPI `await request.body()`, fo
 - **Answer fast.** Return `2xx` within a few seconds and do the work afterwards (queue it). Phean waits at most 10 seconds, counts anything else (including redirects) as a failure, and retries.
 - **De-duplicate by `eventId`.** Delivery is at least once: a batch can arrive again, for example if your 2xx was lost. Remember the event ids you have handled and skip repeats. Within one webhook, events arrive in order.
 - **Read `reasons`** to see why you got each event:
-  - `asked_by_you`: a person answered your question or decision;
+  - `asked_by_you`: a person answered your question or decision, or took the answer back (`task.input_retracted`, which reopens the question);
   - `watching:task` / `watching:goal` / `watching:memory`: something you follow changed;
   - `in_watched_goal`: a change filed under a goal you follow;
   - `about_watched_task`: a memory about a task you follow;
   - `workspace`: you registered with `scope: "all"`.
-- **Fetch the current state.** An event says what changed, not the whole object. Call `get_task`, `get_goal` or `recall` for the latest, and on `task.input_answered` call `collect_answers` to take the answer (that marks it delivered). Then act on it.
+- **Fetch the current state.** An event says what changed, not the whole object. Call `get_task`, `get_goal` or `recall` for the latest, and on `task.input_answered` call `collect_answers` to take the answer (that marks it delivered). Then act on it. A person can take an answer back for a few seconds after giving it, until you collect it: on `task.input_retracted` the question is open again, and `collect_answers` returns nothing for it, so wait for the next answer.
 - **You never get your own changes,** so acting on an event does not echo back to you.
 
 ## 5. When things go wrong

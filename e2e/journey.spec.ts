@@ -72,10 +72,13 @@ test("an owner and an agent run a workspace end to end", async ({ page }) => {
   await test.step("the owner approves the proposed goal", async () => {
     await openTab(page, workspace.slug, "Overview");
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(workspace.name);
-    await expect(page.getByText("1 goal awaits your decision, 1 task is late, and 3 tasks are open.")).toBeVisible();
+    const sentence = page.getByText("1 goal awaits your approval, 1 task is late, and 3 tasks are open.");
+    await expect(sentence).toBeVisible();
+    // Each clause leads to the card that holds it.
+    await expect(sentence.getByRole("link", { name: "1 task is late" })).toHaveAttribute("href", "#late");
 
     const pending = page.locator(`[data-goal="${goalId}"]`);
-    await expect(card(page, "1 goal awaiting your decision")).toBeVisible();
+    await expect(card(page, "1 goal to approve")).toBeVisible();
     await expect(pending).toContainText("Proposed by Inbox sweeper");
     await pending.getByRole("button", { name: "Approve" }).click();
     await expect(pending).toHaveCount(0);
@@ -95,6 +98,21 @@ test("an owner and an agent run a workspace end to end", async ({ page }) => {
     const task = (status: Parameters<typeof lane>[1]) => lane(page, status).locator(`[data-task="${tasks.unfiled.id}"]`);
 
     await task("inbox").getByRole("button", { name: "Accept" }).click();
+    await task("todo").getByRole("button", { name: "Start" }).click();
+    await task("in_progress").getByRole("button", { name: "Done" }).click();
+    await expect(task("done")).toContainText("Book the offsite venue");
+    const status = page.locator("[data-status-region]");
+    await expect(status).toContainText("Done: “Book the offsite venue”");
+
+    // Drop is in the card's ⋯ menu, and Undo puts the task back where it stood.
+    await task("done").getByRole("button", { name: "Reopen" }).click();
+    const more = task("todo").locator("details").filter({ has: page.locator('summary[aria-label="More actions for Book the offsite venue"]') });
+    await more.locator("summary").click();
+    await more.getByRole("button", { name: "Drop" }).click();
+    await expect(status).toContainText("Dropped “Book the offsite venue”");
+    await expect(lane(page, "todo").locator(`[data-task="${tasks.unfiled.id}"]`)).toHaveCount(0);
+    await status.getByRole("button", { name: "Undo" }).click();
+    await expect(status).toContainText("Restored “Book the offsite venue”.");
     await task("todo").getByRole("button", { name: "Start" }).click();
     await task("in_progress").getByRole("button", { name: "Done" }).click();
     await expect(task("done")).toContainText("Book the offsite venue");

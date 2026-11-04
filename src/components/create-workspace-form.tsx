@@ -23,7 +23,7 @@ export function CreateWorkspaceForm() {
           name="name"
           required
           maxLength={LIMITS.name}
-          placeholder="Acme Corp"
+          placeholder="Team name"
           value={name}
           onChange={(event) => {
             setName(event.target.value);
@@ -40,7 +40,7 @@ export function CreateWorkspaceForm() {
             required
             pattern={WORKSPACE_SLUG_PATTERN}
             title="Lowercase letters, numbers, and dashes"
-            placeholder="acme"
+            placeholder="team-name"
             value={slug}
             onChange={(event) => {
               setSlugEdited(true);

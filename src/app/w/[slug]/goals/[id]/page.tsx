@@ -1,4 +1,4 @@
-import { Bot, CalendarRange, ChevronRight, KanbanSquare, ListTodo, Pencil, Plus, Target } from "lucide-react";
+import { Bot, CalendarRange, ChevronRight, ListTodo, Pencil, Plus, Target } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { cache } from "react";
@@ -45,11 +45,9 @@ export async function generateMetadata({ params }: PageProps<"/w/[slug]/goals/[i
 export default async function GoalPage({ params }: PageProps<"/w/[slug]/goals/[id]">) {
   const { slug, id } = await params;
   const { ctx } = await requireWorkspace(slug);
-  const [{ goal, ancestors, tasks, memories, activity }, goals, { window, journeys }] = await Promise.all([
-    loadGoalDetail(slug, id),
-    listGoals(ctx, {}),
-    getJourneys(ctx, { goalId: id, days: TIMETABLE_DAYS }),
-  ]);
+  const [{ goal, ancestors, tasks, memories, activity }, goals, { window, journeys }] = await orNotFound(
+    Promise.all([loadGoalDetail(slug, id), listGoals(ctx, {}), getJourneys(ctx, { goalId: id, days: TIMETABLE_DAYS })]),
+  );
   const canWrite = can(ctx.actor, "task:write");
   const canDecide = can(ctx.actor, "goal:decide");
   const canEditGoals = can(ctx.actor, "goal:write");
@@ -58,28 +56,52 @@ export default async function GoalPage({ params }: PageProps<"/w/[slug]/goals/[i
   const subGoals = subtree.filter((candidate) => candidate.id !== goal.id);
   const { late, done: doneInWindow } = journeyTotals(journeys, window);
   const CreatorIcon = goal.createdByType === "agent" ? Bot : Target;
+  // With only this goal's own tasks on the line, its name as a group heading would repeat the page title.
+  const grouped = groupByGoal(journeys, subtree, slug);
+  const trackGroups = grouped.length === 1 && grouped[0]!.key === goal.id ? [{ ...grouped[0]!, title: undefined }] : grouped;
 
   return (
     <>
-      <nav aria-label="Breadcrumb" className="mb-3 flex flex-wrap items-center gap-1 text-xs text-muted">
-        <Link href={routes.workspace(slug)} className="hover:text-ink link">
-          Overview
-        </Link>
-        {ancestors.map((ancestor) => (
-          <span key={ancestor.id} className="flex items-center gap-1">
-            <ChevronRight className="size-3 text-faint" aria-hidden />
-            <Link href={routes.goal(slug, ancestor.id)} className="max-w-48 truncate hover:text-ink link">
-              {ancestor.title}
+      {/* A path that reads as one: the workspace, each goal above this one, then this goal. */}
+      <nav aria-label="Breadcrumb" className="mb-3">
+        <ol className="flex flex-wrap items-center gap-1 text-xs text-muted">
+          <li>
+            <Link href={routes.workspace(slug)} className="hover:text-ink link">
+              {ctx.tenant.name}
             </Link>
-          </span>
-        ))}
+          </li>
+          {ancestors.map((ancestor) => (
+            <li key={ancestor.id} className="flex items-center gap-1">
+              <ChevronRight className="size-3 text-faint" aria-hidden />
+              <Link href={routes.goal(slug, ancestor.id)} title={ancestor.title} className="max-w-48 truncate hover:text-ink link">
+                {ancestor.title}
+              </Link>
+            </li>
+          ))}
+          <li className="flex min-w-0 items-center gap-1">
+            <ChevronRight className="size-3 text-faint" aria-hidden />
+            <span aria-current="page" title={goal.title} className="max-w-64 truncate text-ink-2">
+              {goal.title}
+            </span>
+          </li>
+        </ol>
       </nav>
 
       <div className="mb-6 flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
         <div className="min-w-0 flex-1 basis-80">
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <h1 className="text-2xl font-bold text-ink">{goal.title}</h1>
             <MetaBadge meta={GOAL_STATUS_META} value={goal.status} />
+            <span className="text-xs text-muted">
+              View on{" "}
+              <Link href={routes.board(slug, goal.id)} className="font-semibold text-ink-2 link">
+                board
+              </Link>{" "}
+              ·{" "}
+              <Link href={routes.timeline(slug, { goal: goal.id })} className="font-semibold text-ink-2 link">
+                timeline
+              </Link>
+            </span>
           </div>
           {goal.description && <p className="mt-1.5 max-w-3xl text-sm whitespace-pre-line text-ink-2">{goal.description}</p>}
           <p className="mt-2 flex items-center gap-1 text-xs text-muted">
@@ -89,19 +111,11 @@ export default async function GoalPage({ params }: PageProps<"/w/[slug]/goals/[i
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {canEditGoals && (
-            <Popover icon={<Pencil aria-hidden />} label="Edit">
+            <Popover icon={<Pencil aria-hidden />} label="Edit" variant="ghost" title="Edit goal">
               <EditGoalForm slug={slug} goal={goal} goals={goals} />
             </Popover>
           )}
-          <ButtonLink href={routes.board(slug, goal.id)} size="sm">
-            <KanbanSquare aria-hidden />
-            Board
-          </ButtonLink>
-          <ButtonLink href={routes.timeline(slug, { goal: goal.id })} size="sm">
-            <CalendarRange aria-hidden />
-            Timeline
-          </ButtonLink>
-          {canDecide && <GoalStatusActions goalId={goal.id} status={goal.status} slug={slug} size="sm" />}
+          {canDecide && <GoalStatusActions goalId={goal.id} status={goal.status} slug={slug} size="sm" openTasks={goal.rollup.open} />}
         </div>
       </div>
 
@@ -132,7 +146,7 @@ export default async function GoalPage({ params }: PageProps<"/w/[slug]/goals/[i
             <CardBody>
               <Timetable
                 window={window}
-                groups={groupByGoal(journeys, subtree, slug)}
+                groups={trackGroups}
                 empty={
                   <EmptyState icon={<CalendarRange />} title="No tasks on the line">
                     Tasks under this goal appear here from the day they are captured.
@@ -148,7 +162,7 @@ export default async function GoalPage({ params }: PageProps<"/w/[slug]/goals/[i
               description={`${goal.own.open} open and ${goal.own.done} done directly under this goal.`}
               action={
                 canWrite && (
-                  <Popover variant="ghost" icon={<Plus aria-hidden />} label="Add task">
+                  <Popover variant="ghost" icon={<Plus aria-hidden />} label="Add task" title="Add a task">
                     <AddTaskForm slug={slug} goals={goals} goalId={goal.id} lockGoal />
                   </Popover>
                 )
@@ -175,7 +189,7 @@ export default async function GoalPage({ params }: PageProps<"/w/[slug]/goals/[i
               action={
                 canEditGoals &&
                 goal.depth < GOAL_MAX_DEPTH - 1 && (
-                  <Popover variant="ghost" icon={<Plus aria-hidden />} label="Add sub-goal">
+                  <Popover variant="ghost" icon={<Plus aria-hidden />} label="Add sub-goal" title="Add a sub-goal">
                     <NewGoalForm slug={slug} goals={goals} parentGoalId={goal.id} />
                   </Popover>
                 )
@@ -183,9 +197,7 @@ export default async function GoalPage({ params }: PageProps<"/w/[slug]/goals/[i
             />
             <CardBody className="py-1">
               {subGoals.length === 0 ? (
-                <EmptyState icon={<Target />} title="No sub-goals">
-                  Split big goals into milestones; progress rolls up automatically.
-                </EmptyState>
+                <p className="py-3 text-sm text-muted">No sub-goals yet. Split a big goal into milestones and its progress rolls up.</p>
               ) : (
                 <GoalTree goals={subGoals} slug={slug} baseDepth={goal.depth + 1} />
               )}
@@ -200,19 +212,23 @@ export default async function GoalPage({ params }: PageProps<"/w/[slug]/goals/[i
               description="What agents know about this goal."
               action={
                 can(ctx.actor, "memory:write") && (
-                  <Popover variant="ghost" icon={<Plus aria-hidden />} label="Add">
+                  <Popover variant="ghost" icon={<Plus aria-hidden />} label="Add" title="Remember something">
                     <RememberForm slug={slug} goals={goals} goalId={goal.id} />
                   </Popover>
                 )
               }
             />
             <CardBody className="py-1">
-              <MemoryList memories={memories} slug={slug} canWrite={can(ctx.actor, "memory:write")} empty="No memories about this goal" />
+              {memories.length === 0 ? (
+                <p className="py-3 text-sm text-muted">No memories about this goal yet.</p>
+              ) : (
+                <MemoryList memories={memories} slug={slug} canWrite={can(ctx.actor, "memory:write")} />
+              )}
             </CardBody>
           </Card>
           <Card>
             <CardHeader title="Activity" />
-            <CardBody className="max-h-[32rem] overflow-y-auto">
+            <CardBody>
               <ActivityFeed events={activity} slug={slug} />
             </CardBody>
           </Card>

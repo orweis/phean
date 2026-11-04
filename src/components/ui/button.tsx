@@ -1,11 +1,11 @@
 import { LoaderCircle } from "lucide-react";
 import Link from "next/link";
-import type { ComponentProps } from "react";
+import type { ComponentProps, ReactNode } from "react";
 
 import { cx } from "@/lib/cx";
 
 export type ButtonVariant = "primary" | "tinted" | "secondary" | "ghost" | "danger" | "dusk" | "signal";
-export type ButtonSize = "sm" | "md";
+export type ButtonSize = "sm" | "md" | "menu";
 
 const VARIANTS: Record<ButtonVariant, string> = {
   /** The prominent action of a view; keep it to one or two per screen. */
@@ -23,13 +23,15 @@ const VARIANTS: Record<ButtonVariant, string> = {
 
 /** Small buttons are 32px tall; the pseudo-element extends the hit target to 44px. */
 const SIZES: Record<ButtonSize, string> = {
-  sm: "relative h-8 gap-1.5 rounded-full px-3 text-xs after:absolute after:inset-x-0 after:-inset-y-1.5 [&_svg]:size-3.5",
-  md: "h-9 gap-2 rounded-full px-4 text-sm [&_svg]:size-4",
+  sm: "relative h-8 justify-center gap-1.5 rounded-full px-3 text-xs after:absolute after:inset-x-0 after:-inset-y-1.5 [&_svg]:size-3.5",
+  md: "h-9 justify-center gap-2 rounded-full px-4 text-sm [&_svg]:size-4",
+  /** A row of a menu panel: full width, its label at the start, 36px tall. */
+  menu: "h-9 w-full justify-start gap-2 rounded-md px-2.5 text-sm [&_svg]:size-4 [&_svg]:text-muted",
 };
 
 export function buttonClasses(variant: ButtonVariant = "secondary", size: ButtonSize = "md", className?: string) {
   return cx(
-    "inline-flex shrink-0 items-center justify-center font-semibold whitespace-nowrap transition-colors duration-(--dur-micro)",
+    "inline-flex shrink-0 items-center font-semibold whitespace-nowrap transition-colors duration-(--dur-micro)",
     "disabled:cursor-not-allowed disabled:opacity-55 aria-disabled:cursor-not-allowed aria-disabled:opacity-55",
     VARIANTS[variant],
     SIZES[size],
@@ -45,9 +47,11 @@ interface ButtonStyleProps {
 interface ButtonProps extends ComponentProps<"button">, ButtonStyleProps {
   /** While its work runs, the button is disabled and shows a spinner. */
   pending?: boolean;
+  /** Shown instead of the spinner while pending, e.g. a tick on Done. */
+  pendingIcon?: ReactNode;
 }
 
-export function Button({ variant, size, className, type = "button", pending = false, disabled, children, ...props }: ButtonProps) {
+export function Button({ variant, size, className, type = "button", pending = false, pendingIcon, disabled, children, ...props }: ButtonProps) {
   return (
     <button
       type={type}
@@ -56,7 +60,7 @@ export function Button({ variant, size, className, type = "button", pending = fa
       aria-busy={pending || undefined}
       {...props}
     >
-      {pending && <LoaderCircle className="motion-safe:animate-spin" aria-hidden />}
+      {pending && (pendingIcon ?? <LoaderCircle className="motion-safe:animate-spin" aria-hidden />)}
       {children}
     </button>
   );

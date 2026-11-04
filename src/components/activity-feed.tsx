@@ -1,15 +1,50 @@
-import { Activity as ActivityIcon, Bot, User } from "lucide-react";
+import { Activity as ActivityIcon } from "lucide-react";
 import Link from "next/link";
 
-import { groupActivity } from "@/lib/activity";
-import { cx } from "@/lib/cx";
+import { groupActivity, type ActivityGroup } from "@/lib/activity";
 import { timeAgo } from "@/lib/format";
 import { routes } from "@/lib/routes";
 import type { Activity } from "@/server/domain/events";
 
+import { ActorAvatar } from "./ui/avatar";
 import { EmptyState } from "./ui/stat";
 
-export function ActivityFeed({ events, slug }: { events: readonly Activity[]; slug: string }) {
+/** Entries shown before the rest fold away, so the card ends cleanly instead of scrolling inside the page. */
+const SHOWN = 8;
+
+/** Older captures were logged as "from manual"; they read as what they were. */
+const reworded = (summary: string) => summary.replace(/ from manual$/, " by hand");
+
+function Entry({ group, slug }: { group: ActivityGroup<Activity>; slug: string }) {
+  const { latest, summary, events } = group;
+  const goalLink = latest.entityType === "goal" && events.length === 1 ? routes.goal(slug, latest.entityId) : null;
+  return (
+    <li className="flex gap-2.5">
+      <ActorAvatar type={latest.actorType} />
+      <div className="min-w-0 text-sm">
+        <p className="text-ink-2">
+          <span className="font-semibold text-ink">{latest.actorName}</span>{" "}
+          {goalLink ? (
+            <Link href={goalLink} className="hover:text-ink link">
+              {reworded(summary)}
+            </Link>
+          ) : (
+            reworded(summary)
+          )}
+        </p>
+        <time dateTime={latest.createdAt.toISOString()} className="text-xs text-muted">
+          {timeAgo(latest.createdAt)}
+        </time>
+      </div>
+    </li>
+  );
+}
+
+/**
+ * Humans and agents, newest first, with runs of one actor doing one thing collapsed into a line.
+ * The first entries show; the rest fold behind "Show more", like the board's Done lane.
+ */
+export function ActivityFeed({ events, slug, shown = SHOWN }: { events: readonly Activity[]; slug: string; shown?: number }) {
   const groups = groupActivity(events);
   if (groups.length === 0) {
     return (
@@ -18,40 +53,28 @@ export function ActivityFeed({ events, slug }: { events: readonly Activity[]; sl
       </EmptyState>
     );
   }
+  const first = groups.slice(0, shown);
+  const rest = groups.slice(shown);
   return (
-    <ol className="space-y-3">
-      {groups.map(({ key, latest, summary, events: grouped }) => {
-        const isAgent = latest.actorType === "agent";
-        const Icon = isAgent ? Bot : User;
-        const goalLink = latest.entityType === "goal" && grouped.length === 1 ? routes.goal(slug, latest.entityId) : null;
-        return (
-          <li key={key} className="flex gap-2.5">
-            <span
-              className={cx(
-                "mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md",
-                isAgent ? "bg-move-tint text-move-ink" : "bg-fill text-ink-2",
-              )}
-            >
-              <Icon className="size-3.5" aria-label={isAgent ? "Agent" : "Person"} />
-            </span>
-            <div className="min-w-0 text-sm">
-              <p className="text-ink-2">
-                <span className="font-semibold text-ink">{latest.actorName}</span>{" "}
-                {goalLink ? (
-                  <Link href={goalLink} className="hover:text-ink link">
-                    {summary}
-                  </Link>
-                ) : (
-                  summary
-                )}
-              </p>
-              <time dateTime={latest.createdAt.toISOString()} className="text-xs text-muted">
-                {timeAgo(latest.createdAt)}
-              </time>
-            </div>
-          </li>
-        );
-      })}
-    </ol>
+    <div>
+      <ol className="space-y-3">
+        {first.map((group) => (
+          <Entry key={group.key} group={group} slug={slug} />
+        ))}
+      </ol>
+      {rest.length > 0 && (
+        <details className="group/more mt-3">
+          <summary className="cursor-pointer list-none text-xs font-semibold text-ink-2 link hover:text-ink [&::-webkit-details-marker]:hidden">
+            <span className="group-open/more:hidden">Show {rest.length} more</span>
+            <span className="hidden group-open/more:inline">Show fewer</span>
+          </summary>
+          <ol className="mt-3 space-y-3">
+            {rest.map((group) => (
+              <Entry key={group.key} group={group} slug={slug} />
+            ))}
+          </ol>
+        </details>
+      )}
+    </div>
   );
 }

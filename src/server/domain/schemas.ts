@@ -173,6 +173,11 @@ export const AnswerInput = z.object({
   answer: z.string().trim().max(LIMITS.note).default("").describe("Empty marks the question answered elsewhere"),
 });
 
+export const RetractAnswerInput = z.object({
+  taskId,
+  requestId: z.string().trim().min(1).max(LIMITS.ref).describe("The id of the request whose answer is taken back"),
+});
+
 export const CompleteTaskInput = z.object({
   taskId,
   note: z.string().trim().max(LIMITS.note).default("").describe("What was done, in one or two sentences"),
@@ -196,7 +201,10 @@ export const NextActionsInput = z.object({ limit: limit(20, 5) });
 export const GoalScopeInput = z.object({
   goalId: goalId.optional().describe("Only this goal and its sub-goals"),
 });
-export const BoardInput = GoalScopeInput.extend({ doneLimit: limit(100, 20) });
+export const BoardInput = GoalScopeInput.extend({
+  doneLimit: limit(100, 20),
+  heldBy: z.string().trim().min(1).optional().describe("Only the open tasks this agent holds (agent id)"),
+});
 export const JourneysInput = GoalScopeInput.extend({
   days: z
     .literal(TIMELINE_WINDOWS)
@@ -219,6 +227,8 @@ export const RecallInput = z.object({
   goalId: goalId.optional(),
   limit: limit(100, 20),
 });
+
+export const MemoryCountsInput = RecallInput.pick({ query: true });
 
 export const MemoryRefInput = z.object({ memoryId: z.string().trim().min(1) });
 

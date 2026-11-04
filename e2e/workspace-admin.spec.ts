@@ -52,23 +52,26 @@ test("an owner manages goals, memory, search, agents and members", async ({ page
     await expect(card(page, "Activity")).toContainText("abandoned goal");
   });
 
-  await test.step("remember a decision and filter memory by kind", async () => {
+  await test.step("remember a choice and filter memory by kind", async () => {
     await openTab(page, slug, "Memory");
-    const form = card(page, "Remember something");
+    const form = popover(card(page, "Everything remembered"), "Add");
+    await form.locator("summary").click();
     await form.getByRole("textbox", { name: "What should agents remember?" }).fill("Vendor contracts renew on the first of the month.");
     await form.getByRole("combobox", { name: "Kind" }).selectOption("decision");
     await form.getByRole("textbox", { name: "Tags" }).fill("vendors, legal");
     await form.getByRole("combobox", { name: "About goal" }).selectOption({ label: "Renew the vendor contracts" });
     await form.getByRole("button", { name: "Remember" }).click();
+    await expect(page.locator("[data-status-region]")).toContainText("Saved to memory");
 
     const remembered = card(page, "Everything remembered").getByRole("listitem").filter({ hasText: "Vendor contracts renew" });
     await expect(remembered).toContainText("#vendors");
     await expect(remembered.getByRole("link", { name: "Renew the vendor contracts" })).toBeVisible();
 
     const kinds = page.getByRole("navigation", { name: "Filter by kind" });
-    await kinds.getByRole("link", { name: "Decision" }).click();
+    await expect(kinds.getByRole("link", { name: /^Choice/ })).toHaveText("Choice1");
+    await kinds.getByRole("link", { name: /^Choice/ }).click();
     await expect(card(page, "1 match")).toContainText("Vendor contracts renew");
-    await kinds.getByRole("link", { name: "Fact" }).click();
+    await kinds.getByRole("link", { name: /^Fact/ }).click();
     await expect(page.getByText("No memories match")).toBeVisible();
   });
 

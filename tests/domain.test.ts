@@ -5,7 +5,7 @@ import { TIMELINE_AHEAD_DAYS, TIMELINE_MIN_DAYS } from "@/lib/timeline";
 import type { Ctx } from "@/server/domain/context";
 import { listActivity } from "@/server/domain/events";
 import { createGoal, findGoal, listGoals, setGoalStatus, updateGoal } from "@/server/domain/goals";
-import { forget, recall, remember } from "@/server/domain/memory";
+import { countMemoryKinds, forget, recall, remember } from "@/server/domain/memory";
 import {
   getAgentWorkload,
   getBoard,
@@ -31,6 +31,7 @@ import {
   releaseTask,
   requestInput,
   resolveInput,
+  retractAnswer,
   suggestNextActions,
   updateTask,
   waitForAnswers,
@@ -348,6 +349,29 @@ describe("agent sessions and questions", () => {
     await expect(answerInput(human, { taskId: task.id })).resolves.toMatchObject({ inputRequest: null });
   });
 
+  it("lets a person take an answer back until the asking agent collects it", async () => {
+    const task = await todo("Pick the auditor");
+    await claimTask(scout, { taskId: task.id });
+    const asked = await requestInput(scout, { taskId: task.id, kind: "decision", question: "Okafor or Brandt?", options: ["Okafor", "Brandt"] });
+    const requestId = asked.inputRequest!.id;
+    await answerInput(human, { taskId: task.id, answer: "Okafor" });
+
+    await expect(retractAnswer(scout, { taskId: task.id, requestId })).rejects.toMatchObject({ code: "invalid" });
+    await expect(retractAnswer(human, { taskId: task.id, requestId: "nope" })).rejects.toMatchObject({ code: "not_found" });
+    const reopened = await retractAnswer(human, { taskId: task.id, requestId });
+    // The question is back exactly as asked, and the note the answer left on the task is gone.
+    expect(reopened.inputRequest).toEqual(asked.inputRequest);
+    expect(reopened.description).toBe(asked.description);
+    expect(reopened.inputAnswers).toEqual([]);
+    expect(await collectAnswers(scout, {})).toEqual([]);
+    expect(await actionsOf(human, task.id)).toContain("task.input_retracted");
+
+    // Once the agent has the answer, it is too late to take it back.
+    await answerInput(human, { taskId: task.id, answer: "Brandt" });
+    expect(await collectAnswers(scout, {})).toEqual([expect.objectContaining({ answer: "Brandt" })]);
+    await expect(retractAnswer(human, { taskId: task.id, requestId })).rejects.toMatchObject({ code: "conflict" });
+  });
+
   it("closes a question when its agent resolves it or the work stops", async () => {
     const task = await todo("Book the offsite venue");
     await requestInput(scout, { taskId: task.id, question: "Lisbon or Porto?" });
@@ -549,6 +573,15 @@ describe("memory and search", () => {
     expect(await recall(closer, {})).toEqual([]);
   });
 
+  it("counts memories by kind, for everything or for what matches a search", async () => {
+    await remember(scout, { content: "Dana prefers invoices batched on Fridays", kind: "preference" });
+    await remember(human, { content: "The auditor is Rivera & Co.", kind: "fact" });
+    await remember(human, { content: "Invoices go out from billing@", kind: "fact" });
+
+    expect(await countMemoryKinds(human, {})).toEqual({ fact: 2, preference: 1, decision: 0, context: 0, note: 0 });
+    expect(await countMemoryKinds(human, { query: "invoice" })).toEqual({ fact: 1, preference: 1, decision: 0, context: 0, note: 0 });
+  });
+
   it("searches goals, tasks, and memories together with prefix matching", async () => {
     const hiring = await createGoal(human, { title: "Hiring" });
     await captureTasks(scout, { tasks: [{ title: "Reply to auditor", goalId: hiring.id }] });
@@ -666,6 +699,17 @@ describe("read models", () => {
     const titles = Object.fromEntries(board.columns.map((column) => [column.status, column.tasks.map((task) => task.title)]));
     expect(titles).toEqual({ inbox: [], todo: ["Order desks"], in_progress: [], done: ["Sign lease"] });
     await expect(getBoard(human, { goalId: "g_missing" })).rejects.toMatchObject({ code: "not_found" });
+  });
+
+  it("narrows the board to the open tasks one agent holds", async () => {
+    const { created } = await captureTasks(human, { tasks: [{ title: "Held", status: "todo" }, { title: "Free", status: "todo" }, { title: "Finished", status: "todo" }] });
+    await claimTask(scout, { taskId: created[0]!.id });
+    await claimTask(scout, { taskId: created[2]!.id });
+    await completeTask(scout, { taskId: created[2]!.id });
+
+    const board = await getBoard(human, { heldBy: ws.scout.agentId });
+    const titles = Object.fromEntries(board.columns.map((column) => [column.status, column.tasks.map((task) => task.title)]));
+    expect(titles).toEqual({ inbox: [], todo: [], in_progress: ["Held"], done: [] });
   });
 
   it("lists dated work soonest first and leaves out dropped tasks", async () => {

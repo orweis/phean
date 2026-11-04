@@ -1,6 +1,7 @@
 import { Bot, Check, Clock } from "lucide-react";
 
-import { DELIVERED_OUTCOMES } from "@/lib/agent-sessions";
+import { chosenOption, DELIVERED_OUTCOMES, type InputAnswer } from "@/lib/agent-sessions";
+import { cx } from "@/lib/cx";
 import { REQUEST_KIND_META, REQUEST_OUTCOME_META } from "@/lib/domain";
 import { timeAgo } from "@/lib/format";
 import type { DecisionRecord } from "@/server/domain/tasks";
@@ -25,11 +26,37 @@ function Delivery({ request }: { request: DecisionRecord["request"] }) {
   );
 }
 
+/** The options the agent offered, with the one chosen ticked, so the history keeps why. */
+function OfferedOptions({ request, chosen }: { request: InputAnswer; chosen: string | null }) {
+  return (
+    <ul aria-label="Options offered" className="mt-2 flex flex-wrap gap-1.5">
+      {request.options.map((option) => {
+        const picked = option === chosen;
+        return (
+          <li
+            key={option}
+            className={cx(
+              "inline-flex h-6 items-center gap-1 rounded-full border px-2.5 text-xs",
+              picked ? "border-edge font-semibold text-ink" : "border-rule text-muted",
+            )}
+          >
+            {picked && <Check className="size-3" aria-hidden />}
+            {option}
+            {picked && <span className="sr-only"> (chosen)</span>}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 /** Questions and decisions that were settled, newest first, with who answered and what. */
 export function AnsweredDecisions({ records, slug }: { records: readonly DecisionRecord[]; slug: string }) {
   return (
     <ul>
-      {records.map(({ task, request }) => (
+      {records.map(({ task, request }) => {
+        const chosen = request.answer ? chosenOption(request, request.answer) : null;
+        return (
         <li key={`${task.id}:${request.id}`} data-task={task.id} className="border-b border-rule py-3.5 last:border-b-0">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <MetaBadge meta={REQUEST_KIND_META} value={request.kind} />
@@ -47,7 +74,8 @@ export function AnsweredDecisions({ records, slug }: { records: readonly Decisio
             )}
           </p>
           <blockquote className="mt-2 border-l-2 border-rule pl-3 text-sm text-ink-2">{request.question}</blockquote>
-          {request.answer && (
+          {request.options.length > 0 && <OfferedOptions request={request} chosen={chosen} />}
+          {request.answer && !chosen && (
             <p className="mt-2 rounded-md bg-fill px-3 py-2 text-sm whitespace-pre-line text-ink">
               <span className="font-semibold">{request.answeredByName ?? "Answer"}:</span> {request.answer}
             </p>
@@ -62,7 +90,8 @@ export function AnsweredDecisions({ records, slug }: { records: readonly Decisio
           </p>
           <TaskLinks links={request.links} className="mt-2" />
         </li>
-      ))}
+        );
+      })}
     </ul>
   );
 }

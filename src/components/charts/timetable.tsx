@@ -4,11 +4,13 @@ import type { CSSProperties, ReactNode } from "react";
 
 import { cx } from "@/lib/cx";
 import { addDays, dayOf, daysBetween } from "@/lib/dates";
-import { isLate, TASK_STATUS_META } from "@/lib/domain";
+import { GOAL_STATUS_META, isLate, TASK_STATUS_META } from "@/lib/domain";
 import { formatDay, formatDueDate, pluralize } from "@/lib/format";
+import { routes } from "@/lib/routes";
 import { fractionOf, trackOf, type Journey, type JourneyGroup, type Segment, type TimeWindow } from "@/lib/timeline";
 import type { TaskView } from "@/server/domain/tasks";
 
+import { MetaBadge } from "../ui/badge";
 import { EmptyState } from "../ui/stat";
 
 /** State is carried by line form as well as hue: dashed while waiting, solid while moving. */
@@ -20,6 +22,9 @@ const SEGMENT_FORM: Record<Segment["status"], string> = {
 
 const at = (fraction: number): CSSProperties => ({ left: `${fraction * 100}%` });
 const span = (from: number, to: number): CSSProperties => ({ left: `${from * 100}%`, width: `${(to - from) * 100}%` });
+
+/** Past this share of the axis a tick would hang over the edge, so it is inset instead. */
+const LAST_TICK = 0.995;
 
 /** The end of the due day, which is when an open task becomes late. */
 const dueAt = (dueDate: string) => addDays(dayOf(dueDate), 1);
@@ -63,8 +68,9 @@ function Track({ journey, window }: { journey: Journey<TaskView>; window: TimeWi
       {due !== null && (
         <span
           title={`Due ${formatDueDate(task.dueDate!)}`}
-          className={cx("absolute inset-y-0.5 w-0.5 -translate-x-1/2 rounded-xs", late ? "bg-late" : "bg-ink-2")}
-          style={at(due)}
+          className={cx("absolute inset-y-0.5 w-0.5 rounded-xs", late ? "bg-late" : "bg-ink-2", due < LAST_TICK && "-translate-x-1/2")}
+          // A tick on the window's last edge is inset, so it is drawn whole rather than cut in half.
+          style={due < LAST_TICK ? at(due) : { right: 0 }}
         />
       )}
       {end.kind === "arrived" && (
@@ -78,10 +84,11 @@ function Track({ journey, window }: { journey: Journey<TaskView>; window: TimeWi
 /** On phones a label sits above its track, so it is lifted over the now and day lines. */
 const ROW_LABEL = "min-w-0 max-sm:relative max-sm:z-10 max-sm:bg-panel";
 
-function TrackRow({ journey, window }: { journey: Journey<TaskView>; window: TimeWindow }) {
+function TrackRow({ journey, window, slug }: { journey: Journey<TaskView>; window: TimeWindow; slug?: string }) {
   const { task } = journey;
   const note = dueNote(task, window.now);
   const dropped = task.status === "dropped";
+  const href = slug && task.goalId ? routes.goal(slug, task.goalId) : null;
   return (
     <li
       data-task={task.id}
@@ -91,8 +98,15 @@ function TrackRow({ journey, window }: { journey: Journey<TaskView>; window: Tim
       )}
     >
       <div className={ROW_LABEL}>
-        <p className={cx("truncate text-sm", dropped ? "text-muted line-through" : "text-ink")} title={task.title}>
-          {task.title}
+        {/* Two lines before the cut, and the whole title on hover: the clipped words are the ones that tell tracks apart. */}
+        <p className={cx("line-clamp-2 text-sm", dropped ? "text-muted line-through" : "text-ink")} title={task.title}>
+          {href ? (
+            <Link href={href} className="relative after:absolute after:inset-x-0 after:-inset-y-1 hover:text-ink link">
+              {task.title}
+            </Link>
+          ) : (
+            task.title
+          )}
         </p>
         <p className="flex flex-wrap gap-x-2 text-2xs text-muted">
           <span>{standing(journey, window.now)}</span>
@@ -136,13 +150,15 @@ interface TimetableProps {
   window: TimeWindow;
   groups: readonly TimetableGroup[];
   empty?: ReactNode;
+  /** The workspace, so each track's title links to its goal. */
+  slug?: string;
 }
 
 /**
  * Every task as a track on one time axis, coloured by the station it stood at each day,
  * with the red now line through all of them. Hovering a track dims the others.
  */
-export function Timetable({ window, groups, empty }: TimetableProps) {
+export function Timetable({ window, groups, empty, slug }: TimetableProps) {
   if (groups.length === 0) {
     return (
       empty ?? (
@@ -157,7 +173,7 @@ export function Timetable({ window, groups, empty }: TimetableProps) {
   const dense = window.days.length > 40;
 
   return (
-    <div className="group/tt relative [--label:11rem] lg:[--label:15rem]">
+    <div className="group/tt relative isolate [--label:11rem] lg:[--label:15rem]">
       <div aria-hidden className="pointer-events-none absolute inset-y-0 right-0 left-0 sm:left-[calc(var(--label)+1rem)]">
         <div className="absolute inset-y-0 right-0 bg-fill/70" style={{ left: `${now * 100}%` }} />
         {ticks.map((tick) => (
@@ -165,7 +181,8 @@ export function Timetable({ window, groups, empty }: TimetableProps) {
         ))}
       </div>
 
-      <div aria-hidden className="relative grid h-7 grid-cols-1 gap-x-4 sm:grid-cols-[var(--label)_minmax(0,1fr)]">
+      {/* The axis stays in view under the glass header while a long timetable scrolls. */}
+      <div aria-hidden data-axis className="relative grid h-7 grid-cols-1 gap-x-4 sm:sticky sm:top-26 sm:z-20 sm:grid-cols-[var(--label)_minmax(0,1fr)] sm:bg-panel">
         <span className="hidden sm:block" />
         <div className="relative">
           {ticks
@@ -187,21 +204,30 @@ export function Timetable({ window, groups, empty }: TimetableProps) {
         const tracks = (
           <ol className={cx(!group.title && "relative border-t border-rule")}>
             {group.journeys.map((journey) => (
-              <TrackRow key={journey.task.id} journey={journey} window={window} />
+              <TrackRow key={journey.task.id} journey={journey} window={window} slug={slug} />
             ))}
           </ol>
         );
         if (!group.title) return <div key={group.key}>{tracks}</div>;
         return (
-          <section key={group.key} aria-label={group.title} className="relative">
-            <h3 className="relative flex items-baseline gap-2 border-t border-rule bg-panel py-1.5 text-xs font-bold text-ink-2 max-sm:z-10">
+          <section key={group.key} aria-label={group.title} data-goal-status={group.status} className="relative">
+            <h3
+              className={cx(
+                "relative flex items-center gap-2 border-t bg-panel py-1.5 text-xs font-bold text-ink-2 max-sm:z-10",
+                // Proposed work is not committed yet: its heading's rule is dashed honey, beside its status.
+                group.status === "proposed" ? "border-dashed border-wait" : "border-rule",
+              )}
+            >
               {group.href ? (
-                <Link href={group.href} className="truncate hover:text-ink link">
+                <Link href={group.href} title={group.title} className="relative truncate after:absolute after:inset-x-0 after:-inset-y-1.5 hover:text-ink link">
                   {group.title}
                 </Link>
               ) : (
-                <span className="truncate">{group.title}</span>
+                <span className="truncate" title={group.title}>
+                  {group.title}
+                </span>
               )}
+              {group.status === "proposed" && <MetaBadge meta={GOAL_STATUS_META} value={group.status} />}
               <span className="shrink-0 font-normal text-muted">{pluralize(group.journeys.length, "task")}</span>
             </h3>
             {tracks}
@@ -209,7 +235,7 @@ export function Timetable({ window, groups, empty }: TimetableProps) {
         );
       })}
 
-      <div aria-hidden className="pointer-events-none absolute inset-y-0 right-0 left-0 sm:left-[calc(var(--label)+1rem)]">
+      <div aria-hidden className="pointer-events-none absolute inset-y-0 right-0 left-0 sm:left-[calc(var(--label)+1rem)] sm:z-21">
         <div data-now className="absolute top-0 bottom-0 w-0.5 -translate-x-1/2 bg-late" style={at(now)}>
           <span className="absolute top-6 left-0 -translate-y-full rounded-xs bg-late-ink px-1 text-2xs leading-4 font-bold text-panel">
             Now

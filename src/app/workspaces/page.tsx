@@ -7,6 +7,7 @@ import { AutoRefresh } from "@/components/auto-refresh";
 import { FlowBar } from "@/components/charts/flow-bar";
 import { CreateWorkspaceForm } from "@/components/create-workspace-form";
 import { PageHeader } from "@/components/page-header";
+import { SkipLink } from "@/components/skip-link";
 import { MetaBadge } from "@/components/ui/badge";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { EmptyState, Stat, StatStrip } from "@/components/ui/stat";
@@ -30,6 +31,17 @@ const COLUMNS: { label: string; value: (row: WorkspaceOverview) => number; alert
 
 const ALERT_TEXT = { late: "font-bold text-late-ink", wait: "font-bold text-wait-ink" } as const;
 
+/** Zero recedes to a dash, read as "0" by screen readers, so active workspaces stand out. */
+function Figure({ value }: { value: number }) {
+  if (value !== 0) return value;
+  return (
+    <>
+      <span aria-hidden>–</span>
+      <span className="sr-only">0</span>
+    </>
+  );
+}
+
 function sum(rows: readonly WorkspaceOverview[], pick: (row: WorkspaceOverview) => number): number {
   return rows.reduce((total, row) => total + pick(row), 0);
 }
@@ -41,9 +53,10 @@ export default async function WorkspacesPage() {
 
   return (
     <>
+      <SkipLink />
       <AppHeader user={viewer.user} />
       <AutoRefresh />
-      <main className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6 sm:py-8">
+      <main id="content" tabIndex={-1} className="mx-auto max-w-7xl space-y-6 px-4 py-6 outline-none sm:px-6 sm:py-8">
         <PageHeader
           title="Workspaces"
           description={
@@ -63,7 +76,7 @@ export default async function WorkspacesPage() {
         )}
 
         <Card>
-          <CardHeader title="Status per workspace" description="Open work by status, then what is late and what waits on you: goals to decide and agent questions. Refreshes every 15 seconds." />
+          <CardHeader title="Status per workspace" description="Open work by status, then what is late and what waits on you: goals to approve and agent questions. Refreshes every 15 seconds." />
           {rows.length === 0 ? (
             <EmptyState icon={<Building2 />} title="No workspaces yet">
               Create your first workspace below, then connect an agent to it.
@@ -86,9 +99,10 @@ export default async function WorkspacesPage() {
                 </thead>
                 <tbody className="divide-y divide-rule">
                   {rows.map((row) => (
-                    <tr key={row.tenant.id} className="transition-colors duration-(--dur-micro) hover:bg-fill/60">
+                    // The name's link stretches over the whole row, so the row reads as one target.
+                    <tr key={row.tenant.id} className="relative transition-colors duration-(--dur-micro) hover:bg-fill">
                       <td className={cx("py-3 pr-3 pl-5", PINNED_CELL)}>
-                        <Link href={routes.workspace(row.tenant.slug)} className="font-semibold text-ink link">
+                        <Link href={routes.workspace(row.tenant.slug)} className="font-semibold text-ink link after:absolute after:inset-0">
                           {row.tenant.name}
                         </Link>
                         <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted">
@@ -105,14 +119,16 @@ export default async function WorkspacesPage() {
                             label={`${row.tenant.name} open work`}
                             className="flex-1"
                           />
-                          <span className="w-6 text-right font-semibold text-ink">{row.openTasks}</span>
+                          <span className={cx("w-6 text-right", row.openTasks ? "font-semibold text-ink" : "text-muted")}>
+                            <Figure value={row.openTasks} />
+                          </span>
                         </div>
                       </td>
                       {COLUMNS.map((column) => {
                         const value = column.value(row);
                         return (
-                          <td key={column.label} className={cx("px-3 py-3 text-right", value === 0 ? "text-muted" : column.alert ? ALERT_TEXT[column.alert] : "text-ink")}>
-                            {value}
+                          <td key={column.label} className={cx("px-3 py-3 text-right", value === 0 ? "text-muted" : column.alert ? ALERT_TEXT[column.alert] : "font-semibold text-ink")}>
+                            <Figure value={value} />
                           </td>
                         );
                       })}

@@ -109,9 +109,11 @@ test("a person picks up an agent's question where the agent left off", async ({ 
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(`claude --resume ${SESSION_ID}`);
     await page.keyboard.press("Escape");
 
+    // The badge leads to the very entry, which the page scrolls to.
     await unclaimed.getByRole("link", { name: "Waiting on you" }).click();
-    await expect(page).toHaveURL(`/w/${slug}/decisions`);
+    await expect(page).toHaveURL(`/w/${slug}/decisions#task-${hiring.id}`);
     await expect(card(page, "2 requests waiting on you")).toBeVisible();
+    await expect(page.locator(`#task-${hiring.id}`)).toBeInViewport();
     await openTab(page, slug, "Overview");
     await expect(card(page, "2 agent questions waiting on you")).toBeVisible();
   });
@@ -120,12 +122,22 @@ test("a person picks up an agent's question where the agent left off", async ({ 
     const asked = page.locator(`#questions [data-task="${renewal.id}"]`);
     const form = popover(asked, "Answer here");
     await form.locator("summary").click();
-    await form.getByRole("textbox", { name: "Your answer" }).fill(ANSWER);
-    await form.getByRole("button", { name: "Save answer" }).click();
+    // The panel repeats the question and takes focus in its field.
+    await expect(form).toContainText("Offer 5%, or hold the list price?");
+    const field = form.getByRole("textbox", { name: "Answer" });
+    await expect(field).toBeFocused();
+    await field.fill(ANSWER);
+    await form.getByRole("button", { name: "Send" }).click();
     await expect(asked).toHaveCount(0);
+    await expect(page.locator("[data-status-region]")).toContainText("Sent your answer to Deal desk");
     await expect(card(page, "1 agent question waiting on you")).toBeVisible();
 
-    await page.locator(`#questions [data-task="${hiring.id}"]`).getByRole("button", { name: "Mark answered" }).click();
+    // Saying it was answered in the conversation is rare, so it sits in ⋯ and asks first.
+    const entry = page.locator(`#questions [data-task="${hiring.id}"]`);
+    const more = entry.locator("details").filter({ has: page.locator('summary[aria-label="More for Shortlist the support hires"]') });
+    await more.locator("summary").click();
+    page.once("dialog", (dialog) => dialog.accept());
+    await more.getByRole("button", { name: "Answered in the conversation" }).click();
     await expect(page.locator("#questions")).toHaveCount(0);
     await expect(page.getByText("2 tasks are open.", { exact: true })).toBeVisible();
     await expect(page.getByRole("navigation", { name: "Workspace" }).getByRole("link", { name: /^Overview/ })).toHaveAccessibleName("Overview");

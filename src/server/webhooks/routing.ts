@@ -16,8 +16,14 @@ export interface RoutedEvent {
 
 type WatchedType = WatchedEntityType;
 
-/** Human decisions an agent waits on: an answer to its question, and a goal approved or closed. */
-const DECISION_ACTIONS = new Set(["task.input_answered", "goal.approved", "goal.reactivated", "goal.achieved", "goal.abandoned"]);
+/**
+ * Human decisions an agent waits on: an answer to its question (or the answer taken back, which
+ * reopens the question), and a goal approved or closed.
+ */
+const DECISION_ACTIONS = new Set(["task.input_answered", "task.input_retracted", "goal.approved", "goal.reactivated", "goal.achieved", "goal.abandoned"]);
+
+/** Events about an agent's own question, delivered to it whatever it watches. */
+const ANSWER_ACTIONS = new Set(["task.input_answered", "task.input_retracted"]);
 
 /** Which topics an event belongs to; an agent gets it if its webhook subscribes to any of them. */
 export function topicsOf(action: string): WebhookTopic[] {
@@ -103,7 +109,7 @@ export async function enqueueDeliveries(ctx: Ctx, rows: readonly RoutedEvent[]):
       // An agent never hears about its own actions.
       if (hook.agentId === actorAgent || !topics.some((topic) => hook.topics.includes(topic))) return [];
       const reasons = new Set<string>();
-      if (event.action === "task.input_answered" && event.data.agentId === hook.agentId) reasons.add("asked_by_you");
+      if (ANSWER_ACTIONS.has(event.action) && event.data.agentId === hook.agentId) reasons.add("asked_by_you");
       for (const key of concerns(event)) if (watching.has(`${hook.agentId}|${key.type}|${key.id}`)) reasons.add(key.reason);
       if (reasons.size === 0 && hook.scope === "all") reasons.add("workspace");
       return reasons.size ? [{ tenantId: ctx.tenant.id, webhookId: hook.id, eventId: event.id, reasons: [...reasons] }] : [];

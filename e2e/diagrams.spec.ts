@@ -25,7 +25,11 @@ test("the overview leads with status, the line and the goal map", async ({ page 
   await expect(onLine("Read the Slack thread about on-call pay")).toHaveCount(0);
   await expect(line.locator('[data-end="arrived"], [data-end="dropped"]')).toHaveCount(0);
 
-  await expect(card(page, "Next actions")).toContainText("Chase three overdue invoices");
+  // A task with an open question is answered in the card above, so its controls show only there.
+  await expect(card(page, "Next actions").locator("li[data-task]")).not.toHaveCount(0);
+  await expect(card(page, "Next actions")).not.toContainText("Chase three overdue invoices");
+  // Each track's title leads to its goal.
+  await expect(onLine("Chase three overdue invoices").getByRole("link", { name: "Chase three overdue invoices" })).toHaveAttribute("href", /\/w\/globex\/goals\//);
 
   const map = card(page, "Goal map");
   await expect(map.getByRole("link", { name: "Launch the partner portal" })).toBeVisible();
@@ -33,8 +37,13 @@ test("the overview leads with status, the line and the goal map", async ({ page 
   await expect(map.getByRole("link", { name: "Renew the office lease" })).toHaveCount(0);
   await expect(map.getByRole("img", { name: "Migrate the CRM tasks by status: 3 done" })).toBeVisible();
 
-  await expect(card(page, "1 goal awaiting your decision")).toContainText("Renew the office lease");
-  await expect(card(page, "Late")).toContainText("Chase three overdue invoices");
+  const waiting = card(page, "Waiting on you");
+  await expect(waiting).toContainText("1 agent question and 1 goal to approve.");
+  await expect(waiting.locator("#approvals")).toContainText("Renew the office lease");
+  // Late work already waiting on a person collapses to one line that points at its entry.
+  const late = card(page, "Late").locator("li[data-task]").filter({ hasText: "Chase three overdue invoices" });
+  await expect(late.getByRole("link", { name: /^Also waiting on your/ })).toHaveAttribute("href", /^#task-/);
+  await expect(late.getByRole("button")).toHaveCount(0);
   for (const agent of ["Inbox sweeper", "Calendar planner", "Finance clerk"]) await expect(card(page, "Agents")).toContainText(agent);
 });
 

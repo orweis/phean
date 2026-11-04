@@ -68,7 +68,7 @@ colors:
   dark-on-signal: "oklch(22% 0.05 40)"
   dark-late: "oklch(66% 0.18 22)"
   dark-late-ink: "oklch(77% 0.13 22)"
-  dark-late-tint: "oklch(27.5% 0.05 20)"
+  dark-late-tint: "oklch(25% 0.03 20)"
   dark-wait: "oklch(81% 0.13 86)"
   dark-wait-ink: "oklch(85% 0.11 88)"
   dark-wait-tint: "oklch(28% 0.045 80)"
@@ -270,7 +270,7 @@ A cool lavender ground under a violet brand, with one ember signal and four stat
 
 ### Secondary
 
-- **Boulder ember** (`signal`, oklch(73% 0.165 50) · dark oklch(76% 0.15 52)): the boulder in the logo, the count chips on the tab rail, the inbox station, the last station on the landing route, and the one call to action on a dusk band. Labels on it are `on-signal`. `signal-shade` is the boulder's shaded side; `signal-ink` is ember text, used only in the accent badge on `signal-tint`.
+- **Boulder ember** (`signal`, oklch(73% 0.165 50) · dark oklch(76% 0.15 52)): the boulder in the logo, the tab rail's counts of what needs a person, the inbox station, the last station on the landing route, and the one call to action on a dusk band. Labels on it are `on-signal`. `signal-shade` is the boulder's shaded side; `signal-ink` is ember text, used only in the accent badge on `signal-tint`.
 
 ### Tertiary
 
@@ -305,6 +305,8 @@ Every token above is redefined under the custom `dark` variant, which holds when
 **The Station Rule.** A station hue means that status everywhere: in the flow bar, the rail atop each board column, the cumulative flow and the timetable. Nothing else borrows those hues except the violet, which the brand and in-progress share on purpose.
 
 **The Red Line Rule.** Red is the now line and late work, plus urgent priority and destructive actions. If something is red, a person should look at it today.
+
+**The One Meaning Rule.** A word means one thing on every screen. "Decision" is an agent's request for a person's call; a goal waiting on a person is an approval; the memory kind recorded as `decision` reads "Choice". Kinds are categories, not states, so memory kinds stay neutral (facts take the info tint), and the owner's role badge is info, never ember.
 
 ## Typography
 
@@ -371,6 +373,9 @@ Controls are capsules: buttons, tabs, badges, count chips, segmented controls an
 - **Secondary:** a filled grey capsule, a shade deeper on hover.
 - **Ghost:** text only, for the secondary actions in a row (Release, Drop, Open board, Mark answered), the account menu's trigger and its Sign out, and every manual entry point (Add manually, Add task, Add sub-goal).
 - **Danger:** crimson text on a crimson wash, and it always asks for confirmation.
+- **Menu rows:** a full-width ghost row inside a `⋯` menu (`Button` size `menu`), icon first, for the rare moves of a task (Release, Drop) or a request (Answered in the conversation). The `⋯` trigger is a ghost capsule that is always visible and is named "More actions for …".
+
+**The Undo or Confirm Rule.** Frequent, reversible actions run at once and offer Undo: Drop, Done, Reopen, lane moves and answers say what they did in the status region ("Dropped “Read the thread”" · Undo), and Undo runs the reverse transition that already exists. Rare actions with consequences ask first: Revoke, Forget, Abandon, Remove, Mark answered, and Mark achieved while tasks are still open. If everything asked, people would learn to click through.
 - **Signal:** ember with dark text, used once per dusk band, as the landing hero's call to action.
 - **Dusk:** quiet text controls on a dusk band, lifting to `dusk-2` on hover.
 - **Focus:** a 2px violet outline offset 2px; on a dusk band the ring turns ember.
@@ -380,8 +385,10 @@ Controls are capsules: buttons, tabs, badges, count chips, segmented controls an
 ### Chips
 
 - **Style:** badges are 20px capsules, a tint of their tone with the tone's ink. Every status, priority, role and memory kind renders through its `{ label, tone }` table in `src/lib/domain.ts`.
-- **Counts:** the tab rail's counts are ember capsules with dark numerals.
-- **Filters:** the memory kinds are capsules, violet-tinted when selected and filled grey otherwise.
+- **Counts:** the tab rail's counts for what needs a person (Overview, Decisions) are ember capsules with dark numerals; the Board's inbox count is a neutral capsule (`fill`, `ink-2`), so ember keeps its meaning.
+- **Filters:** the memory kinds are capsules, violet-tinted when selected and filled grey otherwise, each with its count.
+- **Lane counts:** a neutral capsule beside the lane's name; a folded lane reads "5 of 13".
+- **Who acted:** an agent is a squared tile with a bot, a person a round disc, both neutral; a task's holder is meta text, "Held by Finance clerk", never a violet badge, since violet is a state.
 
 ### Cards / Containers
 
@@ -407,7 +414,15 @@ The glass header holds the boulder wordmark, a `/`, the workspace switcher (a ca
 
 ### Menus, popovers and sheets
 
-Glass floats with a 16px corner that grow in from their anchor (220ms, from 97% scale and 4px up). On phones they become a sheet across the top of the screen, 12px from each edge, and scroll inside themselves when taller than the screen.
+Glass floats with a 16px corner that grow in from their anchor (220ms, from 97% scale and 4px up). A panel takes focus when it opens (its first field, or itself), opens upward when there is no room below its trigger, and gives focus back to the trigger when Escape closes it; an open trigger keeps its fill. A form panel has a small heading ("Edit task") and a ghost Cancel beside its primary button, closes itself on success and reports in the status region. On phones panels become a sheet at the bottom of the screen, 12px from each edge, so what they act on stays in view above them, and scroll inside themselves when taller than the screen; the answer to an agent's question opens inline under the question instead.
+
+### Status region
+
+One polite `role="status"` region per workspace, a glass float at the bottom centre of the screen. Actions say what they did there, naming the object, with Undo when the reverse exists; a notice stays about six seconds, longer while it is hovered or holds focus, and Undo is reachable with Tab. The background refresh speaks there too, only when something new waits on the person, and at most once a minute.
+
+### Toolbar filters and search
+
+A toolbar filter is a capsule at the height of the segmented control beside it, "Goal: All goals ▾", with a label for screen readers (`ToolbarSelect`); fields inside forms stay rectangular. A search box above a list is a pill with a clear button, and `/` focuses it from anywhere on the page (or opens Search). Matched words in results are marked with a violet wash (`accent-tint`), never the browser's yellow.
 
 A popover's trigger is a small button, except where the panel leads elsewhere rather than acts: **Resume** uses the link trigger (`Popover look="link"`), violet semibold text with its icon, underlined on hover, with the same 44px hit area as a small button. It sits at the end of a task card's action row, after the state actions, and never wraps onto a line of its own in a board lane. Its panel lists each agent's session: the agent, its app and when it linked, the brief, a tinted **Resume in …** link, and the ids and command as monospace values, cut to one line, each with a ghost copy button named for what it copies ("Copy session id").
 

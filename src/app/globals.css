@@ -148,11 +148,31 @@
   --dur-short: 220ms;
 
   --animate-glass-in: glass-in var(--dur-short) var(--ease-out);
+  --animate-tick: tick var(--dur-short) var(--ease-out);
 
   @keyframes glass-in {
     from {
       opacity: 0;
       transform: translateY(-4px) scale(0.97);
+    }
+  }
+
+  /* Done's tick: a small pop as the button confirms, before the row fades. */
+  @keyframes tick {
+    from {
+      opacity: 0;
+      transform: scale(0.5);
+    }
+  }
+
+  /* The ring that finds an item for the eye: a deep-linked decision, a card just dropped. */
+  @keyframes flash {
+    from,
+    40% {
+      outline-color: var(--color-accent);
+    }
+    to {
+      outline-color: transparent;
     }
   }
 }
@@ -321,7 +341,7 @@
 
       --color-late: oklch(66% 0.18 22);
       --color-late-ink: oklch(77% 0.13 22);
-      --color-late-tint: oklch(27.5% 0.05 20);
+      --color-late-tint: oklch(25% 0.03 20);
       --color-wait: oklch(81% 0.13 86);
       --color-wait-ink: oklch(85% 0.11 88);
       --color-wait-tint: oklch(28% 0.045 80);
@@ -357,6 +377,8 @@
   }
 
   html {
+    /* The glass header is sticky: focused items and anchors stop below it, never under it. */
+    scroll-padding-top: 7.5rem;
     scrollbar-color: var(--color-faint) transparent;
     -webkit-tap-highlight-color: transparent;
   }
@@ -432,6 +454,19 @@
   summary,
   [role="button"] {
     cursor: pointer;
+  }
+}
+
+/*
+ * Finding an item: the entry a link pointed at (#task-…), or a card that just landed in its lane.
+ * Only under motion-safe; under reduced motion nothing rings and the scroll alone finds it.
+ */
+@media (prefers-reduced-motion: no-preference) {
+  :target[data-task],
+  [data-flash] {
+    outline: 2px solid transparent;
+    outline-offset: 3px;
+    animation: flash 1.8s var(--ease-out);
   }
 }
 

@@ -27,6 +27,7 @@ import { assertGoalsExist, findGoal } from "./goals";
 import { assertCan } from "./policy";
 import {
   AnswerInput,
+  RetractAnswerInput,
   AskInput,
   AssignTasksInput,
   CaptureTasksInput,
@@ -276,7 +277,7 @@ async function capture(ctx: Ctx, drafts: z.output<typeof TaskDraft>[]): Promise<
         action: "task.captured" as const,
         entityType: "task" as const,
         entityId: task.id,
-        summary: `captured "${task.title}" from ${SOURCE_META[task.source].label.toLowerCase()}`,
+        summary: task.source === "manual" ? `added "${task.title}" by hand` : `captured "${task.title}" from ${SOURCE_META[task.source].label.toLowerCase()}`,
         data: { goalId: task.goalId, source: task.source, status: task.status },
       })),
     );
@@ -505,9 +506,7 @@ export const answerInput = service(AnswerInput, async (ctx, { taskId, answer }):
       if (!answer) return current;
       throw conflict(`There is no open question on "${current.title}" any more.`);
     }
-    const description = answer
-      ? `${current.description}\n\n${open.kind === "decision" ? "Decision asked by" : "Question from"} ${open.agentName}: ${open.question}\nAnswer from ${ctx.actor.name}: ${answer}`.trim()
-      : current.description;
+    const description = answer ? `${current.description}\n\n${answerNote(open, answer, ctx.actor.name)}`.trim() : current.description;
     const record = closed(open, { outcome: answer ? "answered" : "answered_elsewhere", answer, answeredByName: ctx.actor.name });
     const [task] = await tx.db
       .update(tasks)
@@ -520,6 +519,58 @@ export const answerInput = service(AnswerInput, async (ctx, { taskId, answer }):
       entityId: taskId,
       summary: answer ? `answered ${open.agentName} on "${current.title}"` : `marked ${open.agentName}'s question on "${current.title}" answered`,
       data: { goalId: current.goalId, agentId: open.agentId, requestId: open.id, kind: open.kind, question: open.question, answer },
+    });
+    return task!;
+  });
+});
+
+/** The note `answerInput` appends to the description, so taking the answer back can remove it. */
+function answerNote(request: InputRequest, answer: string, by: string): string {
+  return `${request.kind === "decision" ? "Decision asked by" : "Question from"} ${request.agentName}: ${request.question}\nAnswer from ${by}: ${answer}`;
+}
+
+/**
+ * A person takes back the answer they just gave (Undo), while the asking agent has not collected
+ * it: the question opens again exactly as it was asked, and the note on the task goes. Once the
+ * agent has the answer it is too late; the person answers again in the agent's conversation.
+ */
+export const retractAnswer = service(RetractAnswerInput, async (ctx, { taskId, requestId }): Promise<Task> => {
+  assertCan(ctx, "task:write");
+  if (agentIdOf(ctx)) throw invalid("Only the person who answered can take an answer back.");
+
+  return inTransaction(ctx, async (tx) => {
+    const current = await findTask(tx, taskId, { lock: true });
+    const record = current.inputAnswers.find((entry) => entry.id === requestId);
+    if (!record || !DELIVERED_OUTCOMES.includes(record.outcome)) throw notFound("answer", requestId);
+    if (record.collected) throw conflict(`${record.agentName} already has that answer. Tell them in their conversation if it changed.`);
+    if (current.inputRequest) throw conflict(`"${current.title}" has a newer question open, so the earlier answer stays.`);
+    if (!isOpenTaskStatus(current.status)) throw conflict(`"${current.title}" has moved on, so its question stays answered.`);
+
+    const { answer, answeredByName } = record;
+    const request: InputRequest = {
+      id: record.id,
+      kind: record.kind,
+      question: record.question,
+      context: record.context,
+      options: record.options,
+      links: record.links,
+      agentId: record.agentId,
+      agentName: record.agentName,
+      askedAt: record.askedAt,
+    };
+    const note = answer ? answerNote(request, answer, answeredByName ?? "") : "";
+    const description = note && current.description.endsWith(note) ? current.description.slice(0, -note.length).trimEnd() : current.description;
+    const [task] = await tx.db
+      .update(tasks)
+      .set({ inputRequest: request, inputAnswers: current.inputAnswers.filter((entry) => entry !== record), description })
+      .where(tenantRow(tx, tasks, taskId))
+      .returning(taskColumns);
+    await recordEvent(tx, {
+      action: "task.input_retracted",
+      entityType: "task",
+      entityId: taskId,
+      summary: `took back the answer to ${request.agentName} on "${current.title}"`,
+      data: { goalId: current.goalId, agentId: request.agentId, requestId: request.id, kind: request.kind, question: request.question },
     });
     return task!;
   });
