@@ -327,7 +327,7 @@ export const TOOLS: readonly PheanTool[] = [
       return {
         webhook,
         secret,
-        verify: `Each request is a POST with JSON {type: "phean.events", events: [...]} and a ${SIGNATURE_HEADER} header "t=<unix seconds>,v1=<hex>": v1 = HMAC-SHA256(secret, "<t>.<raw body>"). Reject it if v1 differs or t is over 5 minutes old. Answer 2xx quickly; Phean retries failures with backoff, so de-duplicate by eventId. Events say what changed and why you got them; call get_task, collect_answers or get_goal for the current state.`,
+        verify: `Each request is a POST with JSON {type: "phean.events", events: [...]} and a ${SIGNATURE_HEADER} header "t=<unix seconds>,v1=<hex>": v1 = HMAC-SHA256(secret, "<t>.<raw body>"). Reject it if v1 differs or t is over 5 minutes old. Use the whole secret string as the HMAC key and the raw body bytes (verify before parsing JSON); compare in constant time. Answer 2xx quickly; Phean retries failures with backoff, so de-duplicate by eventId. The phean-webhooks skill has ready-made Node and Python verifiers. Events say what changed and why you got them; call get_task, collect_answers or get_goal for the current state.`,
         next: "Call ping_webhook to check your endpoint now.",
       };
     },

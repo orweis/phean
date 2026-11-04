@@ -267,6 +267,7 @@ Phean-Delivery-Id: dl_…
   - The secret (`whsec_…`) is shown once, by `register_webhook`.
   - It is stored encrypted with AES-256-GCM, under a key from `PHEAN_WEBHOOK_KEY` or, failing that, derived from `BETTER_AUTH_SECRET` with HKDF.
   - `ping_webhook` sends a signed `phean.ping` to check an endpoint.
+  - [`skills/phean-webhooks/SKILL.md`](../skills/phean-webhooks/SKILL.md) gives bots Node and Python verifiers. `tests/skills.test.ts` runs both against `signPayload`, for valid, tampered, wrong-secret, replayed and malformed requests.
 
 ### Guarding the endpoint (SSRF)
 

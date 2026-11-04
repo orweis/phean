@@ -61,9 +61,18 @@ A bot that runs as a service registers an HTTPS endpoint with `register_webhook`
 - a person answering the bot's question or deciding on a goal it proposed;
 - a change to a task, goal or memory the bot follows.
 
-A bot follows everything it captured, claimed, asked about, updated, created or saved, plus whatever it `watch`es, and never hears about its own changes. Delivery is at-least-once and ordered per bot, with retries and backoff. Requests carry `Phean-Signature: t=…,v1=HMAC-SHA256(secret, "t.body")`. The Agents page shows each agent's webhook and its health. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#webhooks-telling-bots-what-changed) for the design.
+A bot follows everything it captured, claimed, asked about, updated, created or saved, plus whatever it `watch`es, and never hears about its own changes. Delivery is at-least-once and ordered per bot, with retries and backoff. Requests carry `Phean-Signature: t=…,v1=HMAC-SHA256(secret, "t.body")`. Bots verify it on the raw body, in constant time, and reject a `t` older than 5 minutes; [`skills/phean-webhooks/SKILL.md`](skills/phean-webhooks/SKILL.md) has copy-paste Node and Python verifiers. The Agents page shows each agent's webhook and its health. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#webhooks-telling-bots-what-changed) for the design.
 
-### Agent skill: asking for decisions
+### Agent skills
+
+Two installable skills teach agents what the server instructions cover in short, with worked examples, and load only when needed.
+
+[`skills/phean-webhooks/SKILL.md`](skills/phean-webhooks/SKILL.md) is for bots that receive webhooks. It covers:
+
+- registering the endpoint and keeping the secret;
+- verifying `Phean-Signature`, with Node and Python verifiers the tests run against real signatures;
+- rejecting replays and de-duplicating retried events;
+- what to do with each event.
 
 [`skills/phean-decisions/SKILL.md`](skills/phean-decisions/SKILL.md) teaches an agent how to ask you for decisions through Phean:
 
@@ -72,13 +81,13 @@ A bot follows everything it captured, claimed, asked about, updated, created or 
 - which links to attach (`conversation`, `source`, `doc`);
 - how to tell you, then wait for or collect your answer, and act on it.
 
-The server instructions carry the same rules in short; the skill adds a worked example, and loads only when the agent needs it. Install it where your client reads skills. For Claude Code:
+Install them where your client reads skills. For Claude Code:
 
 ```bash
-mkdir -p ~/.claude/skills && cp -r skills/phean-decisions ~/.claude/skills/
+mkdir -p ~/.claude/skills && cp -r skills/phean-decisions skills/phean-webhooks ~/.claude/skills/
 ```
 
-Use `.claude/skills/` inside a project instead to share it with everyone working there. Other clients that support Agent Skills take the same folder.
+Use `.claude/skills/` inside a project instead to share them with everyone working there. Other clients that support Agent Skills take the same folder.
 
 ## The loop
 
