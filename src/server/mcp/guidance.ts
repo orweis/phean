@@ -39,7 +39,8 @@ If you run as a service (a bot with an HTTPS endpoint) rather than in a chat, re
 - Each request: POST, JSON {type: "phean.events", events: [...]}, signed in the Phean-Signature header "t=<unix seconds>,v1=<hex>", where v1 = HMAC-SHA256(secret, "<t>.<raw body>") and the secret is the whole whsec_ string register_webhook returned (shown once). Verify it on the raw body before parsing, compare in constant time, reject a t more than 5 minutes old, and only then act; answer 2xx quickly and do the work afterwards. The phean-webhooks skill has ready-made Node and Python verifiers.
 - Phean delivers at least once, in order per webhook, and retries failures with backoff; de-duplicate by eventId. After repeated failures the webhook is disabled: get_webhook says why, and registering again re-enables it.
 - An event says what changed and why you got it, not the whole object: call get_task, get_goal or collect_answers for the current state, and still collect answers through collect_answers so each is marked delivered.
-- After registering, ping_webhook checks the endpoint.
+- If your endpoint needs its own credentials (an API key in Authorization, say), pass them in register_webhook's headers; they are sent with every request and stored encrypted. Never put them in the URL or in chat.
+- After registering, ping_webhook checks the endpoint; a 401 or 403 there usually means the endpoint's own key is missing from headers.
 
 ## Keeping tasks accurate
 Tasks are shared, so fix them when you learn more instead of capturing duplicates:

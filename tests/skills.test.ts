@@ -7,7 +7,7 @@ import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import { LINK_KINDS, REQUEST_KINDS } from "@/lib/agent-sessions";
-import { AskInput, MAX_WAIT_SECONDS, WaitForAnswersInput } from "@/server/domain/schemas";
+import { AskInput, MAX_WAIT_SECONDS, RegisterWebhookInput, WaitForAnswersInput } from "@/server/domain/schemas";
 import { TOOLS } from "@/server/mcp/tools";
 import { backoffSeconds, MAX_CONSECUTIVE_FAILURES, REQUEST_TIMEOUT_MS } from "@/server/webhooks/dispatch";
 import { SIGNATURE_HEADER, signPayload, verifySignature } from "@/server/webhooks/signing";
@@ -71,6 +71,11 @@ describe("the phean-webhooks skill", () => {
     expect(SKILL).toContain(SIGNATURE_HEADER);
     expect(SKILL).toContain("**300 seconds**");
     for (const [, payload, header, at, valid] of cases) expect(verifySignature(secret, payload, header, { now: at, toleranceSeconds: 300 })).toBe(valid);
+  });
+
+  it("shows a registration with endpoint headers the server would accept", () => {
+    expect(RegisterWebhookInput.safeParse(JSON.parse(codeBlock(SKILL, "json"))).success).toBe(true);
+    for (const field of Object.keys(RegisterWebhookInput.shape)) expect(SKILL).toContain(`\`${field}\``);
   });
 
   it("quotes the server's delivery limits", () => {

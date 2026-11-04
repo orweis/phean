@@ -267,6 +267,11 @@ Phean-Delivery-Id: dl_…
   - The secret (`whsec_…`) is shown once, by `register_webhook`.
   - It is stored encrypted with AES-256-GCM, under a key from `PHEAN_WEBHOOK_KEY` or, failing that, derived from `BETTER_AUTH_SECRET` with HKDF.
   - `ping_webhook` sends a signed `phean.ping` to check an endpoint.
+- **The endpoint's own credentials.** Many receivers (automation platforms, gateways) demand their own key on every call. `register_webhook` takes up to 10 `headers`, sent with every delivery and ping under Phean's own headers, which always win.
+  - Their values are credentials, so they are stored encrypted like the secret (`headers_ciphertext`) and never returned. `header_names` keeps the names for `get_webhook` and the Agents page.
+  - Names Phean sets or that change how a request is framed (`Content-Type`, `Host`, `Content-Length`, `Transfer-Encoding`, `User-Agent`, `Phean-*`…) are refused, as are values that are not one line, which prevents header injection.
+  - Registering again keeps the headers unless `headers` is passed (`{}` removes them), so rotating the secret never silently drops the endpoint's key.
+  - The headers authenticate Phean to the endpoint; the signature still lets the endpoint check the body is Phean's and unchanged.
   - [`skills/phean-webhooks/SKILL.md`](../skills/phean-webhooks/SKILL.md) gives bots Node and Python verifiers. `tests/skills.test.ts` runs both against `signPayload`, for valid, tampered, wrong-secret, replayed and malformed requests.
 
 ### Guarding the endpoint (SSRF)

@@ -54,6 +54,7 @@ interface Claimed {
   agent_id: string;
   url: string;
   secret_ciphertext: string;
+  headers_ciphertext: string | null;
   consecutive_failures: number;
 }
 
@@ -75,7 +76,7 @@ async function claimWebhooks(db: Db, limit: number): Promise<Claimed[]> {
         LIMIT ${limit}
         FOR UPDATE SKIP LOCKED
       )
-      RETURNING id, tenant_id, agent_id, url, secret_ciphertext, consecutive_failures`,
+      RETURNING id, tenant_id, agent_id, url, secret_ciphertext, headers_ciphertext, consecutive_failures`,
   );
 }
 
@@ -154,13 +155,17 @@ async function buildBatch(db: Db, hook: Claimed, deps: DispatchDeps) {
   return { payload, deliveryIds: rows.map((row) => row.deliveryId) };
 }
 
-/** POSTs a signed body. Only a 2xx counts; redirects are not followed. */
+/**
+ * POSTs a signed body, with the endpoint's own headers (its API key, say) under Phean's, which
+ * always win. Only a 2xx counts; redirects are not followed.
+ */
 export async function postSigned(
   url: string,
   secret: string,
   body: string,
   ids: { webhookId: string; deliveryId: string },
   deps: Pick<DispatchDeps, "fetch" | "resolve" | "allowPrivate">,
+  extraHeaders: Record<string, string> = {},
 ): Promise<{ ok: boolean; status: number | null; error: string | null; latencyMs: number }> {
   const started = Date.now();
   try {
@@ -170,6 +175,7 @@ export async function postSigned(
       redirect: "manual",
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       headers: {
+        ...extraHeaders,
         "content-type": "application/json",
         "user-agent": "Phean-Webhooks/1",
         [SIGNATURE_HEADER]: signPayload(secret, body),
@@ -194,13 +200,15 @@ async function sendOne(db: Db, hook: Claimed, deps: DispatchDeps): Promise<"deli
   }
   const body = JSON.stringify(batch.payload);
   let secret: string;
+  let headers: Record<string, string>;
   try {
     secret = decryptSecret(hook.secret_ciphertext);
+    headers = hook.headers_ciphertext ? (JSON.parse(decryptSecret(hook.headers_ciphertext)) as Record<string, string>) : {};
   } catch {
-    await disable(db, hook.id, "The signing secret can no longer be read (the server key changed). Register the webhook again.");
+    await disable(db, hook.id, "The signing secret or headers can no longer be read (the server key changed). Register the webhook again, with its headers.");
     return "failed";
   }
-  const result = await postSigned(hook.url, secret, body, { webhookId: hook.id, deliveryId: batch.payload.deliveryId }, deps);
+  const result = await postSigned(hook.url, secret, body, { webhookId: hook.id, deliveryId: batch.payload.deliveryId }, deps, headers);
 
   await db.transaction(async (tx) => {
     await tx

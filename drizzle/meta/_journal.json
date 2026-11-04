@@ -43,6 +43,13 @@
       "when": 1793785742343,
       "tag": "0005_webhooks",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1793800826905,
+      "tag": "0006_webhook_headers",
+      "breakpoints": true
     }
   ]
 }

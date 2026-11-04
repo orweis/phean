@@ -16,8 +16,19 @@ import { Empty, ListWatchesInput, RegisterWebhookInput, WatchInput, WebhookRefIn
 import { service } from "./service";
 
 /** A webhook as agents and people see it: never its secret. */
-export type Webhook = Omit<WebhookRow, "tenantId" | "secretCiphertext" | "leaseUntil">;
-const webhookColumns = publicColumns(webhooks, ["tenantId", "secretCiphertext", "leaseUntil"]);
+export type Webhook = Omit<WebhookRow, "tenantId" | "secretCiphertext" | "headersCiphertext" | "leaseUntil">;
+const webhookColumns = publicColumns(webhooks, ["tenantId", "secretCiphertext", "headersCiphertext", "leaseUntil"]);
+
+/** Custom headers as stored: encrypted together, with their names kept in the clear for display. */
+function storedHeaders(headers: Record<string, string>) {
+  const names = Object.keys(headers);
+  return names.length ? { headersCiphertext: encryptSecret(JSON.stringify(headers)), headerNames: names } : { headersCiphertext: null, headerNames: [] };
+}
+
+/** The custom headers a webhook sends, decrypted for one request. */
+export function readHeaders(ciphertext: string | null): Record<string, string> {
+  return ciphertext ? (JSON.parse(decryptSecret(ciphertext)) as Record<string, string>) : {};
+}
 
 function agentOnly(ctx: Ctx, instead: string): string {
   if (ctx.actor.type !== "agent") throw invalid(instead);
@@ -52,7 +63,8 @@ export interface RegisteredWebhook {
 
 /**
  * Registers (or replaces) the acting agent's webhook. Each agent has one; registering again
- * changes the URL, topics or scope, rotates the secret, and re-enables a disabled webhook.
+ * changes the URL, topics or scope, rotates the secret, and re-enables a disabled webhook. Custom
+ * headers are kept unless `headers` is passed, so rotating the secret never drops the endpoint's key.
  */
 export const registerWebhook = service(RegisterWebhookInput, async (ctx, input): Promise<RegisteredWebhook> => {
   assertCan(ctx, "webhook:manage");
@@ -69,6 +81,7 @@ export const registerWebhook = service(RegisterWebhookInput, async (ctx, input):
     consecutiveFailures: 0,
     nextAttemptAt: new Date(),
     leaseUntil: null,
+    ...(input.headers && storedHeaders(input.headers)),
   };
   return inTransaction(ctx, async (tx) => {
     const [webhook] = await tx.db
@@ -81,7 +94,7 @@ export const registerWebhook = service(RegisterWebhookInput, async (ctx, input):
       entityType: "agent",
       entityId: agentId,
       summary: `registered a webhook to ${new URL(url).host}`,
-      data: { webhookId: webhook!.id, topics: fields.topics, scope: input.scope },
+      data: { webhookId: webhook!.id, topics: fields.topics, scope: input.scope, headerNames: webhook!.headerNames },
     });
     return { webhook: webhook!, secret };
   });
@@ -156,7 +169,7 @@ export async function pingWith(ctx: Ctx, deps: Pick<DispatchDeps, "fetch" | "res
   assertCan(ctx, "webhook:manage");
   const agentId = agentOnly(ctx, "Agents ping their own webhook over MCP.");
   const [webhook] = await ctx.db
-    .select({ id: webhooks.id, url: webhooks.url, secretCiphertext: webhooks.secretCiphertext, status: webhooks.status })
+    .select({ id: webhooks.id, url: webhooks.url, secretCiphertext: webhooks.secretCiphertext, headersCiphertext: webhooks.headersCiphertext, status: webhooks.status })
     .from(webhooks)
     .where(and(inTenant(ctx, webhooks), eq(webhooks.agentId, agentId)));
   if (!webhook) throw notFound("webhook for this agent", agentId);
@@ -170,7 +183,7 @@ export async function pingWith(ctx: Ctx, deps: Pick<DispatchDeps, "fetch" | "res
     sentAt: new Date().toISOString(),
     events: [],
   });
-  const result = await postSigned(webhook.url, decryptSecret(webhook.secretCiphertext), body, { webhookId: webhook.id, deliveryId }, deps);
+  const result = await postSigned(webhook.url, decryptSecret(webhook.secretCiphertext), body, { webhookId: webhook.id, deliveryId }, deps, readHeaders(webhook.headersCiphertext));
   return { ...result, webhookStatus: webhook.status };
 }
 

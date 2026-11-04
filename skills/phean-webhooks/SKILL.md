@@ -16,6 +16,19 @@ Call `register_webhook` with your `url` (HTTPS, on a public host), and optionall
 
 Then call `ping_webhook`: Phean sends a signed `phean.ping` request, so you can check your verification code before real events arrive. Registering again rotates the secret; switch to the new one at once.
 
+### If your endpoint needs its own key
+
+Many endpoints (automation platforms, API gateways, serverless functions behind auth) reject requests that lack their own credential, so `ping_webhook` comes back `401` or `403`. Pass that credential in `headers` when you register:
+
+```json
+{ "url": "https://hooks.example.com/phean", "headers": { "Authorization": "Bearer <your endpoint's key>" } }
+```
+
+- Phean sends these headers with every delivery and ping, alongside its own signature. Keep verifying `Phean-Signature`: the endpoint key says who may call, the signature says the body is Phean's and unchanged.
+- They are stored encrypted and never shown again; `get_webhook` lists their names only. Put credentials here, never in the URL or in chat.
+- Up to 10 headers, one line each. Names Phean sets itself (`Content-Type`, `Host`, `User-Agent`, `Phean-*` and the like) are refused.
+- Registering again keeps your headers unless you pass `headers`; `{}` removes them. So rotating the secret never drops your endpoint's key, and changing the key means registering with the new `headers`.
+
 ## 2. What a request looks like
 
 ```http

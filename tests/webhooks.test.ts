@@ -283,6 +283,49 @@ describe("delivering", () => {
     expect((await getWebhook(scout, {})).webhook).toMatchObject({ lastStatus: 302, consecutiveFailures: 1 });
   });
 
+  it("sends the endpoint's own headers with every request, and never shows their values", async () => {
+    const url = endpoint();
+    const { webhook } = await registerWebhook(scout, { url, headers: { Authorization: "Bearer endpoint-key-123", "X-Team": "ops" } });
+    expect(webhook.headerNames).toEqual(["Authorization", "X-Team"]);
+    const status = await getWebhook(scout, {});
+    expect(JSON.stringify(status)).not.toContain("endpoint-key-123");
+    expect(status.webhook!.headerNames).toEqual(["Authorization", "X-Team"]);
+
+    await updateTask(human, { taskId: (await todo(scout, "Renew the domain")).id, priority: "high" });
+    const { received, deps } = receiver();
+    await dispatchDue(testDb.db, deps);
+    await pingWith(scout, deps);
+    const sent = mine(received, url);
+    expect(sent.map((request) => request.payload.type)).toEqual(["phean.events", "phean.ping"]);
+    for (const request of sent) {
+      expect(request.headers.get("authorization")).toBe("Bearer endpoint-key-123");
+      expect(request.headers.get("x-team")).toBe("ops");
+      expect(request.headers.get(SIGNATURE_HEADER)).toMatch(/^t=\d+,v1=[0-9a-f]{64}$/);
+      expect(request.headers.get("content-type")).toBe("application/json");
+    }
+
+    // Registering again (say, to rotate the secret) keeps them; {} removes them.
+    expect((await registerWebhook(scout, { url })).webhook.headerNames).toEqual(["Authorization", "X-Team"]);
+    expect((await registerWebhook(scout, { url, headers: {} })).webhook.headerNames).toEqual([]);
+    const after = receiver();
+    await pingWith(scout, after.deps);
+    expect(mine(after.received, url)[0]!.headers.get("authorization")).toBeNull();
+  });
+
+  it("refuses headers Phean sets itself, and malformed ones", async () => {
+    for (const headers of [
+      { "Content-Type": "text/plain" },
+      { host: "evil.example" },
+      { "Phean-Signature": "t=1,v1=00" },
+      { "Bad Name": "x" },
+      { Authorization: "Bearer a\r\nX-Injected: 1" },
+      { Authorization: "a", authorization: "b" },
+      Object.fromEntries(Array.from({ length: 11 }, (_, i) => [`X-H${i}`, "v"])),
+    ]) {
+      await expect(registerWebhook(scout, { url: endpoint(), headers }), JSON.stringify(headers)).rejects.toMatchObject({ code: "invalid" });
+    }
+  });
+
   it("pings the endpoint on request", async () => {
     const url = endpoint();
     const { secret } = await registerWebhook(scout, { url });

@@ -15,13 +15,17 @@ interface Delivery {
   payload: { type: string; events: { action: string; entityId: string; reasons: string[]; data: Record<string, unknown> }[] };
 }
 
-/** A bot's endpoint: records every request Phean makes to it. */
+/** The key the bot's endpoint demands, like an automation platform's webhook token. */
+const ENDPOINT_KEY = "Bearer e2e-endpoint-key";
+
+/** A bot's endpoint: refuses requests without its own key, and records the ones it accepts. */
 async function startReceiver() {
   const deliveries: Delivery[] = [];
   const server = createServer((request, response) => {
     let body = "";
     request.on("data", (chunk) => (body += chunk));
     request.on("end", () => {
+      if (request.headers.authorization !== ENDPOINT_KEY) return void response.writeHead(401).end();
       deliveries.push({ headers: request.headers, body, payload: JSON.parse(body) });
       response.writeHead(204).end();
     });
@@ -44,7 +48,17 @@ test("a bot's webhook is called as soon as a person decides", async ({ page }) =
     const token = await issueToken(page, "Ops bot");
 
     const { secret, taskId } = await asAgent(token, async (agent) => {
-      const { secret } = await agent.call<{ secret: string }>("register_webhook", { url: receiver.url, topics: ["decisions"] });
+      await agent.call("register_webhook", { url: receiver.url, topics: ["decisions"] });
+      const refused = await agent.call<{ result: { ok: boolean; status: number } }>("ping_webhook");
+      expect(refused.result).toMatchObject({ ok: false, status: 401 });
+
+      // The endpoint needs its own key: register it as a header, and the ping gets through.
+      const { secret, webhook } = await agent.call<{ secret: string; webhook: { headerNames: string[] } }>("register_webhook", {
+        url: receiver.url,
+        topics: ["decisions"],
+        headers: { Authorization: ENDPOINT_KEY },
+      });
+      expect(webhook.headerNames).toEqual(["Authorization"]);
       const { result } = await agent.call<{ result: { ok: boolean; status: number } }>("ping_webhook");
       expect(result).toMatchObject({ ok: true, status: 204 });
       const { created } = await agent.call<{ created: { id: string }[] }>("capture_tasks", { tasks: [{ title: "Choose the on-call tool", status: "todo" }] });
@@ -75,6 +89,7 @@ test("a bot's webhook is called as soon as a person decides", async ({ page }) =
       const decided = () => receiver.deliveries.find((delivery) => delivery.payload.type === "phean.events");
       await expect.poll(() => Boolean(decided()), { timeout: 10_000, intervals: [100, 250, 500] }).toBe(true);
       const delivery = decided()!;
+      expect(delivery.headers.authorization).toBe(ENDPOINT_KEY);
       expect(verifySignature(secret, delivery.body, String(delivery.headers[SIGNATURE_HEADER.toLowerCase()]))).toBe(true);
       expect(delivery.payload.events).toEqual([
         expect.objectContaining({ action: "task.input_answered", entityId: taskId, reasons: expect.arrayContaining(["asked_by_you"]), data: expect.objectContaining({ answer: "Opsgenie" }) }),

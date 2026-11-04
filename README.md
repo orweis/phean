@@ -61,7 +61,7 @@ A bot that runs as a service registers an HTTPS endpoint with `register_webhook`
 - a person answering the bot's question or deciding on a goal it proposed;
 - a change to a task, goal or memory the bot follows.
 
-A bot follows everything it captured, claimed, asked about, updated, created or saved, plus whatever it `watch`es, and never hears about its own changes. Delivery is at-least-once and ordered per bot, with retries and backoff. Requests carry `Phean-Signature: t=…,v1=HMAC-SHA256(secret, "t.body")`. Bots verify it on the raw body, in constant time, and reject a `t` older than 5 minutes; [`skills/phean-webhooks/SKILL.md`](skills/phean-webhooks/SKILL.md) has copy-paste Node and Python verifiers. The Agents page shows each agent's webhook and its health. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#webhooks-telling-bots-what-changed) for the design.
+A bot follows everything it captured, claimed, asked about, updated, created or saved, plus whatever it `watch`es, and never hears about its own changes. Delivery is at-least-once and ordered per bot, with retries and backoff. Requests carry `Phean-Signature: t=…,v1=HMAC-SHA256(secret, "t.body")`. An endpoint that needs its own key (an `Authorization` header, say) gets it through `register_webhook`'s `headers`, which are stored encrypted and sent with every request. Bots verify the signature on the raw body, in constant time, and reject a `t` older than 5 minutes; [`skills/phean-webhooks/SKILL.md`](skills/phean-webhooks/SKILL.md) has copy-paste Node and Python verifiers. The Agents page shows each agent's webhook and its health. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#webhooks-telling-bots-what-changed) for the design.
 
 ### Agent skills
 

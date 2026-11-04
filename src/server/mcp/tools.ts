@@ -320,7 +320,7 @@ export const TOOLS: readonly PheanTool[] = [
     name: "register_webhook",
     title: "Register webhook",
     description:
-      "Have Phean call your HTTPS endpoint as soon as something you follow changes: a human answers your question or decides on your goal (topic decisions), or a task, goal or memory you follow changes (tasks, goals, memory). You follow what you work on automatically; add more with watch. scope 'all' sends every change in the workspace instead. One webhook per agent: registering again replaces it and rotates the secret. The secret is returned once; verify each request with it.",
+      "Have Phean call your HTTPS endpoint as soon as something you follow changes: a human answers your question or decides on your goal (topic decisions), or a task, goal or memory you follow changes (tasks, goals, memory). You follow what you work on automatically; add more with watch. scope 'all' sends every change in the workspace instead. If your endpoint needs its own key, pass it in headers (e.g. {'Authorization': 'Bearer ...'}); Phean sends them with every request, stores them encrypted, and never shows them again. One webhook per agent: registering again replaces it and rotates the secret, and keeps your headers unless you pass headers ({} removes them). The secret is returned once; verify each request with it.",
     input: registerWebhook.schema,
     run: async (ctx, input) => {
       const { webhook, secret } = await registerWebhook(ctx, input);
@@ -335,7 +335,7 @@ export const TOOLS: readonly PheanTool[] = [
   serviceTool({
     name: "get_webhook",
     title: "Get webhook",
-    description: "Your webhook: its URL, topics and scope, whether it is active (or why it was disabled), delivery counts, and the latest deliveries with any errors.",
+    description: "Your webhook: its URL, topics and scope, the names of the headers it sends (not their values), whether it is active (or why it was disabled), delivery counts, and the latest deliveries with any errors.",
     readOnly: true,
     service: getWebhook,
   }),
