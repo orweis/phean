@@ -4,7 +4,9 @@ import type { EventAction } from "@/lib/activity";
 
 import { publicColumns } from "../db/columns";
 import { events, type EventRow } from "../db/schema";
-import { inTenant, type Ctx } from "./context";
+import { enqueueDeliveries, trackActorWatches } from "../webhooks/routing";
+import { scheduleDispatch } from "../webhooks/trigger";
+import { inTenant, onCommit, type Ctx } from "./context";
 import { assertCan } from "./policy";
 import { ActivityInput } from "./schemas";
 import { service } from "./service";
@@ -24,18 +26,28 @@ export type Activity = Omit<EventRow, "tenantId">;
 
 const activityColumns = publicColumns(events, ["tenantId"]);
 
+/**
+ * Appends to the activity log, which is also the source of every webhook. In the same transaction
+ * as the change, it records what the acting agent now follows and queues a delivery for every
+ * other agent the change concerns; once the transaction commits, the dispatcher is woken.
+ */
 export async function recordEvents(ctx: Ctx, inputs: readonly EventInput[]): Promise<void> {
   if (inputs.length === 0) return;
-  await ctx.db.insert(events).values(
-    inputs.map((event) => ({
-      tenantId: ctx.tenant.id,
-      actorType: ctx.actor.type,
-      actorId: ctx.actor.id,
-      actorName: ctx.actor.name,
-      ...event,
-      data: event.data ?? {},
-    })),
-  );
+  const rows = await ctx.db
+    .insert(events)
+    .values(
+      inputs.map((event) => ({
+        tenantId: ctx.tenant.id,
+        actorType: ctx.actor.type,
+        actorId: ctx.actor.id,
+        actorName: ctx.actor.name,
+        ...event,
+        data: event.data ?? {},
+      })),
+    )
+    .returning({ id: events.id, action: events.action, entityType: events.entityType, entityId: events.entityId, data: events.data });
+  await trackActorWatches(ctx, rows);
+  if (await enqueueDeliveries(ctx, rows)) onCommit(ctx, scheduleDispatch);
 }
 
 export const recordEvent = (ctx: Ctx, input: EventInput) => recordEvents(ctx, [input]);

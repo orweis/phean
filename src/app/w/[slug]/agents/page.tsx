@@ -1,7 +1,7 @@
 import { Bot } from "lucide-react";
 import type { Metadata } from "next";
 
-import { revokeAgentAction } from "@/app/w/[slug]/actions";
+import { deleteWebhookAction, revokeAgentAction } from "@/app/w/[slug]/actions";
 import { AGENT_STATUS_META, agentStatus } from "@/components/agent-list";
 import { ConnectAgentForm } from "@/components/connect-agent-form";
 import { PageHeader } from "@/components/page-header";
@@ -12,12 +12,14 @@ import { CopyField } from "@/components/ui/copy-button";
 import { EmptyState } from "@/components/ui/stat";
 import { PINNED_CELL, TH } from "@/components/ui/table";
 import { cx } from "@/lib/cx";
+import { WEBHOOK_STATE_META, webhookState } from "@/lib/domain";
 import { timeAgo } from "@/lib/format";
 import { routes } from "@/lib/routes";
 import { requireWorkspace } from "@/server/auth/session";
 import { listAgents } from "@/server/domain/agents";
 import { getAgentWorkload } from "@/server/domain/overview";
 import { can } from "@/server/domain/policy";
+import { listWebhooks, type Webhook } from "@/server/domain/webhooks";
 import { absoluteUrl } from "@/server/web";
 
 export const metadata: Metadata = { title: "Agents" };
@@ -27,8 +29,14 @@ const TD = "px-3 py-3 text-xs whitespace-nowrap text-muted";
 export default async function AgentsPage({ params }: PageProps<"/w/[slug]/agents">) {
   const { slug } = await params;
   const { ctx } = await requireWorkspace(slug);
-  const [agents, workload, mcpUrl] = await Promise.all([listAgents(ctx, {}), getAgentWorkload(ctx, {}), absoluteUrl(routes.mcp())]);
+  const [agents, workload, mcpUrl, hooks] = await Promise.all([
+    listAgents(ctx, {}),
+    getAgentWorkload(ctx, {}),
+    absoluteUrl(routes.mcp()),
+    listWebhooks(ctx, {}),
+  ]);
   const loadById = new Map(workload.map((load) => [load.agent.id, load]));
+  const hookByAgent = new Map(hooks.map((hook) => [hook.agentId, hook]));
   const canManage = can(ctx.actor, "agent:manage");
 
   return (
@@ -63,6 +71,7 @@ export default async function AgentsPage({ params }: PageProps<"/w/[slug]/agents
                     <th className={cx(TH, "text-left")}>Status</th>
                     <th className={cx(TH, "text-right")}>Holding</th>
                     <th className={cx(TH, "text-right")}>Done</th>
+                    <th className={cx(TH, "text-left")}>Webhook</th>
                     <th className={cx(TH, "text-left")}>Last seen</th>
                     <th className={cx(TH, "text-left")}>Connected</th>
                     {canManage && (
@@ -87,22 +96,39 @@ export default async function AgentsPage({ params }: PageProps<"/w/[slug]/agents
                         </td>
                         <td className="px-3 py-3 text-right font-semibold text-ink">{load?.claimed ?? 0}</td>
                         <td className="px-3 py-3 text-right font-semibold text-ink">{load?.completedLast7Days ?? 0}</td>
+                        <td className="px-3 py-3 text-xs">
+                          <WebhookCell hook={hookByAgent.get(agent.id)} />
+                        </td>
                         <td className={TD}>{timeAgo(agent.lastSeenAt)}</td>
                         <td className={TD}>{timeAgo(agent.createdAt)}</td>
                         {canManage && (
                           <td className="px-5 py-3 text-right">
-                            {status !== "revoked" && (
-                              <ActionButton
-                                action={revokeAgentAction}
-                                workspace={slug}
-                                fields={{ agentId: agent.id }}
-                                confirm={`Revoke ${agent.name}? It loses access immediately; its past work stays.`}
-                                size="sm"
-                                variant="danger"
-                              >
-                                Revoke
-                              </ActionButton>
-                            )}
+                            <div className="flex justify-end gap-1.5">
+                              {hookByAgent.has(agent.id) && (
+                                <ActionButton
+                                  action={deleteWebhookAction}
+                                  workspace={slug}
+                                  fields={{ agentId: agent.id }}
+                                  confirm={`Remove ${agent.name}'s webhook? Phean stops calling it; the agent can register a new one.`}
+                                  size="sm"
+                                  variant="ghost"
+                                >
+                                  Remove webhook
+                                </ActionButton>
+                              )}
+                              {status !== "revoked" && (
+                                <ActionButton
+                                  action={revokeAgentAction}
+                                  workspace={slug}
+                                  fields={{ agentId: agent.id }}
+                                  confirm={`Revoke ${agent.name}? It loses access immediately; its past work stays.`}
+                                  size="sm"
+                                  variant="danger"
+                                >
+                                  Revoke
+                                </ActionButton>
+                              )}
+                            </div>
                           </td>
                         )}
                       </tr>
@@ -129,6 +155,7 @@ export default async function AgentsPage({ params }: PageProps<"/w/[slug]/agents
                 <li>Tools to capture, claim, and complete tasks, and to propose and plan goals.</li>
                 <li>Shared memory, so one agent&apos;s findings are every agent&apos;s context.</li>
                 <li>Mermaid views of the goal tree, board, and timeline.</li>
+                <li>A webhook each, so a bot hears about your decisions and changes to the work it follows as they happen.</li>
               </ul>
               <p className="mt-3 text-xs text-muted">Agents can propose goals but only people can approve, complete, or abandon them.</p>
             </CardBody>
@@ -136,5 +163,19 @@ export default async function AgentsPage({ params }: PageProps<"/w/[slug]/agents
         </div>
       </div>
     </>
+  );
+}
+
+/** Where an agent's webhook points and how it is doing; the last error shows on hover. */
+function WebhookCell({ hook }: { hook: Webhook | undefined }) {
+  if (!hook) return <span className="text-muted">None</span>;
+  const state = webhookState(hook);
+  const problem = hook.disabledReason ?? hook.lastError;
+  return (
+    <div className="space-y-1" title={problem ?? undefined}>
+      <MetaBadge meta={WEBHOOK_STATE_META} value={state} />
+      <p className="font-mono text-muted">{new URL(hook.url).host}</p>
+      {state !== "active" && problem && <p className="max-w-56 truncate text-muted">{problem}</p>}
+    </div>
   );
 }

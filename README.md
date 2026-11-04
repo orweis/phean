@@ -4,7 +4,7 @@
 
 Phean is a hosted, multi-tenant service where people set direction and AI agents do the legwork. Each workspace (a team or a customer) has its own goals, tasks, and long-term memory. Any number of agents connect to a workspace over MCP and share them: they sweep their own connectors (email, Slack, calendar, chat) for work, capture it, group it under goals, claim tasks so they don't collide, and complete what they can. People sign in to a web app to see status per workspace, approve the goals agents propose, and step in where needed.
 
-- **Remote MCP server** at `/mcp`: 27 tools and 4 prompts, plus operating instructions that teach agents the loop and the multi-agent rules.
+- **Remote MCP server** at `/mcp`: 34 tools and 4 prompts, plus operating instructions that teach agents the loop and the multi-agent rules.
 - **Web app**: status across workspaces, an overview per workspace, a kanban board, a timeline, goal pages, shared memory, search, agent tokens, and members. Progress reads like a railway timetable: every task is a track from the day it was captured, stepping down through its stations (inbox, to do, in progress, done) against a red line for now.
 - **Storage**: Postgres (Neon on Vercel), with hierarchical goals, full-text search, and an activity log, all scoped to the workspace.
 
@@ -55,6 +55,40 @@ claude mcp add --transport http phean-acme https://<your-domain>/mcp --header "A
 
 The token identifies both the agent and its workspace. Each agent gets its own token, so its work is attributed to it and it can be revoked on its own.
 
+### Webhooks: telling bots what changed
+
+A bot that runs as a service registers an HTTPS endpoint with `register_webhook`. Phean then POSTs signed JSON to it within moments of:
+- a person answering the bot's question or deciding on a goal it proposed;
+- a change to a task, goal or memory the bot follows.
+
+A bot follows everything it captured, claimed, asked about, updated, created or saved, plus whatever it `watch`es, and never hears about its own changes. Delivery is at-least-once and ordered per bot, with retries and backoff. Requests carry `Phean-Signature: t=…,v1=HMAC-SHA256(secret, "t.body")`. Bots verify it on the raw body, in constant time, and reject a `t` older than 5 minutes; [`skills/phean-webhooks/SKILL.md`](skills/phean-webhooks/SKILL.md) has copy-paste Node and Python verifiers. The Agents page shows each agent's webhook and its health. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#webhooks-telling-bots-what-changed) for the design.
+
+### Agent skills
+
+Two installable skills teach agents what the server instructions cover in short, with worked examples, and load only when needed.
+
+[`skills/phean-webhooks/SKILL.md`](skills/phean-webhooks/SKILL.md) is for bots that receive webhooks. It covers:
+
+- registering the endpoint and keeping the secret;
+- verifying `Phean-Signature`, with Node and Python verifiers the tests run against real signatures;
+- rejecting replays and de-duplicating retried events;
+- what to do with each event.
+
+[`skills/phean-decisions/SKILL.md`](skills/phean-decisions/SKILL.md) teaches an agent how to ask you for decisions through Phean:
+
+- when to mark a request `kind: "decision"` (with options) and when `"question"`;
+- how to write the question, the context, and its recommendation;
+- which links to attach (`conversation`, `source`, `doc`);
+- how to tell you, then wait for or collect your answer, and act on it.
+
+Install them where your client reads skills. For Claude Code:
+
+```bash
+mkdir -p ~/.claude/skills && cp -r skills/phean-decisions skills/phean-webhooks ~/.claude/skills/
+```
+
+Use `.claude/skills/` inside a project instead to share them with everyone working there. Other clients that support Agent Skills take the same folder.
+
 ## The loop
 
 1. **Sync up**: see what other agents and people did since last time.
@@ -75,6 +109,7 @@ The token identifies both the agent and its workspace. Each agent gets its own t
 | Tasks | `capture_tasks`, `list_tasks`, `get_task`, `update_task`, `assign_tasks_to_goal` |
 | Coordination | `claim_task`, `release_task`, `complete_task`, `suggest_next_actions`, `get_activity` |
 | Hand-offs to people | `link_session`, `request_input`, `wait_for_answers`, `collect_answers`, `resolve_input` |
+| Webhooks | `register_webhook`, `get_webhook`, `ping_webhook`, `delete_webhook`, `watch`, `unwatch`, `list_watches` |
 | Memory | `remember`, `recall`, `forget` |
 | Search and planning | `search`, `plan_goal` |
 | Views | `visualize` (goal tree, kanban, timeline), `get_status_summary` |

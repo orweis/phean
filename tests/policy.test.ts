@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { createAgent, listAgents, revokeAgent } from "@/server/domain/agents";
+import { deleteWebhook } from "@/server/domain/webhooks";
 import type { Actor, Ctx, Role } from "@/server/domain/context";
 import { createGoal, setGoalStatus } from "@/server/domain/goals";
 import { ACTIONS, can, type Action } from "@/server/domain/policy";
@@ -13,7 +14,7 @@ const EXPECTED: Record<Role, readonly Action[]> = {
   owner: ACTIONS,
   admin: ACTIONS,
   member: ["workspace:read", "goal:write", "goal:decide", "task:write", "memory:write"],
-  agent: ["workspace:read", "goal:write", "task:write", "memory:write"],
+  agent: ["workspace:read", "goal:write", "task:write", "memory:write", "webhook:manage"],
   platform_admin: ["workspace:read"],
 };
 
@@ -61,6 +62,9 @@ describe("policy enforcement in services", () => {
     });
     await expect(createAgent(member, { name: "Bot" })).rejects.toMatchObject({ code: "forbidden" });
     await expect(listPendingInvitations(member, {})).rejects.toMatchObject({ code: "forbidden" });
+    await expect(deleteWebhook(member, { agentId: "ag_any" })).rejects.toMatchObject({ code: "forbidden" });
+    await expect(deleteWebhook(platformAdmin, { agentId: "ag_any" })).rejects.toMatchObject({ code: "forbidden" });
+    await expect(deleteWebhook(owner, { agentId: "ag_any" })).resolves.toEqual({ removed: false });
   });
 
   it("keeps platform admins read-only", async () => {

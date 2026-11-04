@@ -23,6 +23,7 @@ import {
   type Task,
 } from "@/server/domain/tasks";
 import { getWorkspaceOverviews, listMemberships } from "@/server/domain/tenants";
+import { deleteWebhook, watch } from "@/server/domain/webhooks";
 
 import { createTestDb, seedWorkspace, type TestDb, type Workspace } from "./support/db";
 
@@ -95,6 +96,10 @@ describe("tenant isolation", () => {
     await expect(requestInput(globexAgent, { taskId: acmeTask.id, question: "Who signs?" })).rejects.toMatchObject({ code: "not_found" });
     await expect(captureTasks(globexAgent, { tasks: [{ title: "Sneaky step", parentTaskId: acmeTask.id }] })).rejects.toMatchObject({ code: "not_found" });
     await expect(getTask(globexOwner, { taskId: acmeTask.id })).rejects.toMatchObject({ code: "not_found" });
+    await expect(watch(globexAgent, { entityType: "task", entityId: acmeTask.id })).rejects.toMatchObject({ code: "not_found" });
+    await expect(watch(globexAgent, { entityType: "goal", entityId: acmeGoal.id })).rejects.toMatchObject({ code: "not_found" });
+    await expect(watch(globexAgent, { entityType: "memory", entityId: acmeMemory.id })).rejects.toMatchObject({ code: "not_found" });
+    expect(await deleteWebhook(globexOwner, { agentId: acme.scout.agentId })).toEqual({ removed: false });
     await expect(answerInput(globexOwner, { taskId: acmeTask.id, answer: "Me" })).rejects.toMatchObject({ code: "not_found" });
     await expect(
       assignTasksToGoal(globexAgent, { taskIds: [acmeTask.id], goalId: globexGoal.id }),

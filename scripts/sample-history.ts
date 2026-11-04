@@ -11,8 +11,9 @@ import { SOURCE_META, TASK_STATUS_META, type GoalStatus, type Priority, type Sou
 import { truncate } from "../src/lib/format";
 import type { Db } from "../src/server/db/client";
 import { newId } from "../src/server/db/ids";
-import { agents, events, goals, memories, tasks } from "../src/server/db/schema";
+import { agents, events, goals, memories, tasks, webhooks } from "../src/server/db/schema";
 import { generateAgentToken } from "../src/server/domain/agents";
+import { encryptSecret, newWebhookSecret } from "../src/server/webhooks/signing";
 import type { Tenant } from "../src/server/domain/context";
 
 type AgentKey = "sweeper" | "planner" | "clerk";
@@ -169,6 +170,19 @@ export async function seedSampleHistory(db: Db, tenant: Tenant, owner: { id: str
       lastSeenAt: new Date(now.getTime() - seenHoursAgo * HOUR_MS),
     });
   }
+  // The finance clerk runs as a service and is told about decisions by webhook; its endpoint is
+  // fictional, so the seed parks it in backoff rather than have a dev server call it.
+  await db.insert(webhooks).values({
+    id: newId("wh"),
+    tenantId: tenant.id,
+    agentId: agentIds.clerk,
+    url: "https://bots.globex.example/phean/finance-clerk",
+    secretCiphertext: encryptSecret(newWebhookSecret()),
+    topics: ["decisions", "tasks"],
+    scope: "related",
+    nextAttemptAt: new Date(now.getTime() + 24 * HOUR_MS),
+    lastSuccessAt: new Date(now.getTime() - 26 * HOUR_MS),
+  });
   const asAgent = (key: AgentKey) => ({ actorType: "agent" as const, actorId: agentIds[key], actorName: AGENTS[key].name });
 
   const log: (typeof events.$inferInsert)[] = [];

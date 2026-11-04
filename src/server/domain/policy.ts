@@ -8,6 +8,7 @@ export const ACTIONS = [
   "task:write",
   "memory:write",
   "agent:manage",
+  "webhook:manage",
   "member:manage",
 ] as const;
 export type Action = (typeof ACTIONS)[number];
@@ -22,13 +23,15 @@ const PERMISSIONS: Record<Role, readonly Action[]> = {
   owner: ACTIONS,
   admin: ACTIONS,
   member: [...CONTRIBUTE, "goal:decide"],
-  agent: CONTRIBUTE,
+  // An agent registers and removes its own webhook; owners and admins can remove any agent's.
+  agent: [...CONTRIBUTE, "webhook:manage"],
   platform_admin: ["workspace:read"],
 };
 
 const DENIAL_MESSAGES: Partial<Record<Action, string>> = {
   "goal:decide": "Only a human can approve, complete, or abandon a goal. Ask them to review it in the Phean web app.",
   "agent:manage": "Only workspace owners and admins can manage agent tokens.",
+  "webhook:manage": "Only agents (for their own webhook) and workspace owners and admins can manage webhooks.",
   "member:manage": "Only workspace owners and admins can manage members.",
 };
 

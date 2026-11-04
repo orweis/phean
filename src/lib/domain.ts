@@ -42,6 +42,14 @@ export type MemberRole = (typeof MEMBER_ROLES)[number];
 
 export const INVITABLE_ROLES = ["member", "admin"] as const satisfies readonly MemberRole[];
 
+/** What a watch, and so a webhook delivery, can be about. */
+export const WATCHED_ENTITY_TYPES = ["task", "goal", "memory"] as const;
+export type WatchedEntityType = (typeof WATCHED_ENTITY_TYPES)[number];
+
+/** What a webhook can subscribe to; an event can belong to more than one. */
+export const WEBHOOK_TOPICS = ["decisions", "tasks", "goals", "memory"] as const;
+export type WebhookTopic = (typeof WEBHOOK_TOPICS)[number];
+
 export const GOAL_MAX_DEPTH = 4;
 export const AGENT_TOKEN_PREFIX = "phn_";
 
@@ -132,6 +140,21 @@ export const REQUEST_OUTCOME_META: Record<RequestOutcome, EnumMeta> = {
   resolved: { label: "Resolved by the agent", tone: "neutral" },
   closed: { label: "Closed with the task", tone: "neutral" },
 };
+
+export const WEBHOOK_STATES = ["active", "failing", "disabled"] as const;
+export type WebhookState = (typeof WEBHOOK_STATES)[number];
+
+export const WEBHOOK_STATE_META: Record<WebhookState, EnumMeta> = {
+  active: { label: "Delivering", tone: "success" },
+  failing: { label: "Retrying", tone: "warning" },
+  disabled: { label: "Disabled", tone: "danger" },
+};
+
+/** How a webhook is doing, from its status and its run of failures. */
+export function webhookState(webhook: { status: "active" | "disabled"; consecutiveFailures: number }): WebhookState {
+  if (webhook.status === "disabled") return "disabled";
+  return webhook.consecutiveFailures > 0 ? "failing" : "active";
+}
 
 export const LINK_KIND_META: Record<LinkKind, EnumMeta> = {
   conversation: { label: "Conversation", tone: "accent" },

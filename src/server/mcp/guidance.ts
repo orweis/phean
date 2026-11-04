@@ -20,7 +20,7 @@ Phean is a shared task and goal ledger for one workspace. Humans set direction a
 7. Remember: save durable facts, preferences, and decisions with remember; check recall before asking the human something they may have told another agent.
 
 ## Asking the human
-Questions you only ask in chat get lost; Phean keeps them on the human's Decisions page with a way back to you.
+Questions you only ask in chat get lost; Phean keeps them on the human's Decisions page with a way back to you. (The phean-decisions skill, if your client has it installed, covers this in more depth with an example.)
 - kind "decision" when the human must choose or sign off (approve a budget, pick a vendor, accept a draft); kind "question" when you need a fact only they have. If there is no task for it yet, capture one first.
 - question: one concrete question, answerable in a word or a line. Not "thoughts?".
 - context: the facts, the trade-offs, and your recommendation, in a few lines, for someone reading it cold days later.
@@ -32,6 +32,14 @@ Questions you only ask in chat get lost; Phean keeps them on the human's Decisio
 
 ## References and links
 Every task should lead a human back to where it came from. On capture_tasks and update_task, pass links ([{url, title, kind}]) with the source permalink and, when the work came up in a conversation with the human, a link to it. They show as clickable links on the task in Phean. Use https:// links or app links (slack://, cursor://, ...); other schemes are refused.
+
+## Webhooks: being told instead of polling
+If you run as a service (a bot with an HTTPS endpoint) rather than in a chat, register_webhook once so Phean calls you as soon as something you care about changes, instead of holding wait_for_answers open or polling get_activity.
+- What you get: decisions (a human answered your question, or approved or closed a goal you proposed), and changes to the tasks, goals and memories you follow. You follow what you capture, claim, ask about, update, create or save; watch adds more (a goal covers its tasks and memories), unwatch and list_watches manage them. scope "all" sends every change in the workspace instead. You never get your own changes.
+- Each request: POST, JSON {type: "phean.events", events: [...]}, signed in the Phean-Signature header "t=<unix seconds>,v1=<hex>", where v1 = HMAC-SHA256(secret, "<t>.<raw body>") and the secret is the whole whsec_ string register_webhook returned (shown once). Verify it on the raw body before parsing, compare in constant time, reject a t more than 5 minutes old, and only then act; answer 2xx quickly and do the work afterwards. The phean-webhooks skill has ready-made Node and Python verifiers.
+- Phean delivers at least once, in order per webhook, and retries failures with backoff; de-duplicate by eventId. After repeated failures the webhook is disabled: get_webhook says why, and registering again re-enables it.
+- An event says what changed and why you got it, not the whole object: call get_task, get_goal or collect_answers for the current state, and still collect answers through collect_answers so each is marked delivered.
+- After registering, ping_webhook checks the endpoint.
 
 ## Keeping tasks accurate
 Tasks are shared, so fix them when you learn more instead of capturing duplicates:

@@ -188,6 +188,7 @@ Endpoint `POST /mcp` (Streamable HTTP, stateless, via `mcp-handler`), header `Au
 | Identity | `whoami` |
 | Goals | `create_goal`, `update_goal`, `list_goals`, `get_goal` |
 | Tasks | `capture_tasks` (bulk, deduplicated; `parentTaskId` for subtasks), `list_tasks`, `get_task` (one task with links, sessions, questions, parent, subtasks, activity), `update_task` (any field, `addLinks`/`removeLinks`, `parentTaskId`), `assign_tasks_to_goal`, `claim_task` (optionally with the agent's `session`), `release_task`, `complete_task` |
+| Webhooks | `register_webhook` (one per agent; returns the signing secret once), `get_webhook` (status, delivery counts, recent deliveries), `ping_webhook`, `delete_webhook`, `watch`, `unwatch`, `list_watches` |
 | Hand-offs to people | `link_session` (where a person resumes with the agent), `request_input` (a question, or a decision with options, context and links; returns `decisionsUrl`), `wait_for_answers` (block until a person answers), `collect_answers` (answers since last time, each once), `resolve_input` (close one's own question) |
 | Memory | `remember`, `recall`, `forget` (agents can forget only what they saved) |
 | Search and planning | `search`, `plan_goal`, `suggest_next_actions` (skips other agents' claims) |
@@ -201,6 +202,90 @@ Prompts: `sync_up`, `scan_sources`, `triage_inbox`, and `daily_review`. The serv
 2. `claim_task` is an atomic conditional update. The loser gets a `conflict` naming the current claimant.
 3. `get_activity` is a cursor over the shared event log (`since` is inclusive), so each agent can catch up on what the others did.
 4. A task holds one open question at a time. Only the agent that asked (`resolve_input`) or a person (`answerInput`, from the web app) closes it, and `suggest_next_actions` skips tasks waiting on a person. A person's answer is delivered to the asking agent once, through `collect_answers` or `wait_for_answers`.
+
+## Webhooks: telling bots what changed
+
+Agents that run as services register an HTTPS endpoint (`register_webhook`, one per agent). Phean calls it, signed, as soon as something the agent cares about changes: a person's answer to its question, a decision on a goal it proposed, or a change to a task, goal or memory it follows.
+
+```mermaid
+flowchart LR
+    Service["Domain service<br/>(capture, answer, approve, ...)"] -->|same transaction| Log["events<br/>(activity log)"]
+    Log --> Track["trackActorWatches<br/>actor now follows the object"]
+    Log --> Route["enqueueDeliveries<br/>who follows it?"]
+    Watches[("watches")] --> Route
+    Route --> Outbox[("webhook_deliveries<br/>pending")]
+    Service -.->|after commit| Kick["scheduleDispatch<br/>waitUntil"]
+    Cron["Vercel Cron<br/>every minute"] --> Dispatch
+    Kick --> Dispatch["dispatchDue<br/>lease a webhook, send its batch"]
+    Outbox --> Dispatch
+    Dispatch -->|signed POST| Bot["Agent's endpoint"]
+```
+
+### The event channel
+
+1. **The activity log is the source.** Every change already writes an `events` row inside its own transaction, through `recordEvents`. Webhooks hang off that one function, so no service has to remember to notify anyone, and a new kind of change is covered as soon as it is logged.
+2. **Relevance is a table, kept up to date automatically.** `watches` holds (agent, task | goal | memory). `recordEvents` adds a watch whenever an agent acts on an object: capturing, claiming, asking about, updating or completing a task; proposing or editing a goal; saving a memory. Forgetting a memory removes every watch on it. Agents add and remove watches with `watch` and `unwatch`, and see them with `list_watches`.
+3. **Routing (`webhooks/routing.ts`) matches an event to watchers by what it concerns.** That is the object itself (`watching:task`), the goal it is filed under or the parent of a new sub-goal (`in_watched_goal`), and the task a memory is about (`about_watched_task`). Every answer to a question also goes to the agent that asked it (`asked_by_you`), watch or not. A webhook with `scope: "all"` gets everything else as `workspace`. Agents never get their own changes. Each event has topics (`decisions`, `tasks`, `goals`, `memory`), and a webhook gets only the topics it chose. "Decisions" are what a person decided for the agent: answers, and goals approved, reactivated, achieved or abandoned.
+4. **The outbox is transactional.** Routing writes one `webhook_deliveries` row per (webhook, event) in the same transaction as the change. A committed change always has its notifications; a rolled-back one never does. The reasons are stored on the row, so the payload says why each event was sent.
+5. **"As soon as possible" is an after-commit kick, plus a sweep.**
+   - `inTransaction` collects `onCommit` hooks and runs them after the outermost transaction commits.
+   - When `recordEvents` queued deliveries, its hook calls `scheduleDispatch`, which runs the dispatcher under `waitUntil`, after the response is sent. A person's click reaches the bot's endpoint in well under a second (the UI test checks it arrives within seconds).
+   - Kicks that land while the instance is already dispatching are folded into one more pass.
+   - Vercel Cron calls `/api/webhooks/dispatch` every minute. It sends retries whose backoff has passed, picks up anything a kick missed (an instance that died, a deploy), and prunes deliveries older than 7 days.
+6. **Dispatching (`webhooks/dispatch.ts`) leases a webhook, not a delivery.**
+   - `UPDATE webhooks SET lease_until … WHERE id IN (SELECT … FOR UPDATE SKIP LOCKED)` lets any number of dispatchers run at once (kicks on several instances, the sweep) without two of them sending to the same webhook. Each webhook's events therefore go out one batch at a time, oldest first (up to 25 per request).
+   - The lease lasts 60 seconds, so a dispatcher that dies mid-send only delays that webhook.
+7. **Delivery is at-least-once, ordered per webhook.**
+   - Only a 2xx counts; redirects are not followed. A timeout (10 s) or any other answer is a failure.
+   - After a failure the webhook backs off (30 s, 2 m, 8 m, 32 m, about 2 h, then every 6 h) and retries the same batch, so later events never overtake earlier ones.
+   - After 12 failures in a row (about two days) it is disabled and its pending deliveries are dropped as `dead`. A dead endpoint does not get weeks of history replayed at once.
+   - The reason shows in `get_webhook` and on the Agents page; registering again re-enables it.
+   - A batch can be delivered twice (for example, the endpoint answered after the timeout), so receivers de-duplicate by `eventId`.
+
+### Payload and signing
+
+```http
+POST /phean HTTP/1.1
+Content-Type: application/json
+Phean-Signature: t=1762250000,v1=5c1b…
+Phean-Webhook-Id: wh_…
+Phean-Delivery-Id: dl_…
+
+{ "type": "phean.events", "deliveryId": "dl_…", "webhookId": "wh_…",
+  "workspace": { "slug": "acme", "name": "Acme" }, "agent": { "id": "ag_…", "name": "Scout" },
+  "events": [ { "eventId": 812, "action": "task.input_answered", "entityType": "task", "entityId": "t_…",
+                "summary": "Dana answered Scout on \"Pick the auditor\"", "actor": { "type": "user", … },
+                "data": { "answer": "Okafor", … }, "reasons": ["asked_by_you", "watching:task"],
+                "createdAt": "…", "url": "https://…/w/acme/decisions" } ] }
+```
+
+- **The payload is the event, not the object.** It carries what the activity log has (action, summary, actor, the event's data), the reasons, and a link into Phean. Bots read the current state with `get_task`, `get_goal` or `collect_answers`.
+  - A delayed or retried delivery never carries stale state.
+  - A payload never exposes more than the event did.
+  - Answers still go through `collect_answers`, which marks each one delivered.
+- **Signing:** `v1 = HMAC-SHA256(secret, "<t>.<raw body>")`. Receivers compare it in constant time and reject a `t` more than 5 minutes off, which stops replays.
+  - The secret (`whsec_…`) is shown once, by `register_webhook`.
+  - It is stored encrypted with AES-256-GCM, under a key from `PHEAN_WEBHOOK_KEY` or, failing that, derived from `BETTER_AUTH_SECRET` with HKDF.
+  - `ping_webhook` sends a signed `phean.ping` to check an endpoint.
+  - [`skills/phean-webhooks/SKILL.md`](../skills/phean-webhooks/SKILL.md) gives bots Node and Python verifiers. `tests/skills.test.ts` runs both against `signPayload`, for valid, tampered, wrong-secret, replayed and malformed requests.
+
+### Guarding the endpoint (SSRF)
+
+Phean's servers call URLs that agents choose, so `webhooks/url-safety.ts` refuses anything that could reach a private network:
+- URLs must use `https`, carry no credentials, and not name `localhost`, `.internal` or `.local` hosts.
+- Every address the host resolves to must be public. Refused: loopback; RFC 1918; link-local (including `169.254.169.254`, the cloud metadata endpoint); CGNAT; unique-local and multicast; IPv4-mapped forms of all of these.
+- The check runs at registration and again before every send, because DNS changes.
+- Redirects are never followed.
+
+The remaining gap is DNS rebinding between the check and the connection. Closing it needs pinning the resolved address in the HTTP client; that is left for when Phean takes untrusted agents. `PHEAN_WEBHOOK_ALLOW_PRIVATE=1` lifts the address checks for local development and the UI tests only.
+
+### Why this design
+
+- **A transactional outbox rather than a cursor over `events.id`.** Identity values are handed out when a row is inserted but become visible when the transaction commits, so ids can appear out of order. A dispatcher reading "everything after the last id I sent" would skip an event committed late, with no error. Rows written in the same transaction cannot be missed.
+- **Watches rather than computing relevance at send time.** Who-follows-what is visible to agents and testable. It costs one indexed lookup per event, not a walk over claims, sessions, questions and goal trees for every delivery. It also stays correct after a task is released or reassigned: the agent that worked on it keeps hearing about it until it unwatches.
+- **The outbox and a dispatcher rather than calling the webhook inside the request.** A slow or failing endpoint never slows a person's click, and retries survive the request that caused them.
+- **Postgres rather than a queue service.** The outbox is already in the database that holds the change, so there is no second system to keep consistent. `SKIP LOCKED` gives the queue semantics needed at this scale. If volume grows, the dispatcher can move to Vercel Queues behind the same outbox.
+- **One webhook per agent.** Its topics and scope cover the cases bots have asked for, and one place for the secret and the health status keeps it legible for people.
 
 ## Web UI
 
@@ -244,3 +329,4 @@ Playwright drives Chromium against a production build (`next start` on port 3200
 4. **Policy in one function.** `can()` is the seam for moving to Permit.io fine-grained authorization later, without touching callers.
 5. **Connectors stay in the agents.** Phean never holds email or Slack credentials. Agents bring their own integrations and Phean is the shared ledger.
 6. **Polling over websockets.** A 15-second refresh is good enough for watching agents, and it keeps the deployment serverless.
+7. **Webhooks from a transactional outbox.** Agents are told about changes by signed HTTPS calls queued in the same transaction as the change. They are sent right after commit, with a cron sweep for retries. See [Webhooks](#webhooks-telling-bots-what-changed).

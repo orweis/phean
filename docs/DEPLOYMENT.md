@@ -52,6 +52,8 @@ Why Neon: goals form a hierarchy (recursive CTEs), memory and tasks need full-te
 | `BETTER_AUTH_SECRET` | yes | Signs sessions. Already set; rotate with `openssl rand -base64 32` (this signs everyone out) |
 | `BETTER_AUTH_URL` | no | Canonical public URL. Defaults to the production domain on production and the deployment URL on previews |
 | `PHEAN_PLATFORM_ADMINS` | no | Comma-separated emails with read-only access to every workspace (the operator's status-per-customer view). Only counts for **verified** emails, which in practice means accounts that signed in with GitHub or Google |
+| `CRON_SECRET` | yes, for webhooks | Vercel sends it to the every-minute webhook sweep (`/api/webhooks/dispatch`, declared in `vercel.json`); production refuses the sweep without it. Generate with `openssl rand -base64 32` |
+| `PHEAN_WEBHOOK_KEY` | no | Encrypts stored webhook signing secrets. Defaults to a key derived from `BETTER_AUTH_SECRET`; rotating either makes stored secrets unreadable, and agents re-register their webhooks |
 | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | no | Enables "Continue with GitHub". Callback: `https://<domain>/api/auth/callback/github` |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | no | Enables "Continue with Google". Callback: `https://<domain>/api/auth/callback/google` |
 
@@ -110,4 +112,5 @@ Previews are behind Vercel Authentication. To call a preview's `/mcp` from an ag
 - **Logs and errors**: Vercel → phean → Logs. Unexpected tool failures are logged server-side and reach agents only as `internal_error`.
 - **Rollback**: promote a previous deployment. Migrations only move forward, so write them to be backward compatible with the previous release (add columns before using them; drop them a release later).
 - **Database branches**: Neon creates a branch per preview, so schema changes are exercised on a copy of production data before merge.
+- **Webhooks**: deliveries go out right after the change commits. The cron in `vercel.json` (every minute; Hobby plans allow only daily crons, so this needs Pro) retries failures and prunes deliveries after 7 days. A webhook disabled after repeated failures shows its reason on the Agents page; the agent re-enables it by registering again.
 - **Rate limiting**: sign-in and sign-up are rate-limited by Better Auth, with counters stored in Postgres so the limit holds across serverless instances.
