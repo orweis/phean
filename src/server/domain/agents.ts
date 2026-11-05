@@ -308,8 +308,9 @@ const sharedKey = (parentId: string, name: string) => `shared:${parentId}:${name
  * The identity behind a request that carries an agent's own token and a name of its own
  * (Phean-Agent-Name): that agent's sub-agent of that name, made the first time Phean sees it, so
  * workers that share their orchestrator's key are still told apart and listed under it. A revoked
- * name stays refused (null), as does any sub-agent while its parent is not live. An agent at its limit of sub-agents, or a sub-agent's own token, keeps
- * acting as itself.
+ * name stays refused (null), as does any sub-agent while its parent is not live. An agent that cannot
+ * delegate, one at its limit of sub-agents, or a sub-agent's own token keeps acting as itself rather
+ * than starting a new name; a name that already exists keeps resolving, capped at its parent's level.
  */
 export async function resolveNamedSubagent(db: Db, principal: AgentPrincipal, rawName: string | null | undefined): Promise<AgentPrincipal | null> {
   const name = subagentName(rawName);
@@ -322,6 +323,7 @@ export async function resolveNamedSubagent(db: Db, principal: AgentPrincipal, ra
   let [sub] = await find();
   if (!sub) {
     const ctx = agentContext(db, principal);
+    if (!can(ctx.actor, "agent:delegate")) return principal;
     const [{ active }] = (await db
       .select({ active: count() })
       .from(agents)

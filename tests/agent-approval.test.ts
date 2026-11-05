@@ -353,14 +353,34 @@ describe("sub-agents and their parent", () => {
     expect((await rowOf(named!.agent.id)).accessLevel).toBe("write");
   });
 
-  it("a named sub-agent stays capped at Write under an Admin key, and at Read under a Read key", async () => {
+  it("a named sub-agent stays capped at Write under an Admin key", async () => {
     await testDb.db.update(agents).set({ accessLevel: "admin" }).where(eq(agents.id, ws.scout.agentId));
     const admin = (await authenticateAgentToken(testDb.db, ws.scout.token))!;
     expect((await resolveNamedSubagent(testDb.db, admin, "Helper"))?.agent.level).toBe("write");
+  });
+
+  it("a Read credential cannot start a named sub-agent, and acts as itself", async () => {
+    await testDb.db.update(agents).set({ accessLevel: "read" }).where(eq(agents.id, ws.closer.agentId));
+    const reader = (await authenticateAgentToken(testDb.db, ws.closer.token))!;
+    expect(await resolveNamedSubagent(testDb.db, reader, "Helper")).toEqual(reader);
+    expect(await testDb.db.select().from(agents).where(eq(agents.parentAgentId, ws.closer.agentId))).toEqual([]);
+    expect(await eventsOf(ws.closer.agentId)).toEqual(["agent.created"]);
+
+    const { agent } = await approveAgent(miaCtx, { name: "Reader", ...grant, level: "read" });
+    const oauthReader = (await resolveOAuthAgent(testDb.db, agent.id))!;
+    expect(await resolveNamedSubagent(testDb.db, oauthReader, "Helper")).toEqual(oauthReader);
+    expect(await testDb.db.select().from(agents).where(eq(agents.parentAgentId, agent.id))).toEqual([]);
+  });
+
+  it("a named sub-agent that already exists keeps resolving at Read when its parent drops to Read", async () => {
+    const writer = (await authenticateAgentToken(testDb.db, ws.closer.token))!;
+    const helper = await resolveNamedSubagent(testDb.db, writer, "Helper");
+    expect(helper?.agent.level).toBe("write");
 
     await testDb.db.update(agents).set({ accessLevel: "read" }).where(eq(agents.id, ws.closer.agentId));
     const reader = (await authenticateAgentToken(testDb.db, ws.closer.token))!;
-    expect((await resolveNamedSubagent(testDb.db, reader, "Helper"))?.agent.level).toBe("read");
+    const again = await resolveNamedSubagent(testDb.db, reader, "Helper");
+    expect(again?.agent).toEqual({ id: helper!.agent.id, name: "Helper", level: "read" });
   });
 });
 
