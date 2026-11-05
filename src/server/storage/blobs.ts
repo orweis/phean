@@ -55,9 +55,28 @@ function databaseStore(ctx: Ctx): BlobStore {
   };
 }
 
+/**
+ * Vercel Blob, reading through to the database for documents stored there before the deployment
+ * had a store, so turning a store on never strands them. Deletes clear both.
+ */
+function movingStore(token: string, ctx: Ctx): BlobStore {
+  const blob = vercelBlobStore(token);
+  const database = databaseStore(ctx);
+  return {
+    driver: "vercel-blob",
+    put: blob.put,
+    async get(key) {
+      return (await blob.get(key)) ?? (await database.get(key));
+    },
+    async delete(keys) {
+      await Promise.all([blob.delete(keys), database.delete(keys)]);
+    },
+  };
+}
+
 export function blobStore(ctx: Ctx): BlobStore {
   const config = blobStoreConfig();
-  return config.driver === "vercel-blob" ? vercelBlobStore(config.token) : databaseStore(ctx);
+  return config.driver === "vercel-blob" ? movingStore(config.token, ctx) : databaseStore(ctx);
 }
 
 /** Where a version of a document's bytes lives; versions never overwrite each other. */
