@@ -173,11 +173,12 @@ test.describe("signed in", () => {
     const countOf = async (tab: RegExp) => Number(((await rail.getByRole("link", { name: tab }).locator("span").first().textContent()) ?? "0").replace(/\D.*$/, "") || 0);
     const expected = (await countOf(/^Decisions/)) + (await countOf(/^Board/));
     expect(expected).toBeGreaterThan(0);
-    const badge = page.locator('head link[rel="icon"][data-badge]');
-    await expect(badge).toHaveAttribute("data-badge", String(expected));
-    await expect(badge).toHaveAttribute("href", /^data:image\/png;base64,/);
-    // It is the last icon in the head, which is the one browsers show.
-    expect(await page.evaluate(() => [...document.querySelectorAll('link[rel~="icon"]')].at(-1)?.hasAttribute("data-badge"))).toBe(true);
+    // Every icon link carries the badge: browsers pick among them by size and type, not order.
+    const icons = page.locator('head link[rel~="icon"]');
+    await expect(icons).not.toHaveCount(0);
+    await expect(icons.and(page.locator(":not([data-badge])"))).toHaveCount(0);
+    await expect(icons.first()).toHaveAttribute("data-badge", String(expected));
+    await expect(icons.first()).toHaveAttribute("href", /^data:image\/png;base64,/);
   });
 
   test("the selected request is unmistakable, and J and K move the selection", async ({ page }) => {
