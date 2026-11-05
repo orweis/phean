@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { tasks } from "@/server/db/schema";
-import { authenticateAgentToken } from "@/server/domain/agents";
+import { approveAgent, authenticateAgentToken, findRenewableAgent, resolveOAuthAgent, revokeAgent } from "@/server/domain/agents";
 import type { Ctx } from "@/server/domain/context";
 import { listActivity } from "@/server/domain/events";
 import { createGoal, findGoal, listGoals, updateGoal, type Goal } from "@/server/domain/goals";
@@ -179,6 +179,23 @@ describe("tenant isolation", () => {
   it("binds agent tokens to their own workspace", async () => {
     const principal = await authenticateAgentToken(testDb.db, globex.scout.token);
     expect(principal?.tenant).toEqual(globex.tenant);
+  });
+
+  it("binds an OAuth agent to its own workspace, and keeps other workspaces from revoking or renewing it", async () => {
+    const grant = { name: "Laptop", level: "write", lifetimeDays: 30, oauthClientId: "client_1" } as const;
+    const { agent } = await approveAgent(acmeOwner, grant);
+    expect((await resolveOAuthAgent(testDb.db, agent.id))?.tenant).toEqual(acme.tenant);
+
+    await expect(revokeAgent(globexOwner, { agentId: agent.id })).rejects.toMatchObject({ code: "not_found" });
+    await expect(revokeAgent(globexAgent, { agentId: agent.id })).rejects.toMatchObject({ code: "not_found" });
+
+    // The same person in another workspace: it is not theirs to renew there.
+    const samePerson = { ...globexOwner, actor: acmeOwner.actor };
+    expect(await findRenewableAgent(samePerson, "Laptop")).toBeNull();
+    const { agent: there, renewed } = await approveAgent(samePerson, grant);
+    expect(renewed).toBe(false);
+    expect(there.id).not.toBe(agent.id);
+    expect((await resolveOAuthAgent(testDb.db, agent.id))?.tenant).toEqual(acme.tenant);
   });
 
   it("shows each user only the workspaces they belong to", async () => {

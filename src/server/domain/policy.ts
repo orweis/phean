@@ -39,7 +39,7 @@ const PERMISSIONS: Record<Role, readonly Action[]> = {
 
 const DENIAL_MESSAGES: Partial<Record<Action, string>> = {
   "goal:decide": "Only a human can approve, complete, or abandon a goal. Ask them to review it in the Phean web app.",
-  "agent:manage": "Only workspace owners and admins can manage agent tokens.",
+  "agent:manage": "Only workspace owners and admins can manage agents they did not connect themselves.",
   "agent:issue_key": "Only workspace owners and admins can issue agent keys. Connect the agent with OAuth instead.",
   "webhook:manage": "Only agents (for their own webhook) and workspace owners and admins can manage webhooks.",
   "member:manage": "Only workspace owners and admins can manage members.",

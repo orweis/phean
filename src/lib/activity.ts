@@ -28,6 +28,7 @@ const ACTION_BATCH_PHRASES = {
   "workspace.workflow_updated": ["updated the board's stages", "time"],
   "memory.forgotten": ["forgot", "memory"],
   "agent.created": ["connected", "agent"],
+  "agent.renewed": ["renewed", "agent"],
   "agent.revoked": ["revoked", "agent"],
   "webhook.registered": ["registered webhooks for", "agent"],
   "webhook.removed": ["removed webhooks for", "agent"],

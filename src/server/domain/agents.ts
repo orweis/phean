@@ -1,18 +1,21 @@
 import { createHash, randomBytes } from "node:crypto";
 
-import { and, asc, count, eq, isNull, lt, or, sql } from "drizzle-orm";
+import { and, asc, count, eq, isNull, lt, or, sql, type SQL } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 
-import { AGENT_TOKEN_PREFIX, LIMITS, lowerLevel, type AgentAccessLevel } from "@/lib/domain";
+import { addDays } from "@/lib/dates";
+import { ACCESS_LEVEL_META, AGENT_TOKEN_PREFIX, grantableLevels, highestGrantableLevel, LIMITS, lowerLevel, toMemberRole, type AgentAccessLevel } from "@/lib/domain";
 
 import type { Db } from "../db/client";
 import { publicColumns } from "../db/columns";
 import { newId } from "../db/ids";
-import { agents, organization, type AgentRow } from "../db/schema";
+import { agents, member, organization, type AgentRow } from "../db/schema";
+import { liveAgent } from "./agent-liveness";
 import { agentRole, inTenant, inTransaction, type Ctx, type Tenant } from "./context";
 import { conflict, forbidden, invalid, notFound } from "./errors";
 import { recordEvent } from "./events";
-import { assertCan } from "./policy";
-import { AgentRefInput, CreateAgentInput, CreateSubagentInput, Empty } from "./schemas";
+import { assertCan, can } from "./policy";
+import { AgentRefInput, ApproveAgentInput, CreateAgentInput, CreateSubagentInput, Empty } from "./schemas";
 import { service } from "./service";
 import { disableWebhooksOf } from "./webhooks";
 
@@ -101,26 +104,110 @@ export const createSubagent = service(CreateSubagentInput, async (ctx, { name, p
   return issue(ctx, { name, parent, purpose });
 });
 
+/** Revokes an agent's OAuth tokens. It runs inside the caller's transaction, with that transaction's db. */
+export type AgentTokenRevoker = (db: Db, agentId: string) => Promise<void>;
+
+let revokeTokensOf: AgentTokenRevoker = async () => undefined;
+
+export function setAgentTokenRevoker(revoker: AgentTokenRevoker): void {
+  revokeTokensOf = revoker;
+}
+
+/** The same comparison as the agents_oauth_name_uq index, so what this finds is what an insert would hit. */
+function renewableBy(ctx: Ctx, approverId: string, name: string): SQL | undefined {
+  return and(inTenant(ctx, agents), eq(agents.createdByUserId, approverId), eq(agents.name, name), eq(agents.authKind, "oauth"), isNull(agents.revokedAt));
+}
+
+/** The agent an approval under this name would renew: this person's, in this workspace, not revoked. An expired one still counts. */
+export async function findRenewableAgent(ctx: Ctx, name: string): Promise<Agent | null> {
+  assertCan(ctx, "workspace:read");
+  if (ctx.actor.type !== "user") return null;
+  const [agent] = await ctx.db.select(agentColumns).from(agents).where(renewableBy(ctx, ctx.actor.id, name.trim()));
+  return agent ?? null;
+}
+
 /**
- * Revokes an agent and every sub-agent it runs. Owners and admins revoke any agent; an agent
- * revokes only its own sub-agents.
+ * A person approves an agent that signed in with OAuth. The same person, workspace and name renews
+ * that row, keeping its history and watches and replacing its old tokens; anything else is a new agent.
+ */
+export const approveAgent = service(ApproveAgentInput, async (ctx, { name, level, lifetimeDays, oauthClientId }): Promise<{ agent: Agent; renewed: boolean }> => {
+  assertCan(ctx, "agent:connect");
+  const { actor } = ctx;
+  if (actor.type !== "user" || actor.role === "platform_admin") throw forbidden("Only a person can approve an agent.");
+  const levelLabel = ACCESS_LEVEL_META[level].label;
+  if (!grantableLevels(actor.role).includes(level)) throw forbidden(`Your role cannot grant ${levelLabel} access. Ask a workspace admin.`);
+  const grant = { accessLevel: level, accessExpiresAt: addDays(new Date(), lifetimeDays), oauthClientId };
+  const terms = `${levelLabel} access for ${lifetimeDays} day${lifetimeDays === 1 ? "" : "s"}`;
+
+  return inTransaction(ctx, async (tx) => {
+    const lockRenewable = async () => (await tx.db.select(agentColumns).from(agents).where(renewableBy(tx, actor.id, name)).for("update"))[0];
+
+    let existing = await lockRenewable();
+    if (!existing) {
+      const [created] = await tx.db
+        .insert(agents)
+        .values({ id: newId("ag"), tenantId: tx.tenant.id, name, authKind: "oauth", createdByUserId: actor.id, ...grant })
+        // A concurrent approval got there first: this waits for it, then renews what it made.
+        .onConflictDoNothing({ target: [agents.tenantId, agents.createdByUserId, agents.name], where: sql`${agents.authKind} = 'oauth' and ${agents.revokedAt} is null` })
+        .returning(agentColumns);
+      if (created) {
+        await recordEvent(tx, {
+          action: "agent.created",
+          entityType: "agent",
+          entityId: created.id,
+          summary: `connected a new agent "${name}" with ${terms}`,
+          data: { parentAgentId: null, level, lifetimeDays },
+        });
+        return { agent: created, renewed: false };
+      }
+      existing = await lockRenewable();
+      if (!existing) throw conflict(`"${name}" was revoked just now. Approve it again.`);
+    }
+
+    const [agent] = await tx.db.update(agents).set(grant).where(and(inTenant(tx, agents), eq(agents.id, existing.id))).returning(agentColumns);
+    await revokeTokensOf(tx.db, existing.id);
+    await recordEvent(tx, {
+      action: "agent.renewed",
+      entityType: "agent",
+      entityId: existing.id,
+      summary: `renewed agent "${name}" with ${terms}`,
+      data: { level, lifetimeDays },
+    });
+    return { agent: agent!, renewed: true };
+  });
+});
+
+function assertCanRevoke(ctx: Ctx, target: Agent): void {
+  const { actor } = ctx;
+  if (actor.type === "agent" && actor.id === target.id) throw forbidden("An agent cannot revoke itself. Ask a workspace admin to revoke it.");
+  if (can(actor, "agent:manage")) return;
+  if (actor.type === "agent") {
+    if (target.parentAgentId !== actor.id) throw forbidden("Agents revoke only their own sub-agents. Ask a workspace admin to revoke this one.");
+    return;
+  }
+  if (target.createdByUserId !== actor.id) assertCan(ctx, "agent:manage");
+}
+
+/**
+ * Revokes an agent and every sub-agent it runs, and their tokens. A person needs `agent:manage`, or
+ * `agent:connect` for an agent they approved. An agent needs `agent:manage` to revoke any agent but
+ * itself; otherwise, with `agent:delegate`, only its own sub-agents.
  */
 export const revokeAgent = service(AgentRefInput, async (ctx, { agentId }): Promise<Agent> => {
-  if (ctx.actor.type === "agent") {
-    assertCan(ctx, "agent:delegate");
-  } else {
-    assertCan(ctx, "agent:manage");
-  }
+  if (!can(ctx.actor, "agent:connect") && !can(ctx.actor, "agent:delegate")) assertCan(ctx, "agent:manage");
   return inTransaction(ctx, async (tx) => {
     const [target] = await tx.db.select(agentColumns).from(agents).where(and(inTenant(tx, agents), eq(agents.id, agentId), isNull(agents.revokedAt)));
     if (!target) throw notFound("active agent", agentId);
-    if (tx.actor.type === "agent" && target.parentAgentId !== tx.actor.id) throw forbidden("Agents revoke only their own sub-agents. Ask a workspace admin to revoke this one.");
+    assertCanRevoke(tx, target);
     const revoked = await tx.db
       .update(agents)
       .set({ revokedAt: new Date() })
       .where(and(inTenant(tx, agents), or(eq(agents.id, agentId), eq(agents.parentAgentId, agentId)), isNull(agents.revokedAt)))
       .returning(agentColumns);
-    for (const agent of revoked) await disableWebhooksOf(tx, agent.id);
+    for (const agent of revoked) {
+      await disableWebhooksOf(tx, agent.id);
+      await revokeTokensOf(tx.db, agent.id);
+    }
     const children = revoked.filter((agent) => agent.id !== agentId);
     await recordEvent(tx, {
       action: "agent.revoked",
@@ -138,40 +225,70 @@ export interface AgentPrincipal {
   tenant: Tenant;
 }
 
-/** Resolves a bearer token to its agent and tenant. Returns null for unknown or revoked tokens. */
-export async function authenticateAgentToken(db: Db, token: string): Promise<AgentPrincipal | null> {
-  if (!token.startsWith(AGENT_TOKEN_PREFIX)) return null;
-  const tokenHash = hashToken(token);
+const parentAgent = alias(agents, "parent_agent");
+const approver = alias(member, "approver");
+const parentApprover = alias(member, "parent_approver");
 
+/** A grant, capped by what its approver can grant now. A key has no approver to cap it. */
+function grantedLevel(level: AgentAccessLevel, authKind: "key" | "oauth", approverRole: string | null): AgentAccessLevel {
+  return authKind === "oauth" ? lowerLevel(level, highestGrantableLevel(toMemberRole(approverRole))) : level;
+}
+
+/** Coarse-grained so a busy agent does not write on every request. */
+async function touchAgent(db: Db, agentId: string): Promise<void> {
+  await db
+    .update(agents)
+    .set({ lastSeenAt: new Date() })
+    .where(and(eq(agents.id, agentId), or(isNull(agents.lastSeenAt), lt(agents.lastSeenAt, sql`now() - ${LAST_SEEN_RESOLUTION}`))));
+}
+
+/**
+ * The one way every token path turns an agent row into a principal: null unless `liveAgent()` holds,
+ * and the level is the agent's grant, capped by its approver's current role and, for a sub-agent, by
+ * its parent's level worked out the same way.
+ */
+async function resolvePrincipal(db: Db, match: SQL | undefined): Promise<AgentPrincipal | null> {
   const [row] = await db
     .select({
-      agentId: agents.id,
-      agentName: agents.name,
-      agentLevel: agents.accessLevel,
+      id: agents.id,
+      name: agents.name,
+      level: agents.accessLevel,
+      authKind: agents.authKind,
+      approverRole: approver.role,
+      parentLevel: parentAgent.accessLevel,
+      parentAuthKind: parentAgent.authKind,
+      parentApproverRole: parentApprover.role,
       tenantId: organization.id,
       tenantSlug: organization.slug,
       tenantName: organization.name,
     })
     .from(agents)
     .innerJoin(organization, eq(organization.id, agents.tenantId))
-    .where(and(eq(agents.tokenHash, tokenHash), isNull(agents.revokedAt)));
+    .leftJoin(approver, and(eq(approver.organizationId, agents.tenantId), eq(approver.userId, agents.createdByUserId)))
+    .leftJoin(parentAgent, and(eq(parentAgent.tenantId, agents.tenantId), eq(parentAgent.id, agents.parentAgentId)))
+    .leftJoin(parentApprover, and(eq(parentApprover.organizationId, agents.tenantId), eq(parentApprover.userId, parentAgent.createdByUserId)))
+    .where(and(match, liveAgent()));
   if (!row) return null;
 
-  // Coarse-grained so a busy agent does not write on every request.
-  await db
-    .update(agents)
-    .set({ lastSeenAt: new Date() })
-    .where(
-      and(
-        eq(agents.id, row.agentId),
-        or(isNull(agents.lastSeenAt), lt(agents.lastSeenAt, sql`now() - ${LAST_SEEN_RESOLUTION}`)),
-      ),
-    );
+  await touchAgent(db, row.id);
 
+  const own = grantedLevel(row.level, row.authKind, row.approverRole);
+  const level = row.parentLevel && row.parentAuthKind ? lowerLevel(own, grantedLevel(row.parentLevel, row.parentAuthKind, row.parentApproverRole)) : own;
   return {
-    agent: { id: row.agentId, name: row.agentName, level: row.agentLevel },
+    agent: { id: row.id, name: row.name, level },
     tenant: { id: row.tenantId, slug: row.tenantSlug, name: row.tenantName },
   };
+}
+
+/** Resolves a bearer token to its agent and tenant. Returns null for an unknown token or an agent that is not live. */
+export async function authenticateAgentToken(db: Db, token: string): Promise<AgentPrincipal | null> {
+  if (!token.startsWith(AGENT_TOKEN_PREFIX)) return null;
+  return resolvePrincipal(db, eq(agents.tokenHash, hashToken(token)));
+}
+
+/** Resolves the agent a verified OAuth token names. Returns null unless it is a live OAuth agent. */
+export async function resolveOAuthAgent(db: Db, agentId: string): Promise<AgentPrincipal | null> {
+  return resolvePrincipal(db, and(eq(agents.id, agentId), eq(agents.authKind, "oauth")));
 }
 
 /** The header a sub-agent sends with its parent's token to say who it is. */
@@ -191,7 +308,7 @@ const sharedKey = (parentId: string, name: string) => `shared:${parentId}:${name
  * The identity behind a request that carries an agent's own token and a name of its own
  * (Phean-Agent-Name): that agent's sub-agent of that name, made the first time Phean sees it, so
  * workers that share their orchestrator's key are still told apart and listed under it. A revoked
- * name stays refused (null). An agent at its limit of sub-agents, or a sub-agent's own token, keeps
+ * name stays refused (null), as does any sub-agent while its parent is not live. An agent at its limit of sub-agents, or a sub-agent's own token, keeps
  * acting as itself.
  */
 export async function resolveNamedSubagent(db: Db, principal: AgentPrincipal, rawName: string | null | undefined): Promise<AgentPrincipal | null> {
@@ -239,12 +356,7 @@ export async function resolveNamedSubagent(db: Db, principal: AgentPrincipal, ra
     });
     [sub] = await find();
   }
-  if (!sub || sub.revokedAt) return null;
-  await db
-    .update(agents)
-    .set({ lastSeenAt: new Date() })
-    .where(and(eq(agents.id, sub.id), or(isNull(agents.lastSeenAt), lt(agents.lastSeenAt, sql`now() - ${LAST_SEEN_RESOLUTION}`))));
-  return { agent: { id: sub.id, name: sub.name, level: sub.accessLevel }, tenant: principal.tenant };
+  return sub ? resolvePrincipal(db, eq(agents.id, sub.id)) : null;
 }
 
 export function agentContext(db: Db, principal: AgentPrincipal): Ctx {

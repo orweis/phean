@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
-import { createAgent, listAgents, revokeAgent } from "@/server/domain/agents";
+import { approveAgent, createAgent, listAgents, revokeAgent } from "@/server/domain/agents";
 import { attachDocument } from "@/server/domain/documents";
 import { DEFAULT_WORKFLOW } from "@/lib/workflow";
 import { saveWorkflow } from "@/server/domain/workflow";
@@ -122,5 +122,13 @@ describe("policy enforcement in services", () => {
 
     await revokeAgent(owner, { agentId: agent.id });
     await expect(revokeAgent(owner, { agentId: agent.id })).rejects.toMatchObject({ code: "not_found" });
+  });
+
+  it("keeps approving and revoking agents from the read-only role, and members to their own", async () => {
+    const grant = { name: "Laptop", level: "write", lifetimeDays: 30, oauthClientId: "client_1" } as const;
+    await expect(approveAgent(platformAdmin, grant)).rejects.toMatchObject({ code: "forbidden" });
+    const { agent } = await approveAgent(owner, grant);
+    await expect(revokeAgent(platformAdmin, { agentId: agent.id })).rejects.toMatchObject({ code: "forbidden" });
+    await expect(revokeAgent(member, { agentId: agent.id })).rejects.toThrow("did not connect themselves");
   });
 });

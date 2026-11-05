@@ -57,9 +57,23 @@ export function grantableLevels(role: MemberRole): readonly AgentAccessLevel[] {
   return role === "member" ? ["read", "write"] : AGENT_ACCESS_LEVELS;
 }
 
+/** The highest level a person of this role may grant. */
+export function highestGrantableLevel(role: MemberRole): AgentAccessLevel {
+  const levels = grantableLevels(role);
+  return levels[levels.length - 1]!;
+}
+
 /** The lower of two levels. */
 export function lowerLevel(a: AgentAccessLevel, b: AgentAccessLevel): AgentAccessLevel {
   return AGENT_ACCESS_LEVELS.indexOf(a) <= AGENT_ACCESS_LEVELS.indexOf(b) ? a : b;
+}
+
+/** Better Auth stores roles as a comma-separated list (or none); Phean uses the most privileged one. */
+export function toMemberRole(raw: string | null): MemberRole {
+  const roles = (raw ?? "").split(",").map((role) => role.trim());
+  if (roles.includes("owner")) return "owner";
+  if (roles.includes("admin")) return "admin";
+  return "member";
 }
 
 export const INVITABLE_ROLES = ["member", "admin"] as const satisfies readonly MemberRole[];
