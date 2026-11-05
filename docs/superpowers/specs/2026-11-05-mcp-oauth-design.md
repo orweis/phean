@@ -102,6 +102,8 @@ When access ends, the client gets a 401 and sends the person back through the di
 
 **Webhooks (my calls):** revoking disables them, as today. Expired and orphaned agents' webhooks pause through a check when deliveries are queued and dispatched, and resume on their own if the agent is renewed or its approver returns.
 
+**Sub-agents (my calls, added when the branch moved to the current `main`):** agents can already issue `phn_` tokens for their sub-agents. A sub-agent only works while its parent works and can't exceed its parent's level, capped at Write. Without this rule, an expiring agent could mint itself a key that never expires.
+
 ## Spec checklist (MCP 2026-07-28)
 
 - RFC 9728 protected resource metadata at `/.well-known/oauth-protected-resource/mcp`, plus `resource_metadata` in every 401.
