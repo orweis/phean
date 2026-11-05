@@ -1,4 +1,6 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+
+import { createTestDb, seedWorkspace, type TestDb } from "./support/db";
 
 const calls: { op: string; key: unknown; options: Record<string, unknown> }[] = [];
 
@@ -9,6 +11,7 @@ vi.mock("@vercel/blob", () => ({
   }),
   get: vi.fn(async (key: string, options: Record<string, unknown>) => {
     calls.push({ op: "get", key, options });
+    if (key.includes("before-the-store")) return null;
     return { statusCode: 200, stream: new Response(new Uint8Array([1, 2, 3])).body, blob: {} };
   }),
   del: vi.fn(async (keys: unknown, options: Record<string, unknown>) => {
@@ -19,6 +22,12 @@ vi.mock("@vercel/blob", () => ({
 const { blobStore, documentKey } = await import("@/server/storage/blobs");
 
 const ctx = { db: {} as never, tenant: { id: "org_1", slug: "acme", name: "Acme" }, actor: { type: "user" as const, id: "u", name: "U", role: "owner" as const } };
+
+let testDb: TestDb;
+beforeAll(async () => {
+  testDb = await createTestDb();
+});
+afterAll(() => testDb.close());
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -32,7 +41,8 @@ describe("the document blob store", () => {
 
   it("uses private Vercel Blob storage when a store's token is set, so no blob is public", async () => {
     vi.stubEnv("BLOB_READ_WRITE_TOKEN", "vercel_blob_rw_test");
-    const store = blobStore(ctx);
+    const { human } = await seedWorkspace(testDb.db);
+    const store = blobStore(human);
     expect(store.driver).toBe("vercel-blob");
     await store.put("tenants/org_1/documents/d_1/v1", new Uint8Array([1]), "text/markdown");
     expect(await store.get("tenants/org_1/documents/d_1/v1")).toEqual(new Uint8Array([1, 2, 3]));
@@ -43,6 +53,20 @@ describe("the document blob store", () => {
       ["del", undefined, "vercel_blob_rw_test"],
     ]);
     expect(calls[0]!.options).toMatchObject({ addRandomSuffix: false, contentType: "text/markdown" });
+  });
+
+  it("still reads documents stored in the database before the store was turned on, and deletes clear both", async () => {
+    const { human } = await seedWorkspace(testDb.db);
+    const key = `tenants/${human.tenant.id}/documents/before-the-store/v1`;
+    await blobStore(human).put(key, new Uint8Array([7, 8]), "text/markdown");
+    vi.stubEnv("BLOB_READ_WRITE_TOKEN", "vercel_blob_rw_test");
+    const store = blobStore(human);
+    expect(store.driver).toBe("vercel-blob");
+    expect(await store.get(key)).toEqual(new Uint8Array([7, 8]));
+    await store.delete([key]);
+    expect(calls.map((call) => call.op)).toEqual(["get", "del"]);
+    vi.unstubAllEnvs();
+    expect(await blobStore(human).get(key)).toBeNull();
   });
 
   it("falls back to the database without a token, or when told to", () => {
