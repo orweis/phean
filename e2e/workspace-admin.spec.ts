@@ -26,7 +26,7 @@ test("an owner manages goals, memory, search, agents and members", async ({ page
     await openTab(page, slug, "Agents");
     // The page leads with signing in: the keyless snippet is open, the key is behind a quiet control.
     await page.getByRole("group", { name: "Client" }).getByRole("button", { name: "Claude Code" }).click();
-    await expect(page.getByText(`claude mcp add --transport http phean-${slug} ${BASE_URL}/mcp`, { exact: true })).toBeVisible();
+    await expect(page.getByText(`claude mcp add --transport http phean-${slug} ${BASE_URL}/mcp/w/${slug}`, { exact: true })).toBeVisible();
     const keys = popover(page, FIXED_KEY_TRIGGER);
     await expect(keys.getByRole("button", { name: "Issue key" })).toBeHidden();
     token = await issueToken(page, "Night shift");

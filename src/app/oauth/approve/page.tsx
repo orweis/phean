@@ -61,8 +61,23 @@ export default async function ApproveAgentPage({ searchParams }: PageProps<"/oau
   const clientName = clientDisplayName(client.value.client_name);
   const called = clientName || "an unnamed client";
 
-  // Only the person's own memberships, so a platform admin is offered nothing extra here.
-  const memberships = await listMemberships(getDb(), session.user.id);
+  // Only the person's own memberships, so a platform admin is offered nothing extra here. A client on a
+  // workspace's own URL can only be given that workspace, so it is the one offered.
+  const memberships = (await listMemberships(getDb(), session.user.id)).filter(({ tenant }) => request.workspace === null || tenant.slug === request.workspace);
+  if (request.workspace !== null && memberships.length === 0) {
+    return (
+      <DialogPage title={`Connect ${called} to Phean`}>
+        <p className="mt-1 text-sm text-ink-2">
+          This client connects to the address of the workspace <strong className="font-semibold wrap-anywhere text-ink">{request.workspace}</strong>, and you are not a member of it. Ask
+          someone in that workspace to connect it, or use the address on your own workspace&apos;s Agents page.
+        </p>
+        <div className="mt-5">
+          <DeclineConsentForm oauthQuery={oauthQuery} clientName={called} />
+        </div>
+        <p className="mt-4 text-xs text-muted">Signed in as {session.user.name}</p>
+      </DialogPage>
+    );
+  }
   const renewable = clientName
     ? await Promise.all(
         memberships.map(async (membership) => ((await findRenewableAgent(userContext(getDb(), membership, session.user), clientName)) ? renewalKey(membership.tenant.slug, clientName) : null)),

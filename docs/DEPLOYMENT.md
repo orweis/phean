@@ -78,7 +78,7 @@ curl https://<domain>/api/health
 # {"status":"ok","database":"ok","latencyMs":12}
 ```
 
-Then sign up, create a workspace, and connect a real client with only the URL (`claude mcp add --transport http phean-smoke https://<domain>/mcp`): it should open the approval dialog, and `whoami` should name the workspace afterwards. To run the two-agent demo, issue two fixed keys under **Key for a bot** on the Agents page:
+Then sign up, create a workspace, and connect a real client with only the URL (`claude mcp add --transport http phean-smoke https://<domain>/mcp/w/<workspace>`): it should open the approval dialog, and `whoami` should name the workspace afterwards. To run the two-agent demo, issue two fixed keys under **Key for a bot** on the Agents page:
 
 ```bash
 pnpm demo:agents https://<domain> phn_first_token phn_second_token
@@ -88,11 +88,13 @@ It captures tasks (including a duplicate that must be skipped), proposes goals, 
 
 ## Connecting agents
 
-An agent connects with only the URL. Its client gets a 401 naming `/.well-known/oauth-protected-resource/mcp`, finds the authorization server at `/api/auth`, registers itself (open dynamic registration for public clients, or a Client ID Metadata Document), and sends the person to `/oauth/approve` to sign in and choose the agent's name, workspace, level and lifetime. The workspace's **Agents** page has the snippets:
+An agent connects with only the URL: its workspace's, `/mcp/w/<slug>`, or the shared `/mcp`. Its client gets a 401 naming the matching `/.well-known/oauth-protected-resource/...` document, finds the authorization server at `/api/auth`, registers itself (open dynamic registration for public clients, or a Client ID Metadata Document), and sends the person to `/oauth/approve` to sign in and choose the agent's name, workspace, level and lifetime. The workspace's **Agents** page has the snippets:
 
 ```bash
-claude mcp add --transport http phean-acme https://<domain>/mcp
+claude mcp add --transport http phean-acme https://<domain>/mcp/w/acme
 ```
+
+The workspace's URL is its own OAuth resource, so a second workspace on the same client is a second sign-in rather than an overwrite (Cursor and VS Code key logins by URL). The agent's row still decides the workspace; the URL only has to agree, and a credential for another workspace gets a 401 there.
 
 Access tokens last an hour and refresh on their own until the lifetime the person chose. A bot that can't open a browser gets a fixed `phn_` key instead, which an owner or admin issues under **Key for a bot** on the same page; it is shown once and sent as `Authorization: Bearer phn_...`.
 

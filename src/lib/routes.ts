@@ -40,7 +40,8 @@ export const routes = {
   /** Workspace settings: the board's stages. Reached from the workspace menu, not the tab rail. */
   settings: (slug: string) => `/w/${slug}/settings`,
   invite: (invitationId: string) => `/invite/${invitationId}`,
-  mcp: () => "/mcp",
+  /** The shared MCP endpoint, or a workspace's own (`""` gives the prefix every workspace's shares). */
+  mcp: (slug?: string) => (slug === undefined ? "/mcp" : `/mcp/w/${slug}`),
   /** The dialog for connecting an MCP client, on the signed query the OAuth provider sent it. */
   oauthApprove: (oauthQuery: string) => `/oauth/approve?${oauthQuery}`,
 } as const;

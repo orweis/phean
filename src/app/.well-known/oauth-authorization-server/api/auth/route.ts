@@ -1,5 +1,3 @@
-import { oauthProviderAuthServerMetadata } from "@better-auth/oauth-provider";
+import { auth, authServerMetadataRoute } from "@/server/auth/auth";
 
-import { auth } from "@/server/auth/auth";
-
-export const GET = oauthProviderAuthServerMetadata(auth);
+export const GET = authServerMetadataRoute(auth);

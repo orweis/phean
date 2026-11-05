@@ -1,3 +1,6 @@
+import { WORKSPACE_SLUG_PATTERN } from "@/lib/domain";
+import { routes } from "@/lib/routes";
+
 /** Public base URL of this deployment, used for auth callbacks and links handed to agents. */
 export function appUrl(): string {
   const explicit = process.env.BETTER_AUTH_URL ?? process.env.PHEAN_APP_URL;
@@ -9,9 +12,24 @@ export function appUrl(): string {
   return `http://localhost:${process.env.PORT ?? 3000}`;
 }
 
-/** The MCP endpoint's address: the audience of its OAuth tokens and the resource they are requested for. */
-export function mcpResourceUrl(): string {
-  return `${appUrl()}/mcp`;
+/**
+ * An MCP endpoint's address: the audience of its OAuth tokens and the resource they are requested for.
+ * With a slug, the workspace's own URL, which clients that keep one login per URL need for a second
+ * workspace. Either way the agent's row, not the address, decides the workspace; the address must agree.
+ */
+export function mcpResourceUrl(slug?: string): string {
+  return `${appUrl()}${routes.mcp(slug)}`;
+}
+
+const WORKSPACE_SLUG = new RegExp(`^${WORKSPACE_SLUG_PATTERN}$`);
+
+/** Which of this deployment's MCP endpoints a resource names: the shared one (`slug: null`), a workspace's, or none. */
+export function mcpResourceTarget(resource: string): { slug: string | null } | null {
+  if (resource === mcpResourceUrl()) return { slug: null };
+  const prefix = mcpResourceUrl("");
+  if (!resource.startsWith(prefix)) return null;
+  const slug = resource.slice(prefix.length);
+  return WORKSPACE_SLUG.test(slug) ? { slug } : null;
 }
 
 /** Better Auth's own limit on open client registration, per client address a minute. */

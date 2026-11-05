@@ -15,6 +15,8 @@ interface OAuthClientOptions {
   metadata?: Partial<ClientMetadata>;
   /** An app's address such as `cursor://…`, which nothing here can receive. By default a loopback receiver takes the callback. */
   redirectUri?: string;
+  /** The MCP endpoint the client is given: the shared one, or a workspace's own. */
+  path?: string;
 }
 
 export interface ToolResult {
@@ -29,7 +31,7 @@ export interface OAuthTestClient {
   authorizationUrl: string;
   /** What the browser brought back to the loopback receiver. */
   callback: () => Promise<URL>;
-  /** Trades the code from the callback for tokens, then connects to /mcp with them. */
+  /** Trades the code from the callback for tokens, then connects to the endpoint with them. */
   connect: () => Promise<{ call: (tool: string, args?: Record<string, unknown>) => Promise<ToolResult>; close: () => Promise<void> }>;
   close: () => void;
 }
@@ -52,7 +54,7 @@ async function loopbackReceiver() {
  * A scripted public client that knows only the MCP URL: on its first call it gets the 401, reads
  * the metadata, registers itself and asks for authorization. A person then acts in a browser.
  */
-export async function oauthClient(baseUrl: string, { clientName = "Scripted Client", metadata = {}, redirectUri }: OAuthClientOptions = {}): Promise<OAuthTestClient> {
+export async function oauthClient(baseUrl: string, { clientName = "Scripted Client", metadata = {}, redirectUri, path = "/mcp" }: OAuthClientOptions = {}): Promise<OAuthTestClient> {
   const receiver = redirectUri ? null : await loopbackReceiver();
   const redirectUrl = redirectUri ?? receiver!.redirectUri;
 
@@ -84,11 +86,11 @@ export async function oauthClient(baseUrl: string, { clientName = "Scripted Clie
     discoveryState: () => discovery,
   };
 
-  const endpoint = new URL("/mcp", baseUrl);
+  const endpoint = new URL(path, baseUrl);
   const transport = new StreamableHTTPClientTransport(endpoint, { authProvider });
   try {
     await new Client({ name: clientName, version: "1.0.0" }).connect(transport);
-    throw new Error("/mcp accepted a client with no token");
+    throw new Error(`${path} accepted a client with no token`);
   } catch (error) {
     if (!(error instanceof UnauthorizedError)) throw error;
   }

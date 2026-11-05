@@ -33,7 +33,7 @@ import { deleteWebhook, watch } from "@/server/domain/webhooks";
 
 import { createTestDb, seedWorkspace, type TestDb, type Workspace } from "./support/db";
 import { connectMcpClient, dataOf, textOf } from "./support/mcp";
-import { connectOAuthAgent, createOAuthServer, OAUTH_RESOURCE } from "./support/oauth";
+import { connectOAuthAgent, createOAuthServer, OAUTH_BASE, OAUTH_RESOURCE } from "./support/oauth";
 
 let testDb: TestDb;
 let acme: Workspace;
@@ -221,6 +221,22 @@ describe("tenant isolation", () => {
         expect(reached.isError).toBe(true);
       } finally {
         await client.close();
+      }
+    });
+
+    it("a workspace's own URL lets in only that workspace's agents", async () => {
+      const server = createOAuthServer(testDb.db);
+      const connected = await connectOAuthAgent(testDb.db, server, "oauth-acme");
+      const handler = createPheanMcpHandler({ getDb: () => testDb.db, verifyOAuthToken: () => Promise.resolve({ agentId: connected.agentId }) });
+      // Another workspace's key, and a token the verifier accepts but whose agent works elsewhere.
+      await expect(connectMcpClient(handler, globex.scout.token, { url: `${OAUTH_BASE}/mcp/w/${acme.tenant.slug}` })).rejects.toThrow();
+      await expect(connectMcpClient(handler, "verified-token", { url: `${OAUTH_BASE}/mcp/w/${acme.tenant.slug}` })).rejects.toThrow();
+      const own = await connectMcpClient(handler, globex.scout.token, { url: `${OAUTH_BASE}/mcp/w/${globex.tenant.slug}` });
+      try {
+        const me = dataOf<{ workspace: { id: string } }>(await own.callTool({ name: "whoami", arguments: {} }));
+        expect(me.workspace.id).toBe(globex.tenant.id);
+      } finally {
+        await own.close();
       }
     });
   });

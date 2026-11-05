@@ -175,6 +175,7 @@ describe("the signed request behind the dialog", () => {
       redirectUri: REDIRECT_URI,
       target: { label: "127.0.0.1", loopback: true },
       scope: "phean:read phean:write offline_access",
+      workspace: null,
     });
   });
 

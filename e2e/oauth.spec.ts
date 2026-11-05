@@ -46,6 +46,15 @@ test.describe("with the demo account", () => {
     await expect(page.getByText("Signed in as Dana Demo")).toBeVisible();
   });
 
+  test("a client on a workspace's own URL is offered only that workspace", async ({ page }) => {
+    const client = await oauthClient(BASE_URL, { path: "/mcp/w/globex" });
+    await openDialog(page, client);
+    await expect(page.getByRole("radio", { name: "Globex" })).toBeChecked();
+    await expect(page.getByRole("radio", { name: "Acme Corp" })).toHaveCount(0);
+    await page.getByRole("button", { name: "Cancel" }).click();
+    expect((await client.callback()).searchParams.get("error")).toBe("access_denied");
+  });
+
   test("a web address does not get the warning for this computer", async ({ page }) => {
     const client = await oauthClient(BASE_URL, { redirectUri: "https://client.example/callback" });
     await openDialog(page, client);
@@ -208,6 +217,16 @@ test("a client connects with only the URL", async ({ page }) => {
     await agent.close();
   });
 
+  await test.step("a client on the workspace's own URL gets an agent that works there", async () => {
+    const own = await oauthClient(BASE_URL, { path: `/mcp/w/${workspace.slug}`, clientName: "Workspace Client" });
+    await openDialog(page, own, "Workspace Client");
+    await allow(page).click();
+    const agent = await own.connect();
+    const result = await agent.call("whoami");
+    expect(result.structuredContent).toMatchObject({ agent: { name: "Workspace Client" }, workspace: { slug: workspace.slug } });
+    await agent.close();
+  });
+
   await test.step("the agent is on the workspace's Agents page", async () => {
     await page.goto(`/w/${workspace.slug}/agents`);
     await expect(page.getByRole("row", { name: /Laptop agent/ })).toBeVisible();
@@ -314,9 +333,9 @@ test("a member is not offered Admin or fixed keys, and revokes only the agents t
     await test.step("a member sees how to connect but not how to issue a fixed key", async () => {
       await member.goto(`/w/${workspace.slug}/agents`);
       await member.getByRole("button", { name: "Connect an agent" }).click();
-      await expect(member.getByText(`${BASE_URL}/mcp`, { exact: true })).toBeVisible();
+      await expect(member.getByText(`${BASE_URL}/mcp/w/${workspace.slug}`, { exact: true })).toBeVisible();
       await member.getByRole("group", { name: "Client" }).getByRole("button", { name: "Claude Code" }).click();
-      await expect(member.getByText(`claude mcp add --transport http phean-${workspace.slug} ${BASE_URL}/mcp`, { exact: true })).toBeVisible();
+      await expect(member.getByText(`claude mcp add --transport http phean-${workspace.slug} ${BASE_URL}/mcp/w/${workspace.slug}`, { exact: true })).toBeVisible();
       await expect(member.getByText(/Authorization/)).toHaveCount(0);
       await expect(popover(member, FIXED_KEY_TRIGGER)).toHaveCount(0);
       await expect(member.getByRole("button", { name: "Issue key" })).toHaveCount(0);

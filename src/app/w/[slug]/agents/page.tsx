@@ -65,7 +65,7 @@ export default async function AgentsPage({ params }: PageProps<"/w/[slug]/agents
   const [agents, workload, mcpUrl, hooks] = await Promise.all([
     listAgents(ctx, {}),
     getAgentWorkload(ctx, {}),
-    absoluteUrl(routes.mcp()),
+    absoluteUrl(routes.mcp(slug)),
     listWebhooks(ctx, {}),
   ]);
   const loadById = new Map(workload.map((load) => [load.agent.id, load]));

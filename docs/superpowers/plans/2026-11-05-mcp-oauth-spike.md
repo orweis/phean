@@ -212,5 +212,77 @@ I didn't read OAuth 2.1 Section 7 itself, which the security page incorporates. 
 
 ## Not answered here
 
-- Whether `mcp-handler` 2.3.0 works with clients on the 2026-07-28 revision (the spec's check for the builder). The SDK 2.4.0 client connected and called tools, but I didn't establish which revision it used. `@better-auth/mcp`'s README suggests `legacy: "reject"` for that revision. Leave this to Task 9.
-- Claude Code, Cursor and VS Code, and whether a second workspace collides in their token stores (Task 9).
+- Whether `mcp-handler` 2.3.0 works with clients on the 2026-07-28 revision. Answered in Task 9 below: it does, by hand.
+- Claude Code, Cursor and VS Code, and whether a second workspace collides in their token stores. Answered from their code in Task 9 below; not yet run with a person signing in.
+
+## Real clients (Task 9)
+
+No client was signed in here: connecting one needs a person to approve in a browser and would change the owner's own client configuration. These findings come from the installed clients' code and from public sources, plus Vitest and Playwright runs of the same flows with the SDK client. **A check with real clients against a real deployment is still needed**; the script below is for that.
+
+| | Claude Code 2.1.301 | Cursor 3.28.7 (VS Code 1.128 base) | VS Code (source on `main`; not installed here) |
+| --- | --- | --- | --- |
+| Registration | CIMD when the server advertises `client_id_metadata_document_supported` (Phean does): `client_id` `https://claude.ai/oauth/claude-code-client-metadata`. Falls back to DCR if its redirect isn't the document's loopback `/callback` | DCR only: its provider defines no `clientMetadataUrl` | CIMD when advertised: `client_id` `https://vscode.dev/oauth/client-metadata.json`; DCR otherwise, then a prompt for a client id |
+| `token_endpoint_auth_method` | `none` (document and DCR body) | `none` | `none` (document) |
+| `grant_types` | `authorization_code`, `refresh_token` | `authorization_code`, `refresh_token` | `authorization_code`, `refresh_token`, `urn:ietf:params:oauth:grant-type:device_code` |
+| Redirects | `http://localhost/callback`, `http://127.0.0.1/callback` (any port) | `cursor://…` and a loopback when gated on | `http://127.0.0.1:33418/`, `https://vscode.dev/redirect`; `application_type: native` |
+| `offline_access` | Appended when `scopes_supported` has it (`y4s`): yes for Phean | Not read in the bundle; the SDK 1.x `auth()` it ships adds it when advertised and `refresh_token` is a grant | Appended when `scopes_supported` has it (`extHostAuthentication.ts`, "adding `offline_access` when the server advertises it") |
+| DPoP | None in the MCP path (the binary's DPoP code belongs to AWS SDK and `openid-client`) | None found | None in `oauth.ts` or the dynamic provider |
+| Token store key | `mcpOAuth["<name>\|<sha256(type,url,headers)[0:16]>"]` (`md()`): name **and** URL | `storageScope`: `canonicalServerUrl` by default, keyed `[url:<server url>] tokens`; `serverIdentifier` (per name) only when shared-process routing is on, and even then a new name with no tokens copies the URL-keyed ones (`getSecretWithFallback`) | One auth provider per authorization server **plus** PRM `resource` (`this.id = server + ' ' + resource`); sessions in it are matched by scopes only |
+| Second workspace on the same `/mcp` | Separate (different name) | **Collides**: the second name reads or overwrites the first's tokens | **Collides**: same provider, same scopes, same person, so the second server finds the first session |
+
+So two of three clients would put a second workspace on the first one's login. **Built `/mcp/w/[slug]`** per the spec:
+
+- `/mcp/w/<slug>` is its own OAuth resource: tokens requested for it carry it as `aud`. VS Code requires PRM `resource` to equal the URL it was given exactly (`fetchResourceMetadata` in `src/vs/base/common/oauth.ts`), so a shared audience would not have worked there; a distinct resource also gives VS Code a distinct provider.
+- `/.well-known/oauth-protected-resource/mcp/w/<slug>` serves the shared PRM with that `resource`, and 404 for a workspace that doesn't exist.
+- The provider grants only resources it has a row for. A before-hook on `/oauth2/authorize` adds the `oauth_resource` row for an existing workspace's URL. `enforcePerClientResources: false`, since a DCR client is linked only to `/mcp` at registration and a CIMD client's row may not exist yet. What keeps it honest: the dialog accepts only this deployment's addresses and offers only the URL's workspace (refusing the post of another); `customAccessTokenClaims` refuses a token for `/mcp/w/<slug>` to an agent of any other workspace, on exchange and on refresh; and `/mcp/w/<slug>` refuses any credential, key or token, whose agent works elsewhere. The slug never chooses the tenant.
+- The Agents page now shows the workspace's URL in every snippet. `/mcp` keeps working for everything already connected.
+
+Tests: `tests/oauth.test.ts` "a workspace's own URL" (metadata, challenge, dialog workspace, full flow with `aud`, refresh, a shared token refused there, "a token for another workspace is refused there", a key only at its own URL, the claims backstop, unknown workspace), `tests/isolation.test.ts`, `tests/config.test.ts`, and two Playwright steps in `e2e/oauth.spec.ts` with the SDK client on `/mcp/w/…`.
+
+Smaller findings:
+
+- Phean advertises `dpop_signing_alg_values_supported: []`. None of the three sends DPoP, so none is affected.
+- `token_endpoint_auth_methods_supported` is now `["none", "private_key_jwt"]`, at the RFC 8414 route and at `/api/auth/.well-known/oauth-authorization-server`, which the provider answers in its `onRequest`, before any hook, so the catch-all route trims it (`authRouteHandler`). A DCR request with no `token_endpoint_auth_method` is registered as `none` and told so; an explicit `client_secret_*` is still refused.
+- The spike's worry that a client omitting `grant_types` gets no refresh token doesn't apply to these three: all send `refresh_token` and get `offline_access` added.
+- Claude Code's CIMD document lists `http://localhost/callback` with no port. Loopback ports may differ (confirmed in the spike), so its real port matches. Not run.
+- VS Code's document also lists `https://vscode.dev/redirect`, a web relay. The dialog will show `vscode.dev` with no loopback warning when VS Code uses it.
+- Both CIMD clients share one `client_id` across every user and workspace, so the "family is client plus user" note in Decisions applies to them: a replay at reuse 0 would end every Phean agent the person runs in that client. Reuse 30 holds (below).
+
+### Concurrent refresh (step 3)
+
+Run in Vitest with the SDK 2.4.0 client and the real provider: a client holds an expired access token and a live refresh token, then makes 2 or 5 calls at once, each on its own transport, as a client running parallel tool calls does.
+
+| Reuse | Parallel calls | Calls that succeeded | The client's refresh token afterwards |
+| --- | --- | --- | --- |
+| 30 s (shipped) | 2 | 1 | works (200) |
+| 30 s | 5 | 1 | works |
+| 0 | 2 | 1 | **dead** (400): logged out at the next expiry |
+| 0 | 5 | 1 | **dead**: the losers ended the family (`session not found`) |
+
+At 0, the losing replays end the family, including the winner's new token, so the client must sign in and be approved again within the hour. That is the "logs a client out" case, so 30 stays (as already ruled). At 30 the losing calls still fail once with `invalid_grant`: the winner marks the old token rotated before it stores the replayable answer, and a request arriving between the two gets neither. The client is not logged out. Real clients mostly avoid the race: Claude Code takes a file lock per server before refreshing (`mcp-refresh-<key>.lock` in `refreshAuthorization`), and Cursor a disk lock (`mcp_oauth_refresh_prepare`, `holdsDiskLock`). Run on PGlite in one process, not Postgres.
+
+### The 2026-07-28 transport (step 4)
+
+By hand, with that revision's headers (`MCP-Protocol-Version: 2026-07-28`, `Mcp-Method`, `Mcp-Name`) and `_meta` (`io.modelcontextprotocol/protocolVersion`, `clientCapabilities`, `clientInfo`), on a `phn_` key through `createPheanMcpHandler`:
+
+- `server/discover` → 200, `supportedVersions: ["2026-07-28"]`, capabilities and instructions.
+- `tools/list` with no `initialize` → 200, `resultType: "complete"`, `ttlMs: 0`, `cacheScope: "private"`, `serverInfo` in `_meta`.
+- `tools/call` `whoami` → 200, `resultType: "complete"`.
+- A missing or mismatched `Mcp-Method`, or a mismatched `Mcp-Name` → 400, `-32020` (HeaderMismatch).
+- `initialize` sent as 2026-07-28 → `-32601`; the 2025-era `initialize` still works (every existing test uses it).
+
+So `mcp-handler` 2.3.0 with `@modelcontextprotocol/server` 2.4.0 serves both revisions. Nothing migrated. Not run with a real client on that revision.
+
+### Manual test script for Or
+
+Against a real deployment (`https://<domain>`), with two workspaces you own, `acme` and `globex`.
+
+1. **Claude Code:** `claude mcp add --transport http phean-acme https://<domain>/mcp/w/acme`, then `/mcp` in a session and authenticate. The dialog should offer only Acme. Allow with Write, 7 days. Ask it to call `whoami`: agent and workspace Acme.
+2. Same for `phean-globex` at `/mcp/w/globex`. Then call `whoami` on **both** servers again: each names its own workspace.
+3. **Cursor:** add both to `~/.cursor/mcp.json` with their `/mcp/w/…` URLs, sign in to each from Settings → MCP, check `whoami` on both. Optional, to see the collision: add a third entry for `https://<domain>/mcp` under another name after one is signed in, and note whether it connects without a dialog.
+4. **VS Code:** add both to `.vscode/mcp.json` (`"type": "http"`), start each, sign in, check `whoami`. Note whether the dialog says `127.0.0.1` (loopback warning shown) or `vscode.dev`.
+5. On the Agents pages: each agent shows OAuth, its level and its end date. Revoke the Acme agent: its next call fails, and Globex's keeps working.
+6. Refresh after an hour: leave a client idle for more than an hour, then call a tool. It should work without a dialog. In Claude Code, ask for several tool calls at once after the hour; a single failure there is the race above, a dialog is a bug.
+7. Record each client's version and anything that differed.
+
+Sources: the installed Claude Code binary (`~/.local/share/claude/versions/2.1.301`: `clientMetadata`, `clientMetadataUrl`, `y4s`, `md`); `https://claude.ai/oauth/claude-code-client-metadata`; Cursor's `extensions/cursor-mcp/dist/main.js` (`clientMetadata`, `storageScope`, `sharedTokensKey`, `getSecretWithFallback`, `ti`); `https://vscode.dev/oauth/client-metadata.json`; VS Code `src/vs/workbench/api/common/extHostAuthentication.ts` and `src/vs/base/common/oauth.ts` on `microsoft/vscode` `main`; [den.dev, "CIMD in VS Code"](https://den.dev/blog/cimd-vs-code-mcp/); [MCP 2026-07-28 changelog](https://modelcontextprotocol.io/specification/2026-07-28/changelog).

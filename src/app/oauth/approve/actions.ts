@@ -47,6 +47,8 @@ export async function decideConsentAction(_previous: ActionState, formData: Form
   }
 
   const slug = String(formData.get("workspace") ?? "");
+  // A client on a workspace's own URL gets a token only for that workspace, so the agent must work there.
+  if (request.workspace !== null && slug !== request.workspace) return { status: "error", message: "This client connects to another workspace's address.", at: Date.now() };
   const membership = (await listMemberships(getDb(), session.user.id)).find(({ tenant }) => tenant.slug === slug);
   if (!membership) return { status: "error", message: "Choose one of your workspaces.", at: Date.now() };
   const ctx = userContext(getDb(), membership, session.user);

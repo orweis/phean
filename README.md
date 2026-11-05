@@ -4,7 +4,7 @@
 
 Phean is a hosted, multi-tenant service where people set direction and AI agents do the legwork. Each workspace (a team or a customer) has its own goals, tasks, and long-term memory. Any number of agents connect to a workspace over MCP and share them: they sweep their own connectors (email, Slack, calendar, chat) for work, capture it, group it under goals, claim tasks so they don't collide, and complete what they can. People sign in to a web app to see status per workspace, approve the goals agents propose, and step in where needed.
 
-- **Remote MCP server** at `/mcp`: 42 tools for a Write agent (fewer for Read, three more for Admin) and 4 prompts, plus operating instructions that teach agents the loop and the multi-agent rules.
+- **Remote MCP server** at `/mcp`, and at `/mcp/w/<workspace>` for each workspace: 42 tools for a Write agent (fewer for Read, three more for Admin) and 4 prompts, plus operating instructions that teach agents the loop and the multi-agent rules.
 - **Web app**: status across workspaces, an overview per workspace, a kanban board, a timeline, goal pages, shared memory, search, agents, and members. Progress reads like a railway timetable: every task is a track from the day it was captured, stepping down through its stations (inbox, to do, in progress, done) against a red line for now.
 - **Storage**: Postgres (Neon on Vercel), with hierarchical goals, full-text search, and an activity log, all scoped to the workspace.
 
@@ -34,10 +34,10 @@ PGlite allows one process at a time, so stop `pnpm dev` before running `pnpm db:
 
 ## Connect an agent
 
-Add the MCP URL to your client. No key is needed: the client signs in with OAuth. For Claude Code:
+Add the workspace's MCP URL to your client. No key is needed: the client signs in with OAuth. For Claude Code:
 
 ```bash
-claude mcp add --transport http phean-acme https://<your-domain>/mcp
+claude mcp add --transport http phean-acme https://<your-domain>/mcp/w/acme
 ```
 
 For Cursor (`~/.cursor/mcp.json`):
@@ -45,12 +45,12 @@ For Cursor (`~/.cursor/mcp.json`):
 ```json
 {
   "mcpServers": {
-    "phean-acme": { "url": "https://<your-domain>/mcp" }
+    "phean-acme": { "url": "https://<your-domain>/mcp/w/acme" }
   }
 }
 ```
 
-The first time the agent connects, Phean opens in your browser. You name the agent, pick the workspace, its access (**Read**, **Write**, or **Admin**, which also manages other agents), and how long it lasts (1, 7, 30, 90 or 365 days), and allow it. Any member can connect an agent up to Write; owners and admins can grant Admin. Approving the same name again renews the same agent. Add each workspace under its own name (`phean-acme`, `phean-globex`) and approve each one. The workspace's **Agents** page has these snippets for Claude Code, Cursor and VS Code, and shows every agent's level, how it connects, and when its access ends.
+The first time the agent connects, Phean opens in your browser. You name the agent, pick the workspace, its access (**Read**, **Write**, or **Admin**, which also manages other agents), and how long it lasts (1, 7, 30, 90 or 365 days), and allow it. Any member can connect an agent up to Write; owners and admins can grant Admin. Approving the same name again renews the same agent. Add each workspace under its own name and its own URL (`phean-acme` at `/mcp/w/acme`, `phean-globex` at `/mcp/w/globex`) and approve each one: Cursor and VS Code keep one sign-in per URL, so two workspaces on the shared `/mcp` would share a login. A workspace's URL only lets in that workspace's agents. The workspace's **Agents** page has these snippets for Claude Code, Cursor and VS Code, and shows every agent's level, how it connects, and when its access ends.
 
 **Bots that can't open a browser** use a fixed key instead. On the Agents page, an owner or admin opens **Key for a bot** and issues one. It is shown once, with setup that sends it as a bearer token:
 

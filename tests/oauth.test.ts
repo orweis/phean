@@ -1,8 +1,8 @@
-import { oauthProviderAuthServerMetadata } from "@better-auth/oauth-provider";
 import { eq } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { completeConsent } from "@/server/auth/auth";
+import { authRouteHandler, authServerMetadataRoute, completeConsent, workspaceResourceMetadata } from "@/server/auth/auth";
+import { readConsentRequest } from "@/server/auth/consent";
 import { createOAuthVerifier } from "@/server/auth/oauth";
 import { agents, member, oauthClient, oauthConsent, oauthRefreshToken } from "@/server/db/schema";
 import { approveAgent, createAgent, resolveOAuthAgent, revokeAgent } from "@/server/domain/agents";
@@ -22,11 +22,13 @@ import {
   OAUTH_RESOURCE,
   pkce,
   redeem,
+  REDIRECT_URI,
   refresh,
   registerClient,
   registerClientId,
   signUpOwner,
   type OAuthServer,
+  type SignedIn,
 } from "./support/oauth";
 
 let testDb: TestDb;
@@ -86,7 +88,7 @@ describe("discovery", () => {
   });
 
   it("authorization server metadata", async () => {
-    const response = await oauthProviderAuthServerMetadata(server.auth)(new Request(`${OAUTH_BASE}/.well-known/oauth-authorization-server/api/auth`));
+    const response = await authServerMetadataRoute(server.auth)(new Request(`${OAUTH_BASE}/.well-known/oauth-authorization-server/api/auth`));
     expect(await response.json()).toMatchObject({
       issuer: OAUTH_ISSUER,
       code_challenge_methods_supported: ["S256"],
@@ -94,6 +96,17 @@ describe("discovery", () => {
       client_id_metadata_document_supported: true,
       authorization_response_iss_parameter_supported: true,
     });
+  });
+
+  it("advertises only the token auth methods registration accepts", async () => {
+    const response = await authServerMetadataRoute(server.auth)(new Request(`${OAUTH_BASE}/.well-known/oauth-authorization-server/api/auth`));
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toContain("application/json");
+    // private_key_jwt stays for CIMD clients, which authenticate with their published keys.
+    expect(((await response.json()) as { token_endpoint_auth_methods_supported: string[] }).token_endpoint_auth_methods_supported).toEqual(["none", "private_key_jwt"]);
+    // The provider also answers under its own base path.
+    const nested = await authRouteHandler(server.auth)(new Request(`${OAUTH_ISSUER}/.well-known/oauth-authorization-server`));
+    expect(((await nested.json()) as { token_endpoint_auth_methods_supported: string[] }).token_endpoint_auth_methods_supported).toEqual(["none", "private_key_jwt"]);
   });
 });
 
@@ -108,9 +121,21 @@ describe("registering a client", () => {
     expect(client.token_endpoint_auth_method).toBe("none");
   });
 
+  it("DCR registers a client that names no auth method as public, and says so", async () => {
+    // RFC 7591 3.2.1 lets the server replace requested metadata; the response is what the client must use.
+    const response = await registerClient(server, { token_endpoint_auth_method: undefined });
+    expect(response.status).toBe(201);
+    const client = (await response.json()) as { client_id: string; client_secret?: string; token_endpoint_auth_method: string };
+    expect(client.token_endpoint_auth_method).toBe("none");
+    expect(client.client_secret).toBeUndefined();
+    const [row] = await testDb.db.select().from(oauthClient).where(eq(oauthClient.clientId, client.client_id));
+    expect(row?.tokenEndpointAuthMethod).toBe("none");
+    expect(row?.clientSecret ?? null).toBeNull();
+  });
+
   it("DCR refuses a confidential client without credentials", async () => {
     const before = await testDb.db.select({ id: oauthClient.id }).from(oauthClient);
-    for (const method of ["client_secret_basic", "client_secret_post", undefined]) {
+    for (const method of ["client_secret_basic", "client_secret_post", "client_secret_jwt"]) {
       const response = await registerClient(server, { token_endpoint_auth_method: method });
       expect(response.status).toBe(400);
       expect(await response.json()).toMatchObject({ error: "invalid_client_metadata" });
@@ -238,6 +263,28 @@ describe("the access token at /mcp", () => {
     expect((await initialize("a.b.c")).status).toBe(401);
   });
 
+  it("an expired access token verifies as nothing, without throwing", async () => {
+    const { accessToken } = await connectOAuthAgent(testDb.db, server, "acme");
+    const verify = createOAuthVerifier(server.auth, { issuer: OAUTH_ISSUER, audience: OAUTH_RESOURCE });
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(Date.now() + 2 * 60 * 60 * 1000);
+      await expect(verify(accessToken)).resolves.toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("a failure reading the signing keys is thrown, not taken for a bad token", async () => {
+    const { accessToken } = await connectOAuthAgent(testDb.db, server, "acme");
+    const broken = { api: { ...server.auth.api, getJwks: () => Promise.reject(new Error("database unavailable")) } } as unknown as typeof server.auth;
+    const verify = createOAuthVerifier(broken, { issuer: OAUTH_ISSUER, audience: OAUTH_RESOURCE });
+    await expect(verify(accessToken)).rejects.toThrow("database unavailable");
+    // Garbage never reaches the keys, so it is still just refused.
+    await expect(verify("a.b.c")).resolves.toBeNull();
+    await expect(verify("not-a-jwt")).resolves.toBeNull();
+  });
+
   it("a phn_ key still works", async () => {
     const ws = await seedWorkspace(testDb.db);
     const me = await whoami(ws.scout.token);
@@ -337,5 +384,118 @@ describe("refreshing", () => {
     const other = await connectOAuthAgent(testDb.db, server, "globex", "Desktop");
     await revokeAgent(connected.ctx, { agentId: connected.agentId });
     expect((await refresh(server, other.clientId, other.refreshToken)).status).toBe(200);
+  });
+});
+
+describe("a workspace's own URL", () => {
+  const workspaceUrl = (slug: string) => `${OAUTH_BASE}/mcp/w/${slug}`;
+
+  /** The whole flow with the client pointed at the workspace's URL, as Cursor and VS Code need. */
+  async function connectAtWorkspaceUrl(signedIn: SignedIn, slug = signedIn.tenant.slug) {
+    const clientId = await registerClientId(server);
+    const { verifier, challenge } = pkce();
+    const response = await server.auth.handler(authorizeRequest(server, signedIn.cookie, clientId, challenge, { resource: workspaceUrl(slug) }));
+    const location = new URL(response.headers.get("location") ?? "", OAUTH_BASE);
+    if (location.pathname !== "/oauth/approve") return { clientId, location, tokens: null };
+    const { agent } = await approveAgent(signedIn.ctx, { name: "Cursor", level: "write", lifetimeDays: 30, oauthClientId: clientId });
+    const { url } = await completeConsent(server.auth, new Headers({ cookie: signedIn.cookie }), { agentId: agent.id, oauthQuery: location.search.slice(1) });
+    const code = new URL(url).searchParams.get("code")!;
+    const redeemed = await server.auth.handler(
+      new Request(`${OAUTH_BASE}/api/auth/oauth2/token`, {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ grant_type: "authorization_code", client_id: clientId, code, redirect_uri: REDIRECT_URI, code_verifier: verifier, resource: workspaceUrl(slug) }),
+      }),
+    );
+    const body = (await redeemed.json()) as { access_token: string; refresh_token: string; error?: string };
+    const tokens = redeemed.ok ? body : null;
+    return { clientId, location, agentId: agent.id, status: redeemed.status, error: body.error, tokens };
+  }
+
+  it("publishes its own resource metadata, and none for a workspace that doesn't exist", async () => {
+    const { tenant } = await signUpOwner(testDb.db, server, "acme");
+    const response = await workspaceResourceMetadata(server.auth, () => testDb.db)(new Request(`${OAUTH_BASE}/.well-known/oauth-protected-resource/mcp/w/${tenant.slug}`), tenant.slug);
+    expect(response.status).toBe(200);
+    // VS Code requires this to equal the URL it was given, exactly.
+    expect(await response.json()).toMatchObject({ resource: workspaceUrl(tenant.slug), authorization_servers: [OAUTH_ISSUER] });
+    expect((await workspaceResourceMetadata(server.auth, () => testDb.db)(new Request(`${OAUTH_BASE}/x`), "no-such-workspace")).status).toBe(404);
+  });
+
+  it("challenges with its own metadata address", async () => {
+    const response = await initialize(undefined, workspaceUrl("acme"));
+    expect(response.status).toBe(401);
+    expect(response.headers.get("www-authenticate")).toContain(`resource_metadata="${OAUTH_BASE}/.well-known/oauth-protected-resource/mcp/w/acme"`);
+  });
+
+  it("the dialog learns the workspace from the signed request", async () => {
+    const signedIn = await signUpOwner(testDb.db, server, "acme");
+    const { location } = await connectAtWorkspaceUrl(signedIn);
+    expect(await readConsentRequest(server.auth, location.search.slice(1))).toMatchObject({ status: "ok", workspace: signedIn.tenant.slug });
+  });
+
+  it("full flow: the token is for that URL only, and whoami names that workspace", async () => {
+    const signedIn = await signUpOwner(testDb.db, server, "acme");
+    const { tokens, agentId } = await connectAtWorkspaceUrl(signedIn);
+    expect(tokens).not.toBeNull();
+    const claims = JSON.parse(Buffer.from(tokens!.access_token.split(".")[1]!, "base64url").toString()) as Record<string, unknown>;
+    expect(claims.aud).toBe(workspaceUrl(signedIn.tenant.slug));
+    const client = await connectMcpClient(server.handler, tokens!.access_token, { url: workspaceUrl(signedIn.tenant.slug) });
+    try {
+      const me = dataOf<{ agent: { id: string }; workspace: { id: string } }>(await client.callTool({ name: "whoami", arguments: {} }));
+      expect(me).toMatchObject({ agent: { id: agentId }, workspace: { id: signedIn.tenant.id } });
+    } finally {
+      await client.close();
+    }
+    // Bound to its own URL: not the shared one, not another workspace's.
+    expect((await initialize(tokens!.access_token)).status).toBe(401);
+    expect((await initialize(tokens!.access_token, workspaceUrl("someone-else"))).status).toBe(401);
+  });
+
+  it("refreshes for the same URL", async () => {
+    const signedIn = await signUpOwner(testDb.db, server, "acme");
+    const { tokens, clientId } = await connectAtWorkspaceUrl(signedIn);
+    const response = await refresh(server, clientId, tokens!.refresh_token);
+    expect(response.status).toBe(200);
+    const { access_token } = (await response.json()) as { access_token: string };
+    expect((await initialize(access_token, workspaceUrl(signedIn.tenant.slug))).status).toBe(200);
+  });
+
+  it("a shared-URL token is refused there", async () => {
+    const connected = await connectOAuthAgent(testDb.db, server, "acme");
+    expect((await initialize(connected.accessToken, workspaceUrl(connected.tenant.slug))).status).toBe(401);
+  });
+
+  it("a token for another workspace is refused there", async () => {
+    const acme = await signUpOwner(testDb.db, server, "acme");
+    const globex = await connectOAuthAgent(testDb.db, server, "globex");
+    // Even a token the verifier accepts for acme's URL is refused when its agent works in globex.
+    const { db } = testDb;
+    server = { ...server, handler: createPheanMcpHandler({ getDb: () => db, verifyOAuthToken: () => Promise.resolve({ agentId: globex.agentId }) }) };
+    expect((await initialize("a-verified-token", workspaceUrl(acme.tenant.slug))).status).toBe(401);
+    expect((await initialize("a-verified-token", workspaceUrl(globex.tenant.slug))).status).toBe(200);
+  });
+
+  it("a key works at its own workspace's URL and nowhere else", async () => {
+    const ws = await seedWorkspace(testDb.db);
+    const other = await seedWorkspace(testDb.db);
+    expect((await initialize(ws.scout.token, workspaceUrl(ws.tenant.slug))).status).toBe(200);
+    expect((await initialize(ws.scout.token, workspaceUrl(other.tenant.slug))).status).toBe(401);
+  });
+
+  it("a code approved for another workspace than the URL's is never exchanged", async () => {
+    const acme = await signUpOwner(testDb.db, server, "acme");
+    const globex = await signUpOwner(testDb.db, server, "globex");
+    // Globex's owner, holding a signed request for acme's URL, approves an agent in globex.
+    const { tokens, status, error } = await connectAtWorkspaceUrl(globex, acme.tenant.slug);
+    expect(tokens).toBeNull();
+    expect(status).toBe(400);
+    expect(error).toBe("invalid_grant");
+  });
+
+  it("authorize refuses the URL of a workspace that doesn't exist", async () => {
+    const { cookie } = await signUpOwner(testDb.db, server, "acme");
+    const clientId = await registerClientId(server);
+    const response = await server.auth.handler(authorizeRequest(server, cookie, clientId, pkce().challenge, { resource: workspaceUrl("no-such-workspace") }));
+    expect(response.headers.get("location")).toContain("invalid_target");
   });
 });

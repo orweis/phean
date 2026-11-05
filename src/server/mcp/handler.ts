@@ -2,10 +2,11 @@ import type { AuthInfo, McpServer, ServerContext } from "@modelcontextprotocol/s
 import { createMcpHandler, getPublicOrigin, withMcpAuth } from "mcp-handler";
 
 import { AGENT_TOKEN_PREFIX, type AgentAccessLevel } from "@/lib/domain";
+import { routes } from "@/lib/routes";
 
 import packageJson from "../../../package.json" with { type: "json" };
 import { verifyOAuthToken as verifyDeploymentToken, type OAuthTokenVerifier } from "../auth/oauth";
-import { appUrl } from "../config";
+import { appUrl, mcpResourceTarget, mcpResourceUrl } from "../config";
 import type { Db } from "../db/client";
 import { agentRole } from "../domain/context";
 import { AGENT_NAME_HEADER, agentContext, authenticateAgentToken, resolveNamedSubagent, resolveOAuthAgent, type AgentPrincipal } from "../domain/agents";
@@ -85,15 +86,20 @@ export function createPheanMcpHandler(deps: PheanMcpDeps): (request: Request) =>
     return handlerFor(principal.agent.level)(request);
   };
 
-  const authenticate = async (bearerToken: string): Promise<AgentPrincipal | null> => {
-    if (bearerToken.startsWith(AGENT_TOKEN_PREFIX)) return authenticateAgentToken(getDb(), bearerToken);
-    const verified = await verifyOAuthToken(bearerToken);
-    return verified && resolveOAuthAgent(getDb(), verified.agentId);
+  /** The workspace the endpoint's address names, if any; a credential for any other is refused there. */
+  const authenticate = async (bearerToken: string, slug: string | null): Promise<AgentPrincipal | null> => {
+    let principal: AgentPrincipal | null;
+    if (bearerToken.startsWith(AGENT_TOKEN_PREFIX)) principal = await authenticateAgentToken(getDb(), bearerToken);
+    else {
+      const verified = await verifyOAuthToken(bearerToken, mcpResourceUrl(slug ?? undefined));
+      principal = verified && (await resolveOAuthAgent(getDb(), verified.agentId));
+    }
+    return principal && (slug === null || principal.tenant.slug === slug) ? principal : null;
   };
 
-  const verifyToken = async (request: Request, bearerToken?: string): Promise<AuthInfo | undefined> => {
+  const verifierFor = (slug: string | null) => async (request: Request, bearerToken?: string): Promise<AuthInfo | undefined> => {
     if (!bearerToken) return undefined;
-    const token = await authenticate(bearerToken);
+    const token = await authenticate(bearerToken, slug);
     if (!token) return undefined;
     // A worker sharing its agent's key names itself, by header or (for clients that only take a URL) `?agent=`.
     const named = request.headers.get(AGENT_NAME_HEADER) ?? new URL(request.url).searchParams.get("agent");
@@ -103,6 +109,15 @@ export function createPheanMcpHandler(deps: PheanMcpDeps): (request: Request) =>
     return { token: bearerToken, clientId: principal.agent.id, scopes: [], extra: { ...extra } };
   };
 
-  // resourceUrl keeps the challenge on the real address, whatever X-Forwarded-Host says.
-  return withMcpAuth(handler, verifyToken, { required: true, resourceMetadataPath: "/.well-known/oauth-protected-resource/mcp", resourceUrl: appUrl() });
+  return (request: Request) => {
+    // The path names the endpoint; the configured address, not the request's host, makes it a resource.
+    const target = mcpResourceTarget(`${appUrl()}${new URL(request.url).pathname}`);
+    if (!target) return Promise.resolve(new Response("Not found", { status: 404 }));
+    // resourceUrl keeps the challenge on the real address, whatever X-Forwarded-Host says.
+    return withMcpAuth(handler, verifierFor(target.slug), {
+      required: true,
+      resourceMetadataPath: `/.well-known/oauth-protected-resource${routes.mcp(target.slug ?? undefined)}`,
+      resourceUrl: appUrl(),
+    })(request);
+  };
 }
