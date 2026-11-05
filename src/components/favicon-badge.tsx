@@ -4,10 +4,10 @@ import { useEffect } from "react";
 
 import { faviconBadgeText } from "@/lib/favicon";
 
+import { MARK } from "./logo";
+
 /** Drawn at 64px, so it stays crisp on high-density tabs. */
 const SIZE = 64;
-
-const token = (name: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -18,29 +18,53 @@ function loadImage(src: string): Promise<HTMLImageElement> {
   });
 }
 
-/** The mark with an ember count in its top-right corner, ringed in dusk so it reads on any tab strip. */
+/** The scale from the mark's 32-unit square to the canvas. */
+const UNIT = SIZE / 32;
+
+/**
+ * The boulder's colours as `src/app/icon.svg` paints them (the dark-appearance ember, lit and
+ * shaded), so the count reads as the same boulder, and dark figures on it.
+ */
+const BOULDER = { lit: "#fa934e", shade: "#d96533", figures: "#2b1408" };
+
+/**
+ * The mark with the count as its boulder: a larger ember boulder, lit from the upper left like
+ * the original, drawn where the original rests on the slope and covering it, so there is one
+ * boulder and it carries the number.
+ */
 async function drawBadge(iconUrl: string, text: string): Promise<string> {
   const canvas = document.createElement("canvas");
   canvas.width = canvas.height = SIZE;
   const context = canvas.getContext("2d")!;
   context.drawImage(await loadImage(iconUrl), 0, 0, SIZE, SIZE);
 
-  context.font = `700 ${text.length > 2 ? 26 : 34}px system-ui, -apple-system, sans-serif`;
-  const height = 42;
-  const width = Math.max(height, context.measureText(text).width + 16);
-  const x = SIZE - width;
-  context.fillStyle = token("--color-dusk") || "#211541";
-  context.beginPath();
-  context.roundRect(x - 3, -3, width + 6, height + 6, (height + 6) / 2);
+  context.font = `700 ${text.length > 2 ? 22 : text.length > 1 ? 26 : 30}px system-ui, -apple-system, sans-serif`;
+  // Wide enough to cover the original boulder (radius 6.4 units) and to hold the figures.
+  const height = 36;
+  const width = Math.max(height, context.measureText(text).width + 12);
+  const centerX = Math.min(Math.max(MARK.boulder.cx * UNIT, width / 2 + 1), SIZE - width / 2 - 1);
+  const centerY = MARK.boulder.cy * UNIT;
+  const shape = (inset: number, dx = 0, dy = 0) => {
+    context.beginPath();
+    context.roundRect(centerX - width / 2 + inset + dx, centerY - height / 2 + inset + dy, width - 2 * inset, height - 2 * inset, (height - 2 * inset) / 2);
+  };
+
+  shape(0);
+  context.fillStyle = BOULDER.shade;
   context.fill();
-  context.fillStyle = token("--color-signal") || "#fa934e";
-  context.beginPath();
-  context.roundRect(x, 0, width, height, height / 2);
+  // The lit face: the same shape nudged up and to the left, kept inside the boulder.
+  context.save();
+  shape(0);
+  context.clip();
+  shape(2.5, -2.5, -2.5);
+  context.fillStyle = BOULDER.lit;
   context.fill();
-  context.fillStyle = token("--color-on-signal") || "#2b1408";
+  context.restore();
+
+  context.fillStyle = BOULDER.figures;
   context.textAlign = "center";
   context.textBaseline = "middle";
-  context.fillText(text, x + width / 2, height / 2 + 2);
+  context.fillText(text, centerX - 1, centerY + 1);
   return canvas.toDataURL("image/png");
 }
 
