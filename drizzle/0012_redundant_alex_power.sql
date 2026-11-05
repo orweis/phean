@@ -1,1 +1,0 @@
-ALTER TABLE "agents" ADD COLUMN "tokens_not_before" timestamp with time zone;

@@ -1,5 +1,5 @@
 {
-  "id": "8ec9cca4-5497-4294-931e-9e6f70b47878",
+  "id": "9d80bee4-e679-4486-b6e0-cd5144b2deb4",
   "prevId": "908596c2-6650-4cf5-8c37-37e04dc3c156",
   "version": "7",
   "dialect": "postgresql",
@@ -716,41 +716,13 @@
           "name": "token_hash",
           "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "token_prefix": {
           "name": "token_prefix",
           "type": "text",
           "primaryKey": false,
-          "notNull": false
-        },
-        "auth_kind": {
-          "name": "auth_kind",
-          "type": "agent_auth_kind",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'key'"
-        },
-        "access_level": {
-          "name": "access_level",
-          "type": "agent_access_level",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'write'"
-        },
-        "access_expires_at": {
-          "name": "access_expires_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "oauth_client_id": {
-          "name": "oauth_client_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "created_by_user_id": {
           "name": "created_by_user_id",
@@ -796,6 +768,12 @@
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
+        },
+        "archived_at": {
+          "name": "archived_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {
@@ -810,34 +788,6 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "agents_oauth_name_uq": {
-          "name": "agents_oauth_name_uq",
-          "columns": [
-            {
-              "expression": "tenant_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "created_by_user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "name",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"agents\".\"auth_kind\" = 'oauth' and \"agents\".\"revoked_at\" is null",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -1857,6 +1807,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "archived_at": {
+          "name": "archived_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
         "agent_sessions": {
           "name": "agent_sessions",
           "type": "jsonb",
@@ -2652,23 +2608,6 @@
       "values": [
         "user",
         "agent"
-      ]
-    },
-    "public.agent_access_level": {
-      "name": "agent_access_level",
-      "schema": "public",
-      "values": [
-        "read",
-        "write",
-        "admin"
-      ]
-    },
-    "public.agent_auth_kind": {
-      "name": "agent_auth_kind",
-      "schema": "public",
-      "values": [
-        "key",
-        "oauth"
       ]
     },
     "public.goal_status": {

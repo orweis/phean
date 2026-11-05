@@ -4,13 +4,13 @@ import { GOAL_STATUS_META } from "@/lib/domain";
 import { routes } from "@/lib/routes";
 import { tenantAction } from "@/server/actions";
 import { cancelInvitation, inviteMember, removeMember } from "@/server/auth/workspaces";
-import { createAgent, revokeAgent } from "@/server/domain/agents";
+import { archiveAgent, archiveRevokedAgents, createAgent, revokeAgent, unarchiveAgent } from "@/server/domain/agents";
 import { attachDocument, deleteDocument, updateDocument } from "@/server/domain/documents";
 import { createGoal, setGoalStatus, updateGoal } from "@/server/domain/goals";
 import { forget, remember, updateMemory } from "@/server/domain/memory";
 import { deleteWebhook } from "@/server/domain/webhooks";
 import { saveWorkflow } from "@/server/domain/workflow";
-import { addTask, answerInput, completeTask, releaseTask, retractAnswer, updateTask } from "@/server/domain/tasks";
+import { addTask, answerInput, archiveDoneTasks, archiveTask, completeTask, releaseTask, retractAnswer, unarchiveTask, updateTask } from "@/server/domain/tasks";
 
 // Goals
 export const createGoalAction = tenantAction(createGoal, {
@@ -28,6 +28,11 @@ export const addTaskAction = tenantAction(addTask, {
 export const updateTaskAction = tenantAction(updateTask, { success: "Saved." });
 export const completeTaskAction = tenantAction(completeTask, { success: "Done." });
 export const releaseTaskAction = tenantAction(releaseTask, { success: "Released." });
+export const archiveTaskAction = tenantAction(archiveTask, { success: "Archived." });
+export const unarchiveTaskAction = tenantAction(unarchiveTask, { success: "Back on the board." });
+export const archiveDoneTasksAction = tenantAction(archiveDoneTasks, {
+  success: ({ archived }) => (archived ? `Archived ${archived === 1 ? "1 done task" : `${archived} done tasks`}.` : "Nothing done to archive."),
+});
 export const answerInputAction = tenantAction(answerInput, { success: "Answered." });
 export const retractAnswerAction = tenantAction(retractAnswer, { success: "Answer taken back." });
 
@@ -51,6 +56,11 @@ export const createAgentAction = tenantAction(createAgent, {
 });
 export const revokeAgentAction = tenantAction(revokeAgent, {
   success: (agent) => `Revoked ${agent.name}.`,
+});
+export const archiveAgentAction = tenantAction(archiveAgent, { success: "Archived." });
+export const unarchiveAgentAction = tenantAction(unarchiveAgent, { success: "Back on the list." });
+export const archiveRevokedAgentsAction = tenantAction(archiveRevokedAgents, {
+  success: ({ archived }) => (archived ? `Archived ${archived === 1 ? "1 revoked agent" : `${archived} revoked agents`}.` : "No revoked agents to archive."),
 });
 export const deleteWebhookAction = tenantAction(deleteWebhook, { success: "Webhook removed." });
 

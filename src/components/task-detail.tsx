@@ -1,6 +1,7 @@
-import { Bot, CornerDownRight, History } from "lucide-react";
+import { Archive, ArchiveRestore, Bot, CornerDownRight, History } from "lucide-react";
 import Link from "next/link";
 
+import { unarchiveTaskAction } from "@/app/w/[slug]/actions";
 import { PRIORITY_META } from "@/lib/domain";
 import { timeAgo } from "@/lib/format";
 import { routes } from "@/lib/routes";
@@ -17,7 +18,8 @@ import { MarkdownView } from "./documents/markdown-view";
 import { DocumentChips } from "./documents/document-chips";
 import { OpenQuestions } from "./open-questions";
 import { StageBadge, TaskActionRow, TaskMeta } from "./task-card";
-import { MetaBadge } from "./ui/badge";
+import { ActionButton } from "./ui/action-button";
+import { Badge, MetaBadge } from "./ui/badge";
 
 function Section({ title, children, count }: { title: string; count?: number; children: React.ReactNode }) {
   return (
@@ -61,8 +63,29 @@ export async function TaskDetail({ slug, taskId, headingLevel = 1 }: { slug: str
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
           <StageBadge task={task} slug={slug} />
           {task.priority !== "medium" && <MetaBadge meta={PRIORITY_META} value={task.priority} />}
+          {task.archivedAt && (
+            <Badge>
+              <Archive aria-hidden />
+              Archived {timeAgo(task.archivedAt)}
+            </Badge>
+          )}
           <TaskMeta task={task} slug={slug} showGoal />
         </div>
+        {task.archivedAt && canWrite && (
+          // Archived work is off the board; this is the way back.
+          <ActionButton
+            action={unarchiveTaskAction}
+            workspace={slug}
+            fields={{ taskId: task.id }}
+            notice={`Put “${task.title}” back on the board`}
+            size="sm"
+            variant="secondary"
+            className="self-start"
+          >
+            <ArchiveRestore aria-hidden />
+            Unarchive
+          </ActionButton>
+        )}
         <p className="text-xs text-muted">
           Captured by {task.createdByName} {timeAgo(task.createdAt)} · updated {timeAgo(task.updatedAt)}
         </p>

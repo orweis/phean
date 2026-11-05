@@ -21,9 +21,13 @@ test("stages are set in Settings, and documents carry the work between agents an
   const token = await issueToken(page, "Writer");
 
   await test.step("Settings renames To do, adds a Review stage and hides Backlog", async () => {
-    // Settings sit in the workspace menu, not on the tab rail.
-    await page.locator("details").filter({ has: page.locator("summary", { hasText: "Hooli" }) }).first().locator("summary").click();
-    await page.getByRole("link", { name: "Settings for Hooli" }).click();
+    // Settings sit in the workspace menu, not on the tab rail; the Board's Edit lanes leads there too.
+    const menu = page.locator("details").filter({ has: page.locator("summary", { hasText: "Hooli" }) }).first().locator("summary");
+    await menu.click();
+    await expect(page.getByRole("link", { name: "Settings for Hooli" })).toHaveAttribute("href", `/w/${slug}/settings`);
+    await menu.click();
+    await openTab(page, slug, "Board");
+    await page.getByRole("link", { name: "Edit lanes" }).click();
     await expect(page).toHaveURL(`/w/${slug}/settings`);
 
     await page.getByRole("textbox", { name: "Name of the To do stage" }).fill("Ready");

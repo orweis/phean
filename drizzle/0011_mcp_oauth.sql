@@ -1,3 +1,5 @@
+CREATE TYPE "public"."agent_access_level" AS ENUM('read', 'write', 'admin');--> statement-breakpoint
+CREATE TYPE "public"."agent_auth_kind" AS ENUM('key', 'oauth');--> statement-breakpoint
 CREATE TABLE "jwks" (
 	"id" text PRIMARY KEY NOT NULL,
 	"public_key" text NOT NULL,
@@ -133,6 +135,13 @@ CREATE TABLE "oauth_resource" (
 	CONSTRAINT "oauth_resource_identifier_unique" UNIQUE("identifier")
 );
 --> statement-breakpoint
+ALTER TABLE "agents" ALTER COLUMN "token_hash" DROP NOT NULL;--> statement-breakpoint
+ALTER TABLE "agents" ALTER COLUMN "token_prefix" DROP NOT NULL;--> statement-breakpoint
+ALTER TABLE "agents" ADD COLUMN "auth_kind" "agent_auth_kind" DEFAULT 'key' NOT NULL;--> statement-breakpoint
+ALTER TABLE "agents" ADD COLUMN "access_level" "agent_access_level" DEFAULT 'write' NOT NULL;--> statement-breakpoint
+ALTER TABLE "agents" ADD COLUMN "access_expires_at" timestamp with time zone;--> statement-breakpoint
+ALTER TABLE "agents" ADD COLUMN "oauth_client_id" text;--> statement-breakpoint
+ALTER TABLE "agents" ADD COLUMN "tokens_not_before" timestamp with time zone;--> statement-breakpoint
 ALTER TABLE "oauth_access_token" ADD CONSTRAINT "oauth_access_token_client_id_oauth_client_client_id_fk" FOREIGN KEY ("client_id") REFERENCES "public"."oauth_client"("client_id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "oauth_access_token" ADD CONSTRAINT "oauth_access_token_session_id_session_id_fk" FOREIGN KEY ("session_id") REFERENCES "public"."session"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "oauth_access_token" ADD CONSTRAINT "oauth_access_token_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
@@ -159,4 +168,5 @@ CREATE INDEX "oauthConsent_userId_idx" ON "oauth_consent" USING btree ("user_id"
 CREATE INDEX "oauthRefreshToken_clientId_idx" ON "oauth_refresh_token" USING btree ("client_id");--> statement-breakpoint
 CREATE INDEX "oauthRefreshToken_sessionId_idx" ON "oauth_refresh_token" USING btree ("session_id");--> statement-breakpoint
 CREATE INDEX "oauthRefreshToken_userId_idx" ON "oauth_refresh_token" USING btree ("user_id");--> statement-breakpoint
-CREATE INDEX "oauthRefreshToken_authorizationCodeId_idx" ON "oauth_refresh_token" USING btree ("authorization_code_id");
+CREATE INDEX "oauthRefreshToken_authorizationCodeId_idx" ON "oauth_refresh_token" USING btree ("authorization_code_id");--> statement-breakpoint
+CREATE UNIQUE INDEX "agents_oauth_name_uq" ON "agents" USING btree ("tenant_id","created_by_user_id","name") WHERE "agents"."auth_kind" = 'oauth' and "agents"."revoked_at" is null;

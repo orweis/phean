@@ -156,6 +156,18 @@ test("an owner manages goals, memory, search, agents and members", async ({ page
     await expect(connectAgent(BASE_URL, helper.token, "revoked helper")).rejects.toThrow();
     await expect(row.getByRole("button", { name: "Revoke" })).toHaveCount(0);
     await expect(connectAgent(BASE_URL, token, "revoked")).rejects.toThrow();
+
+    // Revoked agents are filed away together, and the Archived view keeps them.
+    await page.getByRole("button", { name: "Archive revoked" }).click();
+    await expect(page.locator("[data-status-region]")).toContainText("Archived 3 revoked agents.");
+    await expect(page.getByRole("row").filter({ hasText: "Night shift" })).toHaveCount(0);
+    await page.getByRole("link", { name: "Archived (3)" }).click();
+    await expect(page.getByRole("heading", { name: "Archived agents" })).toBeVisible();
+    const archived = page.getByRole("row").filter({ hasText: "Researcher" });
+    await archived.getByRole("button", { name: "Unarchive" }).click();
+    await expect(page.locator("[data-status-region]")).toContainText("Put Researcher back on the list");
+    await page.getByRole("link", { name: "Back to agents" }).click();
+    await expect(page.getByRole("row").filter({ hasText: "Researcher" })).toContainText("Revoked");
   });
 
   await test.step("invite a colleague, and cancel an invitation sent by mistake", async () => {

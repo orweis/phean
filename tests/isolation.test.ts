@@ -148,7 +148,21 @@ describe("tenant isolation", () => {
     const { updateMemory } = await import("@/server/domain/memory");
     await expect(createAgent(globexOwner, { name: "Sneaky", parentAgentId: acme.scout.agentId })).rejects.toMatchObject({ code: "not_found" });
     await expect(revokeAgent(globexOwner, { agentId: acme.scout.agentId })).rejects.toMatchObject({ code: "not_found" });
+    const { archiveAgent, archiveRevokedAgents, listAgents } = await import("@/server/domain/agents");
+    await revokeAgent(acmeOwner, { agentId: acme.closer.agentId });
+    await expect(archiveAgent(globexOwner, { agentId: acme.closer.agentId })).rejects.toMatchObject({ code: "not_found" });
+    expect(await archiveRevokedAgents(globexOwner, {})).toEqual({ archived: 0 });
+    expect((await listAgents(acmeOwner, {})).find((agent) => agent.id === acme.closer.agentId)?.archivedAt).toBeNull();
     await expect(updateMemory(globexOwner, { memoryId: acmeMemory.id, content: "pwned" })).rejects.toMatchObject({ code: "not_found" });
+  });
+
+  it("archives tasks only inside their own workspace", async () => {
+    const { archiveDoneTasks, archiveTask, unarchiveTask } = await import("@/server/domain/tasks");
+    await updateTask(acmeOwner, { taskId: acmeTask.id, status: "done" });
+    await expect(archiveTask(globexOwner, { taskId: acmeTask.id })).rejects.toMatchObject({ code: "not_found" });
+    await expect(unarchiveTask(globexAgent, { taskId: acmeTask.id })).rejects.toMatchObject({ code: "not_found" });
+    expect(await archiveDoneTasks(globexOwner, {})).toEqual({ archived: 0 });
+    expect((await getTask(acmeOwner, { taskId: acmeTask.id })).task.archivedAt).toBeNull();
   });
 
   it("keeps each workspace's stages its own", async () => {

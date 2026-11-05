@@ -238,6 +238,7 @@ export const ListTasksInput = z.object({
     .enum(["any", "overdue", "next_7_days"])
     .default("any")
     .describe("Filter open tasks by due date (overdue = past due and not done)"),
+  includeArchived: z.boolean().default(false).describe("Also list finished tasks people archived off the board"),
   limit: limit(200, 50),
 });
 

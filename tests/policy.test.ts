@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
-import { approveAgent, createAgent, listAgents, revokeAgent } from "@/server/domain/agents";
+import { approveAgent, archiveAgent, archiveRevokedAgents, createAgent, listAgents, revokeAgent, unarchiveAgent } from "@/server/domain/agents";
 import { attachDocument } from "@/server/domain/documents";
 import { DEFAULT_WORKFLOW } from "@/lib/workflow";
 import { saveWorkflow } from "@/server/domain/workflow";
@@ -136,5 +136,16 @@ describe("policy enforcement in services", () => {
     const { agent } = await approveAgent(owner, grant);
     await expect(revokeAgent(platformAdmin, { agentId: agent.id })).rejects.toMatchObject({ code: "forbidden" });
     await expect(revokeAgent(member, { agentId: agent.id })).rejects.toThrow("did not connect themselves");
+  });
+
+  it("lets only owners and admins archive revoked agents", async () => {
+    const { agent } = await createAgent(owner, { name: "Old bot" });
+    await revokeAgent(owner, { agentId: agent.id });
+    for (const ctx of [member, platformAdmin]) {
+      await expect(archiveAgent(ctx, { agentId: agent.id })).rejects.toMatchObject({ code: "forbidden" });
+      await expect(archiveRevokedAgents(ctx, {})).rejects.toMatchObject({ code: "forbidden" });
+    }
+    expect(await archiveAgent(owner, { agentId: agent.id })).toEqual({ archived: 1 });
+    await expect(unarchiveAgent(member, { agentId: agent.id })).rejects.toMatchObject({ code: "forbidden" });
   });
 });

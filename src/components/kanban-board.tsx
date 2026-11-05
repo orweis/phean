@@ -1,6 +1,7 @@
-import { EyeOff } from "lucide-react";
+import { Archive, EyeOff } from "lucide-react";
 import Link from "next/link";
 
+import { archiveDoneTasksAction } from "@/app/w/[slug]/actions";
 import { cx } from "@/lib/cx";
 import { routes } from "@/lib/routes";
 import type { Stage } from "@/lib/workflow";
@@ -11,6 +12,7 @@ import { DraggableTask, DropLane } from "./board-dnd";
 import { STATION_STYLE } from "./charts/stations";
 import type { GoalOption } from "./goal-options";
 import { TaskCard } from "./task-card";
+import { ActionButton } from "./ui/action-button";
 import { segment, SEGMENTED } from "./ui/segmented";
 
 /** Finished cards shown before the rest fold away, so Done does not outrun the open lanes. */
@@ -101,6 +103,8 @@ export function KanbanBoard({ board, slug, canWrite, goals = [], goalId, lane }:
           const shown = stage.kind === "done" ? tasks.slice(0, DONE_SHOWN) : tasks;
           const folded = tasks.slice(shown.length);
           const next = board.columns[index + 1]?.stage;
+          // The first Done lane clears every done task at once; the rare, sweeping move asks first.
+          const clears = canWrite && tasks.length > 0 && stage.kind === "done" && board.columns.findIndex((column) => column.stage.kind === "done") === index;
           const props = { slug, canWrite, goals, stage };
           const body = (
             <div className="flex flex-col gap-2">
@@ -153,6 +157,22 @@ export function KanbanBoard({ board, slug, canWrite, goals = [], goalId, lane }:
                       <EyeOff className="size-3" aria-hidden />
                       Hidden
                     </span>
+                  )}
+                  {clears && (
+                    <ActionButton
+                      action={archiveDoneTasksAction}
+                      fields={{}}
+                      workspace={slug}
+                      confirm="Archive every done task? They leave the board but keep their history, and each can be brought back from its page."
+                      closeOnSuccess
+                      size="sm"
+                      variant="ghost"
+                      className="ml-auto px-2"
+                      aria-label="Archive all done tasks"
+                      title="Archive all done tasks"
+                    >
+                      <Archive aria-hidden />
+                    </ActionButton>
                   )}
                   {next && tasks.length > 0 && (
                     <a

@@ -1,6 +1,6 @@
 {
-  "id": "ff84c21e-a989-4977-9f7b-495c84feb4d8",
-  "prevId": "8ec9cca4-5497-4294-931e-9e6f70b47878",
+  "id": "fcb64a1d-c80c-49fd-a011-d74b751d2d98",
+  "prevId": "9d80bee4-e679-4486-b6e0-cd5144b2deb4",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -1977,6 +1977,18 @@
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
+        },
+        "tokens_not_before": {
+          "name": "tokens_not_before",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "archived_at": {
+          "name": "archived_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {
@@ -3034,6 +3046,12 @@
         },
         "completed_at": {
           "name": "completed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "archived_at": {
+          "name": "archived_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false

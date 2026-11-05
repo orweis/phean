@@ -9,6 +9,7 @@ import { agents, events, member, oauthClient, oauthRefreshToken, user } from "@/
 import {
   agentContext,
   approveAgent,
+  archiveAgent,
   authenticateAgentToken,
   canRevoke,
   createAgent,
@@ -203,6 +204,25 @@ describe("renewing an agent", () => {
     expect(fresh.id).not.toBe(agent.id);
     expect((await rowOf(agent.id)).revokedAt).toBeInstanceOf(Date);
     expect(await resolveOAuthAgent(testDb.db, agent.id)).toBeNull();
+  });
+
+  it("an archived agent and its sub-agents stay cut off, off the admin list, and are never renewed", async () => {
+    const { agent } = await approveAgent(miaCtx, { name: "Laptop", ...grant });
+    const { agent: worker } = await createSubagent(await signedIn(agent.id), { name: "Worker" });
+    await revokeAgent(miaCtx, { agentId: agent.id });
+    await expect(archiveAgent(miaCtx, { agentId: agent.id })).rejects.toMatchObject({ code: "forbidden" });
+    expect(await archiveAgent(owner, { agentId: agent.id })).toEqual({ archived: 2 });
+
+    expect(await resolveOAuthAgent(testDb.db, agent.id)).toBeNull();
+    expect(await findRenewableAgent(miaCtx, "Laptop")).toBeNull();
+    const listed = await listAgents(owner, {});
+    expect(listed.filter(({ id }) => id === agent.id || id === worker.id).map(({ live, archivedAt }) => ({ live, archived: archivedAt !== null }))).toEqual([
+      { live: false, archived: true },
+      { live: false, archived: true },
+    ]);
+    const { agent: fresh, renewed } = await approveAgent(miaCtx, { name: "Laptop", ...grant });
+    expect(renewed).toBe(false);
+    expect(fresh.id).not.toBe(agent.id);
   });
 
   it("two approvals at once leave one agent", async () => {

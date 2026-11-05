@@ -1,8 +1,8 @@
-import { ArrowRight, Bot, CalendarClock, Check, CornerDownRight, Ellipsis, ListChecks, Trash2, Unlock } from "lucide-react";
+import { Archive, ArrowRight, Bot, CalendarClock, Check, CornerDownRight, Ellipsis, ListChecks, Trash2, Unlock } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
-import { completeTaskAction, releaseTaskAction, updateTaskAction } from "@/app/w/[slug]/actions";
+import { archiveTaskAction, completeTaskAction, releaseTaskAction, unarchiveTaskAction, updateTaskAction } from "@/app/w/[slug]/actions";
 import { webUrl } from "@/lib/agent-sessions";
 import { cx } from "@/lib/cx";
 import { isLate, isOpenTaskStatus, PRIORITY_META, SOURCE_META, TASK_STATUS_META, type TaskStatus } from "@/lib/domain";
@@ -83,11 +83,13 @@ async function NextStep({ task, slug }: { task: TaskView; slug: string }) {
 /**
  * Every other move, behind one ghost ⋯ that is always visible: straight to any stage (inbox to done
  * in one step, which a narrow lane or a phone has no room to show as buttons), then Release and
- * Drop. Each is undone from the status region rather than confirmed, since all are reversible.
+ * Drop, or Archive for finished work. Each is undone from the status region rather than confirmed,
+ * since all are reversible.
  */
 async function MoreActions({ task, slug }: { task: TaskView; slug: string }) {
   const taskId = task.id;
   const canDrop = isOpenTaskStatus(task.status);
+  const canArchive = !canDrop && !task.archivedAt;
   const workflow = await workspaceWorkflow(slug);
   const here = stageOf(workflow, task);
   const back = moveBack(task, workflow, `${quoted(task)} is back in ${stageLabel(workflow, task)}.`);
@@ -113,7 +115,7 @@ async function MoreActions({ task, slug }: { task: TaskView; slug: string }) {
           </ActionButton>
         ))}
       </div>
-      {(task.claimedByName || canDrop) && <div className="my-1 border-t border-rule" />}
+      {(task.claimedByName || canDrop || canArchive) && <div className="my-1 border-t border-rule" />}
       {task.claimedByName && (
         <ActionButton
           action={releaseTaskAction}
@@ -142,6 +144,22 @@ async function MoreActions({ task, slug }: { task: TaskView; slug: string }) {
         >
           <Trash2 aria-hidden />
           Drop
+        </ActionButton>
+      )}
+      {canArchive && (
+        <ActionButton
+          action={archiveTaskAction}
+          workspace={slug}
+          fields={{ taskId }}
+          notice={`Archived ${quoted(task)}`}
+          undo={{ action: unarchiveTaskAction, fields: { taskId }, done: `${quoted(task)} is back on the board.` }}
+          exits
+          closeOnSuccess
+          size="menu"
+          variant="ghost"
+        >
+          <Archive aria-hidden />
+          Archive
         </ActionButton>
       )}
     </Popover>

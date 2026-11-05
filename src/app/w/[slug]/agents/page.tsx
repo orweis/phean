@@ -1,8 +1,8 @@
-import { Bot, CornerDownRight, KeyRound } from "lucide-react";
+import { Archive, ArchiveRestore, Bot, CornerDownRight, KeyRound } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 
-import { deleteWebhookAction, revokeAgentAction } from "@/app/w/[slug]/actions";
+import { archiveAgentAction, archiveRevokedAgentsAction, deleteWebhookAction, revokeAgentAction, unarchiveAgentAction } from "@/app/w/[slug]/actions";
 import { ConnectAgentForm, SignInSetup } from "@/components/connect-agent-form";
 import { ConnectAgentSection } from "@/components/connect-agent-section";
 import { PageHeader } from "@/components/page-header";
@@ -58,7 +58,8 @@ function WhatAgentsGet() {
   );
 }
 
-export default async function AgentsPage({ params }: PageProps<"/w/[slug]/agents">) {
+export default async function AgentsPage({ params, searchParams }: PageProps<"/w/[slug]/agents">) {
+  const showArchived = (await searchParams).archived === "1";
   const { slug } = await params;
   const { ctx } = await requireWorkspace(slug);
   const [agents, workload, keyUrl, hooks] = await Promise.all([
@@ -76,10 +77,20 @@ export default async function AgentsPage({ params }: PageProps<"/w/[slug]/agents
   const canIssueKey = can(ctx.actor, "agent:issue_key");
   const canRemoveWebhooks = can(ctx.actor, "webhook:manage");
   // Sub-agents sit right under the agent they work for.
+  // Archiving is housekeeping for revoked agents, held to the same permission as revoking others' agents.
+  const canManage = can(ctx.actor, "agent:manage");
   const byId = new Map(agents.map((agent) => [agent.id, agent]));
+  // Archived (revoked, filed away) agents have their own view; the list shows the rest.
+  const listed = agents.filter((agent) => Boolean(agent.archivedAt) === showArchived);
+  const listedIds = new Set(listed.map((agent) => agent.id));
+  const archivedCount = agents.length - agents.filter((agent) => !agent.archivedAt).length;
+  const revokedListed = listed.filter((agent) => agent.revokedAt).length;
   const children = new Map<string, ListedAgent[]>();
-  for (const agent of agents) if (agent.parentAgentId) children.set(agent.parentAgentId, [...(children.get(agent.parentAgentId) ?? []), agent]);
-  const ordered = agents.filter((agent) => !agent.parentAgentId).flatMap((agent) => [agent, ...(children.get(agent.id) ?? [])]);
+  for (const agent of listed) if (agent.parentAgentId) children.set(agent.parentAgentId, [...(children.get(agent.parentAgentId) ?? []), agent]);
+  // A sub-agent whose parent is not in this view stands on its own row.
+  const ordered = listed
+    .filter((agent) => !agent.parentAgentId || !listedIds.has(agent.parentAgentId))
+    .flatMap((agent) => [agent, ...(agent.parentAgentId ? [] : (children.get(agent.id) ?? []))]);
   const parents = agents.filter((agent) => !agent.parentAgentId && !agent.revokedAt).map(({ id, name }) => ({ id, name }));
 
   // The server's standing: a sub-agent lapses with its parent and never has more access than it, and an
@@ -95,11 +106,16 @@ export default async function AgentsPage({ params }: PageProps<"/w/[slug]/agents
       endsWithParent: !!parent && endsAt !== null && endsAt.getTime() === parent.accessExpiresAt?.getTime() && endsAt.getTime() !== agent.accessExpiresAt?.getTime(),
       level: agent.level,
       status,
+      // Drawn under its parent only when the parent is in this view too.
+      nested: !!parent && listedIds.has(parent.id),
       // By the rule the revoke itself is held to; revoking a parent takes its sub-agents with it.
       revocable: status !== "revoked" && canRevoke(ctx.actor, agent, parent),
+      // Only revoked agents are archived, and back again.
+      archivable: canManage && status === "revoked" && !agent.archivedAt,
+      unarchivable: canManage && !!agent.archivedAt,
     };
   });
-  const hasActions = rows.some((row) => row.revocable || (canRemoveWebhooks && hookByAgent.has(row.agent.id)));
+  const hasActions = rows.some((row) => row.revocable || row.archivable || row.unarchivable || (canRemoveWebhooks && hookByAgent.has(row.agent.id)));
 
   return (
     <>
@@ -143,8 +159,48 @@ export default async function AgentsPage({ params }: PageProps<"/w/[slug]/agents
       </ConnectAgentSection>
 
       <Card className="min-w-0">
-        <CardHeader title="Connected agents" description="Holding counts open tasks an agent has claimed; done counts the last 7 days." />
-        {agents.length === 0 ? (
+        <CardHeader
+          title={showArchived ? "Archived agents" : "Connected agents"}
+          description={
+            showArchived
+              ? "Revoked agents filed away. Their past work keeps their name; unarchive one to list it again."
+              : "Holding counts open tasks an agent has claimed; done counts the last 7 days."
+          }
+          action={
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              {canManage && !showArchived && revokedListed > 0 && (
+                <ActionButton
+                  action={archiveRevokedAgentsAction}
+                  fields={{}}
+                  workspace={slug}
+                  confirm={`Archive ${pluralize(revokedListed, "revoked agent")}? They leave this list; the Archived view keeps them.`}
+                  closeOnSuccess
+                  size="sm"
+                  variant="ghost"
+                >
+                  <Archive aria-hidden />
+                  Archive revoked
+                </ActionButton>
+              )}
+              {showArchived ? (
+                <Link href={routes.agents(slug)} className="text-xs font-semibold text-accent-ink link whitespace-nowrap">
+                  Back to agents
+                </Link>
+              ) : (
+                archivedCount > 0 && (
+                  <Link href={`${routes.agents(slug)}?archived=1`} className="text-xs font-semibold text-accent-ink link whitespace-nowrap">
+                    Archived ({archivedCount})
+                  </Link>
+                )
+              )}
+            </div>
+          }
+        />
+        {ordered.length === 0 && showArchived ? (
+          <EmptyState icon={<Archive />} title="Nothing archived">
+            Archive a revoked agent to file it away here.
+          </EmptyState>
+        ) : agents.length === 0 ? (
           <EmptyState icon={<Bot />} title="No agents yet">
             Add Phean to your MCP client to connect your first agent.
           </EmptyState>
@@ -169,16 +225,16 @@ export default async function AgentsPage({ params }: PageProps<"/w/[slug]/agents
                 </tr>
               </thead>
               <tbody className="divide-y divide-rule">
-                {rows.map(({ agent, parent, endsAt, endsWithParent, level, status, revocable }) => {
+                {rows.map(({ agent, parent, nested, endsAt, endsWithParent, level, status, revocable, archivable, unarchivable }) => {
                   const load = loadById.get(agent.id);
                   const holding = load?.claimed ?? 0;
                   const running = (children.get(agent.id) ?? []).filter((child) => !child.revokedAt).length;
                   const removableHook = canRemoveWebhooks && hookByAgent.has(agent.id);
                   return (
-                    <tr key={agent.id} data-agent={agent.id} data-parent={agent.parentAgentId ?? undefined} className={cx(status === "revoked" && "text-muted", parent && "bg-fill/40")}>
-                      <td className={cx("min-w-44 py-3 pr-3", parent ? "pl-10" : "pl-5", PINNED_CELL)}>
+                    <tr key={agent.id} data-agent={agent.id} data-parent={agent.parentAgentId ?? undefined} className={cx(status === "revoked" && "text-muted", nested && "bg-fill/40")}>
+                      <td className={cx("min-w-44 py-3 pr-3", nested ? "pl-10" : "pl-5", PINNED_CELL)}>
                         <div className="flex items-center gap-2.5">
-                          {parent && <CornerDownRight className="size-3.5 shrink-0 text-faint" aria-hidden />}
+                          {nested && <CornerDownRight className="size-3.5 shrink-0 text-faint" aria-hidden />}
                           <ActorAvatar type="agent" className="mt-0" />
                           <div className="min-w-0">
                             <p className={cx("font-semibold whitespace-nowrap", status !== "revoked" && "text-ink")}>
@@ -237,6 +293,35 @@ export default async function AgentsPage({ params }: PageProps<"/w/[slug]/agents
                                 variant="ghost"
                               >
                                 Remove webhook
+                              </ActionButton>
+                            )}
+                            {archivable && (
+                              <ActionButton
+                                action={archiveAgentAction}
+                                workspace={slug}
+                                fields={{ agentId: agent.id }}
+                                notice={`Archived ${agent.name}`}
+                                undo={{ action: unarchiveAgentAction, fields: { agentId: agent.id }, done: `${agent.name} is back on the list.` }}
+                                exits
+                                size="sm"
+                                variant="ghost"
+                              >
+                                <Archive aria-hidden />
+                                Archive
+                              </ActionButton>
+                            )}
+                            {unarchivable && (
+                              <ActionButton
+                                action={unarchiveAgentAction}
+                                workspace={slug}
+                                fields={{ agentId: agent.id }}
+                                notice={`Put ${agent.name} back on the list`}
+                                exits
+                                size="sm"
+                                variant="ghost"
+                              >
+                                <ArchiveRestore aria-hidden />
+                                Unarchive
                               </ActionButton>
                             )}
                             {revocable && (
