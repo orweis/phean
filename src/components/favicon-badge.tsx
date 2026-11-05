@@ -38,10 +38,10 @@ async function drawBadge(iconUrl: string, text: string): Promise<string> {
   const context = canvas.getContext("2d")!;
   context.drawImage(await loadImage(iconUrl), 0, 0, SIZE, SIZE);
 
-  context.font = `700 ${text.length > 2 ? 22 : text.length > 1 ? 26 : 30}px system-ui, -apple-system, sans-serif`;
-  // Wide enough to cover the original boulder (radius 6.4 units) and to hold the figures.
-  const height = 36;
-  const width = Math.max(height, context.measureText(text).width + 12);
+  // As large as the tile allows around the original boulder (radius 6.4 units), so the figures read at 16px.
+  context.font = `800 ${text.length > 2 ? 26 : text.length > 1 ? 34 : 42}px system-ui, -apple-system, sans-serif`;
+  const height = 48;
+  const width = Math.max(height, context.measureText(text).width + 10);
   const centerX = Math.min(Math.max(MARK.boulder.cx * UNIT, width / 2 + 1), SIZE - width / 2 - 1);
   const centerY = MARK.boulder.cy * UNIT;
   const shape = (inset: number, dx = 0, dy = 0) => {
@@ -56,7 +56,7 @@ async function drawBadge(iconUrl: string, text: string): Promise<string> {
   context.save();
   shape(0);
   context.clip();
-  shape(2.5, -2.5, -2.5);
+  shape(3, -3, -3);
   context.fillStyle = BOULDER.lit;
   context.fill();
   context.restore();
@@ -64,7 +64,7 @@ async function drawBadge(iconUrl: string, text: string): Promise<string> {
   context.fillStyle = BOULDER.figures;
   context.textAlign = "center";
   context.textBaseline = "middle";
-  context.fillText(text, centerX - 1, centerY + 1);
+  context.fillText(text, centerX - 1, centerY + 2);
   return canvas.toDataURL("image/png");
 }
 
