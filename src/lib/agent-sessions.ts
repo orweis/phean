@@ -58,6 +58,8 @@ export interface InputRequest {
   context: string;
   /** Answers to pick from; a person may still write their own. */
   options: string[];
+  /** Whether a person may pick several of the options; absent on single-choice requests. */
+  multiple?: boolean;
   links: TaskLink[];
   agentId: string;
   agentName: string;
@@ -77,6 +79,8 @@ export interface InputAnswer extends InputRequest {
   outcome: RequestOutcome;
   /** The person's answer; empty unless the outcome is "answered". */
   answer: string;
+  /** The options a person ticked on a request that takes several. */
+  choices?: string[];
   answeredByName: string | null;
   /** ISO timestamp the request closed. */
   closedAt: string;
@@ -131,6 +135,13 @@ export function resumeLabel(session: Pick<AgentSession, "app">): string {
 /** The session of the agent that asked, which is where its question is best answered. */
 export function sessionOfAsker(sessions: readonly AgentSession[], request: Pick<InputRequest, "agentId">): AgentSession | undefined {
   return sessions.find((session) => session.agentId === request.agentId);
+}
+
+/** The options an answer picks: those ticked on a multiple-choice request, else the one it matches. */
+export function chosenOptions(record: Pick<InputAnswer, "options" | "answer" | "choices">): string[] {
+  if (record.choices) return record.choices;
+  const one = record.answer ? chosenOption(record, record.answer) : null;
+  return one ? [one] : [];
 }
 
 /** Whether `answer` picks one of the request's options, compared the way people type. */

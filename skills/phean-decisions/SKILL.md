@@ -29,6 +29,7 @@ Call `request_input` with these fields:
 | `question` | One concrete question, answerable in a word or a line. Never "thoughts?" or "let me know". |
 | `context` | The facts, the trade-offs, and **your recommendation**, in a few lines. Write for someone reading it cold, days later, without the chat open. |
 | `options` | For decisions: 2-5 short, mutually exclusive answers, each a few words. The person clicks one. Leave it out for open questions. |
+| `multiple` | `true` when several options may apply together ("Which channels should announce the launch?"). The person ticks any number and sends them together; the options need not be exclusive then, and you need at least two. Phrase the question to match: "Pick any that apply". |
 | `links` | References, as `[{ url, title, kind }]`. See below. Always include them. |
 | `session` | Where the person can resume with you: `{ url, app, brief }`, or `sessionId` / `command` when you have no link. |
 
@@ -76,7 +77,7 @@ Rules:
 
 Each answer is delivered to you once, through either tool. An answer has:
 
-- `outcome: "answered"`: `answer` holds what the person wrote or picked; `chosenOption` names the option when it matches one of yours. A custom answer is authoritative even when it matches no option. Follow any conditions it adds.
+- `outcome: "answered"`: `answer` holds what the person wrote or picked; `chosenOption` names the option when it matches exactly one of yours, and `chosenOptions` lists every option picked (several, when you asked with `multiple`). A custom answer is authoritative even when it matches no option. Follow any conditions it adds.
 - `outcome: "answered_elsewhere"`: the person answered you in your own conversation; read it there.
 
 ## 5. Close the loop

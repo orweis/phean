@@ -19,6 +19,7 @@ const CHAT = "https://claude.ai/chat/2a9c7e4b-e2e0-4d1a-8f3b-6c5d4e3f2a10";
 const MAIL = "https://mail.google.com/mail/u/0/#inbox/FMfcgzAuditQuote";
 const QUESTION = "Hire Rivera & Co. or Okafor LLP for the Q3 audit?";
 const COURIER = "Which courier takes the signed engagement letter?";
+const CHANNELS = "Which channels should confirm the engagement? Pick any that apply.";
 
 /**
  * An agent asks a person to decide and waits on it. The person sees the request on the Decisions
@@ -110,6 +111,36 @@ test("an agent waits on a decision and wakes when the person makes it", async ({
     await expect(answered.getByRole("list", { name: "Options offered" })).toContainText("Okafor LLP (chosen)");
     await expect(answered).toContainText(`by ${owner.name}`);
     await expect(answered).toContainText("Auditor scout has it");
+  });
+
+  await test.step("a decision that takes several picks is ticked by click and key, and arrives whole", async () => {
+    await asAgent(token, (agent) =>
+      agent.call("request_input", { taskId: courier.id, kind: "decision", question: CHANNELS, options: ["Email", "Slack", "Phone"], multiple: true }),
+    );
+    await page.reload();
+    const request = card(page, "1 request waiting on you").locator(`[data-task="${courier.id}"]`);
+    const send = request.getByRole("button", { name: /^Send/ });
+    await expect(send).toBeDisabled();
+    const email = request.getByRole("checkbox", { name: "Email", exact: true });
+    await email.check();
+    // From a tick box, 3 ticks the third option and Enter sends both.
+    await email.press("3");
+    await expect(request.getByRole("checkbox", { name: "Phone", exact: true })).toBeChecked();
+    await expect(send).toHaveText("Send 2 picks");
+    await page.keyboard.press("Enter");
+    await expect(page.locator("[data-status-region]")).toContainText("Sent your picks to Auditor scout");
+    await expect(card(page, "Nothing waiting on you")).toBeVisible();
+
+    const answers = await asAgent(token, (agent) =>
+      agent.call<{ answers: { answer: string; chosenOptions: string[] }[] }>("collect_answers", { taskIds: [courier.id] }),
+    );
+    expect(answers.answers).toEqual(expect.arrayContaining([expect.objectContaining({ answer: "Email; Phone", chosenOptions: ["Email", "Phone"] })]));
+    await page.reload();
+    const answered = card(page, "Answered").locator(`[data-task="${courier.id}"]`).filter({ hasText: CHANNELS });
+    const offered = answered.getByRole("list", { name: /^Options offered/ });
+    await expect(offered).toContainText("Email (chosen)");
+    await expect(offered).toContainText("Phone (chosen)");
+    await expect(offered).not.toContainText("Slack (chosen)");
   });
 
   await test.step("the board shows the task's links, edits it, and moves it by drag and drop", async () => {

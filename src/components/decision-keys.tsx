@@ -3,8 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, type KeyboardEvent, type ReactNode } from "react";
 
-/** Typing into a field must never pick an option. */
-const TYPING = "input, textarea, select, [contenteditable]";
+/** Typing into a field must never pick an option; a tick box is not typing. */
+const TYPING = "input:not([type=checkbox]), textarea, select, [contenteditable]";
 
 const entriesOf = (root: HTMLElement) => [...root.querySelectorAll<HTMLElement>("[data-entry]")];
 
@@ -26,8 +26,9 @@ function markSelected(root: HTMLElement, entry: HTMLElement): number {
  * Keyboard answering for a list of requests. One entry is always selected while the list has any,
  * marked unmistakably (`data-selected`, an accent bar and tint, `aria-current`) and kept in view:
  * the first on arrival, then the one last focused or clicked, and, when an answered entry leaves,
- * the one that takes its place. While an entry is selected, 1 to 9 choose its options, J and K
- * move to the next and previous entry, and Enter opens its task. Each option shows its number and
+ * the one that takes its place. While an entry is selected, 1 to 9 choose its options (or tick
+ * them, where several may be picked, and Enter sends), J and K move to the next and previous
+ * entry, and Enter opens its task. Each option shows its number and
  * names it in `aria-keyshortcuts`; Undo in the status region makes a mistaken key cheap.
  */
 export function DecisionKeys({ children }: { children: ReactNode }) {
@@ -86,10 +87,20 @@ export function DecisionKeys({ children }: { children: ReactNode }) {
     if (!entry) return;
     const key = event.key.toLowerCase();
     if (/^[1-9]$/.test(key)) {
-      const option = entry.querySelector<HTMLButtonElement>(`[data-option="${key}"]:not(:disabled)`);
+      const option = entry.querySelector<HTMLButtonElement | HTMLInputElement>(`[data-option="${key}"]:not(:disabled)`);
       if (!option) return;
       event.preventDefault();
       option.click();
+      // A tick box keeps focus, so Enter sends the picks from there.
+      if (option.type === "checkbox") option.focus({ preventScroll: true });
+      return;
+    }
+    // Enter on a tick box sends the picks of a request that takes several.
+    if (key === "enter" && target.matches("input[type=checkbox][data-option]")) {
+      const form = target.closest("form");
+      if (!form?.querySelector("input[data-option]:checked")) return;
+      event.preventDefault();
+      form.requestSubmit();
       return;
     }
     if (key === "enter" && target === entry) {

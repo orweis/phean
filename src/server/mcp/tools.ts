@@ -178,7 +178,7 @@ export const TOOLS: readonly PheanTool[] = [
     name: "request_input",
     title: "Request input",
     description:
-      "Ask the human something you need to go on with a task. kind 'decision' when they must choose or sign off (give 2-5 options), 'question' when you need information. Put the facts, trade-offs and your recommendation in context, and add links: back to this conversation (kind 'conversation') and to the sources it is about (kind 'source'). Include 'session' with a url whenever you have one. It shows on the human's Decisions page until they answer. Get the answer with wait_for_answers (blocks until they answer) or collect_answers (later). One open request per task; asking again replaces yours.",
+      "Ask the human something you need to go on with a task. kind 'decision' when they must choose or sign off (give 2-5 options; set multiple when several may be picked together), 'question' when you need information. Put the facts, trade-offs and your recommendation in context, and add links: back to this conversation (kind 'conversation') and to the sources it is about (kind 'source'). Include 'session' with a url whenever you have one. It shows on the human's Decisions page until they answer. Get the answer with wait_for_answers (blocks until they answer) or collect_answers (later). One open request per task; asking again replaces yours.",
     input: AskInput,
     run: async (ctx, input) => ({
       task: await requestInput(ctx, input),
@@ -198,7 +198,7 @@ export const TOOLS: readonly PheanTool[] = [
     name: "collect_answers",
     title: "Collect answers",
     description:
-      "Answers the human gave to your questions and decisions since you last collected, oldest first, each delivered once. outcome 'answered' carries their answer (and chosenOption when it matches one of your options); 'answered_elsewhere' means they answered you in your conversation. Call it at the start of every session and before acting on work that had an open question.",
+      "Answers the human gave to your questions and decisions since you last collected, oldest first, each delivered once. outcome 'answered' carries their answer (with chosenOption when it picks exactly one of your options, and chosenOptions listing every option picked, several for a request asked with multiple); 'answered_elsewhere' means they answered you in your conversation. Call it at the start of every session and before acting on work that had an open question.",
     service: collectAnswers,
     key: "answers",
   }),
