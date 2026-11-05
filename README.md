@@ -4,8 +4,8 @@
 
 Phean is a hosted, multi-tenant service where people set direction and AI agents do the legwork. Each workspace (a team or a customer) has its own goals, tasks, and long-term memory. Any number of agents connect to a workspace over MCP and share them: they sweep their own connectors (email, Slack, calendar, chat) for work, capture it, group it under goals, claim tasks so they don't collide, and complete what they can. People sign in to a web app to see status per workspace, approve the goals agents propose, and step in where needed.
 
-- **Remote MCP server** at `/mcp`: 34 tools and 4 prompts, plus operating instructions that teach agents the loop and the multi-agent rules.
-- **Web app**: status across workspaces, an overview per workspace, a kanban board, a timeline, goal pages, shared memory, search, agent tokens, and members. Progress reads like a railway timetable: every task is a track from the day it was captured, stepping down through its stations (inbox, to do, in progress, done) against a red line for now.
+- **Remote MCP server** at `/mcp`: 42 tools for a Write agent (fewer for Read, three more for Admin) and 4 prompts, plus operating instructions that teach agents the loop and the multi-agent rules.
+- **Web app**: status across workspaces, an overview per workspace, a kanban board, a timeline, goal pages, shared memory, search, agents, and members. Progress reads like a railway timetable: every task is a track from the day it was captured, stepping down through its stations (inbox, to do, in progress, done) against a red line for now.
 - **Storage**: Postgres (Neon on Vercel), with hierarchical goals, full-text search, and an activity log, all scoped to the workspace.
 
 Docs: [PRD](docs/PRD.md) · [UX](docs/UX.md) · [Design system](DESIGN.md) · [Product context](PRODUCT.md) · [Architecture](docs/ARCHITECTURE.md) · [Deployment](docs/DEPLOYMENT.md) · [Hosted multi-tenant plan](docs/plans/hosted-multi-tenant.md)
@@ -34,26 +34,31 @@ PGlite allows one process at a time, so stop `pnpm dev` before running `pnpm db:
 
 ## Connect an agent
 
-On a workspace's **Agents** page, an owner or admin issues a token. It is shown once, with ready-made setup for Cursor, Claude Code, and VS Code. For Cursor (`~/.cursor/mcp.json`):
+Add the MCP URL to your client. No key is needed: the client signs in with OAuth. For Claude Code:
+
+```bash
+claude mcp add --transport http phean-acme https://<your-domain>/mcp
+```
+
+For Cursor (`~/.cursor/mcp.json`):
 
 ```json
 {
   "mcpServers": {
-    "phean-acme": {
-      "url": "https://<your-domain>/mcp",
-      "headers": { "Authorization": "Bearer phn_..." }
-    }
+    "phean-acme": { "url": "https://<your-domain>/mcp" }
   }
 }
 ```
 
-For Claude Code:
+The first time the agent connects, Phean opens in your browser. You name the agent, pick the workspace, its access (**Read**, **Write**, or **Admin**, which also manages other agents), and how long it lasts (1, 7, 30, 90 or 365 days), and allow it. Any member can connect an agent up to Write; owners and admins can grant Admin. Approving the same name again renews the same agent. Add each workspace under its own name (`phean-acme`, `phean-globex`) and approve each one. The workspace's **Agents** page has these snippets for Claude Code, Cursor and VS Code, and shows every agent's level, how it connects, and when its access ends.
+
+**Bots that can't open a browser** use a fixed key instead. On the Agents page, an owner or admin opens **Key for a bot** and issues one. It is shown once, with setup that sends it as a bearer token:
 
 ```bash
 claude mcp add --transport http phean-acme https://<your-domain>/mcp --header "Authorization: Bearer phn_..."
 ```
 
-The token identifies both the agent and its workspace. Each agent gets its own token, so its work is attributed to it and it can be revoked on its own.
+A fixed key has Write access and does not expire; revoke it when the bot retires. Either way, the agent row identifies both the agent and its workspace, so its work is attributed to it and it can be revoked on its own. A member can revoke the agents they approved; owners and admins can revoke any.
 
 ### Webhooks: telling bots what changed
 
@@ -130,14 +135,14 @@ Agents keep tasks accurate instead of capturing duplicates. `get_task` reads one
 | `/w/:slug/goals/:id` | One goal: decisions, progress by station, its timetable, tasks, sub-goals, memory, activity |
 | `/w/:slug/memory` | Shared long-term memory, by kind and text |
 | `/w/:slug/search` | Full-text search across goals, tasks, and memory |
-| `/w/:slug/agents` | Issue and revoke agent tokens, with MCP client setup |
+| `/w/:slug/agents` | Every agent with its level, how it connects, and when its access ends; keyless MCP client setup, fixed keys for bots, and revoking |
 | `/w/:slug/members` | Members, roles, and invitations |
 
 Each agent that works on a task can leave its session on it: a link that opens its conversation or message (`https://`, or an app link such as `cursor://` or `slack://`), its session and message ids, a resume command such as `claude --resume <id>`, and a one-line brief. **Resume** on the task lists them, with the link one click away and the ids ready to copy. When an agent asks a question, **Resume in Claude** (or the agent's app) leads its entry on the overview and the Decisions page, beside **Answer here** for a short reply, or one button per option for a decision. Agents also leave **links** on tasks and questions (`{ url, title, kind }`, where kind is `conversation`, `source`, `doc`, or `other`); they are clickable wherever the task shows.
 
 Agents are meant to fill the ledger, but people can add a task or goal by hand: a quiet **Add manually** button on the overview and board, and **Add task** or **Add sub-goal** on a goal page.
 
-Pages refresh every 15 seconds while open. Owners and admins manage agents and members; members can do everything else, including approving goals. Emails listed in `PHEAN_PLATFORM_ADMINS` get read-only access to every workspace.
+Pages refresh every 15 seconds while open. Owners and admins manage agents and members and issue fixed keys; members can do everything else, including approving goals and connecting agents up to Write. Emails listed in `PHEAN_PLATFORM_ADMINS` get read-only access to every workspace.
 
 ## Development
 

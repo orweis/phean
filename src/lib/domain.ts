@@ -233,6 +233,48 @@ export const ACCESS_LEVEL_META: Record<AgentAccessLevel, EnumMeta> = {
   admin: { label: "Admin", tone: "warning" },
 };
 
+/** Matches the window the workspace stats use for "active agents". */
+const ACTIVE_AGENT_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+export type AgentStatus = "active" | "idle" | "expired" | "revoked";
+
+export const AGENT_STATUS_META: Record<AgentStatus, EnumMeta> = {
+  active: { label: "Active", tone: "success" },
+  idle: { label: "Idle", tone: "neutral" },
+  // Amber, not red: an expired agent is waiting for someone to approve it again, not cut off for cause.
+  expired: { label: "Expired", tone: "warning" },
+  revoked: { label: "Revoked", tone: "danger" },
+};
+
+/**
+ * Where an agent stands: revoked, past the end of its access, or active or idle by when it was last
+ * seen. For a sub-agent, pass its access end from `agentAccessEnds`, so it lapses with its parent.
+ */
+export function agentStatus(agent: { revokedAt: Date | null; lastSeenAt: Date | null; accessExpiresAt: Date | null }, now = Date.now()): AgentStatus {
+  if (agent.revokedAt) return "revoked";
+  if (agent.accessExpiresAt && agent.accessExpiresAt.getTime() <= now) return "expired";
+  return agent.lastSeenAt && now - agent.lastSeenAt.getTime() < ACTIVE_AGENT_WINDOW_MS ? "active" : "idle";
+}
+
+/** When an agent's access ends: its own end, or its parent's if that comes first. Null for a key that does not lapse. */
+export function agentAccessEnds(agent: { accessExpiresAt: Date | null }, parent?: { accessExpiresAt: Date | null }): Date | null {
+  const ends = [agent.accessExpiresAt, parent?.accessExpiresAt].filter((date): date is Date => !!date);
+  return ends.sort((a, b) => a.getTime() - b.getTime())[0] ?? null;
+}
+
+/** How an agent reaches Phean: signed in through the browser, with a fixed key, or naming itself on its parent's key. */
+export type AgentConnection = "oauth" | "key" | "shared_key";
+
+export const AGENT_CONNECTION_META: Record<AgentConnection, EnumMeta> = {
+  oauth: { label: "OAuth sign-in", tone: "accent" },
+  key: { label: "Fixed key", tone: "neutral" },
+  shared_key: { label: "Shared key", tone: "neutral" },
+};
+
+export function agentConnection(agent: { authKind: "key" | "oauth"; sharesParentKey: boolean }): AgentConnection {
+  return agent.sharesParentKey ? "shared_key" : agent.authKind;
+}
+
 export const ROLE_META: Record<MemberRole | "platform_admin", EnumMeta> = {
   owner: { label: "Owner", tone: "info" },
   admin: { label: "Admin", tone: "info" },

@@ -89,7 +89,7 @@ Better Auth has no per-grant lifetime, and a refreshed grant otherwise lasts ind
 - The effective level is the lower of the granted level and what the approver can currently grant, so a demotion lowers the agent's access at once.
 - Refresh also fails in those cases, and the refresh tokens are revoked when an agent is revoked.
 - Access tokens last 1 hour and renew automatically within the chosen period **(my call)**.
-- Refresh token reuse interval follows the Better Auth recommendation of 0, unless testing shows real clients breaking on concurrent refreshes **(my call)**.
+- Refresh token reuse interval is 30 seconds. **Ruled after the spike:** at 0, one replayed refresh token ends the whole token family, and the family is client plus person, not agent, so one replay kills the refresh tokens of every agent that person approved on that client (normal under CIMD). Within the 30 seconds a replay gets the stored answer without the claims check, so the per-request row check at `/mcp` is what cuts off a revoked agent. See `REFRESH_REUSE_SECONDS` in `src/server/auth/auth.ts`.
 
 When access ends, the client gets a 401 and sends the person back through the dialog.
 

@@ -3,6 +3,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { DEMO_USER } from "../scripts/demo-account";
 import { LIMITS } from "../src/lib/domain";
 import { newPerson, newWorkspace, runId, signUp } from "./support/accounts";
+import { agentRow, approveClient, FIXED_KEY_TRIGGER, issueToken } from "./support/agents";
 import { BASE_URL, DEMO_SESSION } from "./support/env";
 import { card, popover } from "./support/locators";
 import { openTab } from "./support/navigation";
@@ -257,13 +258,16 @@ test("reusing a name warns before replacing the connection", async ({ page }) =>
   });
 });
 
-test("a member is not offered Admin, and a posted level above their role is refused", async ({ page, browser }) => {
+/** Everything a member does with agents, in one test, because sign-ups are rate limited. */
+test("a member is not offered Admin or fixed keys, and revokes only the agents they approved", async ({ page, browser }) => {
   test.slow();
   page.on("dialog", (dialog) => dialog.accept());
   const workspace = await newWorkspace(page, "Membership");
   const agentName = `Forged level ${runId()}`;
 
-  await test.step("the demo account joins as a member", async () => {
+  await test.step("the owner runs a bot on a fixed key, and the demo account joins as a member", async () => {
+    await openTab(page, workspace.slug, "Agents");
+    await issueToken(page, "Owner bot");
     await openTab(page, workspace.slug, "Members");
     const panel = popover(card(page, "People"), "Invite");
     await panel.locator("summary").click();
@@ -301,6 +305,34 @@ test("a member is not offered Admin, and a posted level above their role is refu
       await expect(dialog.getByRole("alert").filter({ hasText: "cannot grant Admin access" })).toBeVisible();
       await openTab(page, workspace.slug, "Agents");
       await expect(page.getByText(agentName)).toHaveCount(0);
+    });
+
+    // The member connects agents by signing in: keyless snippets, no fixed keys, and Revoke only on their own.
+    const member = await demo.newPage();
+    member.on("dialog", (confirm) => confirm.accept());
+
+    await test.step("a member sees how to connect but not how to issue a fixed key", async () => {
+      await member.goto(`/w/${workspace.slug}/agents`);
+      await member.getByRole("button", { name: "Connect an agent" }).click();
+      await expect(member.getByText(`${BASE_URL}/mcp`, { exact: true })).toBeVisible();
+      await member.getByRole("group", { name: "Client" }).getByRole("button", { name: "Claude Code" }).click();
+      await expect(member.getByText(`claude mcp add --transport http phean-${workspace.slug} ${BASE_URL}/mcp`, { exact: true })).toBeVisible();
+      await expect(member.getByText(/Authorization/)).toHaveCount(0);
+      await expect(popover(member, FIXED_KEY_TRIGGER)).toHaveCount(0);
+      await expect(member.getByRole("button", { name: "Issue key" })).toHaveCount(0);
+      await expect(agentRow(member, "Owner bot")).toBeVisible();
+      await expect(agentRow(member, "Owner bot").getByRole("button", { name: "Revoke" })).toHaveCount(0);
+    });
+
+    await test.step("a member revokes the agent they approved from the Agents page", async () => {
+      await approveClient(member, workspace.name, "Member laptop");
+      await member.goto(`/w/${workspace.slug}/agents`);
+      const row = agentRow(member, "Member laptop");
+      await expect(row).toContainText("OAuth sign-in");
+      await expect(row).toContainText("Write");
+      await row.getByRole("button", { name: "Revoke" }).click();
+      await expect(row).toContainText("Revoked");
+      await expect(row.getByRole("button", { name: "Revoke" })).toHaveCount(0);
     });
   } finally {
     await demo.close();

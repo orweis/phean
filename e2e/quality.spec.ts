@@ -36,6 +36,7 @@ const PANELS = [
   ["/w/globex/decisions", "More for"],
   ["/w/globex/memory", "Add"],
   ["/w/globex/documents", "New document"],
+  ["/w/globex/agents", "Key for a bot"],
 ] as const;
 
 async function openPanel(page: Page, path: string, trigger: string) {
