@@ -1,15 +1,16 @@
-import { Bot } from "lucide-react";
+import { Bot, CornerDownRight } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 
 import { deleteWebhookAction, revokeAgentAction } from "@/app/w/[slug]/actions";
 import { AGENT_STATUS_META, agentStatus } from "@/components/agent-list";
 import { ConnectAgentForm } from "@/components/connect-agent-form";
+import { ConnectAgentSection } from "@/components/connect-agent-section";
 import { PageHeader } from "@/components/page-header";
 import { ActionButton } from "@/components/ui/action-button";
 import { ActorAvatar } from "@/components/ui/avatar";
 import { Badge, MetaBadge } from "@/components/ui/badge";
-import { Card, CardBody, CardHeader } from "@/components/ui/card";
+import { Card, CardHeader } from "@/components/ui/card";
 import { CopyField } from "@/components/ui/copy-button";
 import { ScrollX } from "@/components/ui/scroll-x";
 import { EmptyState } from "@/components/ui/stat";
@@ -65,30 +66,37 @@ export default async function AgentsPage({ params }: PageProps<"/w/[slug]/agents
   const loadById = new Map(workload.map((load) => [load.agent.id, load]));
   const hookByAgent = new Map(hooks.map((hook) => [hook.agentId, hook]));
   const canManage = can(ctx.actor, "agent:manage");
+  // Sub-agents sit right under the agent they work for.
+  const children = new Map<string, typeof agents>();
+  for (const agent of agents) if (agent.parentAgentId) children.set(agent.parentAgentId, [...(children.get(agent.parentAgentId) ?? []), agent]);
+  const ordered = agents.filter((agent) => !agent.parentAgentId).flatMap((agent) => [agent, ...(children.get(agent.id) ?? [])]);
+  const parents = agents.filter((agent) => !agent.parentAgentId && !agent.revokedAt).map(({ id, name }) => ({ id, name }));
+  const nameOf = new Map(agents.map((agent) => [agent.id, agent.name]));
 
   return (
     <>
       <PageHeader
         title="Agents"
-        description="Every agent connected to this workspace shares its goals, tasks, and memory. Each has its own token, so its work is attributed and it can be cut off on its own."
+        description="Every agent connected to this workspace shares its goals, tasks, and memory. Each has its own token, so its work is attributed and it can be cut off on its own. Agents can run sub-agents of their own, listed under them."
       />
 
-      <Card className="mb-6">
-        <CardHeader
-          title={canManage ? "Connect an agent" : "How agents connect"}
-          description={canManage ? "Issue a token, then paste the snippet into your MCP client." : "A workspace admin issues each agent its token."}
-        />
-        <CardBody className="grid gap-6 lg:grid-cols-3">
+      {/* The connect form leads only until the first agent is connected; then it folds to a bar and the agents lead. */}
+      <ConnectAgentSection
+        collapsed={agents.length > 0}
+        title={canManage ? "Connect an agent" : "How agents connect"}
+        description={canManage ? "Issue a token, then paste the snippet into your MCP client." : "A workspace admin issues each agent its token."}
+      >
+        <div className="grid gap-6 lg:grid-cols-3">
           {canManage && (
             <div className="min-w-0 lg:col-span-2">
-              <ConnectAgentForm slug={slug} mcpUrl={mcpUrl} />
+              <ConnectAgentForm slug={slug} mcpUrl={mcpUrl} parents={parents} />
             </div>
           )}
           <div className={cx("min-w-0", canManage ? "lg:border-l lg:border-rule lg:pl-6" : "lg:col-span-3")}>
             <WhatAgentsGet mcpUrl={mcpUrl} />
           </div>
-        </CardBody>
-      </Card>
+        </div>
+      </ConnectAgentSection>
 
       <Card className="min-w-0">
         <CardHeader title="Connected agents" description="Holding counts open tasks an agent has claimed; done counts the last 7 days." />
@@ -115,17 +123,29 @@ export default async function AgentsPage({ params }: PageProps<"/w/[slug]/agents
                 </tr>
               </thead>
               <tbody className="divide-y divide-rule">
-                {agents.map((agent) => {
+                {ordered.map((agent) => {
                   const status = agentStatus(agent);
                   const load = loadById.get(agent.id);
                   const holding = load?.claimed ?? 0;
+                  const sub = Boolean(agent.parentAgentId);
+                  const running = (children.get(agent.id) ?? []).filter((child) => !child.revokedAt).length;
                   return (
-                    <tr key={agent.id} data-agent={agent.id} className={cx(status === "revoked" && "text-muted")}>
-                      <td className={cx("min-w-44 py-3 pr-3 pl-5", PINNED_CELL)}>
+                    <tr key={agent.id} data-agent={agent.id} data-parent={agent.parentAgentId ?? undefined} className={cx(status === "revoked" && "text-muted", sub && "bg-fill/40")}>
+                      <td className={cx("min-w-44 py-3 pr-3", sub ? "pl-10" : "pl-5", PINNED_CELL)}>
                         <div className="flex items-center gap-2.5">
+                          {sub && <CornerDownRight className="size-3.5 shrink-0 text-faint" aria-hidden />}
                           <ActorAvatar type="agent" className="mt-0" />
                           <div className="min-w-0">
-                            <p className={cx("font-semibold whitespace-nowrap", status !== "revoked" && "text-ink")}>{agent.name}</p>
+                            <p className={cx("font-semibold whitespace-nowrap", status !== "revoked" && "text-ink")}>
+                              {agent.name}
+                              {sub && <span className="sr-only">, sub-agent of {nameOf.get(agent.parentAgentId!)}</span>}
+                            </p>
+                            {agent.purpose && (
+                              <p className="max-w-64 truncate text-xs text-ink-2" title={agent.purpose}>
+                                {agent.purpose}
+                              </p>
+                            )}
+                            {running > 0 && <p className="text-xs text-muted">Runs {pluralize(running, "sub-agent")}</p>}
                             <p className="font-mono text-xs whitespace-nowrap text-muted" title={`Token starting ${agent.tokenPrefix}`}>
                               {agent.tokenPrefix}…
                             </p>
@@ -172,7 +192,11 @@ export default async function AgentsPage({ params }: PageProps<"/w/[slug]/agents
                                 action={revokeAgentAction}
                                 workspace={slug}
                                 fields={{ agentId: agent.id }}
-                                confirm={`Revoke ${agent.name}? It loses access immediately; its past work stays.`}
+                                confirm={
+                                  running > 0
+                                    ? `Revoke ${agent.name} and its ${pluralize(running, "sub-agent")}? They lose access immediately; their past work stays.`
+                                    : `Revoke ${agent.name}? It loses access immediately; its past work stays.`
+                                }
                                 size="sm"
                                 variant="danger"
                               >

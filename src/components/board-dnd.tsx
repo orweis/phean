@@ -1,5 +1,6 @@
 "use client";
 
+import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState, useTransition, type DragEvent, type ReactNode } from "react";
 
 import { updateTaskAction } from "@/app/w/[slug]/actions";
@@ -15,6 +16,9 @@ const TASK_MIME = "application/x-phean-task";
 
 /** Grabbing a field, button, link or open panel inside a card must not start a drag. */
 const NOT_A_HANDLE = "input, textarea, select, button, a, summary, details[open] > div";
+
+/** A selected card: an accent outline and a tint on the card, never colour alone (it is also `aria-current`). */
+export const SELECTED_CARD = "data-selected:outline-2 data-selected:outline-offset-2 data-selected:outline-accent data-selected:*:bg-accent-tint/40";
 
 /** How long a card that just landed keeps its ring. */
 const LANDED_MS = 1800;
@@ -33,13 +37,17 @@ interface Dragged {
 export function DraggableTask({ taskId, from, title, children }: Dragged & { children: ReactNode }) {
   const ref = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState(false);
+  // The card whose peek is open is the selected one, so the eye can find it beside the sheet.
+  const selected = usePathname().endsWith(`/tasks/${taskId}`);
 
   return (
     <div
       ref={ref}
       draggable
       aria-roledescription="draggable task"
-      className={cx("cursor-grab active:cursor-grabbing", dragging && "opacity-50")}
+      aria-current={selected || undefined}
+      data-selected={selected || undefined}
+      className={cx("cursor-grab rounded-md active:cursor-grabbing", dragging && "opacity-50", SELECTED_CARD)}
       onPointerDown={(event) => {
         // Firefox will not select text in a field inside a draggable element, so only arm the drag from the card itself.
         if (ref.current) ref.current.draggable = !(event.target as Element).closest(NOT_A_HANDLE);

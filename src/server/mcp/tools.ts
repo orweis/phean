@@ -6,7 +6,8 @@ import { routes } from "@/lib/routes";
 
 import { listActivity } from "../domain/events";
 import { createGoal, listGoals, updateGoal } from "../domain/goals";
-import { forget, recall, remember } from "../domain/memory";
+import { forget, recall, remember, updateMemory } from "../domain/memory";
+import { createSubagent, revokeAgent } from "../domain/agents";
 import { getBoard, getGoalDetail, getStatusSummary, getTimeline } from "../domain/overview";
 import { ACTIONS, can } from "../domain/policy";
 import { AskInput, Empty, GoalRefInput, VisualizeInput } from "../domain/schemas";
@@ -249,11 +250,39 @@ export const TOOLS: readonly PheanTool[] = [
     key: "memories",
   }),
   serviceTool({
+    name: "update_memory",
+    title: "Update memory",
+    description: "Correct a memory you saved that has gone wrong or stale: its content, kind, tags, or goal (null for the whole workspace). Only the fields you pass change. Agents edit only their own memories; for someone else's, remember a correction instead.",
+    service: updateMemory,
+    key: "memory",
+  }),
+  serviceTool({
     name: "forget",
     title: "Forget",
     description: "Delete a memory that is wrong or obsolete. Agents can only delete memories they saved.",
     destructive: true,
     service: forget,
+  }),
+
+  // Sub-agents
+  defineTool({
+    name: "create_subagent",
+    title: "Create sub-agent",
+    description:
+      "Issue a Phean token for a sub-agent you run (a worker you spawn, a specialist you delegate to), so its work is attributed to it and people see it under you on the Agents page. Give it a name and a one-line purpose. The token is shown once: hand it to the sub-agent's MCP connection and never put it in chat, a task or a document. One level deep: sub-agents cannot have their own. Revoke it with revoke_subagent when its job is done.",
+    input: createSubagent.schema,
+    run: async (ctx, input) => {
+      const { agent, token } = await createSubagent(ctx, input);
+      return { subagent: agent, token, mcpUrl: ctx.url(routes.mcp()), note: "Shown once. Configure the sub-agent with this token as its bearer token." };
+    },
+  }),
+  serviceTool({
+    name: "revoke_subagent",
+    title: "Revoke sub-agent",
+    description: "Cut off one of your own sub-agents once its job is done; its past work stays attributed to it.",
+    destructive: true,
+    service: revokeAgent,
+    key: "subagent",
   }),
 
   // Documents

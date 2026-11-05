@@ -5,6 +5,7 @@ import { MEMORY_KIND_META } from "@/lib/domain";
 import { timeAgo, truncate } from "@/lib/format";
 import type { Memory } from "@/server/domain/memory";
 
+import { EditMemoryPopover } from "./edit-memory-form";
 import { GoalLink } from "./goal-link";
 import { ActionButton } from "./ui/action-button";
 import { Badge, MetaBadge } from "./ui/badge";
@@ -50,6 +51,8 @@ export function MemoryList({ memories, slug, canWrite, goalTitles, empty = "Noth
               </div>
             </div>
             {canWrite && (
+              <div className="flex shrink-0 items-start gap-0.5 pointer-fine:opacity-0 pointer-fine:group-hover/mem:opacity-100 pointer-fine:group-focus-within/mem:opacity-100 pointer-fine:has-[details[open]]:opacity-100">
+              <EditMemoryPopover memory={memory} slug={slug} />
               <ActionButton
                 action={forgetAction}
                 workspace={slug}
@@ -59,10 +62,10 @@ export function MemoryList({ memories, slug, canWrite, goalTitles, empty = "Noth
                 size="sm"
                 variant="ghost"
                 aria-label={`Forget “${truncate(memory.content, 50)}”`}
-                className="pointer-fine:opacity-0 pointer-fine:group-hover/mem:opacity-100 pointer-fine:group-focus-within/mem:opacity-100"
               >
                 <Trash2 aria-hidden />
               </ActionButton>
+              </div>
             )}
           </li>
         );

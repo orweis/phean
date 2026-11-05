@@ -84,11 +84,19 @@ export const agents = pgTable(
     tokenHash: text("token_hash").notNull().unique(),
     tokenPrefix: text("token_prefix").notNull(),
     createdByUserId: text("created_by_user_id").references(() => user.id, { onDelete: "set null" }),
+    /** The agent this one works for, when it is a sub-agent (one level deep). */
+    parentAgentId: text("parent_agent_id"),
+    /** What a sub-agent does for its parent, in a line ("Researches vendors"). */
+    purpose: text("purpose").notNull().default(""),
     createdAt: timestampTz("created_at").notNull().defaultNow(),
     lastSeenAt: timestampTz("last_seen_at"),
     revokedAt: timestampTz("revoked_at"),
   },
-  (t) => [unique("agents_tenant_id_uq").on(t.tenantId, t.id), index("agents_tenant_idx").on(t.tenantId)],
+  (t) => [
+    unique("agents_tenant_id_uq").on(t.tenantId, t.id),
+    index("agents_tenant_idx").on(t.tenantId),
+    foreignKey({ name: "agents_parent_fk", columns: [t.tenantId, t.parentAgentId], foreignColumns: [t.tenantId, t.id] }),
+  ],
 );
 
 export const goals = pgTable(

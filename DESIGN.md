@@ -432,6 +432,16 @@ The board's lanes are the workspace's stages, edited on the Settings page (from 
 
 A document reads like a page of the ledger: its title as the page's headline (Markdown headings sit a level below it), Markdown set in the body face with token colours, tables ruled in hairlines, code on `fill`, and Mermaid diagrams drawn on a panel in the appearance's own theme, with their source one click away. On a task, each document is a quiet `fill` chip with a document icon and no arrow, since it stays inside Phean. The editor is a monospace field with a live preview beside it on wide screens and a Write and Preview switch on phones.
 
+### Peeks
+
+A task or a document opens in a peek over the page it was opened from, never in place of it. A task opens as a **side peek** at the right edge, so the board or list stays in view beside it (the way Notion's side peek opens database items, and because Jira's users pushed back when an overlay hid the list they were triaging). A document opens as a **centre peek**, wide enough to read, with **Full screen** to fill the window for long reading or editing. Every peek keeps the item's own URL: Back closes it, a refresh or a shared link opens the item's full page, and **Open as page** goes there on purpose. A peek is a native modal dialog: the page behind is inert under a light ink scrim, focus moves into the peek and returns to what opened it, and Escape closes it. Its toolbar is a glass bar; its content sits on the ground, never on glass. On phones a peek is the whole screen.
+
+### Selection
+
+What is selected must never be a guess. The selected request on Decisions and the overview (the one holding focus, or the one J and K moved to) carries an accent bar at its left edge, an accent tint, and `aria-current`; a board card whose peek is open takes an accent outline and tint. Colour is never the only sign, and the selected item is scrolled into view as the selection moves.
+
+Sources for these choices: Linear's [peek](https://linear.app/docs/peek.md); Notion's [open pages as side peek, centre peek or full page](https://www.notion.com/releases/2022-07-20); feedback on Jira's [side panel](https://community.atlassian.com/forums/Jira-Service-Management/Jira-Cloud-filter-results-now-open-issues-in-a-side-panel-can/qaa-p/3241087); the W3C [dialog (modal) pattern](https://www.w3.org/WAI/ARIA/apg/patterns/dialogmodal/).
+
 ### Keyboard shortcuts
 
 `?` opens a legend of every shortcut as a glass sheet (it is also in the account menu). Keys are shown as small `kbd` capsules in a hairline outline. Shortcuts never fire while focus is in a field.

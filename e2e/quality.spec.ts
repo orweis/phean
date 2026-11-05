@@ -115,12 +115,75 @@ test.describe("signed in", () => {
     await expect(entry.getByRole("link", { name: /^Draft reply to Globex/ }).first()).toBeVisible();
     await entry.getByRole("list", { name: "Documents" }).getByRole("link", { name: "Draft reply to Globex" }).click();
     await expect(page).toHaveURL(/\/w\/globex\/documents\/d_/);
+    // A refresh opens the document as its own page.
+    await page.reload();
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Draft reply to Globex");
     const body = page.locator("[data-markdown]");
     await expect(body.getByRole("heading", { name: "Where the three invoices stand" })).toBeVisible();
     await expect(body.getByRole("table")).toContainText("#4471");
     await expect(body.locator('[data-diagram="drawn"] svg')).toBeVisible();
     await expectAccessible(page);
+  });
+
+  test("a board card opens in a side peek beside the board, and Escape brings focus back to it", async ({ page }) => {
+    await page.goto("/w/globex/board");
+    const card = page.locator('section[data-stage="in_progress"] article').filter({ hasText: "Chase three overdue invoices" });
+    const title = card.getByRole("link", { name: "Chase three overdue invoices" });
+    await title.click();
+    await expect(page).toHaveURL(/\/w\/globex\/tasks\/t_/);
+    const peek = page.getByRole("dialog", { name: "Task" });
+    await expect(peek.getByRole("heading", { level: 2, name: "Chase three overdue invoices" })).toBeVisible();
+    await expect(peek.getByRole("region", { name: "Waiting on you" })).toContainText("Globex disputes invoice #4471");
+    // The board stays in view, and the card whose peek is open is marked as the selected one.
+    await expect(page.locator('section[data-stage="in_progress"] [aria-current="true"]')).toContainText("Chase three overdue invoices");
+    await expectAccessible(page);
+    await page.keyboard.press("Escape");
+    await expect(page).toHaveURL("/w/globex/board");
+    await expect(peek).toBeHidden();
+    await expect(title).toBeFocused();
+  });
+
+  test("a peek opens as its own page from its link, a refresh, or a shared URL", async ({ page }) => {
+    await page.goto("/w/globex/board");
+    await page.locator('section[data-stage="in_progress"]').getByRole("link", { name: "Chase three overdue invoices" }).click();
+    await page.getByRole("dialog", { name: "Task" }).getByRole("link", { name: "Open as page" }).click();
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Chase three overdue invoices");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+  });
+
+  test("a document opens in a wide peek that can fill the screen", async ({ page }) => {
+    await page.goto("/w/globex/decisions");
+    const entry = page.locator("[data-entry]").filter({ hasText: "Chase three overdue invoices" });
+    await entry.getByRole("list", { name: "Documents" }).getByRole("link", { name: "Draft reply to Globex" }).click();
+    const peek = page.getByRole("dialog", { name: "Document" });
+    await expect(peek.locator("#document-title")).toHaveText("Draft reply to Globex");
+    await expect(peek.locator('[data-diagram="drawn"] svg')).toBeVisible();
+    const full = peek.getByRole("button", { name: "Full screen" });
+    await full.click();
+    await expect(peek.getByRole("button", { name: "Exit full screen" })).toHaveAttribute("aria-pressed", "true");
+    const box = (await peek.boundingBox())!;
+    expect(box.width).toBeGreaterThanOrEqual((page.viewportSize()!.width) - 1);
+    await page.keyboard.press("Escape");
+    await expect(page).toHaveURL("/w/globex/decisions");
+  });
+
+  test("the selected request is unmistakable, and J and K move the selection", async ({ page }) => {
+    await page.goto("/w/globex/decisions");
+    const entries = page.locator("[data-entry]");
+    await expect(entries).not.toHaveCount(0);
+    await entries.first().focus();
+    await expect(entries.first()).toHaveAttribute("aria-current", "true");
+    await expect(entries.first()).toHaveAttribute("data-selected", "");
+    if ((await entries.count()) > 1) {
+      await page.keyboard.press("j");
+      await expect(entries.nth(1)).toHaveAttribute("aria-current", "true");
+      await expect(entries.first()).not.toHaveAttribute("aria-current");
+      await page.keyboard.press("k");
+      await expect(entries.first()).toHaveAttribute("aria-current", "true");
+    }
+    // Enter opens the selected request's task.
+    await page.keyboard.press("Enter");
+    await expect(page.getByRole("dialog", { name: "Task" })).toBeVisible();
   });
 
   test("? opens the keyboard shortcuts legend, and so does the account menu", async ({ page }) => {

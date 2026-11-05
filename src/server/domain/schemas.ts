@@ -252,6 +252,14 @@ export const RememberInput = z.object({
   taskId: taskId.optional(),
 });
 
+export const UpdateMemoryInput = z.object({
+  memoryId: z.string().trim().min(1),
+  content: z.string().trim().min(1).max(LIMITS.memory).optional(),
+  kind: z.enum(MEMORY_KINDS).optional(),
+  tags: tags.optional(),
+  goalId: goalId.nullable().optional().describe("The goal it is about, or null for the whole workspace"),
+});
+
 export const RecallInput = z.object({
   query: z.string().trim().max(LIMITS.query).optional(),
   kind: z.enum(MEMORY_KINDS).optional(),
@@ -333,8 +341,15 @@ export const VIEW_KINDS = ["goal_tree", "kanban", "timeline"] as const;
 export const VisualizeInput = z.object({ kind: z.enum(VIEW_KINDS), goalId: goalId.optional() });
 
 // Workspace administration
-export const CreateAgentInput = z.object({ name });
+export const CreateAgentInput = z.object({
+  name,
+  parentAgentId: z.string().trim().min(1).optional().describe("Issue it as a sub-agent of this agent"),
+});
 export const AgentRefInput = z.object({ agentId: z.string().trim().min(1) });
+export const CreateSubagentInput = z.object({
+  name,
+  purpose: z.string().trim().max(LIMITS.brief).default("").describe("What it does for you, in a line: 'Researches vendors'"),
+});
 
 export const CreateWorkspaceInput = z.object({
   name,

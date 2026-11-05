@@ -67,6 +67,9 @@ Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) first. The rules below are the
 - A row that leaves when its action runs passes `exits` to the button and fades with `has-[[data-exit][data-pending]]`; pending buttons spin (`Button`'s `pending`).
 - Popovers take focus when they open and open upward when there is no room below. A form panel gets a `title` and a `PopoverCancel`; a panel of one-click rows is `Popover menu` with `Button` size `menu`. The rare moves of a row (Release, Drop, Mark answered) live in its ghost `⋯` menu, named "More actions for …".
 - Toolbar filters are `ToolbarSelect` capsules; form fields stay `Select`. A search box is `SearchForm` (a pill with a clear button and the `/` shortcut).
+- Tasks and documents open in a peek through the `@peek` parallel slot in `app/w/[slug]` (intercepting routes `(.)tasks/[id]` and `(.)documents/[id]`, wrapped in `Peek`), and as full pages at `/tasks/[id]` and `/documents/[id]`. Build both from one view (`TaskDetail`, `DocumentDetail`) with `headingLevel={2}` in the peek. Link to them with `Link` and `scroll={false}`; "Open as page" is a plain `<a>`, which is never intercepted. The slot's `[...rest]` page closes a peek on any other navigation.
+- Selection is marked with `data-selected` plus `aria-current`, never colour alone (`DecisionKeys` for requests, `SELECTED_CARD` for board cards).
+- Agents may run sub-agents (`agents.parent_agent_id`, one level deep): `createSubagent` for an agent's own, `createAgent` with `parentAgentId` for owners; revoking an agent revokes its sub-agents. List them nested under their parent.
 - Keyboard shortcuts are listed in `components/keyboard-shortcuts.tsx` (the `?` legend); add a row there for any new one, and never bind a key while focus is in a field.
 - "Decision" means an agent's request and nothing else: a goal waiting on a person is an approval, and the memory kind `decision` reads "Choice".
 

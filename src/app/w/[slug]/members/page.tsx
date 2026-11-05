@@ -1,3 +1,4 @@
+import { UserPlus } from "lucide-react";
 import type { Metadata } from "next";
 
 import { cancelInvitationAction, removeMemberAction } from "@/app/w/[slug]/actions";
@@ -6,8 +7,9 @@ import { PageHeader } from "@/components/page-header";
 import { ActionButton } from "@/components/ui/action-button";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge, MetaBadge } from "@/components/ui/badge";
-import { Card, CardBody, CardHeader } from "@/components/ui/card";
+import { Card, CardHeader } from "@/components/ui/card";
 import { CopyButton } from "@/components/ui/copy-button";
+import { Popover } from "@/components/ui/popover";
 import { ROLE_META } from "@/lib/domain";
 import { timeAgo } from "@/lib/format";
 import { routes } from "@/lib/routes";
@@ -32,21 +34,21 @@ export default async function MembersPage({ params }: PageProps<"/w/[slug]/membe
     <>
       <PageHeader title="Members" description="People who can see this workspace, decide on goals, and manage its agents." />
 
-      {canManage && (
-        <Card className="mb-6">
+      {/* The team first; inviting someone is a panel in its header, not a form across the page. */}
+      <div className="max-w-4xl space-y-6">
+        <Card>
           <CardHeader
-            title="Invite someone"
-            description="Admins can manage members and agent tokens. Members can do everything else, including approving goals."
+            title="People"
+            description={`${members.length} with access to this workspace.`}
+            action={
+              canManage && (
+                <Popover variant="ghost" icon={<UserPlus aria-hidden />} label="Invite" title="Invite someone" className="sm:w-96">
+                  <p className="mb-3 text-xs text-muted">Admins can manage members and agent tokens. Members can do everything else, including approving goals.</p>
+                  <InviteMemberForm slug={slug} origin={origin} />
+                </Popover>
+              )
+            }
           />
-          <CardBody>
-            <InviteMemberForm slug={slug} origin={origin} />
-          </CardBody>
-        </Card>
-      )}
-
-      <div className="grid gap-6 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
-          <CardHeader title="People" description={`${members.length} with access to this workspace.`} />
           <ul className="divide-y divide-rule">
             {members.map((person) => {
               const isSelf = person.userId === ctx.actor.id;
@@ -82,15 +84,10 @@ export default async function MembersPage({ params }: PageProps<"/w/[slug]/membe
           </ul>
         </Card>
 
-        {canManage && (
-          <Card className="h-fit">
-            <CardHeader title="Pending invitations" />
-            {invitations.length === 0 ? (
-              <CardBody>
-                <p className="text-xs text-muted">No open invitations.</p>
-              </CardBody>
-            ) : (
-              <ul className="divide-y divide-rule">
+        {canManage && invitations.length > 0 && (
+          <Card>
+            <CardHeader title="Pending invitations" description="Each link works once, until it expires." />
+            <ul className="divide-y divide-rule">
                 {invitations.map((invitation) => (
                   <li key={invitation.id} className="space-y-2 px-5 py-3">
                     <div className="flex items-center gap-2">
@@ -106,8 +103,7 @@ export default async function MembersPage({ params }: PageProps<"/w/[slug]/membe
                     </div>
                   </li>
                 ))}
-              </ul>
-            )}
+            </ul>
           </Card>
         )}
       </div>

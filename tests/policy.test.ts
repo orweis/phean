@@ -17,7 +17,7 @@ const EXPECTED: Record<Role, readonly Action[]> = {
   owner: ACTIONS,
   admin: ACTIONS,
   member: ["workspace:read", "goal:write", "goal:decide", "task:write", "memory:write", "document:write"],
-  agent: ["workspace:read", "goal:write", "task:write", "memory:write", "document:write", "webhook:manage"],
+  agent: ["workspace:read", "goal:write", "task:write", "memory:write", "document:write", "agent:delegate", "webhook:manage"],
   platform_admin: ["workspace:read"],
 };
 

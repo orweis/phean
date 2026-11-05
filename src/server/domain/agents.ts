@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 
-import { and, asc, eq, isNull, lt, or, sql } from "drizzle-orm";
+import { and, asc, count, eq, isNull, lt, or, sql } from "drizzle-orm";
 
 import { AGENT_TOKEN_PREFIX } from "@/lib/domain";
 
@@ -9,10 +9,10 @@ import { publicColumns } from "../db/columns";
 import { newId } from "../db/ids";
 import { agents, organization, type AgentRow } from "../db/schema";
 import { inTenant, inTransaction, type Ctx, type Tenant } from "./context";
-import { notFound } from "./errors";
+import { conflict, forbidden, invalid, notFound } from "./errors";
 import { recordEvent } from "./events";
 import { assertCan } from "./policy";
-import { AgentRefInput, CreateAgentInput, Empty } from "./schemas";
+import { AgentRefInput, CreateAgentInput, CreateSubagentInput, Empty } from "./schemas";
 import { service } from "./service";
 import { disableWebhooksOf } from "./webhooks";
 
@@ -39,20 +39,35 @@ export const listAgents = service(Empty, async (ctx): Promise<Agent[]> => {
     .orderBy(asc(agents.createdAt));
 });
 
-/** Creates an agent identity. The plaintext token is returned once and never stored. */
-export const createAgent = service(CreateAgentInput, async (ctx, { name }): Promise<{ agent: Agent; token: string }> => {
-  assertCan(ctx, "agent:manage");
-  const { token, tokenHash, tokenPrefix } = generateAgentToken();
+/** Sub-agents one agent may run at once, so a runaway orchestrator cannot mint tokens without end. */
+export const MAX_SUBAGENTS = 20;
 
+/** An agent that can take sub-agents: active, in this tenant, and not a sub-agent itself (one level deep). */
+async function parentFor(ctx: Ctx, parentAgentId: string): Promise<Agent> {
+  const [parent] = await ctx.db.select(agentColumns).from(agents).where(and(inTenant(ctx, agents), eq(agents.id, parentAgentId), isNull(agents.revokedAt)));
+  if (!parent) throw notFound("active agent", parentAgentId);
+  if (parent.parentAgentId) throw invalid(`"${parent.name}" is a sub-agent already; sub-agents go one level deep.`);
+  const [{ active }] = (await ctx.db
+    .select({ active: count() })
+    .from(agents)
+    .where(and(inTenant(ctx, agents), eq(agents.parentAgentId, parent.id), isNull(agents.revokedAt)))) as [{ active: number }];
+  if (Number(active) >= MAX_SUBAGENTS) throw conflict(`"${parent.name}" already runs ${MAX_SUBAGENTS} sub-agents. Revoke one it no longer needs first.`);
+  return parent;
+}
+
+async function issue(ctx: Ctx, values: { name: string; parent?: Agent; purpose?: string }): Promise<{ agent: Agent; token: string }> {
+  const { token, tokenHash, tokenPrefix } = generateAgentToken();
   return inTransaction(ctx, async (tx) => {
     const [agent] = await tx.db
       .insert(agents)
       .values({
         id: newId("ag"),
         tenantId: tx.tenant.id,
-        name,
+        name: values.name,
         tokenHash,
         tokenPrefix,
+        parentAgentId: values.parent?.id ?? null,
+        purpose: values.purpose ?? "",
         createdByUserId: tx.actor.type === "user" ? tx.actor.id : null,
       })
       .returning(agentColumns);
@@ -60,29 +75,60 @@ export const createAgent = service(CreateAgentInput, async (ctx, { name }): Prom
       action: "agent.created",
       entityType: "agent",
       entityId: agent!.id,
-      summary: `connected a new agent "${name}"`,
+      summary: values.parent ? `connected "${values.name}" as a sub-agent of "${values.parent.name}"` : `connected a new agent "${values.name}"`,
+      data: { parentAgentId: values.parent?.id ?? null },
     });
     return { agent: agent!, token };
   });
+}
+
+/** Creates an agent identity, optionally as another agent's sub-agent. The plaintext token is returned once and never stored. */
+export const createAgent = service(CreateAgentInput, async (ctx, { name, parentAgentId }): Promise<{ agent: Agent; token: string }> => {
+  assertCan(ctx, "agent:manage");
+  const parent = parentAgentId ? await parentFor(ctx, parentAgentId) : undefined;
+  return issue(ctx, { name, parent });
 });
 
+/**
+ * An agent issues a token for one of its own sub-agents (a worker it spawns, a specialist it
+ * delegates to), so their work is attributed to them and shows under it on the Agents page.
+ */
+export const createSubagent = service(CreateSubagentInput, async (ctx, { name, purpose }): Promise<{ agent: Agent; token: string }> => {
+  assertCan(ctx, "agent:delegate");
+  if (ctx.actor.type !== "agent") throw invalid("People issue tokens on the Agents page.");
+  const parent = await parentFor(ctx, ctx.actor.id);
+  return issue(ctx, { name, parent, purpose });
+});
+
+/**
+ * Revokes an agent and every sub-agent it runs. Owners and admins revoke any agent; an agent
+ * revokes only its own sub-agents.
+ */
 export const revokeAgent = service(AgentRefInput, async (ctx, { agentId }): Promise<Agent> => {
-  assertCan(ctx, "agent:manage");
+  if (ctx.actor.type === "agent") {
+    assertCan(ctx, "agent:delegate");
+  } else {
+    assertCan(ctx, "agent:manage");
+  }
   return inTransaction(ctx, async (tx) => {
-    const [agent] = await tx.db
+    const [target] = await tx.db.select(agentColumns).from(agents).where(and(inTenant(tx, agents), eq(agents.id, agentId), isNull(agents.revokedAt)));
+    if (!target) throw notFound("active agent", agentId);
+    if (tx.actor.type === "agent" && target.parentAgentId !== tx.actor.id) throw forbidden("Agents revoke only their own sub-agents. Ask a workspace admin to revoke this one.");
+    const revoked = await tx.db
       .update(agents)
       .set({ revokedAt: new Date() })
-      .where(and(inTenant(tx, agents), eq(agents.id, agentId), isNull(agents.revokedAt)))
+      .where(and(inTenant(tx, agents), or(eq(agents.id, agentId), eq(agents.parentAgentId, agentId)), isNull(agents.revokedAt)))
       .returning(agentColumns);
-    if (!agent) throw notFound("active agent", agentId);
-    await disableWebhooksOf(tx, agentId);
+    for (const agent of revoked) await disableWebhooksOf(tx, agent.id);
+    const children = revoked.filter((agent) => agent.id !== agentId);
     await recordEvent(tx, {
       action: "agent.revoked",
       entityType: "agent",
       entityId: agentId,
-      summary: `revoked agent "${agent.name}"`,
+      summary: children.length ? `revoked agent "${target.name}" and its ${children.length} sub-agent${children.length === 1 ? "" : "s"}` : `revoked agent "${target.name}"`,
+      data: { subagents: children.map((agent) => agent.id) },
     });
-    return agent;
+    return revoked.find((agent) => agent.id === agentId)!;
   });
 });
 

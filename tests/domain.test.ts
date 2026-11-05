@@ -903,3 +903,54 @@ describe("documents", () => {
     await expect(getDocument(human, { documentId: document.id })).rejects.toMatchObject({ code: "not_found" });
   });
 });
+
+describe("sub-agents", () => {
+  it("lets an agent issue tokens for its own sub-agents, one level deep, revoked with it", async () => {
+    const { createSubagent, listAgents, revokeAgent, authenticateAgentToken } = await import("@/server/domain/agents");
+    const { agent: researcher, token } = await createSubagent(scout, { name: "Vendor researcher", purpose: "Researches vendors" });
+    expect(researcher).toMatchObject({ parentAgentId: ws.scout.agentId, purpose: "Researches vendors" });
+    const principal = await authenticateAgentToken(testDb.db, token);
+    expect(principal?.agent.name).toBe("Vendor researcher");
+
+    // The sub-agent works under its own name, and cannot run sub-agents of its own.
+    const { agentContext } = await import("@/server/domain/agents");
+    const sub = agentContext(testDb.db, principal!);
+    const { created } = await captureTasks(sub, { tasks: [{ title: "Compare three vendors" }] });
+    expect(created[0]).toMatchObject({ createdByName: "Vendor researcher" });
+    await expect(createSubagent(sub, { name: "Nested" })).rejects.toMatchObject({ code: "invalid" });
+    await expect(createSubagent(human, { name: "Person's" })).rejects.toMatchObject({ code: "invalid" });
+
+    // An agent revokes only its own sub-agents; revoking the parent takes its sub-agents with it.
+    const { agent: other } = await createSubagent(closer, { name: "Closer's helper" });
+    await expect(revokeAgent(scout, { agentId: other.id })).rejects.toMatchObject({ code: "forbidden" });
+    await expect(revokeAgent(scout, { agentId: ws.closer.agentId })).rejects.toMatchObject({ code: "forbidden" });
+    await revokeAgent(human, { agentId: ws.closer.agentId });
+    const agents = await listAgents(human, {});
+    expect(agents.find((agent) => agent.id === other.id)?.revokedAt).not.toBeNull();
+    expect(agents.find((agent) => agent.id === researcher.id)?.revokedAt).toBeNull();
+    await revokeAgent(scout, { agentId: researcher.id });
+    expect(await authenticateAgentToken(testDb.db, token)).toBeNull();
+  });
+
+  it("lets owners issue a token as an agent's sub-agent", async () => {
+    const { createAgent } = await import("@/server/domain/agents");
+    const { agent } = await createAgent(human, { name: "Night shift", parentAgentId: ws.scout.agentId });
+    expect(agent.parentAgentId).toBe(ws.scout.agentId);
+    await expect(createAgent(human, { name: "Deeper", parentAgentId: agent.id })).rejects.toMatchObject({ code: "invalid" });
+    await expect(createAgent(human, { name: "Orphan", parentAgentId: "ag_missing" })).rejects.toMatchObject({ code: "not_found" });
+  });
+});
+
+describe("editing memories", () => {
+  it("corrects a memory in place, and lets agents edit only their own", async () => {
+    const { updateMemory } = await import("@/server/domain/memory");
+    const memory = await remember(scout, { content: "The auditor is Rivera", kind: "fact", tags: ["audit"] });
+    const fixed = await updateMemory(human, { memoryId: memory.id, content: "The auditor is Okafor", tags: ["audit", "2026"] });
+    expect(fixed).toMatchObject({ content: "The auditor is Okafor", tags: ["audit", "2026"], kind: "fact" });
+    expect((await recall(closer, { query: "okafor" })).map((m) => m.id)).toEqual([memory.id]);
+    await expect(updateMemory(closer, { memoryId: memory.id, content: "Mine" })).rejects.toMatchObject({ code: "forbidden" });
+    await expect(updateMemory(scout, { memoryId: memory.id, kind: "decision" })).resolves.toMatchObject({ kind: "decision" });
+    await expect(updateMemory(human, { memoryId: memory.id, kind: "decision" })).rejects.toMatchObject({ code: "invalid" });
+    expect(await actionsOf(human, memory.id)).toContain("memory.updated");
+  });
+});

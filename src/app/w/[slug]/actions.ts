@@ -7,7 +7,7 @@ import { cancelInvitation, inviteMember, removeMember } from "@/server/auth/work
 import { createAgent, revokeAgent } from "@/server/domain/agents";
 import { attachDocument, deleteDocument, updateDocument } from "@/server/domain/documents";
 import { createGoal, setGoalStatus, updateGoal } from "@/server/domain/goals";
-import { forget, remember } from "@/server/domain/memory";
+import { forget, remember, updateMemory } from "@/server/domain/memory";
 import { deleteWebhook } from "@/server/domain/webhooks";
 import { saveWorkflow } from "@/server/domain/workflow";
 import { addTask, answerInput, completeTask, releaseTask, retractAnswer, updateTask } from "@/server/domain/tasks";
@@ -34,6 +34,7 @@ export const retractAnswerAction = tenantAction(retractAnswer, { success: "Answe
 // Memory
 export const rememberAction = tenantAction(remember, { success: "Saved to memory." });
 export const forgetAction = tenantAction(forget, { success: "Forgotten." });
+export const updateMemoryAction = tenantAction(updateMemory, { success: "Saved." });
 
 // Documents
 export const createDocumentAction = tenantAction(attachDocument, {
