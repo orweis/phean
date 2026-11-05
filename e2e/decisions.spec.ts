@@ -77,6 +77,8 @@ test("an agent waits on a decision and wakes when the person makes it", async ({
     const status = page.locator("[data-status-region]");
     await expect(status).toContainText("Sent “Okafor LLP” to Auditor scout");
     await expect(card(page, "1 request waiting on you").locator(`[data-task="${task.id}"]`)).toHaveCount(0);
+    // The request that takes the answered one's place is selected, so the keys carry on from it.
+    await expect(card(page, "1 request waiting on you").locator(`[data-task="${courier.id}"]`)).toHaveAttribute("aria-current", "true");
   });
 
   await test.step("a mis-click is taken back with Undo, before the agent collects it", async () => {

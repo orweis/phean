@@ -171,6 +171,9 @@ test.describe("signed in", () => {
     await page.goto("/w/globex/decisions");
     const entries = page.locator("[data-entry]");
     await expect(entries).not.toHaveCount(0);
+    // The first request is selected on arrival, before anything has focus.
+    await expect(entries.first()).toHaveAttribute("aria-current", "true");
+    await expect(page.locator("[data-entry][data-selected]")).toHaveCount(1);
     await entries.first().focus();
     await expect(entries.first()).toHaveAttribute("aria-current", "true");
     await expect(entries.first()).toHaveAttribute("data-selected", "");
@@ -194,7 +197,7 @@ test.describe("signed in", () => {
       await page.keyboard.press("?");
       await expect(legend).toBeVisible({ timeout: 1000 });
     }).toPass();
-    await expect(legend).toContainText("Pick the focused request's option");
+    await expect(legend).toContainText("Pick the selected request's option");
     await expectAccessible(page);
     await page.keyboard.press("Escape");
     await expect(legend).toBeHidden();
