@@ -49,8 +49,10 @@ export function goalTreeMermaid(goals: readonly GoalWithProgress[], tasks: reado
 
 export function kanbanMermaid(board: Board): string {
   const lines = ["kanban"];
-  for (const { status, tasks } of board.columns) {
-    lines.push(`  ${status}[${TASK_STATUS_META[status].label}]`);
+  for (const { stage, tasks } of board.columns) {
+    // Mermaid ids are words; an added stage's key may hold dashes.
+    const status = stage.key.replace(/-/g, "_");
+    lines.push(`  ${status}[${label(stage.label, 40)}]`);
     for (const task of tasks.slice(0, KANBAN_COLUMN_LIMIT)) {
       const owner = task.claimedByName ? ` · ${label(task.claimedByName, 20)}` : "";
       lines.push(`    ${task.id}[${label(task.title, 40)}${owner}]`);

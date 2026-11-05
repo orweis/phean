@@ -28,7 +28,18 @@ export async function signUp(page: Page, person: Person): Promise<void> {
   await page.getByLabel("Name").fill(person.name);
   await page.getByLabel("Email").fill(person.email);
   await page.getByLabel("Password").fill(person.password);
-  await page.getByRole("button", { name: "Create account" }).click();
+  // When parallel specs hit the limit together, wait out its 10-second window and try again.
+  for (let attempt = 0; ; attempt += 1) {
+    await page.getByRole("button", { name: "Create account" }).click();
+    const limited = page.getByRole("alert").filter({ hasText: "Too many requests" });
+    const outcome = await Promise.race([
+      page.waitForURL("/workspaces").then(() => "in" as const),
+      limited.waitFor().then(() => "limited" as const),
+    ]);
+    if (outcome === "in") return;
+    if (attempt === 2) break;
+    await page.waitForTimeout(10_500);
+  }
   await expect(page).toHaveURL("/workspaces");
 }
 

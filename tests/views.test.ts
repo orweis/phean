@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { EMPTY_COUNTS } from "@/lib/goal-tree";
+import { DEFAULT_WORKFLOW } from "@/lib/workflow";
 import type { GoalWithProgress } from "@/server/domain/goals";
 import type { Board } from "@/server/domain/overview";
 import type { TaskView } from "@/server/domain/tasks";
@@ -11,6 +12,8 @@ const goal = (id: string, parentId: string | null, title: string, status: GoalWi
 
 const task = (id: string, title: string, extra: Partial<TaskView> = {}) =>
   ({ id, title, status: "todo", priority: "medium", goalId: null, goalTitle: null, claimedByName: null, dueDate: null, ...extra }) as TaskView;
+
+const stage = (key: string) => DEFAULT_WORKFLOW.find((candidate) => candidate.key === key)!;
 
 describe("Mermaid views", () => {
   it("draws the goal hierarchy with escaped labels and status classes", () => {
@@ -29,15 +32,16 @@ describe("Mermaid views", () => {
   it("caps kanban columns and shows who holds each task", () => {
     const board: Board = {
       columns: [
-        { status: "inbox", tasks: Array.from({ length: 17 }, (_, i) => task(`t_${i}`, `Item ${i}`)) },
-        { status: "todo", tasks: [] },
-        { status: "in_progress", tasks: [task("t_x", "Invoices", { claimedByName: "Scout" })] },
-        { status: "done", tasks: [] },
+        { stage: stage("inbox"), tasks: Array.from({ length: 17 }, (_, i) => task(`t_${i}`, `Item ${i}`)) },
+        { stage: stage("todo"), tasks: [] },
+        { stage: { key: "in-review", label: "In review", kind: "in_progress", hidden: false }, tasks: [task("t_x", "Invoices", { claimedByName: "Scout" })] },
+        { stage: stage("done"), tasks: [] },
       ],
     };
     const mermaid = kanbanMermaid(board);
     expect(mermaid).toContain("inbox_more[+2 more]");
     expect(mermaid).toContain("t_x[Invoices · Scout]");
+    expect(mermaid).toContain("in_review[In review]");
   });
 
   it("groups the timeline by goal and marks done, active, and urgent work", () => {

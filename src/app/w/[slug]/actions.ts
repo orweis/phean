@@ -5,9 +5,11 @@ import { routes } from "@/lib/routes";
 import { tenantAction } from "@/server/actions";
 import { cancelInvitation, inviteMember, removeMember } from "@/server/auth/workspaces";
 import { createAgent, revokeAgent } from "@/server/domain/agents";
+import { attachDocument, deleteDocument, updateDocument } from "@/server/domain/documents";
 import { createGoal, setGoalStatus, updateGoal } from "@/server/domain/goals";
 import { forget, remember } from "@/server/domain/memory";
 import { deleteWebhook } from "@/server/domain/webhooks";
+import { saveWorkflow } from "@/server/domain/workflow";
 import { addTask, answerInput, completeTask, releaseTask, retractAnswer, updateTask } from "@/server/domain/tasks";
 
 // Goals
@@ -33,6 +35,15 @@ export const retractAnswerAction = tenantAction(retractAnswer, { success: "Answe
 export const rememberAction = tenantAction(remember, { success: "Saved to memory." });
 export const forgetAction = tenantAction(forget, { success: "Forgotten." });
 
+// Documents
+export const createDocumentAction = tenantAction(attachDocument, {
+  redirectTo: (document, ctx) => routes.document(ctx.tenant.slug, document.id, "edit"),
+});
+export const updateDocumentAction = tenantAction(updateDocument, {
+  redirectTo: (document, ctx) => routes.document(ctx.tenant.slug, document.id),
+});
+export const deleteDocumentAction = tenantAction(deleteDocument, { redirectTo: (_result, ctx) => routes.documents(ctx.tenant.slug) });
+
 // Agents
 export const createAgentAction = tenantAction(createAgent, {
   data: ({ agent, token }) => ({ token, agentName: agent.name }),
@@ -41,6 +52,9 @@ export const revokeAgentAction = tenantAction(revokeAgent, {
   success: (agent) => `Revoked ${agent.name}.`,
 });
 export const deleteWebhookAction = tenantAction(deleteWebhook, { success: "Webhook removed." });
+
+// Settings
+export const saveWorkflowAction = tenantAction(saveWorkflow, { success: "Saved the board's stages." });
 
 // Members
 export const inviteMemberAction = tenantAction(inviteMember, {

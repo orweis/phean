@@ -6,14 +6,14 @@ export const SERVER_INSTRUCTIONS = `# Phean operating guide
 Phean is a shared task and goal ledger for one workspace. Humans set direction and approve goals; agents like you collect work from your own connectors (email, Slack, calendar, chat), organize it, and get it done. Several agents may be connected to the same workspace at once, so coordinate through Phean instead of assuming you are alone.
 
 ## Start of every session
-1. Call whoami to learn your agent name, workspace, and dashboard link.
+1. Call whoami to learn your agent name, workspace, dashboard link, and the board's stages (workflow).
 2. Run the sync_up prompt (or call get_activity and list_tasks with claimed="mine") to see what other agents and humans did since you last looked.
 3. Work out how a human gets back to this session: a url that opens this conversation or message is best (one click from Phean); otherwise your session id, or the command that resumes you. Phean calls this your session.
 
 ## The loop
 1. Scan: sweep the sources you can access for requests, commitments, deadlines, and follow-ups. Phean has no connectors of its own.
 2. Capture: record findings with one capture_tasks call. Always set source and a stable source_ref (message link, thread id, event id). Phean skips items another agent already captured and reports them as duplicates.
-3. Triage: group inbox tasks under goals with assign_tasks_to_goal, and set priority and due dates with update_task. If no goal fits, propose one with create_goal.
+3. Triage: group inbox tasks under goals with assign_tasks_to_goal (see "Goals: group the work" below), and set priority and due dates with update_task. Work that is wanted but not planned yet goes to status "backlog"; work ready to pick up goes to "todo".
 4. Execute: call suggest_next_actions, claim_task with your session before you start, do the work, then complete_task with a short note on what you did. Release tasks you cannot finish. Picking up a task from an earlier session? Call link_session from this one.
 5. Ask: when a task needs a decision or information only the human has, record it with request_input (see "Asking the human" below) instead of only asking in chat. Then wait_for_answers if you can wait in this session, or work on something else and collect_answers later.
 6. Review: get_status_summary and visualize (goal_tree, kanban, timeline) answer "where do we stand?".
@@ -26,9 +26,29 @@ Questions you only ask in chat get lost; Phean keeps them on the human's Decisio
 - context: the facts, the trade-offs, and your recommendation, in a few lines, for someone reading it cold days later.
 - options: 2-5 short, mutually exclusive answers whenever the answer space is known. The human can still write their own answer, so treat a custom answer as authoritative.
 - links: always add a link back to this conversation (kind "conversation") when your client has one, and permalinks to every source the question is about (kind "source": the email, Slack message, ticket, PR; kind "doc" for drafts and files). Give each a short title ("This chat", "Dana's email"). Never invent a URL; if you have none, say where to look in context.
+- A draft to approve (an email, an offer, a plan) with no URL of its own: attach it with attach_document first, then link its url (kind "doc"), so the person reads it beside the decision.
 - session: also pass your session so the human can resume with you in one click.
 - Tell the human in one line that a decision is waiting, with decisionsUrl, and batch several into one message.
 - Collect the answer: wait_for_answers blocks until the human answers (it returns timedOut after at most a few minutes; say what you are still waiting on, then wait again or move on). Otherwise collect_answers at the start of every session and before acting on blocked work. Each answer is delivered once. Act on it, then continue or complete the task.
+
+## Goals: group the work
+Goals are how a person sees the work: a goal map, progress per outcome, a timeline per goal. A task with no goal is invisible in all of them.
+- Every task you capture or triage should serve a goal. Pass goalId on capture_tasks, or file tasks afterwards with assign_tasks_to_goal.
+- When two or more tasks share an outcome no goal names yet (three invoices to chase, a hire to make, a launch to prepare), propose that goal with create_goal and file the tasks under it. Name the outcome, not the activity: "Close the Q4 books", not "Finance stuff".
+- Prefer a few clear goals with sub-goals over many tiny ones; a goal with one task usually belongs inside another.
+- Before proposing, list_goals and search, so you extend what exists. Tell the human in one message which goals you proposed and which tasks each groups, with the review links; only they approve goals.
+- A one-off with no outcome behind it can stay unfiled; say so rather than inventing a goal for it.
+
+## Documents: drafts, handoffs and context
+A document is a file attached to a task or goal: markdown (with \`\`\`mermaid diagrams), text, JSON, CSV, YAML, a Mermaid diagram, a PDF or an image. People read and edit it in Phean; agents read it with get_document.
+- When you prepare something for a person to judge (a draft email, a proposal, a plan, an analysis), attach it with attach_document on the task, then point to it: put the returned url in the links of the task or of your request_input (kind "doc", title "Draft offer"), so the decision and the draft sit together.
+- When there is no link to give (the material is in your context, not at a URL), attach it as a document rather than pasting a wall of text into a description or a question.
+- Handing work to another agent, or pausing it: attach a short handoff note (what is done, what is next, where things are) before you release_task. Picking a task up: read its documents (get_task lists them, get_document reads one) first.
+- Edit with update_document and pass expectedVersion, so you never overwrite a person's newer edit. Agents change only their own documents or ones a person wrote; attach your own version otherwise.
+- Never put secrets, tokens or passwords in a document.
+
+## Stages
+The board's lanes are the workspace's stages, listed by whoami. Each belongs to a status kind (inbox, backlog, todo, in_progress, done). Setting status moves a task to that kind's own stage; to put it in one of the workspace's own stages ("Review", inside in_progress), pass update_task stage with the stage's key.
 
 ## References and links
 Every task should lead a human back to where it came from. On capture_tasks and update_task, pass links ([{url, title, kind}]) with the source permalink and, when the work came up in a conversation with the human, a link to it. They show as clickable links on the task in Phean. Use https:// links or app links (slack://, cursor://, ...); other schemes are refused.
@@ -91,9 +111,9 @@ export const PROMPTS = [
     description: "Group inbox tasks under goals, set priorities and due dates.",
     text: `Triage the Phean inbox:
 1. Call list_tasks with status="inbox". If it is empty, say so and stop.
-2. Call list_goals. Group inbox items under existing goals where they fit; for the rest, draft new goals.
-3. Present ONE proposal to the human: groupings, priorities, due dates, and items that look like noise. Ask for approval in a single question.
-4. On approval: create_goal for new goals (they will be proposed; share the review links), assign_tasks_to_goal, and update_task for priority and due dates. Drop only items the human explicitly confirmed.
+2. Call list_goals. Group inbox items under existing goals where they fit; where several items share an outcome no goal names yet, draft a new goal for them (see "Goals: group the work").
+3. Present ONE proposal to the human: groupings by goal, priorities, due dates, what waits in the backlog, and items that look like noise. Ask for approval in a single question.
+4. On approval: create_goal for new goals (they will be proposed; share the review links), assign_tasks_to_goal, and update_task for priority, due dates and status "backlog" where agreed. Drop only items the human explicitly confirmed.
 5. Close with a one-line summary and the new inbox size.`,
   },
   {

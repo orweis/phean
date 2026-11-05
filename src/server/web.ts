@@ -2,11 +2,16 @@ import "server-only";
 
 import { cookies, headers } from "next/headers";
 import { notFound } from "next/navigation";
+import { cache } from "react";
 
 import { APPEARANCE_COOKIE, parseAppearance, type Appearance } from "@/lib/appearance";
 
+import type { Stage } from "@/lib/workflow";
+
+import { requireWorkspace } from "./auth/session";
 import { appUrl } from "./config";
 import { isDomainError } from "./domain/errors";
+import { getWorkflow } from "./domain/workflow";
 
 /** Renders the 404 page when a service reports the entity is missing (or in another workspace). */
 export async function orNotFound<T>(load: Promise<T>): Promise<T> {
@@ -30,3 +35,9 @@ export async function absoluteUrl(path: string): Promise<string> {
   const protocol = requestHeaders.get("x-forwarded-proto") ?? (host?.startsWith("localhost") ? "http" : "https");
   return new URL(path, host ? `${protocol}://${host}` : appUrl()).toString();
 }
+
+/** The workspace's board stages, read once per request, for any component that names a task's stage. */
+export const workspaceWorkflow = cache(async (slug: string): Promise<Stage[]> => {
+  const { ctx } = await requireWorkspace(slug);
+  return getWorkflow(ctx, {});
+});

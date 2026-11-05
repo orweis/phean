@@ -16,6 +16,8 @@ import { EmptyState } from "../ui/stat";
 /** State is carried by line form as well as hue: dashed while waiting, solid while moving. */
 const SEGMENT_FORM: Record<Segment["status"], string> = {
   inbox: "h-0 border-t-2 border-dashed border-line-inbox",
+  // Parked: dotted, quieter than the dashes of work waiting to start.
+  backlog: "h-0 border-t-2 border-dotted border-line-backlog",
   todo: "h-0 border-t-2 border-dashed border-line-todo",
   in_progress: "h-1.5 rounded-full bg-station-progress",
 };
@@ -254,6 +256,10 @@ export function TimetableLegend({ className }: { className?: string }) {
       <li className={item}>
         <span aria-hidden className="w-6 border-t-2 border-dashed border-line-inbox" />
         Inbox
+      </li>
+      <li className={item}>
+        <span aria-hidden className="w-6 border-t-2 border-dotted border-line-backlog" />
+        Backlog
       </li>
       <li className={item}>
         <span aria-hidden className="w-6 border-t-2 border-dashed border-line-todo" />

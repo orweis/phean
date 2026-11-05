@@ -17,6 +17,7 @@ import {
 } from "drizzle-orm/pg-core";
 
 import type { AgentSession, InputAnswer, InputRequest, TaskLink } from "../../../lib/agent-sessions";
+import { DOCUMENT_FORMATS } from "../../../lib/documents";
 import {
   ACTOR_TYPES,
   GOAL_STATUSES,
@@ -39,6 +40,10 @@ export const actorTypeEnum = pgEnum("actor_type", ACTOR_TYPES);
 
 const tsvector = customType<{ data: string }>({
   dataType: () => "tsvector",
+});
+
+const bytea = customType<{ data: Uint8Array; driverData: Uint8Array }>({
+  dataType: () => "bytea",
 });
 
 const timestampTz = (name: string) => timestamp(name, { withTimezone: true });
@@ -127,6 +132,8 @@ export const tasks = pgTable(
     title: text("title").notNull(),
     description: text("description").notNull().default(""),
     status: taskStatusEnum("status").notNull().default("inbox"),
+    /** The workspace stage within the status, when it is not the status's own (built-in) stage. */
+    stage: text("stage"),
     priority: priorityEnum("priority").notNull().default("medium"),
     source: sourceEnum("source").notNull().default("manual"),
     sourceRef: text("source_ref").notNull().default(""),
@@ -241,11 +248,67 @@ export const events = pgTable(
   ],
 );
 
+/** Per-workspace settings people edit on the Settings page; one row per workspace, made on first save. */
+export const workspaceSettings = pgTable("workspace_settings", {
+  tenantId: text("tenant_id")
+    .primaryKey()
+    .references(() => organization.id, { onDelete: "cascade" }),
+  /** The board's stages, in flow order (see `lib/workflow.ts`); empty means the defaults. */
+  workflow: jsonb("workflow").$type<unknown[]>().notNull().default(sql`'[]'::jsonb`),
+  ...timestamps,
+});
+
+/**
+ * Files attached to tasks and goals: drafts, handoff notes, reports, diagrams. The row holds what
+ * lists and search need; the bytes live in the blob store under `storageKey`.
+ */
+export const documents = pgTable(
+  "documents",
+  {
+    id: text("id").primaryKey(),
+    tenantId: tenantId(),
+    taskId: text("task_id"),
+    goalId: text("goal_id"),
+    title: text("title").notNull(),
+    format: text("format", { enum: DOCUMENT_FORMATS }).notNull(),
+    /** What is in it and why it matters, for agents deciding whether to fetch it. */
+    summary: text("summary").notNull().default(""),
+    size: integer("size").notNull(),
+    sha256: text("sha256").notNull(),
+    storageKey: text("storage_key").notNull(),
+    /** Goes up by one on every edit, so an agent can tell a document changed since it read it. */
+    version: integer("version").notNull().default(1),
+    ...createdBy,
+    updatedByName: text("updated_by_name").notNull(),
+    ...timestamps,
+    search: searchVector(
+      "setweight(to_tsvector('english', coalesce(title, '')), 'A') || setweight(to_tsvector('english', coalesce(summary, '')), 'B')",
+    ),
+  },
+  (t) => [
+    unique("documents_tenant_id_uq").on(t.tenantId, t.id),
+    foreignKey({ name: "documents_task_fk", columns: [t.tenantId, t.taskId], foreignColumns: [tasks.tenantId, tasks.id] }).onDelete("cascade"),
+    foreignKey({ name: "documents_goal_fk", columns: [t.tenantId, t.goalId], foreignColumns: [goals.tenantId, goals.id] }).onDelete("cascade"),
+    index("documents_task_idx").on(t.tenantId, t.taskId),
+    index("documents_goal_idx").on(t.tenantId, t.goalId),
+    index("documents_search_idx").using("gin", t.search),
+  ],
+);
+
+/** Document bytes when no Vercel Blob store is configured (local development, tests). */
+export const documentBlobs = pgTable("document_blobs", {
+  key: text("key").primaryKey(),
+  tenantId: tenantId(),
+  data: bytea("data").notNull(),
+  createdAt: timestampTz("created_at").notNull().defaultNow(),
+});
+
 export type AgentRow = typeof agents.$inferSelect;
 export type GoalRow = typeof goals.$inferSelect;
 export type TaskRow = typeof tasks.$inferSelect;
 export type MemoryRow = typeof memories.$inferSelect;
 export type EventRow = typeof events.$inferSelect;
+export type DocumentRow = typeof documents.$inferSelect;
 
 
 /**

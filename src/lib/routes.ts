@@ -28,9 +28,15 @@ export const routes = {
   timeline: (slug: string, filters?: { goal?: string; days?: string }) => withQuery(`/w/${slug}/timeline`, filters),
   goal: (slug: string, goalId: string) => `/w/${slug}/goals/${goalId}`,
   memory: (slug: string, filters?: { kind?: string; q?: string }) => withQuery(`/w/${slug}/memory`, filters),
+  documents: (slug: string, query?: string) => withQuery(`/w/${slug}/documents`, { q: query }),
+  document: (slug: string, documentId: string, mode?: "edit") => withQuery(`/w/${slug}/documents/${documentId}`, { mode }),
+  /** A document's bytes, served by Phean after it checks access; blobs are never addressed directly. */
+  documentFile: (slug: string, documentId: string, download?: boolean) => withQuery(`/w/${slug}/documents/${documentId}/file`, { download: download ? "1" : undefined }),
   search: (slug: string, query?: string) => withQuery(`/w/${slug}/search`, { q: query }),
   agents: (slug: string) => `/w/${slug}/agents`,
   members: (slug: string) => `/w/${slug}/members`,
+  /** Workspace settings: the board's stages. Reached from the workspace menu, not the tab rail. */
+  settings: (slug: string) => `/w/${slug}/settings`,
   invite: (invitationId: string) => `/invite/${invitationId}`,
   mcp: () => "/mcp",
 } as const;

@@ -38,7 +38,7 @@ Each link has a `kind`, which sets how it shows on the request:
 
 - `conversation`: a link back to this chat or thread with the person. Add one to every request when your client exposes the conversation's URL.
 - `source`: the permalink of everything the question is about: the email, Slack message, calendar event, ticket, or PR.
-- `doc`: a draft, spec, or file you produced or relied on.
+- `doc`: a draft, spec, or file you produced or relied on. When the decision is about a draft you prepared and it has no URL of its own, attach it to the task with `attach_document` and link the `url` it returns (the phean-documents skill covers this).
 - `other`: anything else.
 
 Rules:

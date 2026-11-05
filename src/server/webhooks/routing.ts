@@ -32,6 +32,8 @@ export function topicsOf(action: string): WebhookTopic[] {
   if (action.startsWith("task.")) topics.push("tasks");
   if (action.startsWith("goal.")) topics.push("goals");
   if (action.startsWith("memory.")) topics.push("memory");
+  // Documents hang off tasks and goals, so they travel with those topics.
+  if (action.startsWith("document.")) topics.push("tasks", "goals");
   return topics;
 }
 

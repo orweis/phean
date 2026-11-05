@@ -5,7 +5,9 @@ import { authenticateAgentToken } from "@/server/domain/agents";
 import type { Ctx } from "@/server/domain/context";
 import { listActivity } from "@/server/domain/events";
 import { createGoal, findGoal, listGoals, updateGoal, type Goal } from "@/server/domain/goals";
+import { attachDocument, deleteDocument, getDocument, listDocuments, updateDocument } from "@/server/domain/documents";
 import { countMemoryKinds, forget, recall, remember, type Memory } from "@/server/domain/memory";
+import { getWorkflow, saveWorkflow } from "@/server/domain/workflow";
 import { getBoard, getGoalDetail, getStatusSummary } from "@/server/domain/overview";
 import { search } from "@/server/domain/search";
 import {
@@ -121,6 +123,27 @@ describe("tenant isolation", () => {
 
     expect((await findGoal(acmeOwner, acmeGoal.id)).title).toBe("Acme secret merger");
     expect((await recall(acmeOwner, {})).map((memory) => memory.id)).toEqual([acmeMemory.id]);
+  });
+
+  it("keeps documents and their bytes inside their workspace", async () => {
+    const memo = await attachDocument(acmeOwner, { title: "Merger memo", taskId: acmeTask.id, summary: "Bluebird terms", content: "Codename Bluebird" });
+    for (const ctx of [globexOwner, globexAgent]) {
+      await expect(getDocument(ctx, { documentId: memo.id })).rejects.toMatchObject({ code: "not_found" });
+      await expect(updateDocument(ctx, { documentId: memo.id, content: "pwned" })).rejects.toMatchObject({ code: "not_found" });
+      await expect(deleteDocument(ctx, { documentId: memo.id })).rejects.toMatchObject({ code: "not_found" });
+      await expect(attachDocument(ctx, { title: "Sneaky", taskId: acmeTask.id, content: "x" })).rejects.toMatchObject({ code: "not_found" });
+      await expect(attachDocument(ctx, { title: "Sneaky", goalId: acmeGoal.id, content: "x" })).rejects.toMatchObject({ code: "not_found" });
+      expect(await listDocuments(ctx, { query: "bluebird" })).toEqual([]);
+    }
+    expect((await getDocument(acmeOwner, { documentId: memo.id })).content).toBe("Codename Bluebird");
+  });
+
+  it("keeps each workspace's stages its own", async () => {
+    const stages = await getWorkflow(acmeOwner, {});
+    await saveWorkflow(acmeOwner, { stages: [...stages, { label: "Legal review", kind: "in_progress" as const, hidden: false }] });
+    expect((await getWorkflow(globexOwner, {})).map((stage) => stage.key)).not.toContain("legal-review");
+    const [globexTask] = (await captureTasks(globexOwner, { tasks: [{ title: "Globex work", status: "todo" }] })).created as [Task];
+    await expect(updateTask(globexOwner, { taskId: globexTask.id, stage: "legal-review" })).rejects.toMatchObject({ code: "invalid" });
   });
 
   it("scopes duplicate detection to the tenant", async () => {

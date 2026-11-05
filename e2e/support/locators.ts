@@ -19,4 +19,4 @@ export const appearanceOption = (scope: Locator, option: "Light" | "Dark" | "Sys
   scope.getByRole("group", { name: "Appearance" }).getByText(option, { exact: true });
 
 /** A board lane by task status. */
-export const lane = (page: Page, status: "inbox" | "todo" | "in_progress" | "done") => page.locator(`section[aria-labelledby="lane-${status}"]`);
+export const lane = (page: Page, stage: "inbox" | "backlog" | "todo" | "in_progress" | "done" | (string & {})) => page.locator(`section[aria-labelledby="lane-${stage}"]`);

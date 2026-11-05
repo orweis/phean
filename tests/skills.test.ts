@@ -7,13 +7,14 @@ import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import { LINK_KINDS, REQUEST_KINDS } from "@/lib/agent-sessions";
-import { AskInput, MAX_WAIT_SECONDS, RegisterWebhookInput, WaitForAnswersInput } from "@/server/domain/schemas";
+import { DOCUMENT_FORMATS } from "@/lib/documents";
+import { AskInput, AttachDocumentInput, MAX_WAIT_SECONDS, RegisterWebhookInput, WaitForAnswersInput } from "@/server/domain/schemas";
 import { TOOLS } from "@/server/mcp/tools";
 import { backoffSeconds, MAX_CONSECUTIVE_FAILURES, REQUEST_TIMEOUT_MS } from "@/server/webhooks/dispatch";
 import { SIGNATURE_HEADER, signPayload, verifySignature } from "@/server/webhooks/signing";
 
 const read = (name: string) => readFileSync(new URL(`../skills/${name}/SKILL.md`, import.meta.url), "utf8");
-const SKILLS = { "phean-decisions": read("phean-decisions"), "phean-webhooks": read("phean-webhooks") };
+const SKILLS = { "phean-decisions": read("phean-decisions"), "phean-webhooks": read("phean-webhooks"), "phean-documents": read("phean-documents") };
 const TOOL_NAMES = new Set(TOOLS.map((tool) => tool.name));
 /** Delivery reasons look like tool names (snake_case) but are payload values. */
 const REASONS = ["asked_by_you", "in_watched_goal", "about_watched_task"];
@@ -48,6 +49,21 @@ describe("the phean-decisions skill", () => {
   it("carries an example request the server would accept", () => {
     const example = JSON.parse(codeBlock(SKILL, "json"));
     expect(AskInput.safeParse(example).success).toBe(true);
+  });
+});
+
+describe("the phean-documents skill", () => {
+  const SKILL = SKILLS["phean-documents"];
+
+  it("names every format and field the server accepts", () => {
+    for (const format of DOCUMENT_FORMATS) expect(SKILL).toContain(`\`${format}\``);
+    for (const field of Object.keys(AttachDocumentInput.shape)) expect(SKILL).toContain(`\`${field}\``);
+    expect(SKILL).toContain("`expectedVersion`");
+  });
+
+  it("carries an example document the server would accept", () => {
+    const example = JSON.parse(codeBlock(SKILL, "json"));
+    expect(AttachDocumentInput.safeParse(example).success).toBe(true);
   });
 });
 

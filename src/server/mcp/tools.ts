@@ -1,6 +1,5 @@
 import type { z } from "zod";
 
-import { TASK_STATUS_META } from "@/lib/domain";
 import { pluralize } from "@/lib/format";
 import { subtreeIds } from "@/lib/goal-tree";
 import { routes } from "@/lib/routes";
@@ -32,6 +31,8 @@ import { deleteWebhook, getWebhook, listWatches, pingWebhook, registerWebhook, u
 import { SIGNATURE_HEADER } from "../webhooks/signing";
 import { planningScaffold } from "./guidance";
 import { defineTool, type PheanTool, serviceTool, type ToolContext } from "./tool";
+import { attachDocument, deleteDocument, getDocument, listDocuments, updateDocument } from "../domain/documents";
+import { getWorkflow } from "../domain/workflow";
 import { fenced, goalTreeMermaid, kanbanMermaid, timelineMermaid } from "./views";
 
 const goalUrl = (ctx: ToolContext, goalId: string) => ctx.url(routes.goal(ctx.tenant.slug, goalId));
@@ -39,7 +40,7 @@ const goalUrl = (ctx: ToolContext, goalId: string) => ctx.url(routes.goal(ctx.te
 async function visualize(ctx: ToolContext, { kind, goalId }: z.output<typeof VisualizeInput>) {
   if (kind === "kanban") {
     const board = await getBoard(ctx, { goalId });
-    const summary = board.columns.map((column) => `${TASK_STATUS_META[column.status].label}: ${column.tasks.length}`).join(" · ");
+    const summary = board.columns.map((column) => `${column.stage.label}: ${column.tasks.length}`).join(" · ");
     return { kind, mermaid: kanbanMermaid(board), summary: `${summary} (done shows the most recent)` };
   }
   if (kind === "timeline") {
@@ -62,7 +63,8 @@ export const TOOLS: readonly PheanTool[] = [
   defineTool({
     name: "whoami",
     title: "Who am I",
-    description: "Your agent identity, the workspace you are connected to, what you may do, and the dashboard link to share with humans.",
+    description:
+      "Your agent identity, the workspace you are connected to, what you may do, the dashboard link to share with humans, and the board's stages (workflow): each has a key, a name people see, and the status kind it belongs to. Move a task to a workspace's own stage with update_task stage.",
     input: Empty,
     readOnly: true,
     run: async (ctx) => ({
@@ -70,6 +72,7 @@ export const TOOLS: readonly PheanTool[] = [
       workspace: ctx.tenant,
       dashboardUrl: ctx.url(routes.workspace(ctx.tenant.slug)),
       permissions: ACTIONS.filter((action) => can(ctx.actor, action)),
+      workflow: (await getWorkflow(ctx, {})).map(({ key, label, kind, hidden }) => ({ key, label, status: kind, ...(hidden && { hidden }) })),
       serverTime: new Date().toISOString(),
     }),
   }),
@@ -119,7 +122,7 @@ export const TOOLS: readonly PheanTool[] = [
     name: "capture_tasks",
     title: "Capture tasks",
     description:
-      "Record up to 100 tasks found in your sources in one call. Set source and a stable sourceRef (message link, thread or event id): items any agent already captured are skipped and reported in 'duplicates'. Add links people can click: the source message (kind 'source') and the conversation where the work came up (kind 'conversation'). Pass parentTaskId to capture the steps of a bigger task as its subtasks. New tasks land in the inbox unless status is 'todo'.",
+      "Record up to 100 tasks found in your sources in one call. Set source and a stable sourceRef (message link, thread or event id): items any agent already captured are skipped and reported in 'duplicates'. Add links people can click: the source message (kind 'source') and the conversation where the work came up (kind 'conversation'). Pass parentTaskId to capture the steps of a bigger task as its subtasks. New tasks land in the inbox unless status is 'backlog' (accepted, not planned yet) or 'todo' (ready to pick up). File each under the goal it serves (goalId); if no goal fits but several tasks share an outcome, propose one with create_goal first.",
     service: captureTasks,
   }),
   serviceTool({
@@ -143,7 +146,7 @@ export const TOOLS: readonly PheanTool[] = [
     name: "update_task",
     title: "Update task",
     description:
-      "Fix or update a task: title, description, status, priority, due date (null clears), goal (null unfiles), tags, source and sourceRef (must not match another task's), or parentTaskId (make it a subtask of another task, null detaches it; one level deep). Links: addLinks adds or updates links by url, removeLinks removes urls, links replaces them all. Only the fields you pass change. Status changes fail if another agent has claimed the task.",
+      "Fix or update a task: title, description, status or stage (a workspace's own stage key from whoami, such as 'review', which also sets the status), priority, due date (null clears), goal (null unfiles), tags, source and sourceRef (must not match another task's), or parentTaskId (make it a subtask of another task, null detaches it; one level deep). Links: addLinks adds or updates links by url, removeLinks removes urls, links replaces them all. Only the fields you pass change. Status changes fail if another agent has claimed the task.",
     service: updateTask,
     key: "task",
   }),
@@ -251,6 +254,54 @@ export const TOOLS: readonly PheanTool[] = [
     description: "Delete a memory that is wrong or obsolete. Agents can only delete memories they saved.",
     destructive: true,
     service: forget,
+  }),
+
+  // Documents
+  defineTool({
+    name: "attach_document",
+    title: "Attach document",
+    description:
+      "Attach a document to a task (taskId) or goal (goalId): a draft for a person to review, a handoff note for the next agent, a report, research, a diagram. Prefer markdown (```mermaid blocks render as diagrams). Text goes in content; pdf and images go base64 in contentBase64 (up to 5 MB). Give it a one-line summary. When there is no link to point at, attach the material as a document and put the returned url in the task's or question's links (kind 'doc').",
+    input: attachDocument.schema,
+    run: async (ctx, input) => {
+      const document = await attachDocument(ctx, input);
+      return { document, url: ctx.url(routes.document(ctx.tenant.slug, document.id)) };
+    },
+  }),
+  defineTool({
+    name: "get_document",
+    title: "Get document",
+    description:
+      "Read a document: its metadata (version, who changed it last) and its content (text, or base64 for pdf and images). Read the documents on a task (get_task lists them) before picking up its work.",
+    input: getDocument.schema,
+    readOnly: true,
+    run: async (ctx, input) => {
+      const result = await getDocument(ctx, input);
+      return { ...result, url: ctx.url(routes.document(ctx.tenant.slug, result.document.id)) };
+    },
+  }),
+  serviceTool({
+    name: "list_documents",
+    title: "List documents",
+    description: "Documents on a task or goal, or matching words in their title or summary, most recently changed first. Metadata only; get_document reads one.",
+    readOnly: true,
+    service: listDocuments,
+    key: "documents",
+  }),
+  serviceTool({
+    name: "update_document",
+    title: "Update document",
+    description:
+      "Edit a document: new content (a new version), title, summary, or the task or goal it is attached to. Pass expectedVersion (the version you read) so you never overwrite a person's newer edit. Agents edit only documents they attached or a person wrote.",
+    service: updateDocument,
+    key: "document",
+  }),
+  serviceTool({
+    name: "delete_document",
+    title: "Delete document",
+    description: "Delete a document that is wrong or obsolete. Agents can only delete documents they attached.",
+    destructive: true,
+    service: deleteDocument,
   }),
 
   // Search, planning, views, coordination

@@ -1,6 +1,9 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { createAgent, listAgents, revokeAgent } from "@/server/domain/agents";
+import { attachDocument } from "@/server/domain/documents";
+import { DEFAULT_WORKFLOW } from "@/lib/workflow";
+import { saveWorkflow } from "@/server/domain/workflow";
 import { deleteWebhook } from "@/server/domain/webhooks";
 import type { Actor, Ctx, Role } from "@/server/domain/context";
 import { createGoal, setGoalStatus } from "@/server/domain/goals";
@@ -13,8 +16,8 @@ import { addMember, asUser, createTestDb, seedUser, seedWorkspace, type TestDb }
 const EXPECTED: Record<Role, readonly Action[]> = {
   owner: ACTIONS,
   admin: ACTIONS,
-  member: ["workspace:read", "goal:write", "goal:decide", "task:write", "memory:write"],
-  agent: ["workspace:read", "goal:write", "task:write", "memory:write", "webhook:manage"],
+  member: ["workspace:read", "goal:write", "goal:decide", "task:write", "memory:write", "document:write"],
+  agent: ["workspace:read", "goal:write", "task:write", "memory:write", "document:write", "webhook:manage"],
   platform_admin: ["workspace:read"],
 };
 
@@ -65,6 +68,17 @@ describe("policy enforcement in services", () => {
     await expect(deleteWebhook(member, { agentId: "ag_any" })).rejects.toMatchObject({ code: "forbidden" });
     await expect(deleteWebhook(platformAdmin, { agentId: "ag_any" })).rejects.toMatchObject({ code: "forbidden" });
     await expect(deleteWebhook(owner, { agentId: "ag_any" })).resolves.toEqual({ removed: false });
+  });
+
+  it("lets only owners and admins change the board's stages, and anyone who writes attach documents", async () => {
+    const stages = DEFAULT_WORKFLOW.map((stage) => (stage.key === "inbox" ? { ...stage, label: "Triage" } : stage));
+    await expect(saveWorkflow(member, { stages })).rejects.toMatchObject({ code: "forbidden" });
+    await expect(saveWorkflow(platformAdmin, { stages })).rejects.toMatchObject({ code: "forbidden" });
+    await expect(saveWorkflow(owner, { stages })).resolves.toContainEqual(
+      expect.objectContaining({ key: "inbox", label: "Triage" }),
+    );
+    await expect(attachDocument(member, { title: "Notes", content: "# Notes" })).resolves.toMatchObject({ createdByName: "Member" });
+    await expect(attachDocument(platformAdmin, { title: "Notes", content: "x" })).rejects.toMatchObject({ code: "forbidden" });
   });
 
   it("keeps platform admins read-only", async () => {

@@ -208,9 +208,9 @@ describe("tracks and flow", () => {
   it("counts each station at the end of every day, and only arrivals inside the window", () => {
     const flow = cumulativeFlow(journeys, window);
     expect(flow).toHaveLength(7);
-    expect(flow.at(-1)!.counts).toEqual({ inbox: 0, todo: 0, in_progress: 1, done: 1 });
+    expect(flow.at(-1)!.counts).toEqual({ inbox: 0, backlog: 0, todo: 0, in_progress: 1, done: 1 });
     const threeDaysAgo = flow.find((point) => point.day.getTime() === Date.UTC(2026, 2, 12))!;
-    expect(threeDaysAgo.counts).toEqual({ inbox: 2, todo: 1, in_progress: 0, done: 0 });
+    expect(threeDaysAgo.counts).toEqual({ inbox: 2, backlog: 0, todo: 0 + 1, in_progress: 0, done: 0 });
   });
 
   it("places the flow on the timetable's axis: each day's end, now for today, and the week ahead left for the future", () => {

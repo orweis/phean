@@ -3,6 +3,8 @@
  * and the goal map have history to draw. Rows and events are written directly with explicit
  * timestamps; the services would stamp everything "now". Runs only on a workspace with no tasks.
  */
+import { createHash } from "node:crypto";
+
 import { count, eq } from "drizzle-orm";
 
 import type { AgentSession, TaskLink } from "../src/lib/agent-sessions";
@@ -11,7 +13,11 @@ import { SOURCE_META, TASK_STATUS_META, type GoalStatus, type Priority, type Sou
 import { truncate } from "../src/lib/format";
 import type { Db } from "../src/server/db/client";
 import { newId } from "../src/server/db/ids";
-import { agents, events, goals, memories, tasks, webhooks } from "../src/server/db/schema";
+import { documentFileName } from "../src/lib/documents";
+import { routes } from "../src/lib/routes";
+import { appUrl } from "../src/server/config";
+import { agents, documents, events, goals, memories, tasks, webhooks } from "../src/server/db/schema";
+import { blobStore, documentKey } from "../src/server/storage/blobs";
 import { generateAgentToken } from "../src/server/domain/agents";
 import { encryptSecret, newWebhookSecret } from "../src/server/webhooks/signing";
 import type { Tenant } from "../src/server/domain/context";
@@ -78,9 +84,66 @@ const TASKS: SampleTask[] = [
   { title: "Retire the old CRM logins", goal: "crm", source: "email", legs: [["inbox", 9], ["todo", 8], ["done", 4]], agent: "sweeper" },
   { title: "Compare the three lease offers", goal: "lease", source: "email", due: 9, legs: [["inbox", 2]], agent: "sweeper" },
   { title: "Reply to the conference sponsorship email", source: "email", legs: [["inbox", 2]], agent: "sweeper" },
+  { title: "Evaluate a second payroll provider", goal: "books", source: "email", legs: [["inbox", 8], ["backlog", 7]], agent: "clerk" },
   { title: "Renew the SSL certificate", source: "email", priority: "high", due: 3, legs: [["inbox", 1]], agent: "sweeper", ref: "https://mail.google.com/mail/u/0/#inbox/FMfcgzQXJWDsKkmPqRtVbHnLcZxTwMvB" },
   { title: "Read the Slack thread about on-call pay", source: "slack", legs: [["inbox", 0]], agent: "sweeper", ref: "https://globex.slack.com/archives/C02ONCALL/p1730900000000100" },
   { title: "Update the office Wi-Fi password", source: "slack", legs: [["inbox", 6], ["todo", 5], ["done", 5]], agent: "planner" },
+];
+
+/** Documents agents attached: the draft behind the Globex decision, and the plan for the Q4 close. */
+const DOCUMENTS: { title: string; summary: string; task?: string; goal?: GoalKey; agent: AgentKey; hoursAgo: number; content: string; linkFrom?: string }[] = [
+  {
+    title: "Draft reply to Globex",
+    summary: "The reply offering 5% on invoice #4471 if Globex pays this week, ready to send once you decide.",
+    task: "Chase three overdue invoices",
+    linkFrom: "Chase three overdue invoices",
+    agent: "clerk",
+    hoursAgo: 3,
+    content: `# Draft reply to Globex
+
+Hi Priya,
+
+Thanks for flagging the late delivery on order **1182**. We would like to make it right: if you settle invoice **#4471** this week, we will take **5% off** ($120).
+
+Best,
+Dana
+
+---
+
+## Where the three invoices stand
+
+| Invoice | Customer | Amount | State |
+| --- | --- | ---: | --- |
+| #4468 | Initech | $1,150 | Paid |
+| #4470 | Soylent | $860 | Paid |
+| #4471 | Globex | $2,400 | Disputed |
+
+\`\`\`mermaid
+flowchart LR
+  A[Invoice #4471] --> B{Dana decides}
+  B -- Offer 5% --> C[Send this reply]
+  B -- Escalate --> D[Email their CFO]
+\`\`\`
+`,
+  },
+  {
+    title: "Q4 close plan",
+    summary: "The order of the close: reconcile, accrue, then the board numbers, with owners.",
+    goal: "books",
+    agent: "clerk",
+    hoursAgo: 30,
+    content: `# Q4 close plan
+
+1. Reconcile card spend and bank accounts (Finance clerk)
+2. Accrue December payroll (Finance clerk)
+3. Book the auditor kickoff (Calendar planner)
+4. Prepare the board deck numbers (Dana)
+
+- [x] November card spend reconciled
+- [ ] Payroll accrual
+- [ ] Board deck
+`,
+  },
 ];
 
 /** Where each working agent can be resumed, and the one question waiting on the owner. */
@@ -215,8 +278,17 @@ export async function seedSampleHistory(db: Db, tenant: Tenant, owner: { id: str
     }
   }
 
+  const taskIds = new Map<string, string>();
+  const documentIds = new Map<string, string>();
+  for (const doc of DOCUMENTS) documentIds.set(doc.title, newId("d"));
   for (const [index, sample] of TASKS.entries()) {
     const id = newId("t");
+    taskIds.set(sample.title, id);
+    const draftLinks = DOCUMENTS.filter((doc) => doc.linkFrom === sample.title).map((doc) => ({
+      url: new URL(routes.document(tenant.slug, documentIds.get(doc.title)!), appUrl()).href,
+      title: doc.title,
+      kind: "doc" as const,
+    }));
     const goalId = sample.goal ? goalIds[sample.goal] : null;
     const stops = sample.legs.map(([status, daysAgo], leg) => ({ status, at: at(daysAgo, 8 + ((index * 3 + leg * 2) % 9)) }));
     const first = stops[0]!;
@@ -249,7 +321,7 @@ export async function seedSampleHistory(db: Db, tenant: Tenant, owner: { id: str
             question: handoff.question,
             context: handoff.context ?? "",
             options: handoff.options ?? [],
-            links: handoff.links ?? [],
+            links: [...(handoff.links ?? []), ...draftLinks],
             askedAt: handedOffAt!.toISOString(),
           }
         : null,
@@ -296,6 +368,34 @@ export async function seedSampleHistory(db: Db, tenant: Tenant, owner: { id: str
       createdAt,
       updatedAt: createdAt,
     });
+  }
+
+  const store = blobStore({ db, tenant, actor: { type: "user", id: owner.id, name: owner.name, role: "owner" } });
+  for (const doc of DOCUMENTS) {
+    const id = documentIds.get(doc.title)!;
+    const bytes = new TextEncoder().encode(doc.content);
+    const key = documentKey(tenant.id, id, 1);
+    const createdAt = new Date(now.getTime() - doc.hoursAgo * HOUR_MS);
+    await store.put(key, bytes, "text/markdown; charset=utf-8");
+    await db.insert(documents).values({
+      id,
+      tenantId: tenant.id,
+      taskId: doc.task ? taskIds.get(doc.task)! : null,
+      goalId: doc.goal ? goalIds[doc.goal] : null,
+      title: doc.title,
+      format: "markdown",
+      summary: doc.summary,
+      size: bytes.length,
+      sha256: createHash("sha256").update(bytes).digest("hex"),
+      storageKey: key,
+      createdByType: "agent",
+      createdById: agentIds[doc.agent],
+      createdByName: AGENTS[doc.agent].name,
+      updatedByName: AGENTS[doc.agent].name,
+      createdAt,
+      updatedAt: createdAt,
+    });
+    log.push({ tenantId: tenant.id, ...asAgent(doc.agent), action: "document.attached", entityType: "document", entityId: id, summary: `attached "${doc.title}" (${documentFileName(doc.title, "markdown")})`, data: { taskId: doc.task ? taskIds.get(doc.task)! : null, goalId: doc.goal ? goalIds[doc.goal] : null, format: "markdown", version: 1 }, createdAt });
   }
 
   await db.insert(events).values(log);

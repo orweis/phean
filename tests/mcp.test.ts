@@ -83,7 +83,7 @@ describe("MCP surface", () => {
   it("advertises every tool with annotations, plus prompts and instructions", async () => {
     const { tools } = await scout.listTools();
     expect(tools.map((tool) => tool.name).sort()).toEqual(TOOLS.map((tool) => tool.name).sort());
-    expect(tools).toHaveLength(34);
+    expect(tools).toHaveLength(39);
     const byName = new Map(tools.map((tool) => [tool.name, tool]));
     expect(byName.get("list_tasks")?.annotations?.readOnlyHint).toBe(true);
     expect(byName.get("forget")?.annotations?.destructiveHint).toBe(true);
@@ -120,6 +120,39 @@ describe("MCP surface", () => {
 
     const { memory } = dataOf<{ memory: { id: string } }>(await call(scout, "remember", { content: "Plants need water on Mondays" }));
     expect(dataOf(await call(scout, "forget", { memoryId: memory.id }))).toEqual({ forgotten: memory.id });
+  });
+});
+
+describe("documents and stages over MCP", () => {
+  it("lets one agent hand a task to another through a document, and names the board's stages in whoami", async () => {
+    const { workflow } = dataOf<{ workflow: { key: string; label: string; status: string }[] }>(await call(scout, "whoami"));
+    expect(workflow.map((stage) => stage.key)).toEqual(["inbox", "backlog", "todo", "in_progress", "done"]);
+
+    const {
+      created: [task],
+    } = dataOf<{ created: { id: string }[] }>(await call(scout, "capture_tasks", { tasks: [{ title: "Draft the Q3 letter", status: "backlog" }] }));
+    const attached = dataOf<{ document: { id: string; version: number }; url: string }>(
+      await call(scout, "attach_document", {
+        title: "Handoff: Q3 letter",
+        taskId: task!.id,
+        summary: "Where the letter stands",
+        content: "Done: outline. Next: figures.\n\n```mermaid\nflowchart LR\n  A --> B\n```",
+      }),
+    );
+    expect(attached.url).toBe(`${TEST_ORIGIN}/w/${ws.tenant.slug}/documents/${attached.document.id}`);
+
+    const { task: picked } = dataOf<{ task: { status: string; documents: { id: string }[] } }>(await call(closer, "get_task", { taskId: task!.id }));
+    expect(picked).toMatchObject({ status: "backlog", documents: [{ id: attached.document.id }] });
+    const read = dataOf<{ content: string; document: { version: number } }>(await call(closer, "get_document", { documentId: attached.document.id }));
+    expect(read.content).toContain("Next: figures.");
+
+    // Another agent's document is not the closer's to change; a stale version is refused for anyone.
+    expect((await call(closer, "update_document", { documentId: attached.document.id, content: "mine" })).isError).toBe(true);
+    const stale = await call(scout, "update_document", { documentId: attached.document.id, content: "v2", expectedVersion: 7 });
+    expect(textOf(stale)).toContain("conflict:");
+    expect(dataOf(await call(scout, "update_document", { documentId: attached.document.id, content: "v2", expectedVersion: 1 }))).toMatchObject({
+      document: { version: 2 },
+    });
   });
 });
 

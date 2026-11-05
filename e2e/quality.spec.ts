@@ -15,7 +15,10 @@ const PAGES = [
   "/w/globex/search?q=invoice",
   "/w/globex/agents",
   "/w/globex/members",
+  "/w/globex/documents",
+  "/w/globex/settings",
   "/w/globex/goals/g_missing",
+  "/w/globex/documents/d_missing",
 ];
 
 /** Pages that draw a timetable, so the Now marker can be checked against the date labels. */
@@ -31,6 +34,7 @@ const PANELS = [
   ["/w/globex/decisions", "Other answer"],
   ["/w/globex/decisions", "More for"],
   ["/w/globex/memory", "Add"],
+  ["/w/globex/documents", "New document"],
 ] as const;
 
 async function openPanel(page: Page, path: string, trigger: string) {
@@ -102,6 +106,39 @@ test.describe("signed in", () => {
     await expect(panel).toHaveAttribute("open");
     await expect(title).toHaveValue("Typed before the refresh");
     await expect(title).toBeFocused();
+  });
+
+  test("a document renders its Markdown, tables and Mermaid diagrams, and is reachable from the decision it informs", async ({ page }) => {
+    await page.goto("/w/globex/decisions");
+    const entry = page.locator("[data-entry]").filter({ hasText: "Chase three overdue invoices" });
+    // The agent linked its draft from the request, and the task carries it as a document.
+    await expect(entry.getByRole("link", { name: /^Draft reply to Globex/ }).first()).toBeVisible();
+    await entry.getByRole("list", { name: "Documents" }).getByRole("link", { name: "Draft reply to Globex" }).click();
+    await expect(page).toHaveURL(/\/w\/globex\/documents\/d_/);
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Draft reply to Globex");
+    const body = page.locator("[data-markdown]");
+    await expect(body.getByRole("heading", { name: "Where the three invoices stand" })).toBeVisible();
+    await expect(body.getByRole("table")).toContainText("#4471");
+    await expect(body.locator('[data-diagram="drawn"] svg')).toBeVisible();
+    await expectAccessible(page);
+  });
+
+  test("? opens the keyboard shortcuts legend, and so does the account menu", async ({ page }) => {
+    await page.goto("/w/globex");
+    const legend = page.getByRole("dialog", { name: "Keyboard shortcuts" });
+    // The page listens once it has hydrated; a person never types that fast.
+    await expect(async () => {
+      await page.keyboard.press("?");
+      await expect(legend).toBeVisible({ timeout: 1000 });
+    }).toPass();
+    await expect(legend).toContainText("Pick the focused request's option");
+    await expectAccessible(page);
+    await page.keyboard.press("Escape");
+    await expect(legend).toBeHidden();
+    const account = popover(page, "Dana");
+    await account.locator("summary").click();
+    await account.getByRole("button", { name: "Keyboard shortcuts" }).click();
+    await expect(legend).toBeVisible();
   });
 
   test("an unknown goal says so and leads back to the overview", async ({ page }) => {

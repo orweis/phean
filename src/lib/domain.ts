@@ -15,11 +15,15 @@ export function zeroCounts<V extends string>(values: readonly V[]): Record<V, nu
   return Object.fromEntries(values.map((value) => [value, 0])) as Record<V, number>;
 }
 
-export const TASK_STATUSES = ["inbox", "todo", "in_progress", "done", "dropped"] as const;
+/**
+ * Where a task stands. Backlog is work accepted but not planned yet: open, but parked between the
+ * inbox and to do. A workspace's own stages (lanes) each belong to one of these.
+ */
+export const TASK_STATUSES = ["inbox", "backlog", "todo", "in_progress", "done", "dropped"] as const;
 export type TaskStatus = (typeof TASK_STATUSES)[number];
-export const OPEN_TASK_STATUSES = ["inbox", "todo", "in_progress"] as const satisfies readonly TaskStatus[];
+export const OPEN_TASK_STATUSES = ["inbox", "backlog", "todo", "in_progress"] as const satisfies readonly TaskStatus[];
 /** The stations a task passes through, in board and chart order; "dropped" is an end, not a station. */
-export const STATIONS = ["inbox", "todo", "in_progress", "done"] as const satisfies readonly TaskStatus[];
+export const STATIONS = ["inbox", "backlog", "todo", "in_progress", "done"] as const satisfies readonly TaskStatus[];
 export type Station = (typeof STATIONS)[number];
 
 export const GOAL_STATUSES = ["proposed", "active", "achieved", "abandoned"] as const;
@@ -72,6 +76,13 @@ export const LIMITS = {
   option: 200,
   headerValue: 2000,
   linkTitle: 120,
+  stageLabel: 40,
+  documentTitle: 200,
+  documentSummary: 500,
+  /** Characters of a text document. */
+  documentText: 500_000,
+  /** Bytes of a binary document (a PDF, an image), before base64. */
+  documentBytes: 5_000_000,
 } as const;
 
 /**
@@ -101,6 +112,7 @@ interface EnumMeta {
 
 export const TASK_STATUS_META: Record<TaskStatus, EnumMeta> = {
   inbox: { label: "Inbox", tone: "accent" },
+  backlog: { label: "Backlog", tone: "neutral" },
   todo: { label: "To do", tone: "neutral" },
   in_progress: { label: "In progress", tone: "info" },
   done: { label: "Done", tone: "success" },

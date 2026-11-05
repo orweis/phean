@@ -53,6 +53,8 @@ function sampleGroups(now: Date): TimetableGroup[] {
           title,
           description: "",
           status: last.status,
+          stage: null,
+          documents: [],
           priority: "medium",
           source: "manual",
           sourceRef: "",

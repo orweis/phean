@@ -8,11 +8,13 @@ import {
   MEMORY_KINDS,
   PRIORITIES,
   SOURCES,
+  STATIONS,
   TASK_STATUSES,
   WATCHED_ENTITY_TYPES,
   WEBHOOK_TOPICS,
   WORKSPACE_SLUG_PATTERN,
 } from "@/lib/domain";
+import { DOCUMENT_FORMATS } from "@/lib/documents";
 import { TIMELINE_WINDOWS } from "@/lib/timeline";
 
 const goalId = z.string().trim().min(1).describe("Goal id (g_...)");
@@ -25,6 +27,24 @@ const tags = z.array(z.string().trim().min(1).max(LIMITS.tag)).max(20);
 const limit = (max: number, fallback: number) => z.number().int().min(1).max(max).default(fallback);
 
 export const Empty = z.object({});
+
+// Workflow
+export const StageDraft = z.object({
+  key: z.string().trim().min(1).max(LIMITS.stageLabel).optional().describe("An existing stage's key; leave it out to add a stage"),
+  label: z.string().trim().min(1).max(LIMITS.stageLabel),
+  kind: z.enum(STATIONS),
+  hidden: z.boolean().default(false),
+});
+/** The web form posts the stages as one JSON field; tools and tests pass the array itself. */
+const jsonArray = (value: unknown) => {
+  if (typeof value !== "string") return value;
+  try {
+    return JSON.parse(value) as unknown;
+  } catch {
+    return value;
+  }
+};
+export const SaveWorkflowInput = z.object({ stages: z.preprocess(jsonArray, z.array(StageDraft).min(1).max(32)) });
 
 // Goals
 export const CreateGoalInput = z.object({
@@ -77,7 +97,10 @@ export const TaskDraft = z.object({
   priority: z.enum(PRIORITIES).default("medium"),
   goalId: goalId.optional(),
   tags: tags.default([]),
-  status: z.enum(["inbox", "todo"]).default("inbox"),
+  status: z
+    .enum(["inbox", "backlog", "todo"])
+    .default("inbox")
+    .describe("inbox: to triage. backlog: accepted, not planned yet. todo: ready to pick up"),
   parentTaskId: taskId.optional().describe("Make this a subtask of an existing task (one level: not of a subtask). Inherits the parent's goal unless goalId is set"),
   links: links.default([]).describe("References people can click: the conversation (kind conversation) and the source message (kind source)"),
 });
@@ -89,6 +112,14 @@ export const UpdateTaskInput = z.object({
   title: title.optional(),
   description: longText.optional(),
   status: z.enum(TASK_STATUSES).optional(),
+  stage: z
+    .string()
+    .trim()
+    .min(1)
+    .max(LIMITS.stageLabel)
+    .nullable()
+    .optional()
+    .describe("A stage key from whoami's workflow, such as a workspace's own 'review'; sets the status to the stage's kind. null puts it back in its status's own stage"),
   priority: z.enum(PRIORITIES).optional(),
   dueDate: isoDate.nullable().optional(),
   goalId: goalId.nullable().optional(),
@@ -226,6 +257,53 @@ export const RecallInput = z.object({
   kind: z.enum(MEMORY_KINDS).optional(),
   goalId: goalId.optional(),
   limit: limit(100, 20),
+});
+
+// Documents
+const documentId = z.string().trim().min(1).describe("Document id (d_...)");
+const documentBody = {
+  content: z
+    .string()
+    .max(LIMITS.documentText)
+    .optional()
+    .describe("The text, for text formats (markdown, text, json, csv, yaml, mermaid, html)"),
+  contentBase64: z
+    .string()
+    .max(Math.ceil(LIMITS.documentBytes / 3) * 4 + 4)
+    .optional()
+    .describe("The bytes as base64, for pdf and images (png, jpeg, gif, webp)"),
+};
+export const AttachDocumentInput = z.object({
+  title: z.string().trim().min(1).max(LIMITS.documentTitle),
+  format: z
+    .enum(DOCUMENT_FORMATS)
+    .default("markdown")
+    .describe("How Phean shows it: markdown renders (with ```mermaid diagrams), mermaid is one diagram, html is shown as source, pdf and images are shown or downloaded"),
+  summary: z.string().trim().max(LIMITS.documentSummary).default("").describe("One or two sentences on what is in it and why, so others can tell without opening it"),
+  taskId: taskId.optional().describe("The task it belongs to"),
+  goalId: goalId.optional().describe("The goal it belongs to, when it is about a goal rather than one task"),
+  ...documentBody,
+});
+export const UpdateDocumentInput = z.object({
+  documentId,
+  title: z.string().trim().min(1).max(LIMITS.documentTitle).optional(),
+  summary: z.string().trim().max(LIMITS.documentSummary).optional(),
+  taskId: taskId.nullable().optional().describe("Move it to another task, or null to detach it"),
+  goalId: goalId.nullable().optional(),
+  ...documentBody,
+  expectedVersion: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .optional()
+    .describe("The version you read; if someone changed it since, the update is refused instead of overwriting their edit"),
+});
+export const DocumentRefInput = z.object({ documentId });
+export const ListDocumentsInput = z.object({
+  taskId: taskId.optional(),
+  goalId: goalId.optional(),
+  query: z.string().trim().max(LIMITS.query).optional().describe("Words in the title or summary"),
+  limit: limit(100, 50),
 });
 
 export const MemoryCountsInput = RecallInput.pick({ query: true });

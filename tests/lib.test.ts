@@ -63,7 +63,7 @@ describe("domain vocabulary", () => {
     expect(isOneOf(TASK_STATUSES, undefined)).toBe(false);
     expect(isOneOf([14, 30], 30)).toBe(true);
     expect(isOneOf([14, 30], "30")).toBe(false);
-    expect(zeroCounts(STATIONS)).toEqual({ inbox: 0, todo: 0, in_progress: 0, done: 0 });
+    expect(zeroCounts(STATIONS)).toEqual({ inbox: 0, backlog: 0, todo: 0, in_progress: 0, done: 0 });
     expect(TASK_STATUSES.filter(isOpenTaskStatus)).toEqual([...OPEN_TASK_STATUSES]);
   });
 

@@ -12,7 +12,7 @@ import { ActivityInput } from "./schemas";
 import { service } from "./service";
 
 export type { EventAction };
-export type EntityType = "goal" | "task" | "memory" | "agent" | "member";
+export type EntityType = "goal" | "task" | "memory" | "document" | "agent" | "member" | "workspace";
 
 export interface EventInput {
   action: EventAction;

@@ -119,7 +119,7 @@ export function Popover({
 
   const inline = phone === "inline";
   return (
-    <details ref={ref} className={cx("group/pop relative", inline && "max-sm:open:basis-full")}>
+    <details ref={ref} data-menu className={cx("group/pop relative", inline && "max-sm:open:basis-full")}>
       <summary
         aria-label={triggerLabel}
         className={cx(
