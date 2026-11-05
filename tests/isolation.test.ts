@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { tasks } from "@/server/db/schema";
 import { approveAgent, authenticateAgentToken, findRenewableAgent, resolveOAuthAgent, revokeAgent } from "@/server/domain/agents";
@@ -29,6 +29,8 @@ import { getWorkspaceOverviews, listMemberships } from "@/server/domain/tenants"
 import { deleteWebhook, watch } from "@/server/domain/webhooks";
 
 import { createTestDb, seedWorkspace, type TestDb, type Workspace } from "./support/db";
+import { connectMcpClient, dataOf, textOf } from "./support/mcp";
+import { connectOAuthAgent, createOAuthServer, OAUTH_RESOURCE } from "./support/oauth";
 
 let testDb: TestDb;
 let acme: Workspace;
@@ -196,6 +198,28 @@ describe("tenant isolation", () => {
     expect(renewed).toBe(false);
     expect(there.id).not.toBe(agent.id);
     expect((await resolveOAuthAgent(testDb.db, agent.id))?.tenant).toEqual(acme.tenant);
+  });
+
+  describe("over an OAuth token", () => {
+    afterEach(() => vi.unstubAllEnvs());
+
+    it("an OAuth token for one workspace never sees another's goals", async () => {
+      const server = createOAuthServer(testDb.db);
+      const connected = await connectOAuthAgent(testDb.db, server, "oauth-acme");
+      await createGoal(connected.ctx, { title: "Connected workspace's goal" });
+      const client = await connectMcpClient(server.handler, connected.accessToken, { url: OAUTH_RESOURCE });
+      try {
+        const me = dataOf<{ workspace: { id: string } }>(await client.callTool({ name: "whoami", arguments: {} }));
+        expect(me.workspace.id).toBe(connected.tenant.id);
+        const listed = textOf(await client.callTool({ name: "list_goals", arguments: {} }));
+        expect(listed).toContain("Connected workspace's goal");
+        expect(listed).not.toContain(acmeGoal.title);
+        const reached = await client.callTool({ name: "get_goal", arguments: { goalId: acmeGoal.id } });
+        expect(reached.isError).toBe(true);
+      } finally {
+        await client.close();
+      }
+    });
   });
 
   it("shows each user only the workspaces they belong to", async () => {

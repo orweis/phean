@@ -9,6 +9,20 @@ export function appUrl(): string {
   return `http://localhost:${process.env.PORT ?? 3000}`;
 }
 
+/** The MCP endpoint's address: the audience of its OAuth tokens and the resource they are requested for. */
+export function mcpResourceUrl(): string {
+  return `${appUrl()}/mcp`;
+}
+
+/** Better Auth's own limit on open client registration, per client address a minute. */
+const OAUTH_REGISTER_LIMIT = 5;
+
+/** The UI tests register many clients from one address; a deployment leaves this unset. */
+export function oauthRegisterLimit(): number {
+  const raised = Number(process.env.PHEAN_OAUTH_REGISTER_LIMIT);
+  return Number.isInteger(raised) && raised > 0 ? raised : OAUTH_REGISTER_LIMIT;
+}
+
 /** Every origin a browser may legitimately use to reach this deployment. */
 export function trustedOrigins(): string[] {
   const hosts = [

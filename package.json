@@ -25,7 +25,7 @@
     "db:migrate": "tsx scripts/migrate.ts",
     "db:seed": "pnpm db:migrate && tsx scripts/seed.ts",
     "demo:agents": "tsx scripts/demo-agents.ts",
-    "auth:schema": "auth generate --config src/server/auth/auth.ts --output src/server/db/schema/auth.ts --yes"
+    "auth:schema": "auth generate --config src/server/auth/auth.config.ts --output src/server/db/schema/auth.ts --yes"
   },
   "dependencies": {
     "@better-auth/cimd": "1.7.17",

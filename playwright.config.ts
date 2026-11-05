@@ -35,6 +35,8 @@ export default defineConfig({
       PORT: String(PORT),
       // The webhooks spec delivers to a receiver on 127.0.0.1; production never allows this.
       PHEAN_WEBHOOK_ALLOW_PRIVATE: "1",
+      // Every spec registers its OAuth clients from this one address.
+      PHEAN_OAUTH_REGISTER_LIMIT: "1000",
     },
   },
 });

@@ -97,7 +97,7 @@ export function createAuth(database: Db, baseUrl: string) {
         clientRegistrationDefaultApplicationType: "infer",
         accessTokenExpiresIn: 3600,
         refreshTokenExpiresIn: 366 * 24 * 3600, // the agents row decides when access ends
-        refreshTokenReuseInterval: 0, // see "Decisions"
+        refreshTokenReuseInterval: 30, // see "Decisions"
         dpop: { signingAlgorithms: [] },
         postLogin: {
           page: "/oauth/approve",
@@ -189,7 +189,7 @@ Confirmed as the plan assumed:
 
 ## Decisions for Or or the coordinator
 
-1. **Refresh reuse interval.** The spec calls 0 "the Better Auth recommendation", but `mcp()` defaults to 30 seconds for MCP clients. It matters more than expected: replaying a rotated token at 0 invalidates the whole family, and the family is **client plus user, not agent**. In the test, replaying agent A's old token also killed agent B's refresh token, with both on one client id, which is normal for CIMD. Two parallel refreshes gave 200 and 400 at both settings, so 30 does not remove that race; at 0 the winner's token kept working (not checked at 30). At 30, a retried replay returns the stored response without running the claims, so the per-request row check is what cuts off a revoked agent. **I recommend 30.** The sketch keeps 0 because the plan says so.
+1. **Refresh reuse interval.** The spec calls 0 "the Better Auth recommendation", but `mcp()` defaults to 30 seconds for MCP clients. It matters more than expected: replaying a rotated token at 0 invalidates the whole family, and the family is **client plus user, not agent**. In the test, replaying agent A's old token also killed agent B's refresh token, with both on one client id, which is normal for CIMD. Two parallel refreshes gave 200 and 400 at both settings, so 30 does not remove that race; at 0 the winner's token kept working (not checked at 30). At 30, a retried replay returns the stored response without running the claims, so the per-request row check is what cuts off a revoked agent. **I recommend 30.** Ruled: 30, and the sketch above now says so.
 2. **Token `scope` versus the chosen level.** The SDK requested everything in `scopes_supported`, so with no narrowing, a Write approval carried `phean:admin` in its token. Pass `scope` to the consent call, as the requested scopes at or below the chosen level, keeping `offline_access`. A client that asked only for `phean:read` can't be given a `phean:write` scope, since consent refuses raising. Either cap the dialog at what was requested, or let the row decide and treat `scope` as a hint. **I recommend the row decides**, as the spec already says it is the source of truth.
 
 ## Refresh tokens depend on the client

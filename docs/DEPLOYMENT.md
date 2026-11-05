@@ -50,7 +50,8 @@ Why Neon: goals form a hierarchy (recursive CTEs), memory and tasks need full-te
 | --- | --- | --- |
 | `DATABASE_URL` | yes | Set by the Neon integration |
 | `BETTER_AUTH_SECRET` | yes | Signs sessions. Already set; rotate with `openssl rand -base64 32` (this signs everyone out) |
-| `BETTER_AUTH_URL` | no | Canonical public URL. Defaults to the production domain on production and the deployment URL on previews |
+| `BETTER_AUTH_URL` | no | Canonical public URL, and with it the OAuth issuer and the audience of MCP tokens. Defaults to the production domain on production and the deployment URL on previews. Must be HTTPS, or HTTP on loopback only: anything else makes Better Auth fail on first use, sign-in included. OAuth clients must connect at this exact address, so a branch alias needs it set |
+| `PHEAN_OAUTH_REGISTER_LIMIT` | no | Raises how many OAuth clients one address may register a minute (default 5). The UI tests set it, since they all register from one address. Leave it unset on a real deployment |
 | `PHEAN_PLATFORM_ADMINS` | no | Comma-separated emails with read-only access to every workspace (the operator's status-per-customer view). Only counts for **verified** emails, which in practice means accounts that signed in with GitHub or Google |
 | `CRON_SECRET` | yes, for webhooks | Vercel sends it to the every-minute webhook sweep (`/api/webhooks/dispatch`, declared in `vercel.json`); production refuses the sweep without it. Generate with `openssl rand -base64 32` |
 | `PHEAN_WEBHOOK_KEY` | no | Encrypts stored webhook signing secrets. Defaults to a key derived from `BETTER_AUTH_SECRET`; rotating either makes stored secrets unreadable, and agents re-register their webhooks |
@@ -113,4 +114,4 @@ Previews are behind Vercel Authentication. To call a preview's `/mcp` from an ag
 - **Rollback**: promote a previous deployment. Migrations only move forward, so write them to be backward compatible with the previous release (add columns before using them; drop them a release later).
 - **Database branches**: Neon creates a branch per preview, so schema changes are exercised on a copy of production data before merge.
 - **Webhooks**: deliveries go out right after the change commits. The cron in `vercel.json` (every minute; Hobby plans allow only daily crons, so this needs Pro) retries failures and prunes deliveries after 7 days. A webhook disabled after repeated failures shows its reason on the Agents page; the agent re-enables it by registering again.
-- **Rate limiting**: sign-in and sign-up are rate-limited by Better Auth, with counters stored in Postgres so the limit holds across serverless instances.
+- **Rate limiting**: sign-in, sign-up and OAuth client registration are rate-limited by Better Auth, with counters stored in Postgres so the limit holds across serverless instances.

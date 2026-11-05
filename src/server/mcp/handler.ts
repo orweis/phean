@@ -1,15 +1,21 @@
 import type { AuthInfo, McpServer, ServerContext } from "@modelcontextprotocol/server";
 import { createMcpHandler, getPublicOrigin, withMcpAuth } from "mcp-handler";
 
+import { AGENT_TOKEN_PREFIX } from "@/lib/domain";
+
 import packageJson from "../../../package.json" with { type: "json" };
+import { verifyOAuthToken as verifyDeploymentToken, type OAuthTokenVerifier } from "../auth/oauth";
+import { appUrl } from "../config";
 import type { Db } from "../db/client";
-import { AGENT_NAME_HEADER, agentContext, authenticateAgentToken, resolveNamedSubagent, type AgentPrincipal } from "../domain/agents";
+import { AGENT_NAME_HEADER, agentContext, authenticateAgentToken, resolveNamedSubagent, resolveOAuthAgent, type AgentPrincipal } from "../domain/agents";
 import { PROMPTS, SERVER_INSTRUCTIONS } from "./guidance";
 import { toolError, type PheanTool, type ToolContext } from "./tool";
 import { TOOLS } from "./tools";
 
 export interface PheanMcpDeps {
   getDb: () => Db;
+  /** Defaults to this deployment's provider. */
+  verifyOAuthToken?: OAuthTokenVerifier;
 }
 
 interface PheanAuthExtra {
@@ -49,18 +55,25 @@ export function registerPheanServer(server: McpServer, { getDb }: PheanMcpDeps):
 }
 
 /**
- * The remote MCP endpoint. Every request must carry `Authorization: Bearer phn_...`;
- * the token alone decides the workspace and the acting agent, never the tool input.
+ * The remote MCP endpoint. Every request must carry `Authorization: Bearer`, with a `phn_` key or
+ * an OAuth access token; the token alone decides the workspace and the acting agent, never the tool input.
  */
 export function createPheanMcpHandler(deps: PheanMcpDeps): (request: Request) => Promise<Response> {
+  const { getDb, verifyOAuthToken = verifyDeploymentToken } = deps;
   const handler = createMcpHandler((server) => registerPheanServer(server, deps), {
     serverInfo: { name: "phean", version: packageJson.version },
     instructions: SERVER_INSTRUCTIONS,
   });
 
+  const authenticate = async (bearerToken: string): Promise<AgentPrincipal | null> => {
+    if (bearerToken.startsWith(AGENT_TOKEN_PREFIX)) return authenticateAgentToken(getDb(), bearerToken);
+    const verified = await verifyOAuthToken(bearerToken);
+    return verified && resolveOAuthAgent(getDb(), verified.agentId);
+  };
+
   const verifyToken = async (request: Request, bearerToken?: string): Promise<AuthInfo | undefined> => {
     if (!bearerToken) return undefined;
-    const token = await authenticateAgentToken(deps.getDb(), bearerToken);
+    const token = await authenticate(bearerToken);
     if (!token) return undefined;
     // A worker sharing its agent's key names itself, by header or (for clients that only take a URL) `?agent=`.
     const named = request.headers.get(AGENT_NAME_HEADER) ?? new URL(request.url).searchParams.get("agent");
@@ -70,5 +83,6 @@ export function createPheanMcpHandler(deps: PheanMcpDeps): (request: Request) =>
     return { token: bearerToken, clientId: principal.agent.id, scopes: [], extra: { ...extra } };
   };
 
-  return withMcpAuth(handler, verifyToken, { required: true });
+  // resourceUrl keeps the challenge on the real address, whatever X-Forwarded-Host says.
+  return withMcpAuth(handler, verifyToken, { required: true, resourceMetadataPath: "/.well-known/oauth-protected-resource/mcp", resourceUrl: appUrl() });
 }

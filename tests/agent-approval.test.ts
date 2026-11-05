@@ -1,8 +1,10 @@
-import { and, eq } from "drizzle-orm";
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { randomUUID } from "node:crypto";
+
+import { and, eq, sql } from "drizzle-orm";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { DAY_MS } from "@/lib/dates";
-import { agents, events, member, user } from "@/server/db/schema";
+import { agents, events, member, oauthClient, oauthRefreshToken, user } from "@/server/db/schema";
 import {
   agentContext,
   approveAgent,
@@ -13,8 +15,6 @@ import {
   resolveNamedSubagent,
   resolveOAuthAgent,
   revokeAgent,
-  setAgentTokenRevoker,
-  type AgentTokenRevoker,
 } from "@/server/domain/agents";
 import type { Ctx } from "@/server/domain/context";
 
@@ -25,7 +25,6 @@ let ws: Workspace;
 let owner: Ctx;
 let mia: TestUser;
 let miaCtx: Ctx;
-const revoker = vi.fn<AgentTokenRevoker>();
 
 const grant = { level: "write", lifetimeDays: 30, oauthClientId: "client_1" } as const;
 
@@ -37,6 +36,39 @@ async function rowOf(id: string) {
 async function eventsOf(id: string): Promise<string[]> {
   const rows = await testDb.db.select({ action: events.action }).from(events).where(eq(events.entityId, id)).orderBy(events.id);
   return rows.map((row) => row.action);
+}
+
+/** A refresh token as the provider stores it, so these tests revoke without loading the auth module. */
+async function seedRefreshToken(agentId: string, person: TestUser): Promise<void> {
+  const clientId = randomUUID();
+  await testDb.db.insert(oauthClient).values({ id: randomUUID(), clientId, redirectUris: ["http://127.0.0.1/callback"] });
+  await testDb.db.insert(oauthRefreshToken).values({
+    id: randomUUID(),
+    token: randomUUID(),
+    clientId,
+    userId: person.id,
+    referenceId: agentId,
+    expiresAt: new Date(Date.now() + DAY_MS),
+    createdAt: new Date(),
+    scopes: ["phean:write"],
+  });
+}
+
+const refreshTokensOf = async (agentId: string) => (await testDb.db.select({ id: oauthRefreshToken.id }).from(oauthRefreshToken).where(eq(oauthRefreshToken.referenceId, agentId))).length;
+
+/** Makes deleting this agent's refresh tokens fail inside the service's transaction, for as long as `run` lasts. */
+async function whileTokensCannotBeDeleted(agentId: string, run: () => Promise<void>): Promise<void> {
+  const statements = [
+    "create function refuse_token_delete() returns trigger language plpgsql as $$ begin raise exception 'no'; end $$",
+    `create trigger refuse_token_delete before delete on oauth_refresh_token for each row when (old.reference_id = '${agentId}') execute function refuse_token_delete()`,
+  ];
+  for (const statement of statements) await testDb.db.execute(sql.raw(statement));
+  try {
+    await run();
+  } finally {
+    await testDb.db.execute(sql.raw("drop trigger refuse_token_delete on oauth_refresh_token"));
+    await testDb.db.execute(sql.raw("drop function refuse_token_delete()"));
+  }
 }
 
 const expire = (id: string) => testDb.db.update(agents).set({ accessExpiresAt: new Date(Date.now() - 1000) }).where(eq(agents.id, id));
@@ -68,9 +100,6 @@ beforeEach(async () => {
   ws = await seedWorkspace(testDb.db);
   owner = ws.human;
   ({ person: mia, ctx: miaCtx } = await joinWorkspace("Mia", "member"));
-  revoker.mockReset();
-  revoker.mockResolvedValue(undefined);
-  setAgentTokenRevoker(revoker);
 });
 
 afterAll(() => testDb.close());
@@ -119,13 +148,13 @@ describe("approving an agent", () => {
 describe("renewing an agent", () => {
   it("same person, workspace and name renews the row", async () => {
     const { agent } = await approveAgent(miaCtx, { name: "Laptop", ...grant, lifetimeDays: 1 });
+    await seedRefreshToken(agent.id, mia);
     const { agent: again, renewed } = await approveAgent(miaCtx, { name: "Laptop", level: "read", lifetimeDays: 90, oauthClientId: "client_2" });
     expect(renewed).toBe(true);
     expect(again.id).toBe(agent.id);
     expect(again).toMatchObject({ accessLevel: "read", oauthClientId: "client_2" });
     expect(again.accessExpiresAt!.getTime()).toBeGreaterThan(Date.now() + 89 * DAY_MS);
-    expect(revoker).toHaveBeenCalledTimes(1);
-    expect(revoker).toHaveBeenCalledWith(expect.anything(), agent.id);
+    expect(await refreshTokensOf(agent.id)).toBe(0);
     expect(await eventsOf(agent.id)).toEqual(["agent.created", "agent.renewed"]);
   });
 
@@ -140,21 +169,23 @@ describe("renewing an agent", () => {
 
   it("rolls the renewal back when the old tokens cannot be revoked", async () => {
     const { agent } = await approveAgent(miaCtx, { name: "Laptop", ...grant });
-    revoker.mockRejectedValueOnce(new Error("no"));
-    await expect(approveAgent(miaCtx, { name: "Laptop", ...grant, level: "read" })).rejects.toThrow("no");
+    await seedRefreshToken(agent.id, mia);
+    await whileTokensCannotBeDeleted(agent.id, () => expect(approveAgent(miaCtx, { name: "Laptop", ...grant, level: "read" })).rejects.toThrow());
+    expect(await refreshTokensOf(agent.id)).toBe(1);
     expect((await rowOf(agent.id)).accessLevel).toBe("write");
     expect(await eventsOf(agent.id)).toEqual(["agent.created"]);
   });
 
   it("a different name creates a new agent", async () => {
     const { agent } = await approveAgent(miaCtx, { name: "Laptop", ...grant });
+    await seedRefreshToken(agent.id, mia);
     const { agent: other, renewed } = await approveAgent(miaCtx, { name: "Desktop", ...grant });
     expect(renewed).toBe(false);
     expect(other.id).not.toBe(agent.id);
     // Compared as the unique index does: a different case is a different name.
     const { agent: cased } = await approveAgent(miaCtx, { name: "laptop", ...grant });
     expect(cased.id).not.toBe(agent.id);
-    expect(revoker).not.toHaveBeenCalled();
+    expect(await refreshTokensOf(agent.id)).toBe(1);
   });
 
   it("a revoked agent is never renewed", async () => {
@@ -424,15 +455,18 @@ describe("revoking an agent", () => {
   it("cuts off the agent's tokens and each sub-agent's, in the same transaction", async () => {
     const { agent } = await approveAgent(miaCtx, { name: "Laptop", ...grant });
     const { agent: worker, token } = await createSubagent(await signedIn(agent.id), { name: "Worker" });
+    const { agent: bystander } = await approveAgent(miaCtx, { name: "Desktop", ...grant });
+    await Promise.all([seedRefreshToken(agent.id, mia), seedRefreshToken(worker.id, mia), seedRefreshToken(bystander.id, mia)]);
 
-    revoker.mockRejectedValueOnce(new Error("no"));
-    await expect(revokeAgent(miaCtx, { agentId: agent.id })).rejects.toThrow("no");
+    await whileTokensCannotBeDeleted(agent.id, () => expect(revokeAgent(miaCtx, { agentId: agent.id })).rejects.toThrow());
     expect((await rowOf(agent.id)).revokedAt).toBeNull();
+    expect(await refreshTokensOf(worker.id)).toBe(1);
     expect(await authenticateAgentToken(testDb.db, token)).not.toBeNull();
 
-    revoker.mockClear();
     await revokeAgent(miaCtx, { agentId: agent.id });
-    expect(revoker.mock.calls.map((call) => call[1]).sort()).toEqual([agent.id, worker.id].sort());
+    expect(await refreshTokensOf(agent.id)).toBe(0);
+    expect(await refreshTokensOf(worker.id)).toBe(0);
+    expect(await refreshTokensOf(bystander.id)).toBe(1);
     expect((await rowOf(worker.id)).revokedAt).toBeInstanceOf(Date);
     expect(await authenticateAgentToken(testDb.db, token)).toBeNull();
   });

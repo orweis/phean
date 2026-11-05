@@ -14,7 +14,11 @@ import { auth, type Session } from "./auth";
 
 export type SessionUser = Session["user"];
 
-export const getSession = cache(async () => auth.api.getSession({ headers: await headers() }));
+export const getSession = cache(async () => {
+  // In this order: prerendering stops at headers(), and reading auth.api first would build the provider, which opens the database.
+  const requestHeaders = await headers();
+  return auth.api.getSession({ headers: requestHeaders });
+});
 
 export async function requireUser(): Promise<SessionUser> {
   const session = await getSession();

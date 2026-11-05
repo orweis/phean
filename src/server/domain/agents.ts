@@ -9,7 +9,7 @@ import { ACCESS_LEVEL_META, AGENT_TOKEN_PREFIX, grantableLevels, highestGrantabl
 import type { Db } from "../db/client";
 import { publicColumns } from "../db/columns";
 import { newId } from "../db/ids";
-import { agents, member, organization, type AgentRow } from "../db/schema";
+import { agents, member, oauthRefreshToken, organization, type AgentRow } from "../db/schema";
 import { liveAgent } from "./agent-liveness";
 import { agentRole, inTenant, inTransaction, type Ctx, type Tenant } from "./context";
 import { conflict, forbidden, invalid, notFound } from "./errors";
@@ -104,13 +104,13 @@ export const createSubagent = service(CreateSubagentInput, async (ctx, { name, p
   return issue(ctx, { name, parent, purpose });
 });
 
-/** Revokes an agent's OAuth tokens. It runs inside the caller's transaction, with that transaction's db. */
-export type AgentTokenRevoker = (db: Db, agentId: string) => Promise<void>;
-
-let revokeTokensOf: AgentTokenRevoker = async () => undefined;
-
-export function setAgentTokenRevoker(revoker: AgentTokenRevoker): void {
-  revokeTokensOf = revoker;
+/**
+ * Ends an agent's refresh tokens. Better Auth owns these rows, but its table is part of Phean's schema,
+ * and this runs in the caller's transaction so a revoke or renewal that rolls back keeps them.
+ * Its access tokens need no row: every request to /mcp checks the agent itself.
+ */
+async function revokeTokensOf(db: Db, agentId: string): Promise<void> {
+  await db.delete(oauthRefreshToken).where(eq(oauthRefreshToken.referenceId, agentId));
 }
 
 /** The same comparison as the agents_oauth_name_uq index, so what this finds is what an insert would hit. */
