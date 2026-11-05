@@ -20,7 +20,8 @@ export function FlowBar({ counts, label, size = "sm", stations = STATIONS, class
   return (
     <div role="img" aria-label={`${label}: ${describeCounts(counts, stations)}`} className={cx("flex gap-0.5", SIZES[size], className)}>
       {shown.length === 0 ? (
-        <span className="flex-1 rounded-xs bg-fill" />
+        // Nothing open: a dashed hairline, so an empty bar draws less attention than a full one.
+        <span data-empty className="flex-1 self-center border-t border-dashed border-edge" />
       ) : (
         shown.map((station) => (
           <span key={station} className={cx("min-w-1 rounded-xs", STATION_STYLE[station].fill)} style={{ flexGrow: counts[station] }} />

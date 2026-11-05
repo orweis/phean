@@ -19,7 +19,12 @@ export const routes = {
   questions: (slug: string) => `/w/${slug}#questions`,
   /** Every question and decision agents asked people: what waits, and what was answered. */
   decisions: (slug: string) => `/w/${slug}/decisions`,
-  board: (slug: string, goalId?: string) => withQuery(`/w/${slug}/board`, { goal: goalId }),
+  /** One request on the Decisions page, which scrolls to it and rings it. */
+  decision: (slug: string, taskId: string) => `/w/${slug}/decisions#task-${taskId}`,
+  /** The goals waiting on a person's approval, on the Decisions page. */
+  approvals: (slug: string) => `/w/${slug}/decisions#approvals`,
+  board: (slug: string, filters?: string | { goal?: string; lane?: string; agent?: string }) =>
+    withQuery(`/w/${slug}/board`, typeof filters === "string" ? { goal: filters } : filters),
   timeline: (slug: string, filters?: { goal?: string; days?: string }) => withQuery(`/w/${slug}/timeline`, filters),
   goal: (slug: string, goalId: string) => `/w/${slug}/goals/${goalId}`,
   memory: (slug: string, filters?: { kind?: string; q?: string }) => withQuery(`/w/${slug}/memory`, filters),

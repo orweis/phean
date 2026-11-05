@@ -39,7 +39,7 @@ export interface WorkspaceStats {
   pendingApprovals: number;
   /** Open tasks whose agent is waiting on a person's answer. */
   awaitingInput: number;
-  /** Goals to decide plus questions to answer: everything that waits on a person. */
+  /** Goals to approve plus questions to answer: everything that waits on a person. */
   waitingOnYou: number;
   agents: number;
   /** Agents that called the MCP server in the last 24 hours. */
@@ -203,16 +203,19 @@ export interface Board {
 
 const BOARD_OPEN_LIMIT = 500;
 
-export const getBoard = service(BoardInput, async (ctx, { goalId, doneLimit }): Promise<Board> => {
+export const getBoard = service(BoardInput, async (ctx, { goalId, doneLimit, heldBy }): Promise<Board> => {
   assertCan(ctx, "workspace:read");
   const scope = await goalScope(ctx, goalId);
+  // A finished task is held by no one, so filtering by holder leaves the Done lane empty.
   const [open, done] = await Promise.all([
-    selectTaskViews(ctx, and(isOpenTask, scope))
+    selectTaskViews(ctx, and(isOpenTask, scope, heldBy ? eq(tasks.claimedByAgentId, heldBy) : undefined))
       .orderBy(...byUrgency)
       .limit(BOARD_OPEN_LIMIT),
-    selectTaskViews(ctx, and(eq(tasks.status, "done"), scope))
-      .orderBy(desc(tasks.completedAt))
-      .limit(doneLimit),
+    heldBy
+      ? Promise.resolve([])
+      : selectTaskViews(ctx, and(eq(tasks.status, "done"), scope))
+          .orderBy(desc(tasks.completedAt))
+          .limit(doneLimit),
   ]);
   return {
     columns: STATIONS.map((status) => ({

@@ -32,13 +32,16 @@ interface CardHeaderProps {
   description?: ReactNode;
   action?: ReactNode;
   tone?: PanelTone;
+  /** Without the rule under the header, for a card whose body reads as part of it (an empty state). */
+  divided?: boolean;
 }
 
-export function CardHeader({ title, description, action, tone = "plain" }: CardHeaderProps) {
+export function CardHeader({ title, description, action, tone = "plain", divided = true }: CardHeaderProps) {
   return (
     <header
       className={cx(
-        "flex items-start justify-between gap-4 rounded-t-[calc(var(--radius-lg)-1px)] border-b px-5 py-3.5",
+        "flex items-start justify-between gap-4 rounded-t-[calc(var(--radius-lg)-1px)] px-5 py-3.5",
+        divided && "border-b",
         HEADER_TONES[tone],
       )}
     >

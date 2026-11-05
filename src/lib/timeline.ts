@@ -4,7 +4,19 @@
  * Client-safe; every date is a UTC calendar day, matching how due dates are compared.
  */
 import { addDays, daysBetween, startOfUtcDay } from "./dates";
-import { isLate, isOneOf, isOpenTaskStatus, PRIORITIES, STATIONS, TASK_STATUSES, zeroCounts, type Priority, type Station, type TaskStatus } from "./domain";
+import {
+  isLate,
+  isOneOf,
+  isOpenTaskStatus,
+  PRIORITIES,
+  STATIONS,
+  TASK_STATUSES,
+  zeroCounts,
+  type GoalStatus,
+  type Priority,
+  type Station,
+  type TaskStatus,
+} from "./domain";
 import { formatDay } from "./format";
 import { routes } from "./routes";
 
@@ -216,6 +228,28 @@ export function cumulativeFlow(journeys: readonly Journey[], window: TimeWindow)
     });
 }
 
+export interface FlowPlot {
+  /** Where each day's point sits on the window's axis (0 to 1): the end of that day, or now for today. */
+  xs: number[];
+  /** Where the plot starts: the first day's start, which carries the first day's counts. */
+  start: number;
+  /** Now on the same axis, where the drawn area ends and the future is shaded. */
+  now: number;
+}
+
+/**
+ * Places the flow's points on the timetable's own axis, so both charts on the Timeline share one
+ * x-domain: the same days line up, and the week ahead shows as shaded future on both.
+ */
+export function flowPlot(flow: readonly { day: Date }[], window: TimeWindow): FlowPlot {
+  const today = startOfUtcDay(window.now).getTime();
+  return {
+    xs: flow.map(({ day }) => fractionOf(window, day.getTime() === today ? window.now : addDays(day, 1))),
+    start: flow.length ? fractionOf(window, flow[0]!.day) : 0,
+    now: fractionOf(window, window.now),
+  };
+}
+
 /** A task with what the timeline ranks and groups it by. */
 export interface PlannedTask extends JourneyTask {
   priority: Priority;
@@ -263,16 +297,18 @@ export interface JourneyGroup<T extends JourneyTask = PlannedTask> {
   /** Untitled groups draw their tracks without a heading, as one flat list. */
   title?: string;
   href?: string;
+  /** The goal's status, so a proposed goal's work is marked as not yet committed. */
+  status?: GoalStatus;
   journeys: Journey<T>[];
 }
 
 /** Groups journeys under their goals in goal-tree order; unfiled tasks come last. */
 export function groupByGoal<T extends PlannedTask>(
   journeys: readonly Journey<T>[],
-  goals: readonly { id: string; title: string }[],
+  goals: readonly { id: string; title: string; status?: GoalStatus }[],
   slug: string,
 ): JourneyGroup<T>[] {
-  const groups: JourneyGroup<T>[] = goals.map((goal) => ({ key: goal.id, title: goal.title, href: routes.goal(slug, goal.id), journeys: [] }));
+  const groups: JourneyGroup<T>[] = goals.map((goal) => ({ key: goal.id, title: goal.title, href: routes.goal(slug, goal.id), status: goal.status, journeys: [] }));
   const unfiled: JourneyGroup<T> = { key: "unfiled", title: "Not filed under a goal", journeys: [] };
   const byId = new Map(groups.map((group) => [group.key, group]));
   for (const journey of journeys) (byId.get(journey.task.goalId ?? "") ?? unfiled).journeys.push(journey);

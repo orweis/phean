@@ -79,7 +79,7 @@ test("a bot's webhook is called as soon as a person decides", async ({ page }) =
       await page.goto(`/w/${slug}/decisions`);
       await card(page, "1 request waiting on you")
         .locator(`[data-task="${taskId}"]`)
-        .getByRole("group", { name: "Answer with an option" })
+        .getByRole("group", { name: /^Answer / })
         .getByRole("button", { name: "Opsgenie" })
         .click();
       await expect(card(page, "Nothing waiting on you")).toBeVisible();

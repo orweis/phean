@@ -164,16 +164,20 @@ export const LINK_KIND_META: Record<LinkKind, EnumMeta> = {
   other: { label: "Link", tone: "neutral" },
 };
 
+/**
+ * Kinds are categories, not states, so they stay neutral; facts, the kind agents lean on most, take
+ * the info tint. "decision" reads as "Choice", so "decision" on screen always means an agent's request.
+ */
 export const MEMORY_KIND_META: Record<MemoryKind, EnumMeta> = {
   fact: { label: "Fact", tone: "info" },
-  preference: { label: "Preference", tone: "accent" },
-  decision: { label: "Decision", tone: "success" },
+  preference: { label: "Preference", tone: "neutral" },
+  decision: { label: "Choice", tone: "neutral" },
   context: { label: "Context", tone: "neutral" },
   note: { label: "Note", tone: "neutral" },
 };
 
 export const ROLE_META: Record<MemberRole | "platform_admin", EnumMeta> = {
-  owner: { label: "Owner", tone: "accent" },
+  owner: { label: "Owner", tone: "info" },
   admin: { label: "Admin", tone: "info" },
   member: { label: "Member", tone: "neutral" },
   platform_admin: { label: "Read-only", tone: "warning" },

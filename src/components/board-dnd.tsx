@@ -1,11 +1,14 @@
 "use client";
 
-import { useRef, useState, useTransition, type DragEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, useTransition, type DragEvent, type ReactNode } from "react";
 
 import { completeTaskAction, updateTaskAction } from "@/app/w/[slug]/actions";
 import { IDLE } from "@/lib/action-state";
 import { cx } from "@/lib/cx";
 import { TASK_STATUS_META, type Station, type TaskStatus } from "@/lib/domain";
+import { truncate } from "@/lib/format";
+
+import { useStatus } from "./ui/status-region";
 
 /** The drag payload's type, so lanes ignore files, links and text dragged in from elsewhere. */
 const TASK_MIME = "application/x-phean-task";
@@ -13,13 +16,20 @@ const TASK_MIME = "application/x-phean-task";
 /** Grabbing a field, button, link or open panel inside a card must not start a drag. */
 const NOT_A_HANDLE = "input, textarea, select, button, a, summary, details[open] > div";
 
+/** How long a card that just landed keeps its ring. */
+const LANDED_MS = 1800;
+
 interface Dragged {
   taskId: string;
   status: TaskStatus;
+  title: string;
 }
 
-/** A board card people can pick up and drop on another lane. */
-export function DraggableTask({ taskId, status, title, children }: Dragged & { title: string; children: ReactNode }) {
+/**
+ * A board card people can pick up and drop on another lane. The grab cursor and its role
+ * description say it moves; there is no tooltip to pop up over the card.
+ */
+export function DraggableTask({ taskId, status, title, children }: Dragged & { children: ReactNode }) {
   const ref = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState(false);
 
@@ -28,14 +38,13 @@ export function DraggableTask({ taskId, status, title, children }: Dragged & { t
       ref={ref}
       draggable
       aria-roledescription="draggable task"
-      title={`Drag "${title}" to another lane to move it`}
       className={cx("cursor-grab active:cursor-grabbing", dragging && "opacity-50")}
       onPointerDown={(event) => {
         // Firefox will not select text in a field inside a draggable element, so only arm the drag from the card itself.
         if (ref.current) ref.current.draggable = !(event.target as Element).closest(NOT_A_HANDLE);
       }}
       onDragStart={(event) => {
-        event.dataTransfer.setData(TASK_MIME, JSON.stringify({ taskId, status } satisfies Dragged));
+        event.dataTransfer.setData(TASK_MIME, JSON.stringify({ taskId, status, title } satisfies Dragged));
         event.dataTransfer.setData("text/plain", title);
         event.dataTransfer.effectAllowed = "move";
         setDragging(true);
@@ -53,7 +62,9 @@ export function DraggableTask({ taskId, status, title, children }: Dragged & { t
 function readDragged(event: DragEvent): Dragged | null {
   try {
     const value = JSON.parse(event.dataTransfer.getData(TASK_MIME)) as Partial<Dragged>;
-    return typeof value.taskId === "string" && typeof value.status === "string" ? (value as Dragged) : null;
+    return typeof value.taskId === "string" && typeof value.status === "string"
+      ? { taskId: value.taskId, status: value.status, title: typeof value.title === "string" ? value.title : "" }
+      : null;
   } catch {
     return null;
   }
@@ -61,35 +72,69 @@ function readDragged(event: DragEvent): Dragged | null {
 
 const carriesTask = (event: DragEvent) => event.dataTransfer.types.includes(TASK_MIME);
 
+/** Posts a move: Done completes the task, so it is logged as completion; any other lane sets the status. */
+function moveTo(slug: string, taskId: string, status: TaskStatus) {
+  const form = new FormData();
+  form.set("workspace", slug);
+  form.set("taskId", taskId);
+  if (status !== "done") form.set("status", status);
+  return (status === "done" ? completeTaskAction : updateTaskAction)(IDLE, form);
+}
+
 /**
- * A board lane that takes dropped cards. Dropping on Done completes the task, so it is logged as
- * completion; any other lane sets the status. The page refreshes with the card in its new lane.
+ * A board lane that takes dropped cards. While a card is over it the lane tints and shows a drop
+ * line; once the move lands, the card is scrolled into view with a brief ring, and the status
+ * region says where it went, with Undo to put it back.
  */
 export function DropLane({ status, slug, className, children }: { status: Station; slug: string; className?: string; children: ReactNode }) {
   const [over, setOver] = useState(false);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const landed = useRef<string | null>(null);
+  const lane = useRef<HTMLDivElement>(null);
+  const region = useStatus();
 
-  const move = ({ taskId, status: from }: Dragged) => {
+  // Once the move has rendered, find the card in its new lane for the eye.
+  useEffect(() => {
+    if (pending || !landed.current) return;
+    const card = lane.current?.querySelector<HTMLElement>(`[data-task="${landed.current}"]`);
+    landed.current = null;
+    if (!card) return;
+    card.dataset.flash = "";
+    card.scrollIntoView({ block: "nearest", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+    const timer = setTimeout(() => delete card.dataset.flash, LANDED_MS);
+    return () => clearTimeout(timer);
+  }, [pending]);
+
+  const move = ({ taskId, status: from, title }: Dragged) => {
     if (from === status) return;
-    const form = new FormData();
-    form.set("workspace", slug);
-    form.set("taskId", taskId);
-    if (status !== "done") form.set("status", status);
     setError(null);
     startTransition(async () => {
-      const result = await (status === "done" ? completeTaskAction : updateTaskAction)(IDLE, form);
-      if (result.status === "error") setError(result.message ?? "Could not move the task.");
+      const result = await moveTo(slug, taskId, status);
+      if (result.status === "error") {
+        setError(result.message ?? "Could not move the task.");
+        return;
+      }
+      landed.current = taskId;
+      const name = title ? `“${truncate(title, 60)}”` : "the task";
+      region?.announce({
+        message: `Moved ${name} to ${TASK_STATUS_META[status].label}`,
+        workspace: slug,
+        undo: from === "done"
+          ? { action: completeTaskAction, fields: { taskId }, done: `${name} is back in Done.` }
+          : { action: updateTaskAction, fields: { taskId, status: from }, done: `${name} is back in ${TASK_STATUS_META[from].label}.` },
+      });
     });
   };
 
   return (
     <div
+      ref={lane}
       data-lane={status}
       aria-busy={pending}
       className={cx(
-        "rounded-md transition-[background-color,outline-color] duration-(--dur-micro)",
-        over && "bg-accent-tint outline-2 outline-offset-4 outline-accent/50 outline-dashed",
+        "relative rounded-md transition-[background-color] duration-(--dur-micro)",
+        over && "bg-fill",
         pending && "opacity-70",
         className,
       )}
@@ -114,6 +159,7 @@ export function DropLane({ status, slug, className, children }: { status: Statio
         move(dragged);
       }}
     >
+      {over && <span aria-hidden data-drop-line className="absolute inset-x-1 -top-1 h-0.5 rounded-full bg-accent" />}
       {children}
       <p role="status" className="sr-only">
         {pending ? `Moving the task to ${TASK_STATUS_META[status].label}.` : ""}

@@ -5,7 +5,7 @@ import { authenticateAgentToken } from "@/server/domain/agents";
 import type { Ctx } from "@/server/domain/context";
 import { listActivity } from "@/server/domain/events";
 import { createGoal, findGoal, listGoals, updateGoal, type Goal } from "@/server/domain/goals";
-import { forget, recall, remember, type Memory } from "@/server/domain/memory";
+import { countMemoryKinds, forget, recall, remember, type Memory } from "@/server/domain/memory";
 import { getBoard, getGoalDetail, getStatusSummary } from "@/server/domain/overview";
 import { search } from "@/server/domain/search";
 import {
@@ -19,6 +19,7 @@ import {
   listDecisions,
   listTasks,
   requestInput,
+  retractAnswer,
   updateTask,
   type Task,
 } from "@/server/domain/tasks";
@@ -70,6 +71,7 @@ describe("tenant isolation", () => {
       expect(await listGoals(ctx, {})).toEqual([]);
       expect(await listTasks(ctx, {})).toEqual([]);
       expect(await recall(ctx, {})).toEqual([]);
+      expect(Object.values(await countMemoryKinds(ctx, {})).every((count) => count === 0)).toBe(true);
       expect(await search(ctx, { query: "merger" })).toEqual([]);
       expect(await listActivity(ctx, {})).not.toContainEqual(expect.objectContaining({ actorName: "Dana" }));
       expect((await getStatusSummary(ctx, {})).openTasks).toBe(0);
@@ -79,7 +81,9 @@ describe("tenant isolation", () => {
   it("keeps questions, decisions, and answers inside their workspace", async () => {
     await requestInput(acme.scout.ctx, { taskId: acmeTask.id, kind: "decision", question: "Sign the merger?", options: ["Yes", "No"] });
     for (const ctx of [globexOwner, globexAgent]) expect(await listDecisions(ctx, {})).toEqual({ open: [], closed: [] });
-    await answerInput(acmeOwner, { taskId: acmeTask.id, answer: "Yes" });
+    const { inputAnswers } = await answerInput(acmeOwner, { taskId: acmeTask.id, answer: "Yes" });
+    await expect(retractAnswer(globexOwner, { taskId: acmeTask.id, requestId: inputAnswers[0]!.id })).rejects.toMatchObject({ code: "not_found" });
+    expect((await getBoard(globexOwner, { heldBy: acme.scout.agentId })).columns.flatMap((column) => column.tasks)).toEqual([]);
     expect(await collectAnswers(globexAgent, { taskIds: [acmeTask.id] })).toEqual([]);
     expect((await listDecisions(globexOwner, {})).closed).toEqual([]);
     expect((await collectAnswers(acme.scout.ctx, {})).map((answer) => answer.answer)).toEqual(["Yes"]);

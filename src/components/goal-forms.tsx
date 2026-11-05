@@ -8,6 +8,7 @@ import type { Goal, GoalWithProgress } from "@/server/domain/goals";
 import { GoalField } from "./goal-options";
 import { ActionForm } from "./ui/action-form";
 import { Field, Input, Textarea } from "./ui/field";
+import { PopoverCancel } from "./ui/popover";
 import { SubmitButton } from "./ui/submit-button";
 
 /**
@@ -39,17 +40,20 @@ export function NewGoalForm({ slug, goals, parentGoalId }: { slug: string; goals
         value={parentGoalId}
         locked={Boolean(parentGoalId)}
       />
-      <SubmitButton variant="primary">
-        <Plus aria-hidden />
-        {parentGoalId ? "Add sub-goal" : "Create goal"}
-      </SubmitButton>
+      <div className="flex items-center gap-2">
+        <SubmitButton variant="primary">
+          <Plus aria-hidden />
+          {parentGoalId ? "Add sub-goal" : "Create goal"}
+        </SubmitButton>
+        <PopoverCancel />
+      </div>
     </ActionForm>
   );
 }
 
 export function EditGoalForm({ slug, goal, goals }: { slug: string; goal: Goal; goals: readonly GoalWithProgress[] }) {
   return (
-    <ActionForm action={updateGoalAction} workspace={slug} className="space-y-3">
+    <ActionForm action={updateGoalAction} workspace={slug} className="space-y-3" notice={`Saved “${goal.title}”`} closeOnSuccess>
       <input type="hidden" name="goalId" value={goal.id} />
       <Field label="Title" htmlFor="edit-goal-title">
         <Input id="edit-goal-title" name="title" required maxLength={LIMITS.title} defaultValue={goal.title} />
@@ -58,7 +62,10 @@ export function EditGoalForm({ slug, goal, goals }: { slug: string; goal: Goal; 
         <Textarea id="edit-goal-description" name="description" maxLength={LIMITS.text} defaultValue={goal.description} />
       </Field>
       <GoalField id="edit-goal-parent" name="parentGoalId" label="Part of" none="Top-level goal" goals={parentChoices(goals, goal)} value={goal.parentId} />
-      <SubmitButton>Save changes</SubmitButton>
+      <div className="flex items-center gap-2">
+        <SubmitButton variant="primary">Save changes</SubmitButton>
+        <PopoverCancel />
+      </div>
     </ActionForm>
   );
 }

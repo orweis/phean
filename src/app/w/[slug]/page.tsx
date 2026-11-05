@@ -1,5 +1,6 @@
 import { Bot, CalendarRange, ListTodo } from "lucide-react";
 import Link from "next/link";
+import type { ReactNode } from "react";
 
 import { ActivityFeed } from "@/components/activity-feed";
 import { AgentWorkload } from "@/components/agent-list";
@@ -9,12 +10,12 @@ import { ManualEntry } from "@/components/manual-entry";
 import { OpenQuestions } from "@/components/open-questions";
 import { PageHeader } from "@/components/page-header";
 import { PendingApprovals } from "@/components/pending-approvals";
-import { TaskRow } from "@/components/task-card";
+import { TaskPointer, TaskRow } from "@/components/task-card";
 import { TodayStrip } from "@/components/today-strip";
 import { ButtonLink } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/stat";
-import { formatDueDate, pluralize, relativeDue } from "@/lib/format";
+import { pluralize } from "@/lib/format";
 import { routes } from "@/lib/routes";
 import { journeyTotals, mostPressing } from "@/lib/timeline";
 import { requireWorkspace } from "@/server/auth/session";
@@ -28,24 +29,48 @@ const NEXT_ACTIONS = 6;
 /** Tracks the overview's timetable draws; the Timeline tab has the rest. */
 const PRESSING_TRACKS = 8;
 
+/** Up to this many waiting items share one "Waiting on you" card; more get a card each. */
+const MERGED_WAITING = 3;
+
 const list = new Intl.ListFormat("en", { type: "conjunction" });
 
-/** The one sentence an owner needs first: what waits on them, what is late, how much is moving. */
-function statusSentence(stats: WorkspaceStats): string {
+/**
+ * The one sentence an owner needs first: what waits on them, what is late, how much is moving.
+ * Each clause links to the card that holds it.
+ */
+function statusSentence(stats: WorkspaceStats, slug: string): ReactNode {
   const parts = [
-    stats.awaitingInput > 0 && `${pluralize(stats.awaitingInput, "agent question")} ${stats.awaitingInput === 1 ? "awaits" : "await"} your answer`,
-    stats.pendingApprovals > 0 && `${pluralize(stats.pendingApprovals, "goal")} ${stats.pendingApprovals === 1 ? "awaits" : "await"} your decision`,
-    stats.overdue > 0 && `${pluralize(stats.overdue, "task")} ${stats.overdue === 1 ? "is" : "are"} late`,
-    stats.openTasks > 0 && `${pluralize(stats.openTasks, "task")} ${stats.openTasks === 1 ? "is" : "are"} open`,
-  ].filter((part): part is string => Boolean(part));
-  return parts.length ? `${list.format(parts).replace(/^./, (first) => first.toUpperCase())}.` : "Nothing is waiting on you.";
-}
-
-function DueLead({ dueDate, late }: { dueDate: string; late?: boolean }) {
+    stats.awaitingInput > 0 && {
+      href: "#questions",
+      text: `${pluralize(stats.awaitingInput, "agent question")} ${stats.awaitingInput === 1 ? "awaits" : "await"} your answer`,
+    },
+    stats.pendingApprovals > 0 && {
+      href: "#approvals",
+      text: `${pluralize(stats.pendingApprovals, "goal")} ${stats.pendingApprovals === 1 ? "awaits" : "await"} your approval`,
+    },
+    stats.overdue > 0 && { href: "#late", text: `${pluralize(stats.overdue, "task")} ${stats.overdue === 1 ? "is" : "are"} late` },
+    stats.openTasks > 0 && { href: routes.board(slug), text: `${pluralize(stats.openTasks, "task")} ${stats.openTasks === 1 ? "is" : "are"} open` },
+  ].filter((part): part is { href: string; text: string } => Boolean(part));
+  if (parts.length === 0) return "Nothing is waiting on you.";
+  const words = list.formatToParts(parts.map((part) => part.text));
+  let clause = 0;
   return (
     <>
-      <span className="figure block text-md font-bold text-ink">{formatDueDate(dueDate)}</span>
-      <span className={late ? "text-xs font-semibold text-late-ink" : "text-xs text-muted"}>{relativeDue(dueDate)}</span>
+      {words.map((word, index) => {
+        if (word.type === "literal") return <span key={index}>{word.value}</span>;
+        const { href, text } = parts[clause++]!;
+        const label = index === 0 ? text.replace(/^./, (first) => first.toUpperCase()) : text;
+        return href.startsWith("#") ? (
+          <a key={index} href={href} className="link">
+            {label}
+          </a>
+        ) : (
+          <Link key={index} href={href} className="link">
+            {label}
+          </Link>
+        );
+      })}
+      .
     </>
   );
 }
@@ -58,7 +83,8 @@ export default async function DashboardPage({ params }: PageProps<"/w/[slug]">) 
     listGoals(ctx, {}),
     listActivity(ctx, { limit: 30 }),
     getAgentWorkload(ctx, {}),
-    suggestNextActions(ctx, { limit: NEXT_ACTIONS }),
+    // Tasks with an open question are already in the card above; ask for enough to fill the list without them.
+    suggestNextActions(ctx, { limit: 20 }),
     getJourneys(ctx, { days: 14 }),
   ]);
   const proposed = goals.filter((goal) => goal.status === "proposed");
@@ -66,12 +92,20 @@ export default async function DashboardPage({ params }: PageProps<"/w/[slug]">) 
   const openTracks = journeyTotals(journeys, window).open;
   const canWrite = can(ctx.actor, "task:write");
   const connectFirst = workload.length === 0 && can(ctx.actor, "agent:manage");
+  const asked = new Set(summary.awaitingInputTasks.map((task) => task.id));
+  const actions = nextActions.filter((task) => !task.inputRequest).slice(0, NEXT_ACTIONS);
+  const merged = summary.awaitingInputTasks.length > 0 && proposed.length > 0 && summary.awaitingInputTasks.length + proposed.length <= MERGED_WAITING;
+  const questions = (
+    <OpenQuestions tasks={summary.awaitingInputTasks} slug={slug} canAnswer={canWrite} />
+  );
+  const approvals = <PendingApprovals goals={proposed} slug={slug} canDecide={can(ctx.actor, "goal:decide")} />;
 
   return (
     <>
       <PageHeader
         title={ctx.tenant.name}
-        description={statusSentence(summary)}
+        description={statusSentence(summary, slug)}
+        inlineActions={!connectFirst}
         actions={
           <>
             <ManualEntry slug={slug} goals={goals} canAddTask={canWrite} canAddGoal={can(ctx.actor, "goal:write")} />
@@ -90,12 +124,12 @@ export default async function DashboardPage({ params }: PageProps<"/w/[slug]">) 
       {/* On phones both columns dissolve into one stack, ordered by what needs a person first. */}
       <div className="mt-6 grid gap-6 lg:grid-cols-3">
         <div className="min-w-0 max-lg:contents lg:col-span-2 lg:space-y-6">
-          {summary.awaitingInputTasks.length > 0 && (
+          {merged ? (
             <Card id="questions" tone="wait" className="scroll-mt-32 max-lg:order-1">
               <CardHeader
                 tone="wait"
-                title={`${pluralize(summary.awaitingInput, "agent question")} waiting on you`}
-                description="Agents paused for your answer or decision. Resume the conversation where it stopped, or answer here."
+                title="Waiting on you"
+                description={`${pluralize(summary.awaitingInput, "agent question")} and ${pluralize(proposed.length, "goal")} to approve.`}
                 action={
                   <Link href={routes.decisions(slug)} className="text-xs font-semibold text-wait-ink link">
                     All decisions
@@ -103,22 +137,41 @@ export default async function DashboardPage({ params }: PageProps<"/w/[slug]">) 
                 }
               />
               <CardBody className="py-1">
-                <OpenQuestions tasks={summary.awaitingInputTasks} slug={slug} canAnswer={canWrite} />
+                {questions}
+                <div id="approvals" className="scroll-mt-32 border-t border-rule pt-3">
+                  <h3 className="text-xs font-semibold text-wait-ink">Goals to approve</h3>
+                  {approvals}
+                </div>
               </CardBody>
             </Card>
-          )}
-
-          {proposed.length > 0 && (
-            <Card tone="wait" className="max-lg:order-1">
-              <CardHeader
-                tone="wait"
-                title={`${pluralize(proposed.length, "goal")} awaiting your decision`}
-                description="Agents can propose goals; only people can approve them."
-              />
-              <CardBody className="py-1">
-                <PendingApprovals goals={proposed} slug={slug} canDecide={can(ctx.actor, "goal:decide")} />
-              </CardBody>
-            </Card>
+          ) : (
+            <>
+              {summary.awaitingInputTasks.length > 0 && (
+                <Card id="questions" tone="wait" className="scroll-mt-32 max-lg:order-1">
+                  <CardHeader
+                    tone="wait"
+                    title={`${pluralize(summary.awaitingInput, "agent question")} waiting on you`}
+                    description="Agents paused for your answer or decision. Pick an option, answer here, or resume the conversation where it stopped."
+                    action={
+                      <Link href={routes.decisions(slug)} className="text-xs font-semibold text-wait-ink link">
+                        All decisions
+                      </Link>
+                    }
+                  />
+                  <CardBody className="py-1">{questions}</CardBody>
+                </Card>
+              )}
+              {proposed.length > 0 && (
+                <Card id="approvals" tone="wait" className="scroll-mt-32 max-lg:order-1">
+                  <CardHeader
+                    tone="wait"
+                    title={`${pluralize(proposed.length, "goal")} to approve`}
+                    description="Agents can propose goals; only people can approve them."
+                  />
+                  <CardBody className="py-1">{approvals}</CardBody>
+                </Card>
+              )}
+            </>
           )}
 
           <Card className="max-lg:order-3">
@@ -139,6 +192,7 @@ export default async function DashboardPage({ params }: PageProps<"/w/[slug]">) 
               {pressing.length > 0 && <TimetableLegend className="mb-4" />}
               <Timetable
                 window={window}
+                slug={slug}
                 groups={pressing.length ? [{ key: "pressing", journeys: pressing }] : []}
                 empty={
                   <EmptyState icon={<CalendarRange />} title="Nothing on the line">
@@ -160,13 +214,13 @@ export default async function DashboardPage({ params }: PageProps<"/w/[slug]">) 
               }
             />
             <CardBody className="py-1">
-              {nextActions.length === 0 ? (
+              {actions.length === 0 ? (
                 <EmptyState icon={<ListTodo />} title="Nothing to do right now">
                   Tasks move here once they are triaged out of the inbox.
                 </EmptyState>
               ) : (
                 <ul>
-                  {nextActions.map((task) => (
+                  {actions.map((task) => (
                     <TaskRow key={task.id} task={task} slug={slug} canWrite={canWrite} goals={goals} />
                   ))}
                 </ul>
@@ -192,13 +246,19 @@ export default async function DashboardPage({ params }: PageProps<"/w/[slug]">) 
 
         <div className="min-w-0 max-lg:contents lg:space-y-6">
           {summary.overdueTasks.length > 0 && (
-            <Card tone="late" className="max-lg:order-2">
+            <Card id="late" tone="late" className="scroll-mt-32 max-lg:order-2">
               <CardHeader tone="late" title="Late" description="Past their due date and still open." />
               <CardBody className="py-1">
                 <ul>
-                  {summary.overdueTasks.map((task) => (
-                    <TaskRow key={task.id} task={task} slug={slug} canWrite={canWrite} goals={goals} lead={<DueLead dueDate={task.dueDate!} late />} />
-                  ))}
+                  {summary.overdueTasks.map((task) =>
+                    asked.has(task.id) ? (
+                      <TaskPointer key={task.id} task={task} href={`#task-${task.id}`}>
+                        Also waiting on your {task.inputRequest?.kind === "decision" ? "decision" : "answer"}, above
+                      </TaskPointer>
+                    ) : (
+                      <TaskRow key={task.id} task={task} slug={slug} canWrite={canWrite} goals={goals} compact />
+                    ),
+                  )}
                 </ul>
               </CardBody>
             </Card>
@@ -219,7 +279,7 @@ export default async function DashboardPage({ params }: PageProps<"/w/[slug]">) 
           </Card>
           <Card className="max-lg:order-7">
             <CardHeader title="Activity" description="Humans and agents, newest first." />
-            <CardBody className="max-h-[36rem] overflow-y-auto">
+            <CardBody>
               <ActivityFeed events={activity} slug={slug} />
             </CardBody>
           </Card>

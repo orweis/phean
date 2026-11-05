@@ -1,6 +1,6 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, count, desc, eq } from "drizzle-orm";
 
-import { MEMORY_KIND_META } from "@/lib/domain";
+import { MEMORY_KIND_META, MEMORY_KINDS, zeroCounts, type MemoryKind } from "@/lib/domain";
 import { truncate } from "@/lib/format";
 
 import { publicColumns } from "../db/columns";
@@ -12,7 +12,7 @@ import { forbidden, notFound } from "./errors";
 import { recordEvent } from "./events";
 import { assertGoalsExist } from "./goals";
 import { assertCan } from "./policy";
-import { MemoryRefInput, RecallInput, RememberInput } from "./schemas";
+import { MemoryCountsInput, MemoryRefInput, RecallInput, RememberInput } from "./schemas";
 import { service } from "./service";
 import { findTask } from "./tasks";
 
@@ -66,6 +66,20 @@ export const recall = service(RecallInput, async (ctx, { query, kind, goalId, li
     )
     .orderBy(...(tsQuery ? [desc(tsRank(memories.search, tsQuery))] : []), desc(memories.updatedAt))
     .limit(limit);
+});
+
+/** How many memories of each kind there are, or match `query`: the counts on the Memory page's filters. */
+export const countMemoryKinds = service(MemoryCountsInput, async (ctx, { query }): Promise<Record<MemoryKind, number>> => {
+  assertCan(ctx, "workspace:read");
+  const tsQuery = query ? prefixTsQuery(query) : null;
+  const rows = await ctx.db
+    .select({ kind: memories.kind, count: count() })
+    .from(memories)
+    .where(and(inTenant(ctx, memories), tsQuery ? matchesTsQuery(memories.search, tsQuery) : undefined))
+    .groupBy(memories.kind);
+  const counts = zeroCounts(MEMORY_KINDS);
+  for (const row of rows) counts[row.kind] = Number(row.count);
+  return counts;
 });
 
 export const forget = service(MemoryRefInput, async (ctx, { memoryId }): Promise<{ forgotten: string }> => {

@@ -4,21 +4,22 @@ import { cx } from "@/lib/cx";
 
 /** Controls fill their container (class order cannot override `w-full`), so size the wrapper instead. */
 const CONTROL =
-  "w-full rounded-md border border-edge bg-panel px-3 text-sm text-ink placeholder:text-muted hover:border-ink-2 " +
+  "w-full border border-edge bg-panel px-3 text-sm text-ink placeholder:text-muted hover:border-ink-2 " +
   "transition-[border-color,outline-color] duration-(--dur-micro) " +
   "focus:border-focus focus:outline-3 focus:outline-offset-0 focus:outline-focus/30 " +
   "disabled:cursor-not-allowed disabled:bg-fill disabled:text-muted";
 
-export function Input({ className, ...props }: ComponentProps<"input">) {
-  return <input className={cx(CONTROL, "h-9", className)} {...props} />;
+/** "field" is a form's rectangle; "pill" is a toolbar's capsule, such as a search box above a list. */
+export function Input({ className, shape = "field", ...props }: ComponentProps<"input"> & { shape?: "field" | "pill" }) {
+  return <input className={cx(CONTROL, "h-9", shape === "pill" ? "rounded-full" : "rounded-md", className)} {...props} />;
 }
 
 export function Textarea({ className, ...props }: ComponentProps<"textarea">) {
-  return <textarea className={cx(CONTROL, "min-h-20 py-2", className)} {...props} />;
+  return <textarea className={cx(CONTROL, "min-h-20 rounded-md py-2", className)} {...props} />;
 }
 
 export function Select({ className, ...props }: ComponentProps<"select">) {
-  return <select className={cx(CONTROL, "h-9 pr-8", className)} {...props} />;
+  return <select className={cx(CONTROL, "h-9 rounded-md pr-8", className)} {...props} />;
 }
 
 interface FieldProps {

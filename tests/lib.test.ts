@@ -280,3 +280,30 @@ describe("agent sessions", () => {
     expect(sessionOfAsker(sessions, { agentId: "c" })).toBeUndefined();
   });
 });
+
+describe("search highlighting", () => {
+  it("marks whole words and word prefixes, ignoring case", async () => {
+    const { highlight, searchTerms } = await import("@/lib/highlight");
+    const terms = searchTerms("Invoice acme");
+    expect(terms).toEqual(["invoice", "acme"]);
+    expect(highlight("Chase Acme's invoices; reinvoice later", terms)).toEqual([
+      { text: "Chase ", match: false },
+      { text: "Acme", match: true },
+      { text: "'s ", match: false },
+      { text: "invoice", match: true },
+      { text: "s; reinvoice later", match: false },
+    ]);
+    expect(highlight("nothing here", [])).toEqual([{ text: "nothing here", match: false }]);
+  });
+
+  it("cuts a long text around its first match, at word boundaries", async () => {
+    const { excerpt, searchTerms } = await import("@/lib/highlight");
+    const long = `${"word ".repeat(60)}the invoice from Acme ${"tail ".repeat(60)}`;
+    const cut = excerpt(long, searchTerms("invoice"), 80);
+    expect(cut.startsWith("…")).toBe(true);
+    expect(cut.endsWith("…")).toBe(true);
+    expect(cut).toContain("invoice");
+    expect(cut.length).toBeLessThanOrEqual(82);
+    expect(excerpt("short text", searchTerms("x"))).toBe("short text");
+  });
+});

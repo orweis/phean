@@ -7,7 +7,7 @@ import type { Ctx } from "@/server/domain/context";
 import { inTransaction } from "@/server/domain/context";
 import { createGoal, setGoalStatus } from "@/server/domain/goals";
 import { remember } from "@/server/domain/memory";
-import { answerInput, captureTasks, requestInput, updateTask } from "@/server/domain/tasks";
+import { answerInput, captureTasks, requestInput, retractAnswer, updateTask } from "@/server/domain/tasks";
 import { deleteWebhook, getWebhook, listWatches, pingWith, registerWebhook, unwatch, watch } from "@/server/domain/webhooks";
 import { backoffSeconds, dispatchDue, MAX_CONSECUTIVE_FAILURES, type DispatchDeps, type WebhookPayload } from "@/server/webhooks/dispatch";
 import { SIGNATURE_HEADER, verifySignature } from "@/server/webhooks/signing";
@@ -137,6 +137,22 @@ describe("routing changes to webhooks", () => {
     const [answered, ...rest] = eventsTo(received, url);
     expect(rest).toEqual([]);
     expect(answered).toMatchObject({ action: "task.input_answered", reasons: expect.arrayContaining(["asked_by_you"]), data: expect.objectContaining({ answer: "Okafor" }), url: `https://phean.test/w/${ws.tenant.slug}/decisions` });
+  });
+
+  it("tells the asking agent when a person takes an answer back, which reopens its question", async () => {
+    const url = endpoint();
+    await registerWebhook(closer, { url, topics: ["decisions"] });
+    const task = await todo(human, "Pick the bank");
+    await requestInput(closer, { taskId: task.id, kind: "decision", question: "Northwind or Contoso?", options: ["Northwind", "Contoso"] });
+    const { inputAnswers } = await answerInput(human, { taskId: task.id, answer: "Northwind" });
+    await retractAnswer(human, { taskId: task.id, requestId: inputAnswers[0]!.id });
+
+    const { received, deps } = receiver();
+    await dispatchDue(testDb.db, deps);
+    expect(eventsTo(received, url).map((event) => [event.action, event.reasons.includes("asked_by_you")])).toEqual([
+      ["task.input_answered", true],
+      ["task.input_retracted", true],
+    ]);
   });
 
   it("tells a goal's proposer when a person decides on it, and can follow the whole workspace", async () => {

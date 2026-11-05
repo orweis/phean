@@ -77,7 +77,7 @@ export default async function TimelinePage({ params, searchParams }: PageProps<"
       <Card className="mb-6">
         <CardHeader title="How the work moved" description="Tasks at each status at the end of each day. A widening band is work piling up." />
         <CardBody>
-          <CumulativeFlow flow={cumulativeFlow(journeys, window)} />
+          <CumulativeFlow flow={cumulativeFlow(journeys, window)} window={window} />
         </CardBody>
       </Card>
 
@@ -87,12 +87,17 @@ export default async function TimelinePage({ params, searchParams }: PageProps<"
           description={
             truncated
               ? `The ${journeys.length} most recent tasks, grouped by goal. Narrow the window or pick a goal to see the rest.`
-              : "One track per task, grouped by goal. A long flat run is stuck work. Hover a track to bring it forward."
+              : (
+                  <>
+                    One track per task, grouped by goal, on the same days as the chart above. A long flat run is stuck work.{" "}
+                    <span className="pointer-coarse:hidden">Hover a track to bring it forward.</span>
+                  </>
+                )
           }
         />
         <CardBody>
           <TimetableLegend className="mb-4" />
-          <Timetable window={window} groups={groupByGoal(journeys, goals, slug)} />
+          <Timetable window={window} slug={slug} groups={groupByGoal(journeys, goals, slug)} />
         </CardBody>
       </Card>
     </>

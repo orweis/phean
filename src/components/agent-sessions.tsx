@@ -89,10 +89,10 @@ export function ResumePopover({ sessions }: { sessions: readonly AgentSession[] 
   );
 }
 
-/** Marks a task an agent is waiting on, linking to where its question can be answered. */
-export function WaitingBadge({ slug, kind = "question" }: { slug: string; kind?: InputRequest["kind"] }) {
+/** Marks a task an agent is waiting on, linking to the very entry where its question can be answered. */
+export function WaitingBadge({ slug, kind = "question", taskId }: { slug: string; kind?: InputRequest["kind"]; taskId?: string }) {
   return (
-    <Link href={routes.decisions(slug)} className="rounded-full">
+    <Link href={taskId ? routes.decision(slug, taskId) : routes.decisions(slug)} className="relative rounded-full after:absolute after:inset-x-0 after:-inset-y-1">
       <Badge tone="warning">
         {kind === "decision" ? <Scale aria-hidden /> : <MessageCircleQuestionMark aria-hidden />}
         {kind === "decision" ? "Decision for you" : "Waiting on you"}
@@ -132,7 +132,8 @@ export function TaskLinks({ links, className }: { links: readonly TaskLink[]; cl
           <OutsideLink
             href={link.url}
             className={cx(
-              "inline-flex max-w-full items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold hover:border-ink-2 [&_svg]:size-3 [&_svg]:shrink-0",
+              "relative inline-flex max-w-full items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold hover:border-ink-2 [&_svg]:size-3 [&_svg]:shrink-0",
+              "after:absolute after:inset-x-0 after:-inset-y-1",
               link.kind === "conversation" ? "border-accent/40 text-accent-ink" : "border-rule text-ink-2",
             )}
           >

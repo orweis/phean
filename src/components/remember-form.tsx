@@ -7,6 +7,7 @@ import type { GoalWithProgress } from "@/server/domain/goals";
 import { GoalField } from "./goal-options";
 import { ActionForm } from "./ui/action-form";
 import { enumOptions, Field, Input, Select, Textarea } from "./ui/field";
+import { PopoverCancel } from "./ui/popover";
 import { SubmitButton } from "./ui/submit-button";
 
 interface RememberFormProps {
@@ -19,7 +20,7 @@ interface RememberFormProps {
 /** Workspace memory is shared: whatever a person saves here, every agent can recall. */
 export function RememberForm({ slug, goals, goalId }: RememberFormProps) {
   return (
-    <ActionForm action={rememberAction} workspace={slug} className="space-y-3">
+    <ActionForm action={rememberAction} workspace={slug} className="space-y-3" notice="Saved to memory" closeOnSuccess>
       <Field label="What should agents remember?" htmlFor="remember-content">
         <Textarea
           id="remember-content"
@@ -40,10 +41,13 @@ export function RememberForm({ slug, goals, goalId }: RememberFormProps) {
         </Field>
       </div>
       <GoalField id="remember-goal" name="goalId" label="About goal" none="Whole workspace" goals={goals} value={goalId} locked={Boolean(goalId)} />
-      <SubmitButton variant="primary">
-        <Plus aria-hidden />
-        Remember
-      </SubmitButton>
+      <div className="flex items-center gap-2">
+        <SubmitButton variant="primary">
+          <Plus aria-hidden />
+          Remember
+        </SubmitButton>
+        <PopoverCancel />
+      </div>
     </ActionForm>
   );
 }

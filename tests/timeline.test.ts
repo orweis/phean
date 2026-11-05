@@ -6,6 +6,7 @@ import {
   buildJourneys,
   cumulativeFlow,
   fitWindow,
+  flowPlot,
   fractionOf,
   groupByGoal,
   journeyTotals,
@@ -210,5 +211,26 @@ describe("tracks and flow", () => {
     expect(flow.at(-1)!.counts).toEqual({ inbox: 0, todo: 0, in_progress: 1, done: 1 });
     const threeDaysAgo = flow.find((point) => point.day.getTime() === Date.UTC(2026, 2, 12))!;
     expect(threeDaysAgo.counts).toEqual({ inbox: 2, todo: 1, in_progress: 0, done: 0 });
+  });
+
+  it("places the flow on the timetable's axis: each day's end, now for today, and the week ahead left for the future", () => {
+    const ahead = timeWindow(7, NOW, 7);
+    const flow = cumulativeFlow(journeys, ahead);
+    const plot = flowPlot(flow, ahead);
+    expect(plot.xs).toHaveLength(flow.length);
+    expect(plot.start).toBe(0);
+    // The first point is the end of the first of 14 days; today's point is now itself.
+    expect(plot.xs[0]).toBeCloseTo(1 / 14);
+    expect(plot.xs.at(-1)).toBe(plot.now);
+    expect(plot.now).toBeCloseTo(fractionOf(ahead, NOW));
+    expect(plot.now).toBeLessThan(0.55);
+    // Points only move forward along the axis.
+    expect(plot.xs.every((x, index) => index === 0 || x > plot.xs[index - 1]!)).toBe(true);
+  });
+
+  it("marks a group with its goal's status, so proposed work can be told from committed work", () => {
+    const planned = buildJourneys([plannedTask("lease", "todo", { goalId: "g_lease" })], []);
+    const [group] = groupByGoal(planned, [{ id: "g_lease", title: "Renew the office lease", status: "proposed" }], "acme");
+    expect(group).toMatchObject({ key: "g_lease", status: "proposed" });
   });
 });

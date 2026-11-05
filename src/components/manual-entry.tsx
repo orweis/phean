@@ -31,7 +31,7 @@ export function ManualEntry({ slug, goals, goalId, canAddTask, canAddGoal }: Man
   if (!canAddTask && !canAddGoal) return null;
   const both = canAddTask && canAddGoal;
   return (
-    <Popover variant="ghost" className="sm:w-96" icon={<Plus aria-hidden />} label="Add manually">
+    <Popover variant="ghost" className="sm:w-96" icon={<Plus aria-hidden />} label={<span className="max-sm:sr-only">Add manually</span>} triggerClassName="max-sm:px-2" title="Add manually">
       <div className="group/entry">
         <p className="text-xs text-muted">Agents capture most work for you. Add what they cannot see.</p>
         {both && (

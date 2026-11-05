@@ -6,7 +6,9 @@ import type { GoalWithProgress } from "@/server/domain/goals";
 
 import { GoalField } from "./goal-options";
 import { ActionForm } from "./ui/action-form";
+import { DateInput } from "./ui/date-input";
 import { enumOptions, Field, Input, Select, Textarea } from "./ui/field";
+import { PopoverCancel } from "./ui/popover";
 import { SubmitButton } from "./ui/submit-button";
 
 interface AddTaskFormProps {
@@ -36,14 +38,17 @@ export function AddTaskForm({ slug, goals, goalId, lockGoal = false }: AddTaskFo
           </Select>
         </Field>
         <Field label="Due date" htmlFor="add-task-due">
-          <Input id="add-task-due" name="dueDate" type="date" />
+          <DateInput id="add-task-due" name="dueDate" empty="No due date" />
         </Field>
       </div>
       <GoalField id="add-task-goal" name="goalId" label="Goal" none="No goal" goals={openGoals} value={goalId} locked={lockGoal} />
-      <SubmitButton variant="primary">
-        <Plus aria-hidden />
-        Add task
-      </SubmitButton>
+      <div className="flex items-center gap-2">
+        <SubmitButton variant="primary">
+          <Plus aria-hidden />
+          Add task
+        </SubmitButton>
+        <PopoverCancel />
+      </div>
     </ActionForm>
   );
 }

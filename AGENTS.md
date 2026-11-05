@@ -60,7 +60,12 @@ Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) first. The rules below are the
 - Charts are server-rendered spans placed by `lib/timeline.ts` fractions. Keep the maths in `lib` (with unit tests) and the layout in `components/charts`. Every diagram needs a text equivalent for screen readers, and state must not rely on colour alone.
 - Form controls are `w-full` by design and class order cannot override it. Size the wrapper (a grid column or a `div` with a width) instead of the control.
 - Reuse the primitives before writing markup: `ActionButton`, `GoalField` (goal and parent pickers), `CopyField`, `FlowStat`, `GoalLink`, `segment` from `components/ui/segmented.ts`, `TH` and `PINNED_CELL` from `components/ui/table.ts`, and `Button`'s `pending` state.
-- Destructive actions take a `confirm` message on `ActionForm` or `ActionButton`.
+- Undo for frequent actions, confirm for rare ones (DESIGN.md's Undo or Confirm Rule). Drop, Done, lane moves and answers take a `notice` and an `undo` (the reverse transition) on `ActionButton` or `ActionForm`, shown in the workspace's one status region (`StatusRegion` in `components/ui/status-region.tsx`). Rare, hard-to-reverse actions (Revoke, Forget, Abandon, Remove, Mark achieved with open tasks, Mark answered) take a `confirm` message instead.
+- One-click actions say what they did, naming the object ("Dropped “Read the thread”"), through `notice`; a form panel that closes on success (`closeOnSuccess`) reports the same way. Never rely on the row simply vanishing.
+- A row that leaves when its action runs passes `exits` to the button and fades with `has-[[data-exit][data-pending]]`; pending buttons spin (`Button`'s `pending`).
+- Popovers take focus when they open and open upward when there is no room below. A form panel gets a `title` and a `PopoverCancel`; a panel of one-click rows is `Popover menu` with `Button` size `menu`. The rare moves of a row (Release, Drop, Mark answered) live in its ghost `⋯` menu, named "More actions for …".
+- Toolbar filters are `ToolbarSelect` capsules; form fields stay `Select`. A search box is `SearchForm` (a pill with a clear button and the `/` shortcut).
+- "Decision" means an agent's request and nothing else: a goal waiting on a person is an approval, and the memory kind `decision` reads "Choice".
 
 ### Tests
 
