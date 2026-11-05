@@ -167,6 +167,19 @@ test.describe("signed in", () => {
     await expect(page).toHaveURL("/w/globex/decisions");
   });
 
+  test("the tab's favicon counts the decisions and the inbox, like unread mail", async ({ page }) => {
+    await page.goto("/w/globex");
+    const rail = page.getByRole("navigation", { name: "Workspace" });
+    const countOf = async (tab: RegExp) => Number(((await rail.getByRole("link", { name: tab }).locator("span").first().textContent()) ?? "0").replace(/\D.*$/, "") || 0);
+    const expected = (await countOf(/^Decisions/)) + (await countOf(/^Board/));
+    expect(expected).toBeGreaterThan(0);
+    const badge = page.locator('head link[rel="icon"][data-badge]');
+    await expect(badge).toHaveAttribute("data-badge", String(expected));
+    await expect(badge).toHaveAttribute("href", /^data:image\/png;base64,/);
+    // It is the last icon in the head, which is the one browsers show.
+    expect(await page.evaluate(() => [...document.querySelectorAll('link[rel~="icon"]')].at(-1)?.hasAttribute("data-badge"))).toBe(true);
+  });
+
   test("the selected request is unmistakable, and J and K move the selection", async ({ page }) => {
     await page.goto("/w/globex/decisions");
     const entries = page.locator("[data-entry]");
