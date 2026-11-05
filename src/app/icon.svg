@@ -14,4 +14,6 @@
     <circle cx="12.65" cy="19.17" r="6.4" fill="#d96533" />
     <path d="M6.4 20.53A6.4 6.4 0 0 1 15.71 13.55A5.9 5.9 0 1 1 6.4 20.53Z" fill="#fa934e" />
   </g>
+  <!-- A faint light rim, so the tile keeps its square on dark tab strips. -->
+  <rect x="0.6" y="0.6" width="30.8" height="30.8" rx="6.9" fill="none" stroke="#ffffff" stroke-opacity="0.3" stroke-width="1.2" />
 </svg>

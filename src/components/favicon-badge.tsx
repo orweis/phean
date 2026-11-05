@@ -27,6 +27,9 @@ const UNIT = SIZE / 32;
  */
 const BOULDER = { lit: "#fa934e", shade: "#d96533", figures: "#2b1408" };
 
+/** The faint light rim `src/app/icon.svg` draws around the tile, in the mark's units. */
+const RIM = { inset: 0.6, radius: 6.9, width: 1.2, colour: "rgb(255 255 255 / 0.3)" };
+
 /**
  * The mark with the count as its boulder: a larger ember boulder, lit from the upper left like
  * the original, drawn where the original rests on the slope and covering it, so there is one
@@ -38,10 +41,11 @@ async function drawBadge(iconUrl: string, text: string): Promise<string> {
   const context = canvas.getContext("2d")!;
   context.drawImage(await loadImage(iconUrl), 0, 0, SIZE, SIZE);
 
-  // As large as the tile allows around the original boulder (radius 6.4 units), so the figures read at 16px.
-  context.font = `800 ${text.length > 2 ? 26 : text.length > 1 ? 34 : 42}px system-ui, -apple-system, sans-serif`;
-  const height = 48;
-  const width = Math.max(height, context.measureText(text).width + 10);
+  // Covers the original boulder (radius 6.4 units) with room for figures that read at 16px, and
+  // leaves enough of the tile and the slope around it that the mark still reads as Phean's.
+  context.font = `800 ${text.length > 2 ? 21 : text.length > 1 ? 27 : 34}px system-ui, -apple-system, sans-serif`;
+  const height = 38;
+  const width = Math.max(height, context.measureText(text).width + 8);
   const centerX = Math.min(Math.max(MARK.boulder.cx * UNIT, width / 2 + 1), SIZE - width / 2 - 1);
   const centerY = MARK.boulder.cy * UNIT;
   const shape = (inset: number, dx = 0, dy = 0) => {
@@ -56,7 +60,7 @@ async function drawBadge(iconUrl: string, text: string): Promise<string> {
   context.save();
   shape(0);
   context.clip();
-  shape(3, -3, -3);
+  shape(2.5, -2.5, -2.5);
   context.fillStyle = BOULDER.lit;
   context.fill();
   context.restore();
@@ -64,7 +68,14 @@ async function drawBadge(iconUrl: string, text: string): Promise<string> {
   context.fillStyle = BOULDER.figures;
   context.textAlign = "center";
   context.textBaseline = "middle";
-  context.fillText(text, centerX - 1, centerY + 2);
+  context.fillText(text, centerX - 1, centerY + 1.5);
+
+  // The icon's rim, drawn again over the boulder so the tile's edge stays unbroken.
+  context.beginPath();
+  context.roundRect(RIM.inset * UNIT, RIM.inset * UNIT, SIZE - 2 * RIM.inset * UNIT, SIZE - 2 * RIM.inset * UNIT, RIM.radius * UNIT);
+  context.lineWidth = RIM.width * UNIT;
+  context.strokeStyle = RIM.colour;
+  context.stroke();
   return canvas.toDataURL("image/png");
 }
 
