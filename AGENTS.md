@@ -17,6 +17,7 @@ Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) first. The rules below are the
 - `pnpm check` (typecheck, lint, tests) must pass before every commit. Run `pnpm build` too when touching routes, layouts, or anything imported at module load.
 - `pnpm test:e2e` builds and runs the Playwright UI tests on port 3200 against `.data/e2e`. Run it after any UI change. It needs `pnpm exec playwright install chromium` once, and it reuses a server already listening on 3200, so stop a stale one after rebuilding. To rerun without rebuilding: `pnpm exec playwright test`.
 - CI (`.github/workflows/ci.yml`) runs `pnpm check` and `pnpm test:e2e` on every pull request.
+- Work that needs direct access the cloud session lacks (the Vercel dashboard or CLI, a store's token, production secrets) is spun off as a local session on the owner's machine with a self-contained prompt, rather than handed back as manual steps. Never paste tokens or secrets into a chat, a prompt, or the repository.
 - `pnpm dev` and `pnpm db:seed` both use the on-disk PGlite database by default, and PGlite allows one process at a time. Stop the dev server before seeding.
 - `PageProps<"/route">` and `LayoutProps<"/route">` are generated types. `pnpm typecheck` runs `next typegen` first, so a fresh checkout has them; a bare `tsc` will not.
 
