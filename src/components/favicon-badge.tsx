@@ -44,35 +44,68 @@ async function drawBadge(iconUrl: string, text: string): Promise<string> {
   return canvas.toDataURL("image/png");
 }
 
+/** Every icon link in the head; the page's own is an SVG with `sizes="any"`, which Chrome prefers to any PNG beside it. */
+const iconLinks = () => [...document.querySelectorAll<HTMLLinkElement>('link[rel~="icon"]')];
+
+/** Puts each icon link back to the plain mark. */
+function restore(links: readonly HTMLLinkElement[]) {
+  for (const link of links) {
+    if (link.dataset.plainHref === undefined) continue;
+    link.href = link.dataset.plainHref;
+    if (link.dataset.plainType) link.type = link.dataset.plainType;
+    else link.removeAttribute("type");
+    delete link.dataset.badge;
+    delete link.dataset.plainHref;
+    delete link.dataset.plainType;
+  }
+}
+
+/** The plain mark's address: kept aside on a badged link, else its own. */
+const plainHref = (link: HTMLLinkElement) => link.dataset.plainHref ?? link.getAttribute("href") ?? "";
+
 /**
  * Puts the count of what waits on a person (decisions, approvals, new inbox tasks) on the tab's
- * favicon, the way mail apps show unread mail, so a person sees it from another tab. Its own icon
- * link goes last in the head, which browsers prefer; with nothing waiting it is removed and the
- * plain mark shows. The workspace's auto-refresh keeps the count current.
+ * favicon, the way mail apps show unread mail, so a person sees it from another tab. The badge is
+ * drawn into the page's own icon links rather than a new one, because browsers choose among icon
+ * links by size and type, not by order, and keep the scalable SVG over an added PNG. A refresh can
+ * render the head's icon afresh, so a watch on the head puts the badge back whenever the plain mark
+ * returns. With nothing waiting the plain mark stays. The workspace's auto-refresh keeps the count
+ * current.
  */
 export function FaviconBadge({ count }: { count: number }) {
   useEffect(() => {
     const text = faviconBadgeText(count);
-    if (!text) return;
-    const plain = document.querySelector<HTMLLinkElement>('link[rel~="icon"]:not([data-badge])');
-    if (!plain) return;
-    let link: HTMLLinkElement | null = null;
+    const first = iconLinks()[0];
+    if (!text || !first) return;
+    let badged: string | null = null;
+
+    const apply = () => {
+      if (!badged) return;
+      for (const link of iconLinks()) {
+        if (link.dataset.badge === text && link.getAttribute("href") === badged) continue;
+        if (link.dataset.plainHref === undefined) {
+          link.dataset.plainHref = link.getAttribute("href") ?? "";
+          link.dataset.plainType = link.getAttribute("type") ?? "";
+        }
+        link.type = "image/png";
+        link.href = badged;
+        link.dataset.badge = text;
+      }
+    };
+    const watch = new MutationObserver(apply);
     let cancelled = false;
-    void drawBadge(plain.href, text)
+    void drawBadge(plainHref(first), text)
       .then((href) => {
         if (cancelled) return;
-        link = document.createElement("link");
-        link.rel = "icon";
-        link.type = "image/png";
-        link.href = href;
-        link.dataset.badge = text;
-        document.head.querySelector("link[data-badge]")?.remove();
-        document.head.append(link);
+        badged = href;
+        apply();
+        watch.observe(document.head, { childList: true, subtree: true, attributes: true, attributeFilter: ["href"] });
       })
       .catch(() => undefined);
     return () => {
       cancelled = true;
-      link?.remove();
+      watch.disconnect();
+      restore(iconLinks());
     };
   }, [count]);
   return null;
