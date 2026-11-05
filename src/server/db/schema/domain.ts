@@ -98,6 +98,8 @@ export const agents = pgTable(
     createdAt: timestampTz("created_at").notNull().defaultNow(),
     lastSeenAt: timestampTz("last_seen_at"),
     revokedAt: timestampTz("revoked_at"),
+    /** Set when a revoked agent is filed away, off the Agents list; only revoked agents are archived. */
+    archivedAt: timestampTz("archived_at"),
   },
   (t) => [
     unique("agents_tenant_id_uq").on(t.tenantId, t.id),
@@ -160,6 +162,8 @@ export const tasks = pgTable(
     claimedByAgentId: text("claimed_by_agent_id"),
     claimedAt: timestampTz("claimed_at"),
     completedAt: timestampTz("completed_at"),
+    /** Set when a finished (done or dropped) task is filed away, off the board; reopening it clears it. */
+    archivedAt: timestampTz("archived_at"),
     /** Where people can resume the work with each agent, newest first. */
     agentSessions: jsonb("agent_sessions")
       .$type<AgentSession[]>()

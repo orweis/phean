@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, gte, inArray, isNotNull, max, ne, or, sql, type Column, type SQL } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, inArray, isNotNull, isNull, max, ne, or, sql, type Column, type SQL } from "drizzle-orm";
 
 import {
   GOAL_STATUSES,
@@ -219,7 +219,7 @@ export const getBoard = service(BoardInput, async (ctx, { goalId, doneLimit, hel
       .limit(BOARD_OPEN_LIMIT),
     heldBy
       ? Promise.resolve([])
-      : selectTaskViews(ctx, and(eq(tasks.status, "done"), scope))
+      : selectTaskViews(ctx, and(eq(tasks.status, "done"), isNull(tasks.archivedAt), scope))
           .orderBy(desc(tasks.completedAt))
           .limit(doneLimit),
   ]);

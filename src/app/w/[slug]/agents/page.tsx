@@ -1,8 +1,8 @@
-import { Bot, CornerDownRight } from "lucide-react";
+import { Archive, ArchiveRestore, Bot, CornerDownRight } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 
-import { deleteWebhookAction, revokeAgentAction } from "@/app/w/[slug]/actions";
+import { archiveAgentAction, archiveRevokedAgentsAction, deleteWebhookAction, revokeAgentAction, unarchiveAgentAction } from "@/app/w/[slug]/actions";
 import { AGENT_STATUS_META, agentStatus } from "@/components/agent-list";
 import { ConnectAgentForm } from "@/components/connect-agent-form";
 import { ConnectAgentSection } from "@/components/connect-agent-section";
@@ -54,7 +54,8 @@ function WhatAgentsGet({ mcpUrl }: { mcpUrl: string }) {
   );
 }
 
-export default async function AgentsPage({ params }: PageProps<"/w/[slug]/agents">) {
+export default async function AgentsPage({ params, searchParams }: PageProps<"/w/[slug]/agents">) {
+  const showArchived = (await searchParams).archived === "1";
   const { slug } = await params;
   const { ctx } = await requireWorkspace(slug);
   const [agents, workload, mcpUrl, hooks] = await Promise.all([
@@ -67,9 +68,17 @@ export default async function AgentsPage({ params }: PageProps<"/w/[slug]/agents
   const hookByAgent = new Map(hooks.map((hook) => [hook.agentId, hook]));
   const canManage = can(ctx.actor, "agent:manage");
   // Sub-agents sit right under the agent they work for.
+  // Archived (revoked, filed away) agents have their own view; the list shows the rest.
+  const listed = agents.filter((agent) => Boolean(agent.archivedAt) === showArchived);
+  const listedIds = new Set(listed.map((agent) => agent.id));
+  const archivedCount = agents.length - agents.filter((agent) => !agent.archivedAt).length;
+  const revokedListed = listed.filter((agent) => agent.revokedAt).length;
   const children = new Map<string, typeof agents>();
-  for (const agent of agents) if (agent.parentAgentId) children.set(agent.parentAgentId, [...(children.get(agent.parentAgentId) ?? []), agent]);
-  const ordered = agents.filter((agent) => !agent.parentAgentId).flatMap((agent) => [agent, ...(children.get(agent.id) ?? [])]);
+  for (const agent of listed) if (agent.parentAgentId) children.set(agent.parentAgentId, [...(children.get(agent.parentAgentId) ?? []), agent]);
+  // A sub-agent whose parent is not in this view stands on its own row.
+  const ordered = listed
+    .filter((agent) => !agent.parentAgentId || !listedIds.has(agent.parentAgentId))
+    .flatMap((agent) => [agent, ...(agent.parentAgentId ? [] : (children.get(agent.id) ?? []))]);
   const parents = agents.filter((agent) => !agent.parentAgentId && !agent.revokedAt).map(({ id, name }) => ({ id, name }));
   const nameOf = new Map(agents.map((agent) => [agent.id, agent.name]));
 
@@ -99,8 +108,48 @@ export default async function AgentsPage({ params }: PageProps<"/w/[slug]/agents
       </ConnectAgentSection>
 
       <Card className="min-w-0">
-        <CardHeader title="Connected agents" description="Holding counts open tasks an agent has claimed; done counts the last 7 days." />
-        {agents.length === 0 ? (
+        <CardHeader
+          title={showArchived ? "Archived agents" : "Connected agents"}
+          description={
+            showArchived
+              ? "Revoked agents filed away. Their past work keeps their name; unarchive one to list it again."
+              : "Holding counts open tasks an agent has claimed; done counts the last 7 days."
+          }
+          action={
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              {canManage && !showArchived && revokedListed > 0 && (
+                <ActionButton
+                  action={archiveRevokedAgentsAction}
+                  fields={{}}
+                  workspace={slug}
+                  confirm={`Archive ${pluralize(revokedListed, "revoked agent")}? They leave this list; the Archived view keeps them.`}
+                  closeOnSuccess
+                  size="sm"
+                  variant="ghost"
+                >
+                  <Archive aria-hidden />
+                  Archive revoked
+                </ActionButton>
+              )}
+              {showArchived ? (
+                <Link href={routes.agents(slug)} className="text-xs font-semibold text-accent-ink link whitespace-nowrap">
+                  Back to agents
+                </Link>
+              ) : (
+                archivedCount > 0 && (
+                  <Link href={`${routes.agents(slug)}?archived=1`} className="text-xs font-semibold text-accent-ink link whitespace-nowrap">
+                    Archived ({archivedCount})
+                  </Link>
+                )
+              )}
+            </div>
+          }
+        />
+        {ordered.length === 0 && showArchived ? (
+          <EmptyState icon={<Archive />} title="Nothing archived">
+            Archive a revoked agent to file it away here.
+          </EmptyState>
+        ) : agents.length === 0 ? (
           <EmptyState icon={<Bot />} title="No agents yet">
             {canManage ? "Issue a token to connect your first agent." : "Ask a workspace admin to connect an agent."}
           </EmptyState>
@@ -190,6 +239,35 @@ export default async function AgentsPage({ params }: PageProps<"/w/[slug]/agents
                                 variant="ghost"
                               >
                                 Remove webhook
+                              </ActionButton>
+                            )}
+                            {status === "revoked" && !agent.archivedAt && (
+                              <ActionButton
+                                action={archiveAgentAction}
+                                workspace={slug}
+                                fields={{ agentId: agent.id }}
+                                notice={`Archived ${agent.name}`}
+                                undo={{ action: unarchiveAgentAction, fields: { agentId: agent.id }, done: `${agent.name} is back on the list.` }}
+                                exits
+                                size="sm"
+                                variant="ghost"
+                              >
+                                <Archive aria-hidden />
+                                Archive
+                              </ActionButton>
+                            )}
+                            {agent.archivedAt && (
+                              <ActionButton
+                                action={unarchiveAgentAction}
+                                workspace={slug}
+                                fields={{ agentId: agent.id }}
+                                notice={`Put ${agent.name} back on the list`}
+                                exits
+                                size="sm"
+                                variant="ghost"
+                              >
+                                <ArchiveRestore aria-hidden />
+                                Unarchive
                               </ActionButton>
                             )}
                             {status !== "revoked" && (

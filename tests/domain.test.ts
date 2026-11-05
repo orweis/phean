@@ -23,7 +23,10 @@ import {
   captureTasks,
   claimTask,
   collectAnswers,
+  archiveDoneTasks,
+  archiveTask,
   completeTask,
+  unarchiveTask,
   getTask,
   linkSession,
   listDecisions,
@@ -284,6 +287,46 @@ describe("tasks", () => {
       captureTasks(human, { tasks: [{ title: "Bad date", dueDate: "next tuesday" }] }),
     ).rejects.toMatchObject({ code: "invalid" });
     await expect(updateTask(human, { taskId: "t_whatever", title: "x" })).rejects.toMatchObject({ code: "not_found" });
+  });
+});
+
+describe("archiving finished tasks", () => {
+  const capture = async (title: string, status: "todo" | "done") => {
+    const task = (await captureTasks(human, { tasks: [{ title, status: "todo" }] })).created[0]!;
+    return status === "done" ? updateTask(human, { taskId: task.id, status: "done" }) : task;
+  };
+  const doneLane = async () => (await getBoard(human, {})).columns.find((column) => column.stage.kind === "done")!.tasks.map((task) => task.title);
+
+  it("files done and dropped tasks off the board and agents' list, and brings them back", async () => {
+    const shipped = await capture("Ship the newsletter", "done");
+    const open = await capture("Plan the offsite", "todo");
+    await expect(archiveTask(human, { taskId: open.id })).rejects.toMatchObject({ code: "conflict" });
+
+    const archived = await archiveTask(human, { taskId: shipped.id });
+    expect(archived.archivedAt).toBeInstanceOf(Date);
+    expect(await doneLane()).not.toContain("Ship the newsletter");
+    expect((await listTasks(scout, { status: "done" })).map((task) => task.id)).not.toContain(shipped.id);
+    expect((await listTasks(scout, { status: "done", includeArchived: true })).map((task) => task.id)).toContain(shipped.id);
+
+    expect((await unarchiveTask(human, { taskId: shipped.id })).archivedAt).toBeNull();
+    expect(await doneLane()).toContain("Ship the newsletter");
+
+    // Reopening archived work puts it back on the board.
+    await archiveTask(human, { taskId: shipped.id });
+    expect((await updateTask(human, { taskId: shipped.id, status: "todo" })).archivedAt).toBeNull();
+
+    await updateTask(human, { taskId: open.id, status: "dropped" });
+    expect((await archiveTask(scout, { taskId: open.id })).archivedAt).toBeInstanceOf(Date);
+  });
+
+  it("clears the whole Done lane at once, leaving open work alone", async () => {
+    await capture("Close Q3", "done");
+    await capture("Close Q4", "done");
+    await capture("Open Q1", "todo");
+    expect(await archiveDoneTasks(human, {})).toEqual({ archived: 2 });
+    expect(await doneLane()).toEqual([]);
+    expect(await archiveDoneTasks(human, {})).toEqual({ archived: 0 });
+    expect((await listTasks(human, {})).map((task) => task.title)).toEqual(["Open Q1"]);
   });
 });
 
