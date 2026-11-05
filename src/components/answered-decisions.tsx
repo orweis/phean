@@ -1,6 +1,6 @@
 import { Bot, Check, Clock } from "lucide-react";
 
-import { chosenOption, DELIVERED_OUTCOMES, type InputAnswer } from "@/lib/agent-sessions";
+import { chosenOptions, DELIVERED_OUTCOMES, type InputAnswer } from "@/lib/agent-sessions";
 import { cx } from "@/lib/cx";
 import { REQUEST_KIND_META, REQUEST_OUTCOME_META } from "@/lib/domain";
 import { timeAgo } from "@/lib/format";
@@ -26,12 +26,12 @@ function Delivery({ request }: { request: DecisionRecord["request"] }) {
   );
 }
 
-/** The options the agent offered, with the one chosen ticked, so the history keeps why. */
-function OfferedOptions({ request, chosen }: { request: InputAnswer; chosen: string | null }) {
+/** The options the agent offered, with the ones chosen ticked, so the history keeps why. */
+function OfferedOptions({ request, chosen }: { request: InputAnswer; chosen: readonly string[] }) {
   return (
-    <ul aria-label="Options offered" className="mt-2 flex flex-wrap gap-1.5">
+    <ul aria-label={request.multiple ? "Options offered, several could be picked" : "Options offered"} className="mt-2 flex flex-wrap gap-1.5">
       {request.options.map((option) => {
-        const picked = option === chosen;
+        const picked = chosen.includes(option);
         return (
           <li
             key={option}
@@ -55,7 +55,9 @@ export function AnsweredDecisions({ records, slug }: { records: readonly Decisio
   return (
     <ul>
       {records.map(({ task, request }) => {
-        const chosen = request.answer ? chosenOption(request, request.answer) : null;
+        const chosen = chosenOptions(request);
+        // What the person wrote beyond the options they picked, if anything.
+        const written = !chosen.length || (request.choices && request.answer !== request.choices.join("; "));
         return (
         <li key={`${task.id}:${request.id}`} data-task={task.id} className="border-b border-rule py-3.5 last:border-b-0">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -75,7 +77,7 @@ export function AnsweredDecisions({ records, slug }: { records: readonly Decisio
           </p>
           <blockquote className="mt-2 border-l-2 border-rule pl-3 text-sm text-ink-2">{request.question}</blockquote>
           {request.options.length > 0 && <OfferedOptions request={request} chosen={chosen} />}
-          {request.answer && !chosen && (
+          {request.answer && written && (
             <p className="mt-2 rounded-md bg-fill px-3 py-2 text-sm whitespace-pre-line text-ink">
               <span className="font-semibold">{request.answeredByName ?? "Answer"}:</span> {request.answer}
             </p>

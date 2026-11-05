@@ -25,6 +25,7 @@ Questions you only ask in chat get lost; Phean keeps them on the human's Decisio
 - question: one concrete question, answerable in a word or a line. Not "thoughts?".
 - context: the facts, the trade-offs, and your recommendation, in a few lines, for someone reading it cold days later.
 - options: 2-5 short, mutually exclusive answers whenever the answer space is known. The human can still write their own answer, so treat a custom answer as authoritative.
+- multiple: true when several options may apply together (which channels to announce on, which candidates to interview); the human ticks any number and you get them all in chosenOptions. Phrase the question to match ("Which ... ? Pick any that apply").
 - links: always add a link back to this conversation (kind "conversation") when your client has one, and permalinks to every source the question is about (kind "source": the email, Slack message, ticket, PR; kind "doc" for drafts and files). Give each a short title ("This chat", "Dana's email"). Never invent a URL; if you have none, say where to look in context.
 - A draft to approve (an email, an offer, a plan) with no URL of its own: attach it with attach_document first, then link its url (kind "doc"), so the person reads it beside the decision.
 - session: also pass your session so the human can resume with you in one click.

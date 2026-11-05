@@ -24,6 +24,7 @@ const GROUPS = [
     title: "Decisions and the overview",
     keys: [
       { keys: ["1", "–", "9"], what: "Pick the selected request's option" },
+      { keys: ["Enter"], what: "Send the ticked options, where a request takes several" },
       { keys: ["J"], what: "Next request" },
       { keys: ["K"], what: "Previous request" },
     ],

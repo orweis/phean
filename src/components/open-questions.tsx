@@ -13,6 +13,7 @@ import { ResumeLink, ResumePopover, TaskLinks } from "./agent-sessions";
 import { DecisionKeys } from "./decision-keys";
 import { DocumentChips } from "./documents/document-chips";
 import { GoalLink } from "./goal-link";
+import { MultipleChoice } from "./multiple-choice";
 import { ActionButton } from "./ui/action-button";
 import { ActionForm } from "./ui/action-form";
 import { MetaBadge } from "./ui/badge";
@@ -85,7 +86,8 @@ function MoreAnswers({ taskId, slug, request, title }: { taskId: string; slug: s
 
 /**
  * The request's options, first and largest, as one-click answers; on phones they stack as
- * full-width capsules. Each shows its number key.
+ * full-width capsules. Each shows its number key. A request that takes several answers renders
+ * `MultipleChoice` instead.
  */
 function OptionButtons({ taskId, slug, request }: { taskId: string; slug: string; request: InputRequest }) {
   return request.options.map((option, index) => (
@@ -181,7 +183,11 @@ export function OpenQuestions({
                   aria-label={`Answer ${task.title}`}
                   className="mt-2.5 flex flex-wrap items-center gap-x-1.5 gap-y-2 max-sm:[&>form:has([data-option])]:basis-full"
                 >
-                  <OptionButtons taskId={task.id} slug={slug} request={request} />
+                  {request.multiple ? (
+                    <MultipleChoice taskId={task.id} slug={slug} request={request} title={task.title} />
+                  ) : (
+                    <OptionButtons taskId={task.id} slug={slug} request={request} />
+                  )}
                   <OtherAnswer taskId={task.id} slug={slug} request={request} />
                   <span className="ml-1.5">
                     <Resume session={session} prominent={false} />

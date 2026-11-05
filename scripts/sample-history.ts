@@ -153,6 +153,8 @@ interface Handoff {
   question?: string;
   /** With options, the question is a decision. */
   options?: string[];
+  /** The person may pick several of the options. */
+  multiple?: boolean;
   context?: string;
   links?: TaskLink[];
 }
@@ -197,6 +199,10 @@ const HANDOFFS: Record<string, Handoff> = {
       brief: "The script is approved; recording on Thursday with the partner team.",
     },
     hoursAgo: 20,
+    question: "Which parts should the onboarding walkthrough cover? Pick any that apply.",
+    options: ["Connecting an agent", "Answering decisions", "Goals and the goal map", "The board"],
+    multiple: true,
+    context: "The recording slot is 15 minutes, which fits three parts comfortably. I recommend the first three; the board is self-explanatory.",
   },
 };
 
@@ -321,6 +327,7 @@ export async function seedSampleHistory(db: Db, tenant: Tenant, owner: { id: str
             question: handoff.question,
             context: handoff.context ?? "",
             options: handoff.options ?? [],
+            ...(handoff.multiple && { multiple: true }),
             links: [...(handoff.links ?? []), ...draftLinks],
             askedAt: handedOffAt!.toISOString(),
           }

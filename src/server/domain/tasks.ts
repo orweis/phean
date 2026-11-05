@@ -4,6 +4,7 @@ import type { z } from "zod";
 
 import {
   chosenOption,
+  chosenOptions,
   DELIVERED_OUTCOMES,
   MAX_ANSWERS,
   movesSession,
@@ -183,15 +184,17 @@ const normalizeLinks = (links: readonly TaskLink[]): TaskLink[] =>
 interface Closing {
   outcome: RequestOutcome;
   answer?: string;
+  choices?: string[];
   answeredByName?: string | null;
 }
 
 /** A request as it is kept once closed. Only what a person decided waits for the agent to collect. */
-function closed(request: InputRequest, { outcome, answer = "", answeredByName = null }: Closing): InputAnswer {
+function closed(request: InputRequest, { outcome, answer = "", choices, answeredByName = null }: Closing): InputAnswer {
   return {
     ...request,
     outcome,
     answer,
+    ...(choices && { choices }),
     answeredByName,
     closedAt: new Date().toISOString(),
     collected: !DELIVERED_OUTCOMES.includes(outcome),
@@ -446,9 +449,11 @@ export const linkSession = service(LinkSessionInput, async (ctx, { taskId, sessi
 });
 
 /** An agent's question for a person; the task shows as waiting on them until it is answered. */
-export const requestInput = service(AskInput, async (ctx, { taskId, question, kind, context, options, links, session }): Promise<Task> => {
+export const requestInput = service(AskInput, async (ctx, { taskId, question, kind, context, options, multiple, links, session }): Promise<Task> => {
   assertCan(ctx, "task:write");
   const me = agentOnly(ctx, "Only agents ask for input. People can add a note to the task instead.");
+  const choices = [...new Set(options)];
+  if (multiple && choices.length < 2) throw invalid("A request that takes several answers needs at least two distinct options.");
   const next = session && sessionOf(ctx, session);
 
   return inTransaction(ctx, async (tx) => {
@@ -467,7 +472,8 @@ export const requestInput = service(AskInput, async (ctx, { taskId, question, ki
       kind,
       question,
       context,
-      options: [...new Set(options)],
+      options: choices,
+      ...(multiple && { multiple: true }),
       links: normalizeLinks(links),
       agentId: me,
       agentName: ctx.actor.name,
@@ -485,7 +491,7 @@ export const requestInput = service(AskInput, async (ctx, { taskId, question, ki
       entityType: "task",
       entityId: taskId,
       summary: `${kind === "decision" ? "asked for a decision on" : "asked about"} "${current.title}": ${truncate(question, 120)}`,
-      data: { goalId: current.goalId, requestId: inputRequest.id, kind, question, ...(next && { session: sessionData(next) }) },
+      data: { goalId: current.goalId, requestId: inputRequest.id, kind, question, ...(multiple && { multiple: true }), ...(next && { session: sessionData(next) }) },
     });
     return task!;
   });
@@ -523,7 +529,7 @@ export const resolveInput = service(TaskRefInput, async (ctx, { taskId }): Promi
  * A person answers an agent's question from Phean, or marks it answered in the agent's own
  * conversation. A written answer is appended to the task, where the agent reads it next time.
  */
-export const answerInput = service(AnswerInput, async (ctx, { taskId, answer }): Promise<Task> => {
+export const answerInput = service(AnswerInput, async (ctx, { taskId, answer: written, choices }): Promise<Task> => {
   assertCan(ctx, "task:write");
   if (agentIdOf(ctx)) throw invalid("Agents close their own questions with resolve_input.");
 
@@ -531,11 +537,14 @@ export const answerInput = service(AnswerInput, async (ctx, { taskId, answer }):
     const current = await findTask(tx, taskId, { lock: true });
     const open = current.inputRequest;
     if (!open) {
-      if (!answer) return current;
+      if (!written && !choices.length) return current;
       throw conflict(`There is no open question on "${current.title}" any more.`);
     }
+    const picked = pickedOptions(open, choices);
+    // Ticked options read as one answer, with anything written after them.
+    const answer = picked ? [...picked, ...(written ? [written] : [])].join("; ") : written;
     const description = answer ? `${current.description}\n\n${answerNote(open, answer, ctx.actor.name)}`.trim() : current.description;
-    const record = closed(open, { outcome: answer ? "answered" : "answered_elsewhere", answer, answeredByName: ctx.actor.name });
+    const record = closed(open, { outcome: answer ? "answered" : "answered_elsewhere", answer, choices: picked, answeredByName: ctx.actor.name });
     const [task] = await tx.db
       .update(tasks)
       .set({ inputRequest: null, inputAnswers: withAnswer(current.inputAnswers, record), description })
@@ -546,11 +555,20 @@ export const answerInput = service(AnswerInput, async (ctx, { taskId, answer }):
       entityType: "task",
       entityId: taskId,
       summary: answer ? `answered ${open.agentName} on "${current.title}"` : `marked ${open.agentName}'s question on "${current.title}" answered`,
-      data: { goalId: current.goalId, agentId: open.agentId, requestId: open.id, kind: open.kind, question: open.question, answer },
+      data: { goalId: current.goalId, agentId: open.agentId, requestId: open.id, kind: open.kind, question: open.question, answer, ...(picked && { choices: picked }) },
     });
     return task!;
   });
 });
+
+/** The options ticked on a request that takes several, in the order the agent gave them. */
+function pickedOptions(request: InputRequest, positions: readonly number[]): string[] | undefined {
+  if (!positions.length) return undefined;
+  if (!request.multiple) throw invalid(`${request.agentName} asked for one answer. Pick one option, or write your answer.`);
+  const wanted = new Set(positions);
+  if ([...wanted].some((position) => position >= request.options.length)) throw invalid("That option is not on the request any more.");
+  return request.options.filter((_, position) => wanted.has(position));
+}
 
 /** The note `answerInput` appends to the description, so taking the answer back can remove it. */
 function answerNote(request: InputRequest, answer: string, by: string): string {
@@ -581,6 +599,7 @@ export const retractAnswer = service(RetractAnswerInput, async (ctx, { taskId, r
       question: record.question,
       context: record.context,
       options: record.options,
+      ...(record.multiple && { multiple: true }),
       links: record.links,
       agentId: record.agentId,
       agentName: record.agentName,
@@ -743,8 +762,10 @@ export interface CollectedAnswer {
   outcome: InputAnswer["outcome"];
   /** Empty when the person said they answered elsewhere (in your conversation, say). */
   answer: string;
-  /** The option the answer picks, if it picks one. */
+  /** The option the answer picks, if it picks exactly one. */
   chosenOption: string | null;
+  /** Every option the answer picks: several on a request that takes several, else at most one. */
+  chosenOptions: string[];
   answeredByName: string | null;
   answeredAt: string;
 }
@@ -778,7 +799,8 @@ export const collectAnswers = service(CollectAnswersInput, async (ctx, { taskIds
           question: entry.question,
           outcome: entry.outcome,
           answer: entry.answer,
-          chosenOption: entry.answer ? chosenOption(entry, entry.answer) : null,
+          chosenOption: entry.choices ? (entry.choices.length === 1 ? entry.choices[0]! : null) : entry.answer ? chosenOption(entry, entry.answer) : null,
+          chosenOptions: chosenOptions(entry),
           answeredByName: entry.answeredByName,
           answeredAt: entry.closedAt,
         });

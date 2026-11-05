@@ -437,6 +437,42 @@ describe("agent sessions and questions", () => {
     expect(decisions.closed).toEqual([expect.objectContaining({ task: expect.objectContaining({ id: task.id }), request: expect.objectContaining({ answer: "escalate", collected: true }) })]);
   });
 
+  it("takes several picks on a decision asked with multiple, and delivers them all", async () => {
+    const task = await todo("Announce the launch");
+    const ask = () =>
+      requestInput(scout, {
+        taskId: task.id,
+        kind: "decision",
+        question: "Which channels should announce the launch? Pick any that apply.",
+        options: ["Blog", "Newsletter", "LinkedIn"],
+        multiple: true,
+      });
+    await expect(requestInput(scout, { taskId: task.id, kind: "decision", question: "?", options: ["Blog"], multiple: true })).rejects.toMatchObject({ code: "invalid" });
+    const asked = await ask();
+    expect(asked.inputRequest).toMatchObject({ multiple: true, options: ["Blog", "Newsletter", "LinkedIn"] });
+
+    await expect(answerInput(human, { taskId: task.id, choices: [3] })).rejects.toMatchObject({ code: "invalid" });
+    const answered = await answerInput(human, { taskId: task.id, choices: [2, 0] });
+    expect(answered.inputAnswers[0]).toMatchObject({ answer: "Blog; LinkedIn", choices: ["Blog", "LinkedIn"], outcome: "answered" });
+    expect(answered.description).toContain("Answer from Dana: Blog; LinkedIn");
+
+    // Undo reopens it as asked, still taking several.
+    const reopened = await retractAnswer(human, { taskId: task.id, requestId: asked.inputRequest!.id });
+    expect(reopened.inputRequest).toMatchObject({ multiple: true });
+    expect(reopened.description).not.toContain("Answer from Dana");
+    await answerInput(human, { taskId: task.id, choices: [1] });
+    expect(await collectAnswers(scout, {})).toEqual([
+      expect.objectContaining({ answer: "Newsletter", chosenOption: "Newsletter", chosenOptions: ["Newsletter"] }),
+    ]);
+
+    // A single-choice request takes one option, written or clicked, never ticks.
+    const single = await todo("Pick the launch day");
+    await requestInput(scout, { taskId: single.id, kind: "decision", question: "Tuesday or Thursday?", options: ["Tuesday", "Thursday"] });
+    await expect(answerInput(human, { taskId: single.id, choices: [0, 1] })).rejects.toMatchObject({ code: "invalid" });
+    await answerInput(human, { taskId: single.id, answer: "Thursday" });
+    expect(await collectAnswers(scout, {})).toEqual([expect.objectContaining({ chosenOption: "Thursday", chosenOptions: ["Thursday"] })]);
+  });
+
   it("keeps every closed question on the task, and only delivers what a person decided", async () => {
     const task = await todo("Book the offsite venue");
     const ask = (question: string) => requestInput(scout, { taskId: task.id, question });

@@ -163,6 +163,8 @@ export const ClaimTaskInput = z.object({
   taskId,
   session: SessionInput.optional().describe("Where a human can resume this work with you; same as link_session"),
 });
+/** The most options a request offers. */
+export const MAX_OPTIONS = 8;
 export const AskInput = z.object({
   taskId,
   question: z
@@ -178,9 +180,13 @@ export const AskInput = z.object({
   context: longText.default("").describe("The facts, the trade-offs, and your recommendation, for a human reading it cold"),
   options: z
     .array(z.string().trim().min(1).max(LIMITS.option))
-    .max(8)
+    .max(MAX_OPTIONS)
     .default([])
-    .describe("2-5 short, mutually exclusive answers to pick from; the human may still write their own"),
+    .describe("2-5 short answers to pick from, mutually exclusive unless multiple is true; the human may still write their own"),
+  multiple: z
+    .boolean()
+    .default(false)
+    .describe("true when the human may pick several options (which channels to announce on, which candidates to interview); needs 2+ options"),
   links: links.default([]).describe("References for this question: the conversation (kind conversation), the sources it is about (kind source), docs"),
   session: SessionInput.optional().describe("Where the human can answer you; include a url whenever you have one"),
 });
@@ -202,6 +208,11 @@ export const DecisionsInput = z.object({ limit: limit(200, 50) });
 export const AnswerInput = z.object({
   taskId,
   answer: z.string().trim().max(LIMITS.note).default("").describe("Empty marks the question answered elsewhere"),
+  choices: z
+    .array(z.coerce.number().int().min(0).max(MAX_OPTIONS - 1))
+    .max(MAX_OPTIONS)
+    .default([])
+    .describe("For a request that takes several options: the positions of the options picked"),
 });
 
 export const RetractAnswerInput = z.object({

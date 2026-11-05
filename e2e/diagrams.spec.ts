@@ -38,7 +38,7 @@ test("the overview leads with status, the line and the goal map", async ({ page 
   await expect(map.getByRole("img", { name: "Migrate the CRM tasks by status: 3 done" })).toBeVisible();
 
   const waiting = card(page, "Waiting on you");
-  await expect(waiting).toContainText("1 agent question and 1 goal to approve.");
+  await expect(waiting).toContainText("2 agent questions and 1 goal to approve.");
   await expect(waiting.locator("#approvals")).toContainText("Renew the office lease");
   // Late work already waiting on a person collapses to one line that points at its entry.
   const late = card(page, "Late").locator("li[data-task]").filter({ hasText: "Chase three overdue invoices" });
