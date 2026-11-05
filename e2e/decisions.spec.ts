@@ -189,4 +189,21 @@ test("an agent waits on a decision and wakes when the person makes it", async ({
       expect(tasks).toEqual([expect.objectContaining({ id: task.id, title: "Engage Okafor LLP for the Q3 audit", priority: "high" })]);
     });
   });
+
+  await test.step("finished work is archived off the board, and brought back from its page", async () => {
+    await openTab(page, slug, "Board");
+    const done = lane(page, "done").locator(`[data-task="${task.id}"]`);
+    const more = done.locator("details").filter({ has: page.locator('summary[aria-label="More actions for Engage Okafor LLP for the Q3 audit"]') });
+    await more.locator("summary").click();
+    await more.getByRole("button", { name: "Archive" }).click();
+    await expect(page.locator("[data-status-region]")).toContainText("Archived “Engage Okafor LLP for the Q3 audit”");
+    await expect(lane(page, "done").locator(`[data-task="${task.id}"]`)).toHaveCount(0);
+
+    await page.goto(`/w/${slug}/tasks/${task.id}`);
+    await expect(page.getByText(/^Archived /)).toBeVisible();
+    await page.getByRole("button", { name: "Unarchive" }).click();
+    await expect(page.locator("[data-status-region]")).toContainText("Put “Engage Okafor LLP for the Q3 audit” back on the board");
+    await openTab(page, slug, "Board");
+    await expect(lane(page, "done").locator(`[data-task="${task.id}"]`)).toBeVisible();
+  });
 });

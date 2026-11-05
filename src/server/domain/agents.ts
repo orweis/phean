@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 
-import { and, asc, count, eq, isNull, lt, or, sql } from "drizzle-orm";
+import { and, asc, count, eq, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
 
 import { AGENT_TOKEN_PREFIX, LIMITS } from "@/lib/domain";
 
@@ -10,7 +10,7 @@ import { newId } from "../db/ids";
 import { agents, organization, type AgentRow } from "../db/schema";
 import { inTenant, inTransaction, type Ctx, type Tenant } from "./context";
 import { conflict, forbidden, invalid, notFound } from "./errors";
-import { recordEvent } from "./events";
+import { recordEvent, recordEvents } from "./events";
 import { assertCan } from "./policy";
 import { AgentRefInput, CreateAgentInput, CreateSubagentInput, Empty } from "./schemas";
 import { service } from "./service";
@@ -131,6 +131,50 @@ export const revokeAgent = service(AgentRefInput, async (ctx, { agentId }): Prom
     return revoked.find((agent) => agent.id === agentId)!;
   });
 });
+
+/**
+ * Files revoked agents away, off the Agents list (its Archived view keeps them, with their past
+ * work attributed as before). Only revoked agents are archived, and an agent's revoked sub-agents go
+ * with it; with no `agentId`, every revoked agent is.
+ */
+async function setArchived(ctx: Ctx, agentId: string | null, archived: boolean): Promise<Agent[]> {
+  assertCan(ctx, "agent:manage");
+  return inTransaction(ctx, async (tx) => {
+    if (agentId) {
+      const [target] = await tx.db.select(agentColumns).from(agents).where(and(inTenant(tx, agents), eq(agents.id, agentId)));
+      if (!target) throw notFound("agent", agentId);
+      if (!target.revokedAt) throw conflict(`${target.name} is still active. Revoke it before archiving it.`);
+    }
+    const changed = await tx.db
+      .update(agents)
+      .set({ archivedAt: archived ? new Date() : null })
+      .where(
+        and(
+          inTenant(tx, agents),
+          isNotNull(agents.revokedAt),
+          archived ? isNull(agents.archivedAt) : isNotNull(agents.archivedAt),
+          agentId ? or(eq(agents.id, agentId), eq(agents.parentAgentId, agentId)) : undefined,
+        ),
+      )
+      .returning(agentColumns);
+    await recordEvents(
+      tx,
+      changed.map((agent) => ({
+        action: archived ? "agent.archived" : "agent.unarchived",
+        entityType: "agent",
+        entityId: agent.id,
+        summary: `${archived ? "archived" : "unarchived"} revoked agent "${agent.name}"`,
+        data: {},
+      })),
+    );
+    return changed;
+  });
+}
+
+export const archiveAgent = service(AgentRefInput, async (ctx, { agentId }) => ({ archived: (await setArchived(ctx, agentId, true)).length }));
+export const unarchiveAgent = service(AgentRefInput, async (ctx, { agentId }) => ({ unarchived: (await setArchived(ctx, agentId, false)).length }));
+/** Archives every revoked agent at once. */
+export const archiveRevokedAgents = service(Empty, async (ctx) => ({ archived: (await setArchived(ctx, null, true)).length }));
 
 export interface AgentPrincipal {
   agent: { id: string; name: string };

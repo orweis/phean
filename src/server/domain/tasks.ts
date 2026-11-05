@@ -45,6 +45,7 @@ import {
   SessionInput,
   TaskDraft,
   TaskRefInput,
+  Empty,
   UpdateTaskInput,
   WaitForAnswersInput,
 } from "./schemas";
@@ -342,6 +343,8 @@ export const updateTask = service(UpdateTaskInput, async (ctx, input): Promise<T
   if (statusChange) {
     await assertNotClaimedByOther(ctx, current);
     patch.completedAt = statusChange === "done" ? new Date() : null;
+    // Archiving files finished work away; work that moves again is back on the board.
+    patch.archivedAt = null;
     // A claim only means "an agent is working on it right now"; its open question goes with it.
     if (statusChange !== "in_progress") Object.assign(patch, { claimedByAgentId: null, claimedAt: null, ...closeOpenRequest() });
   }
@@ -623,6 +626,51 @@ export const retractAnswer = service(RetractAnswerInput, async (ctx, { taskId, r
   });
 });
 
+/**
+ * Files a finished (done or dropped) task away: off the board's Done lane and agents' default task
+ * list, but kept with its history, so goal progress, charts and search still count it. Reopening
+ * the task, or `unarchiveTask`, brings it back.
+ */
+export const archiveTask = service(TaskRefInput, async (ctx, { taskId }): Promise<Task> => {
+  assertCan(ctx, "task:write");
+  return inTransaction(ctx, async (tx) => {
+    const current = await findTask(tx, taskId, { lock: true });
+    if (isOpenTaskStatus(current.status)) throw conflict(`"${current.title}" is still open. Only done or dropped tasks are archived.`);
+    if (current.archivedAt) return current;
+    const [task] = await tx.db.update(tasks).set({ archivedAt: new Date() }).where(tenantRow(tx, tasks, taskId)).returning(taskColumns);
+    await recordEvent(tx, { action: "task.archived", entityType: "task", entityId: taskId, summary: `archived "${current.title}"`, data: { goalId: current.goalId } });
+    return task!;
+  });
+});
+
+export const unarchiveTask = service(TaskRefInput, async (ctx, { taskId }): Promise<Task> => {
+  assertCan(ctx, "task:write");
+  return inTransaction(ctx, async (tx) => {
+    const current = await findTask(tx, taskId, { lock: true });
+    if (!current.archivedAt) return current;
+    const [task] = await tx.db.update(tasks).set({ archivedAt: null }).where(tenantRow(tx, tasks, taskId)).returning(taskColumns);
+    await recordEvent(tx, { action: "task.unarchived", entityType: "task", entityId: taskId, summary: `unarchived "${current.title}"`, data: { goalId: current.goalId } });
+    return task!;
+  });
+});
+
+/** Archives every done task in the workspace at once: the board's Done lane, cleared. */
+export const archiveDoneTasks = service(Empty, async (ctx): Promise<{ archived: number }> => {
+  assertCan(ctx, "task:write");
+  return inTransaction(ctx, async (tx) => {
+    const archived = await tx.db
+      .update(tasks)
+      .set({ archivedAt: new Date() })
+      .where(and(inTenant(tx, tasks), eq(tasks.status, "done"), isNull(tasks.archivedAt)))
+      .returning({ id: tasks.id, title: tasks.title, goalId: tasks.goalId });
+    await recordEvents(
+      tx,
+      archived.map((task) => ({ action: "task.archived", entityType: "task", entityId: task.id, summary: `archived "${task.title}"`, data: { goalId: task.goalId } })),
+    );
+    return { archived: archived.length };
+  });
+});
+
 export const releaseTask = service(TaskRefInput, async (ctx, { taskId }): Promise<Task> => {
   assertCan(ctx, "task:write");
   const current = await findTask(ctx, taskId);
@@ -729,6 +777,7 @@ export const listTasks = service(ListTasksInput, async (ctx, input): Promise<Tas
       input.goalId ? eq(tasks.goalId, input.goalId) : undefined,
       input.parentTaskId ? eq(tasks.parentTaskId, input.parentTaskId) : undefined,
       input.priority ? eq(tasks.priority, input.priority) : undefined,
+      input.includeArchived ? undefined : isNull(tasks.archivedAt),
       claimed,
       due,
     ),
