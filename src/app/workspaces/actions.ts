@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 
 import type { ActionState } from "@/lib/action-state";
-import { routes } from "@/lib/routes";
+import { routes, safeNextPath } from "@/lib/routes";
 import { attempt } from "@/server/actions";
 import { requireUser } from "@/server/auth/session";
 import { acceptInvitation, createWorkspace } from "@/server/auth/workspaces";
@@ -16,7 +16,7 @@ export async function createWorkspaceAction(_previous: ActionState, formData: Fo
   await requireUser();
   const result = await attempt(() => createWorkspace(formToInput(formData, CreateWorkspaceInput)));
   if (!result.ok) return result.state;
-  redirect(routes.workspace(result.value.slug));
+  redirect(safeNextPath(formData.get("next")?.toString(), routes.workspace(result.value.slug)));
 }
 
 export async function acceptInvitationAction(_previous: ActionState, formData: FormData): Promise<ActionState> {

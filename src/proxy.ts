@@ -9,10 +9,12 @@ import { routes } from "@/lib/routes";
  */
 export function proxy(request: NextRequest) {
   if (getSessionCookie(request)) return NextResponse.next();
+  // The dialog's server action answers a lost session itself. Redirecting its POST would only break the action call.
+  if (request.method !== "GET" && request.nextUrl.pathname.startsWith("/oauth/")) return NextResponse.next();
   const next = `${request.nextUrl.pathname}${request.nextUrl.search}`;
   return NextResponse.redirect(new URL(routes.signIn(next), request.url));
 }
 
 export const config = {
-  matcher: ["/workspaces/:path*", "/w/:path*", "/invite/:path*"],
+  matcher: ["/workspaces/:path*", "/w/:path*", "/invite/:path*", "/oauth/:path*"],
 };

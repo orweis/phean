@@ -41,6 +41,13 @@ export function formatDay(date: Date): string {
   return dateFormat.format(date);
 }
 
+const longDateFormat = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
+
+/** "5 December 2026", read as a UTC calendar day. */
+export function formatLongDay(date: Date): string {
+  return longDateFormat.format(date);
+}
+
 /** "Today", "Tomorrow", "In 3 days" or "2 days late", counted in UTC calendar days. */
 export function relativeDue(isoDate: string, now = new Date()): string {
   const days = daysBetween(now, dayOf(isoDate));

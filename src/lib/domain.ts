@@ -52,9 +52,15 @@ export type AgentAccessLevel = (typeof AGENT_ACCESS_LEVELS)[number];
 export const AGENT_LIFETIME_DAYS = [1, 7, 30, 90, 365] as const;
 export const DEFAULT_AGENT_LIFETIME_DAYS = 30;
 
-/** The levels a person of this role may grant: members stop at Write, owners and admins may grant Admin. */
-export function grantableLevels(role: MemberRole): readonly AgentAccessLevel[] {
-  return role === "member" ? ["read", "write"] : AGENT_ACCESS_LEVELS;
+/** What the dialog calls a lifetime. */
+export function lifetimeLabel(days: number): string {
+  if (days === 365) return "1 year";
+  return days === 1 ? "1 day" : `${days} days`;
+}
+
+/** The levels a person of this role may grant. Only owners and admins may grant Admin; any other role, present or future, stops at Write. */
+export function grantableLevels(role: string): readonly AgentAccessLevel[] {
+  return role === "owner" || role === "admin" ? AGENT_ACCESS_LEVELS : ["read", "write"];
 }
 
 /** The highest level a person of this role may grant. */
