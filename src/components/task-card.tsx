@@ -7,6 +7,7 @@ import { webUrl } from "@/lib/agent-sessions";
 import { cx } from "@/lib/cx";
 import { isLate, isOpenTaskStatus, PRIORITY_META, SOURCE_META, TASK_STATUS_META, type TaskStatus } from "@/lib/domain";
 import { formatDueDate, relativeDue, truncate } from "@/lib/format";
+import { routes } from "@/lib/routes";
 import { stageLabel, stageOf, visibleStages, type Workflow } from "@/lib/workflow";
 import type { TaskView } from "@/server/domain/tasks";
 import { workspaceWorkflow } from "@/server/web";
@@ -161,7 +162,7 @@ function SourceLabel({ task }: { task: TaskView }) {
 }
 
 /** Where a task stands, named as the workspace names its stage ("In review"), in its kind's tone. */
-async function StageBadge({ task, slug }: { task: TaskView; slug: string }) {
+export async function StageBadge({ task, slug }: { task: TaskView; slug: string }) {
   const workflow = await workspaceWorkflow(slug);
   return <Badge tone={TASK_STATUS_META[task.status].tone}>{stageLabel(workflow, task)}</Badge>;
 }
@@ -176,7 +177,7 @@ function InlineDue({ dueDate, late }: { dueDate: string; late: boolean }) {
 }
 
 /** Goal, due date, source and claimant: the facts every task listing shows. */
-function TaskMeta({ task, slug, showGoal, showDue = true }: { task: TaskView; slug: string; showGoal: boolean; showDue?: boolean }) {
+export function TaskMeta({ task, slug, showGoal, showDue = true }: { task: TaskView; slug: string; showGoal: boolean; showDue?: boolean }) {
   const late = isLate(task);
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
@@ -212,10 +213,16 @@ function TaskMeta({ task, slug, showGoal, showDue = true }: { task: TaskView; sl
 }
 
 /** The title, with its priority right after the words, where the eye already is. */
-function TaskTitle({ task, after }: { task: TaskView; after?: ReactNode }) {
+/**
+ * The title, which opens the task in a peek over the page (its own page on a refresh or a shared
+ * link), with its priority right after the words, where the eye already is.
+ */
+function TaskTitle({ task, slug, after }: { task: TaskView; slug: string; after?: ReactNode }) {
   return (
     <p className={cx("text-sm font-semibold text-ink", task.status === "dropped" && "text-muted line-through")}>
-      {task.title}
+      <Link href={routes.task(slug, task.id)} scroll={false} data-task-link className="rounded-xs hover:underline hover:underline-offset-2">
+        {task.title}
+      </Link>
       {task.priority !== "medium" && (
         <span className="ml-1.5 inline-block align-[0.0625rem] no-underline">
           <MetaBadge meta={PRIORITY_META} value={task.priority} />
@@ -240,7 +247,7 @@ interface TaskViewProps {
 const LEAVING = "has-[[data-exit][data-pending]]:opacity-40 motion-safe:transition-opacity motion-safe:duration-300";
 
 /** The row of actions every task listing shares: the next step, Edit, Resume and ⋯, in that order. */
-function TaskActionRow({ task, slug, canWrite, goals, className }: TaskViewProps & { className?: string }) {
+export function TaskActionRow({ task, slug, canWrite, goals, className }: TaskViewProps & { className?: string }) {
   if (!canWrite && task.agentSessions.length === 0) return null;
   return (
     <div className={cx("flex items-center gap-x-3 gap-y-1.5", className)}>
@@ -259,8 +266,15 @@ function TaskActionRow({ task, slug, canWrite, goals, className }: TaskViewProps
 /** A task on a board lane. */
 export function TaskCard({ task, slug, canWrite, showGoal = true, goals = [] }: TaskViewProps) {
   return (
-    <article data-task={task.id} className={cx("rounded-md border bg-panel p-3", isLate(task) ? "border-late/45" : "border-rule", LEAVING)}>
-      <TaskTitle task={task} />
+    <article
+      data-task={task.id}
+      className={cx(
+        "rounded-md border bg-panel p-3 has-[a[data-task-link]:focus-visible]:outline-2 has-[a[data-task-link]:focus-visible]:outline-offset-2 has-[a[data-task-link]:focus-visible]:outline-focus",
+        isLate(task) ? "border-late/45" : "border-rule",
+        LEAVING,
+      )}
+    >
+      <TaskTitle task={task} slug={slug} />
       {task.description && <p className="mt-1 line-clamp-2 text-xs text-muted">{truncate(task.description, CARD_EXCERPT)}</p>}
       <div className="mt-2">
         <TaskMeta task={task} slug={slug} showGoal={showGoal} />
@@ -289,7 +303,7 @@ export function TaskRow({ task, slug, canWrite, showGoal = true, goals = [], lea
   if (compact) {
     return (
       <li data-task={task.id} className={cx("border-b border-rule py-3 last:border-b-0", LEAVING)}>
-        <TaskTitle task={task} after={task.dueDate && <InlineDue dueDate={task.dueDate} late={isLate(task)} />} />
+        <TaskTitle task={task} slug={slug} after={task.dueDate && <InlineDue dueDate={task.dueDate} late={isLate(task)} />} />
         <div className="mt-1">
           <TaskMeta task={task} slug={slug} showGoal={showGoal} showDue={false} />
         </div>
@@ -301,7 +315,7 @@ export function TaskRow({ task, slug, canWrite, showGoal = true, goals = [], lea
     <li data-task={task.id} className={cx("flex flex-wrap items-start gap-x-4 gap-y-2 border-b border-rule py-3 last:border-b-0", LEAVING)}>
       {lead && <div className="w-20 shrink-0 max-sm:hidden">{lead}</div>}
       <div className="min-w-0 flex-1 basis-56">
-        <TaskTitle task={task} after={lead && task.dueDate ? <span className="sm:hidden"><InlineDue dueDate={task.dueDate} late={isLate(task)} /></span> : undefined} />
+        <TaskTitle task={task} slug={slug} after={lead && task.dueDate ? <span className="sm:hidden"><InlineDue dueDate={task.dueDate} late={isLate(task)} /></span> : undefined} />
         <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
           <StageBadge task={task} slug={slug} />
           <TaskMeta task={task} slug={slug} showGoal={showGoal} showDue={showDue} />

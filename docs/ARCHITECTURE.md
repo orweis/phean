@@ -153,6 +153,7 @@ Auth tables (`user`, `session`, `account`, `verification`, `organization`, `memb
 | `workspace_settings` | One row per workspace, made on first save: `workflow jsonb`, the board's stages (see Stages below) |
 | `documents` | Files on tasks and goals: `format` (markdown, text, json, csv, yaml, mermaid, html, pdf, png, jpeg, gif, webp), `summary`, `size`, `sha256`, `version`, and `storage_key`, where the bytes live in the blob store. Title and summary are searchable |
 | `document_blobs` | Document bytes (`bytea`) when no Vercel Blob store is configured |
+| `agents` (sub-agents) | `parent_agent_id` (composite FK within the tenant, one level deep) and `purpose`. An agent mints tokens for its own sub-agents with `create_subagent` (at most 20 active), so each worker's work is attributed to it; revoking a parent revokes its sub-agents and disables their webhooks |
 | `events` | Append-only activity log with actor, action, entity, summary, and JSONB `data`; indexed on `(tenant_id, created_at desc)` |
 
 **Tenant isolation is structural.** Every domain table has `tenant_id` (cascade-deleted with the organization) and composite foreign keys such as `(tenant_id, goal_id) → goals(tenant_id, id)`. A task cannot point at another tenant's goal even if a service had a bug.

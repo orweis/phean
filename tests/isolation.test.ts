@@ -138,6 +138,14 @@ describe("tenant isolation", () => {
     expect((await getDocument(acmeOwner, { documentId: memo.id })).content).toBe("Codename Bluebird");
   });
 
+  it("keeps sub-agents and memory edits inside their workspace", async () => {
+    const { createAgent, revokeAgent } = await import("@/server/domain/agents");
+    const { updateMemory } = await import("@/server/domain/memory");
+    await expect(createAgent(globexOwner, { name: "Sneaky", parentAgentId: acme.scout.agentId })).rejects.toMatchObject({ code: "not_found" });
+    await expect(revokeAgent(globexOwner, { agentId: acme.scout.agentId })).rejects.toMatchObject({ code: "not_found" });
+    await expect(updateMemory(globexOwner, { memoryId: acmeMemory.id, content: "pwned" })).rejects.toMatchObject({ code: "not_found" });
+  });
+
   it("keeps each workspace's stages its own", async () => {
     const stages = await getWorkflow(acmeOwner, {});
     await saveWorkflow(acmeOwner, { stages: [...stages, { label: "Legal review", kind: "in_progress" as const, hidden: false }] });

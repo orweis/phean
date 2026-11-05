@@ -21,6 +21,7 @@ const ACTION_BATCH_PHRASES = {
   "task.input_answered": ["answered questions on", "task"],
   "task.input_retracted": ["took back answers on", "task"],
   "memory.saved": ["saved", "memory"],
+  "memory.updated": ["updated", "memory"],
   "document.attached": ["attached", "document"],
   "document.updated": ["edited", "document"],
   "document.deleted": ["deleted", "document"],

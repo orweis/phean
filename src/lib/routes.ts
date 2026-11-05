@@ -27,6 +27,8 @@ export const routes = {
     withQuery(`/w/${slug}/board`, typeof filters === "string" ? { goal: filters } : filters),
   timeline: (slug: string, filters?: { goal?: string; days?: string }) => withQuery(`/w/${slug}/timeline`, filters),
   goal: (slug: string, goalId: string) => `/w/${slug}/goals/${goalId}`,
+  /** A task: a peek over the page it was opened from, or its own page on a refresh or a shared link. */
+  task: (slug: string, taskId: string) => `/w/${slug}/tasks/${taskId}`,
   memory: (slug: string, filters?: { kind?: string; q?: string }) => withQuery(`/w/${slug}/memory`, filters),
   documents: (slug: string, query?: string) => withQuery(`/w/${slug}/documents`, { q: query }),
   document: (slug: string, documentId: string, mode?: "edit") => withQuery(`/w/${slug}/documents/${documentId}`, { mode }),

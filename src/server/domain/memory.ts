@@ -3,16 +3,16 @@ import { and, count, desc, eq } from "drizzle-orm";
 import { MEMORY_KIND_META, MEMORY_KINDS, zeroCounts, type MemoryKind } from "@/lib/domain";
 import { truncate } from "@/lib/format";
 
-import { publicColumns } from "../db/columns";
+import { patchOf, publicColumns } from "../db/columns";
 import { matchesTsQuery, prefixTsQuery, tsRank } from "../db/fts";
 import { newId } from "../db/ids";
 import { memories, type MemoryRow } from "../db/schema";
 import { createdByFields, inTenant, inTransaction, tenantRow } from "./context";
-import { forbidden, notFound } from "./errors";
+import { forbidden, invalid, notFound } from "./errors";
 import { recordEvent } from "./events";
 import { assertGoalsExist } from "./goals";
 import { assertCan } from "./policy";
-import { MemoryCountsInput, MemoryRefInput, RecallInput, RememberInput } from "./schemas";
+import { MemoryCountsInput, MemoryRefInput, RecallInput, RememberInput, UpdateMemoryInput } from "./schemas";
 import { service } from "./service";
 import { findTask } from "./tasks";
 
@@ -80,6 +80,37 @@ export const countMemoryKinds = service(MemoryCountsInput, async (ctx, { query }
   const counts = zeroCounts(MEMORY_KINDS);
   for (const row of rows) counts[row.kind] = Number(row.count);
   return counts;
+});
+
+/** Fixes a memory that is wrong or out of date. Agents edit only what they saved; people any memory. */
+export const updateMemory = service(UpdateMemoryInput, async (ctx, { memoryId, ...fields }): Promise<Memory> => {
+  assertCan(ctx, "memory:write");
+  const [current] = await ctx.db.select(memoryColumns).from(memories).where(tenantRow(ctx, memories, memoryId));
+  if (!current) throw notFound("memory", memoryId);
+  if (ctx.actor.type === "agent" && current.createdById !== ctx.actor.id) {
+    throw forbidden("Agents can only edit memories they saved themselves. Save a correction with remember, or ask a human.");
+  }
+  if (fields.goalId) await assertGoalsExist(ctx, [fields.goalId]);
+  const patch = patchOf({
+    content: fields.content !== current.content ? fields.content : undefined,
+    kind: fields.kind !== current.kind ? fields.kind : undefined,
+    tags: fields.tags && fields.tags.join("\u0000") !== current.tags.join("\u0000") ? fields.tags : undefined,
+    goalId: fields.goalId !== undefined && fields.goalId !== current.goalId ? fields.goalId : undefined,
+  });
+  const changed = Object.keys(patch);
+  if (changed.length === 0) throw invalid("Nothing to update: the memory already says that.");
+
+  return inTransaction(ctx, async (tx) => {
+    const [memory] = await tx.db.update(memories).set(patch).where(tenantRow(tx, memories, memoryId)).returning(memoryColumns);
+    await recordEvent(tx, {
+      action: "memory.updated",
+      entityType: "memory",
+      entityId: memoryId,
+      summary: `updated a ${MEMORY_KIND_META[memory!.kind].label.toLowerCase()}: "${truncate(memory!.content, 80)}"`,
+      data: { goalId: memory!.goalId, taskId: memory!.taskId, changed },
+    });
+    return memory!;
+  });
 });
 
 export const forget = service(MemoryRefInput, async (ctx, { memoryId }): Promise<{ forgotten: string }> => {

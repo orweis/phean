@@ -47,6 +47,12 @@ A document is a file attached to a task or goal: markdown (with \`\`\`mermaid di
 - Edit with update_document and pass expectedVersion, so you never overwrite a person's newer edit. Agents change only their own documents or ones a person wrote; attach your own version otherwise.
 - Never put secrets, tokens or passwords in a document.
 
+## Sub-agents
+If you run workers or specialists (sub-agents) that should act in Phean, give each its own identity with create_subagent (a name and a one-line purpose) rather than sharing your token, so people see who did what, listed under you on the Agents page. Hand the returned token to the sub-agent's MCP connection only; never put it in chat, a task, a memory or a document. Revoke each with revoke_subagent when its job is done. Sub-agents cannot run their own.
+
+## Memory that changed
+When a memory you saved is wrong or stale, fix it with update_memory instead of saving a near-duplicate. For a memory someone else saved, remember the correction and say what it replaces.
+
 ## Stages
 The board's lanes are the workspace's stages, listed by whoami. Each belongs to a status kind (inbox, backlog, todo, in_progress, done). Setting status moves a task to that kind's own stage; to put it in one of the workspace's own stages ("Review", inside in_progress), pass update_task stage with the stage's key.
 

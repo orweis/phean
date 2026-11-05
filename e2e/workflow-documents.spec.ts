@@ -74,15 +74,17 @@ test("stages are set in Settings, and documents carry the work between agents an
 
   await test.step("the person opens the draft, edits it with a live preview, and saves a new version", async () => {
     await lane(page, "review").locator(`[data-task="${task.id}"]`).getByRole("link", { name: "Launch post draft" }).click();
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Launch post draft");
-    await expect(page.locator('[data-diagram="drawn"] svg')).toBeVisible();
-    await expect(page.getByText("Version 1 · by Writer")).toBeVisible();
+    // It opens in a peek over the board, with room to read and to edit.
+    const peek = page.getByRole("dialog", { name: "Document" });
+    await expect(peek.locator("#document-title")).toHaveText("Launch post draft");
+    await expect(peek.locator('[data-diagram="drawn"] svg')).toBeVisible();
+    await expect(peek.getByText("Version 1 · by Writer")).toBeVisible();
 
-    await page.getByRole("link", { name: "Edit" }).click();
-    const text = page.getByRole("textbox", { name: "Text" });
+    await peek.getByRole("link", { name: "Edit" }).click();
+    const text = peek.getByRole("textbox", { name: "Text" });
     await text.fill("# Launch post\n\nWe are live, and **free** for a month.\n\n| Plan | Price |\n| --- | --- |\n| Team | $0 |\n");
-    await expect(page.getByRole("region", { name: "Preview" }).getByRole("table")).toContainText("Team");
-    await page.getByRole("button", { name: "Save" }).click();
+    await expect(peek.getByRole("region", { name: "Preview" }).getByRole("table")).toContainText("Team");
+    await peek.getByRole("button", { name: "Save" }).click();
     await expect(page).toHaveURL(/\/documents\/d_[a-z0-9]+$/);
     await expect(page.locator("[data-markdown] strong")).toHaveText("free");
     await expect(page.getByText(/Version 2 · edited by/)).toBeVisible();

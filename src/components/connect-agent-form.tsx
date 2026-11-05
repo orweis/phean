@@ -10,12 +10,15 @@ import { mcpClientSetups } from "@/lib/mcp-config";
 
 import { ActionForm } from "./ui/action-form";
 import { CopyButton, CopyField } from "./ui/copy-button";
-import { Field, Input } from "./ui/field";
+import { Field, Input, Select } from "./ui/field";
 import { segment, SEGMENTED } from "./ui/segmented";
 import { SubmitButton } from "./ui/submit-button";
 
-/** Issues an agent token and shows it exactly once, with setup snippets for common MCP clients. */
-export function ConnectAgentForm({ slug, mcpUrl }: { slug: string; mcpUrl: string }) {
+/**
+ * Issues an agent token and shows it exactly once, with setup snippets for common MCP clients.
+ * Given agents that can take sub-agents, it can issue the token as one of theirs.
+ */
+export function ConnectAgentForm({ slug, mcpUrl, parents = [] }: { slug: string; mcpUrl: string; parents?: readonly { id: string; name: string }[] }) {
   return (
     <ActionForm action={createAgentAction} workspace={slug}>
       {(state) => {
@@ -26,6 +29,18 @@ export function ConnectAgentForm({ slug, mcpUrl }: { slug: string; mcpUrl: strin
               <Field label="Agent name" htmlFor="agent-name" className="min-w-56 flex-1">
                 <Input id="agent-name" name="name" required maxLength={LIMITS.name} placeholder="Claude on Or's laptop" />
               </Field>
+              {parents.length > 0 && (
+                <Field label="Sub-agent of" htmlFor="agent-parent" className="w-56 max-sm:w-full">
+                  <Select id="agent-parent" name="parentAgentId" defaultValue="">
+                    <option value="">None: its own agent</option>
+                    {parents.map((parent) => (
+                      <option key={parent.id} value={parent.id}>
+                        {parent.name}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+              )}
               <SubmitButton variant="primary">
                 <Plus aria-hidden />
                 Issue token

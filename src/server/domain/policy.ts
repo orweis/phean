@@ -9,6 +9,7 @@ export const ACTIONS = [
   "memory:write",
   "document:write",
   "agent:manage",
+  "agent:delegate",
   "webhook:manage",
   "member:manage",
   "workflow:manage",
@@ -26,7 +27,8 @@ const PERMISSIONS: Record<Role, readonly Action[]> = {
   admin: ACTIONS,
   member: [...CONTRIBUTE, "goal:decide"],
   // An agent registers and removes its own webhook; owners and admins can remove any agent's.
-  agent: [...CONTRIBUTE, "webhook:manage"],
+  // An agent registers its own webhook and issues tokens for its own sub-agents.
+  agent: [...CONTRIBUTE, "agent:delegate", "webhook:manage"],
   platform_admin: ["workspace:read"],
 };
 

@@ -15,7 +15,7 @@ export async function generateMetadata({ params }: LayoutProps<"/w/[slug]">): Pr
   return { title: { default: membership.tenant.name, template: `%s | ${membership.tenant.name} | Phean` } };
 }
 
-export default async function WorkspaceLayout({ children, params }: LayoutProps<"/w/[slug]">) {
+export default async function WorkspaceLayout({ children, peek, params }: LayoutProps<"/w/[slug]">) {
   const { slug } = await params;
   const { viewer, membership, ctx } = await requireWorkspace(slug);
   const [workspaces, stats] = await Promise.all([
@@ -40,6 +40,8 @@ export default async function WorkspaceLayout({ children, params }: LayoutProps<
       <main id="content" tabIndex={-1} className="mx-auto max-w-7xl px-4 py-6 outline-none sm:px-6 sm:py-8">
         {children}
       </main>
+      {/* A task or document opened over the page: see the @peek slot. */}
+      {peek}
     </StatusRegion>
   );
 }

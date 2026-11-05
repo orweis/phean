@@ -1,9 +1,12 @@
 import { Bot, Check, Ellipsis } from "lucide-react";
+import Link from "next/link";
 
 import { answerInputAction, retractAnswerAction } from "@/app/w/[slug]/actions";
 import { sessionOfAsker, type AgentSession, type InputRequest } from "@/lib/agent-sessions";
 import { LIMITS, REQUEST_KIND_META } from "@/lib/domain";
+import { cx } from "@/lib/cx";
 import { timeAgo, truncate } from "@/lib/format";
+import { routes } from "@/lib/routes";
 import type { TaskView } from "@/server/domain/tasks";
 
 import { ResumeLink, ResumePopover, TaskLinks } from "./agent-sessions";
@@ -144,11 +147,20 @@ export function OpenQuestions({
             data-entry
             tabIndex={-1}
             aria-label={task.title}
-            className="scroll-mt-32 rounded-md border-b border-rule py-3.5 outline-none last:border-b-0 focus-visible:outline-2 focus-visible:outline-focus"
+            className={cx(
+              "relative -mx-3 scroll-mt-32 rounded-md border-b border-rule px-3 py-3.5 outline-none last:border-b-0 motion-safe:transition-colors motion-safe:duration-(--dur-micro)",
+              // Selected (it holds focus, or J and K moved to it): an accent bar, a tint and a ring, never a hue alone.
+              "before:absolute before:inset-y-2 before:left-0 before:w-1 before:rounded-full before:bg-transparent",
+              "data-selected:bg-accent-tint/45 data-selected:before:bg-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus",
+            )}
           >
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
               {request.kind === "decision" && <MetaBadge meta={REQUEST_KIND_META} value={request.kind} />}
-              <p className="text-sm font-semibold text-ink">{task.title}</p>
+              <p className="text-sm font-semibold text-ink">
+                <Link href={routes.task(slug, task.id)} scroll={false} data-task-link className="hover:underline hover:underline-offset-2">
+                  {task.title}
+                </Link>
+              </p>
             </div>
             <p className="mt-0.5 flex flex-wrap items-center gap-x-1 text-xs text-muted">
               <Bot className="size-3" aria-hidden />

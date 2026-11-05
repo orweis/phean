@@ -88,25 +88,48 @@ test("an owner manages goals, memory, search, agents and members", async ({ page
     await expect(page.getByText('Nothing matches "zeppelin"')).toBeVisible();
   });
 
+  await test.step("correct the memory in place", async () => {
+    await openTab(page, slug, "Memory");
+    const row = card(page, "Everything remembered").getByRole("listitem").filter({ hasText: "Vendor contracts renew" });
+    const edit = row.locator("details").filter({ has: page.locator('summary[aria-label^="Edit"]') });
+    await edit.locator("summary").click();
+    await edit.getByRole("textbox", { name: "What agents remember" }).fill("Vendor contracts renew on the fifteenth.");
+    await edit.getByRole("button", { name: "Save" }).click();
+    await expect(page.locator("[data-status-region]")).toContainText("Saved the memory");
+    await expect(card(page, "Everything remembered")).toContainText("Vendor contracts renew on the fifteenth.");
+  });
+
   await test.step("forget the memory", async () => {
     await openTab(page, slug, "Memory");
     await card(page, "Everything remembered").getByRole("button", { name: "Forget" }).click();
     await expect(page.getByText("Nothing remembered yet")).toBeVisible();
   });
 
-  await test.step("revoking an agent cuts it off at once", async () => {
+  await test.step("an agent's sub-agent shows under it, and revoking the agent cuts both off at once", async () => {
+    const helper = await asAgent(token, (agent) => agent.call<{ subagent: { id: string }; token: string }>("create_subagent", { name: "Researcher", purpose: "Reads vendor contracts" }));
     await openTab(page, slug, "Agents");
-    const row = page.getByRole("row").filter({ hasText: "Night shift" });
+    // The connect form folds to a bar once agents exist; the agents lead the page.
+    await expect(page.getByRole("button", { name: "Connect an agent" })).toHaveAttribute("aria-expanded", "false");
+    const row = page.getByRole("row").filter({ hasText: "Night shift" }).filter({ hasNotText: "Researcher" });
+    const sub = page.locator(`tr[data-agent="${helper.subagent.id}"]`);
+    await expect(sub).toContainText("Reads vendor contracts");
+    await expect(sub).toContainText("sub-agent of Night shift");
+    await expect(row).toContainText("Runs 1 sub-agent");
     await row.getByRole("button", { name: "Revoke" }).click();
     await expect(row).toContainText("Revoked");
+    await expect(sub).toContainText("Revoked");
+    await expect(connectAgent(BASE_URL, helper.token, "revoked helper")).rejects.toThrow();
     await expect(row.getByRole("button", { name: "Revoke" })).toHaveCount(0);
     await expect(connectAgent(BASE_URL, token, "revoked")).rejects.toThrow();
   });
 
   await test.step("invite a colleague, and cancel an invitation sent by mistake", async () => {
     await openTab(page, slug, "Members");
-    const form = card(page, "Invite someone");
+    const invitePanel = popover(card(page, "People"), "Invite");
+    await invitePanel.locator("summary").click();
+    const form = invitePanel.locator(":scope > div");
     const invite = async (email: string, role: "member" | "admin") => {
+      if (!(await invitePanel.evaluate((details) => (details as HTMLDetailsElement).open))) await invitePanel.locator("summary").click();
       await form.getByRole("textbox", { name: "Email" }).fill(email);
       await form.getByRole("combobox", { name: "Role" }).selectOption(role);
       await form.getByRole("button", { name: "Invite" }).click();
@@ -115,15 +138,16 @@ test("an owner manages goals, memory, search, agents and members", async ({ page
     const pending = card(page, "Pending invitations");
 
     await invite("typo@example.com", "member");
+    await page.keyboard.press("Escape");
     await pending.getByRole("listitem").filter({ hasText: "typo@example.com" }).getByRole("button", { name: "Cancel" }).click();
-    await expect(pending).not.toContainText("typo@example.com");
+    await expect(pending.getByRole("listitem").filter({ hasText: "typo@example.com" })).toHaveCount(0);
 
     await invite(DEMO_USER.email, "admin");
     await expect(pending.getByRole("listitem").filter({ hasText: DEMO_USER.email })).toContainText("Admin");
   });
 
   await test.step("the colleague accepts the link in their own browser", async () => {
-    const link = (await card(page, "Invite someone").locator("code").textContent())!.trim();
+    const link = (await popover(card(page, "People"), "Invite").locator("code").textContent())!.trim();
     const colleague = await browser.newContext({ storageState: DEMO_SESSION });
     try {
       const theirs = await colleague.newPage();
@@ -141,7 +165,7 @@ test("an owner manages goals, memory, search, agents and members", async ({ page
     await page.reload();
     const colleague = card(page, "People").getByRole("listitem").filter({ hasText: DEMO_USER.email });
     await expect(colleague).toContainText("Admin");
-    await expect(card(page, "Pending invitations")).toContainText("No open invitations.");
+    await expect(card(page, "Pending invitations")).toHaveCount(0);
     await colleague.getByRole("button", { name: "Remove" }).click();
     await expect(colleague).toHaveCount(0);
   });
