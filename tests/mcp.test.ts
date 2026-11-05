@@ -123,6 +123,28 @@ describe("MCP surface", () => {
   });
 });
 
+describe("sub-agents sharing their agent's key", () => {
+  it("detects each named worker as a sub-agent, attributes its work to it, and refuses a revoked name", async () => {
+    const researcher = await connectMcpClient(handler, ws.scout.token, { agentName: "Vendor researcher" });
+    const { agent } = dataOf<{ agent: { id: string; name: string } }>(await call(researcher, "whoami"));
+    expect(agent.name).toBe("Vendor researcher");
+    const { created } = dataOf<{ created: { createdByName: string }[] }>(await call(researcher, "capture_tasks", { tasks: [{ title: "Compare three vendors" }] }));
+    expect(created[0]).toMatchObject({ createdByName: "Vendor researcher" });
+
+    // The same name on another connection is the same sub-agent; a URL parameter works for clients that only take a URL.
+    const again = await connectMcpClient(handler, ws.scout.token, { url: `${MCP_URL}?agent=Vendor%20researcher` });
+    expect(dataOf<{ agent: { id: string } }>(await call(again, "whoami")).agent.id).toBe(agent.id);
+    const { listAgents, revokeAgent } = await import("@/server/domain/agents");
+    expect((await listAgents(ws.human, {})).find((row) => row.id === agent.id)).toMatchObject({ parentAgentId: ws.scout.agentId, sharesParentKey: true });
+
+    // The agent itself still connects as itself, and revoking the name shuts the worker out.
+    expect(dataOf<{ agent: { id: string } }>(await call(scout, "whoami")).agent.id).toBe(ws.scout.agentId);
+    await revokeAgent(ws.human, { agentId: agent.id });
+    await expect(connectMcpClient(handler, ws.scout.token, { agentName: "Vendor researcher" })).rejects.toThrow();
+    await Promise.all([researcher.close(), again.close()]);
+  });
+});
+
 describe("documents and stages over MCP", () => {
   it("lets one agent hand a task to another through a document, and names the board's stages in whoami", async () => {
     const { workflow } = dataOf<{ workflow: { key: string; label: string; status: string }[] }>(await call(scout, "whoami"));

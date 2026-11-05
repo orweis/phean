@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   bigint,
+  boolean,
   customType,
   date,
   foreignKey,
@@ -88,6 +89,12 @@ export const agents = pgTable(
     parentAgentId: text("parent_agent_id"),
     /** What a sub-agent does for its parent, in a line ("Researches vendors"). */
     purpose: text("purpose").notNull().default(""),
+    /**
+     * A sub-agent Phean detected: it connects with its parent's token and names itself (the
+     * Phean-Agent-Name header). It has no token of its own; `token_hash` holds a placeholder that
+     * no real token hashes to, which also keeps one row per name under a parent.
+     */
+    sharesParentKey: boolean("shares_parent_key").notNull().default(false),
     createdAt: timestampTz("created_at").notNull().defaultNow(),
     lastSeenAt: timestampTz("last_seen_at"),
     revokedAt: timestampTz("revoked_at"),

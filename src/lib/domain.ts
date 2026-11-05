@@ -103,7 +103,8 @@ export function slugify(name: string): string {
     .replace(/-+$/, "");
 }
 
-export type Tone = "neutral" | "info" | "success" | "warning" | "danger" | "accent";
+/** `fresh` is the inbox's sky; `warning` is the ember of what waits on a person; `accent` the ember badge. */
+export type Tone = "neutral" | "info" | "success" | "warning" | "danger" | "accent" | "fresh";
 
 interface EnumMeta {
   label: string;
@@ -111,7 +112,7 @@ interface EnumMeta {
 }
 
 export const TASK_STATUS_META: Record<TaskStatus, EnumMeta> = {
-  inbox: { label: "Inbox", tone: "accent" },
+  inbox: { label: "Inbox", tone: "fresh" },
   backlog: { label: "Backlog", tone: "neutral" },
   todo: { label: "To do", tone: "neutral" },
   in_progress: { label: "In progress", tone: "info" },

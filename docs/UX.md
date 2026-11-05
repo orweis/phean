@@ -99,7 +99,7 @@ Goal decisions available in the web app:
 
 A link is best, and at least one of the link, the session id, or the command is required. Links are limited to `https`, `http`, and the app schemes of known agent and chat clients (`cursor`, `vscode`, `vscode-insiders`, `windsurf`, `zed`, `claude`, `slack`, `msteams`), so a session can never carry a script. Each agent keeps one session per task, its latest; a task keeps up to eight agents' sessions, newest first.
 
-When it is blocked, the agent calls `request_input` with one clear question (and its session, if it has not linked one), tells the person in chat, and either waits (`wait_for_answers`, which returns the moment the person answers) or moves on to other work and collects the answer later (`collect_answers`). A request is a **question** (information only the person has) or a **decision** (a choice or sign-off, usually with 2-5 options). Either carries the agent's context and recommendation and **links**: back to the conversation, and to the sources it is about (the email, the Slack thread, the doc). The task now shows as **waiting on you**: a honey badge on its card, the question beneath, and a count on the Overview tab. The overview leads with an **Agent questions waiting on you** card. Each entry names the task, the agent, and when and where it asked, quotes the question, and offers:
+When it is blocked, the agent calls `request_input` with one clear question (and its session, if it has not linked one), tells the person in chat, and either waits (`wait_for_answers`, which returns the moment the person answers) or moves on to other work and collects the answer later (`collect_answers`). A request is a **question** (information only the person has) or a **decision** (a choice or sign-off, usually with 2-5 options). Either carries the agent's context and recommendation and **links**: back to the conversation, and to the sources it is about (the email, the Slack thread, the doc). The task now shows as **waiting on you**: an ember badge on its card, the question beneath, and a count on the Overview tab. The overview leads with an **Agent questions waiting on you** card. Each entry names the task, the agent, and when and where it asked, quotes the question, and offers:
 
 - **Resume in Claude** (the agent's app): the fastest answer is in the agent's own conversation, with everything it knows in front of you. When the agent left ids and a command instead of a link, **Resume** opens them with copy buttons.
 - **One button per option**, for a decision: one click records that option as the answer.
@@ -264,13 +264,14 @@ One table per concept (`src/lib/domain.ts`) maps each value to a label and a ton
 | Tone | Token | Used for |
 | --- | --- | --- |
 | Danger | `late` (crimson) | late work, urgent priority, revoked agents, the now line |
-| Warning | `wait` (honey) | what waits on a person (proposed goals, agent questions), high priority, read-only access |
+| Warning | `wait` (ember) | what waits on a person (proposed goals, agent questions), high priority, read-only access |
 | Info | `move` (violet) | in-progress tasks, active goals, admin role, facts |
 | Success | `arrive` (green) | done tasks, achieved goals, active agents, decisions |
-| Accent | `signal` (ember) | inbox, owner role, preferences |
+| Accent | `signal` (ember) | the counts on the tab rail |
+| Fresh | `inbox` (sky) | the inbox |
 | Neutral | `ink-2` on `fill` | everything else |
 
-The diagrams use the station colours: inbox ember, to do lavender, in progress violet (`move`), and done green (`arrive`). Red is never a station; it only marks lateness and now.
+The diagrams use the station colours: inbox sky, backlog grey, to do lavender, in progress violet (`move`), and done green (`arrive`). Red is never a station; it only marks lateness and now.
 
 ### Manual entry
 

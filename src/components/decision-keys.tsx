@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useRef, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useRef, type KeyboardEvent, type ReactNode } from "react";
 
 /** Typing into a field must never pick an option. */
 const TYPING = "input, textarea, select, [contenteditable]";
@@ -26,6 +26,12 @@ export function DecisionKeys({ children }: { children: ReactNode }) {
     entry.dataset.selected = "";
     entry.setAttribute("aria-current", "true");
   };
+
+  // An entry may have taken focus before the page finished loading; mark it once the list can.
+  useEffect(() => {
+    const entry = (document.activeElement as HTMLElement | null)?.closest?.<HTMLElement>("[data-entry]");
+    if (entry && list.current?.contains(entry)) select(entry);
+  }, []);
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.altKey || event.ctrlKey || event.metaKey || event.defaultPrevented) return;

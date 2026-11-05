@@ -3,7 +3,7 @@ import { createMcpHandler, getPublicOrigin, withMcpAuth } from "mcp-handler";
 
 import packageJson from "../../../package.json" with { type: "json" };
 import type { Db } from "../db/client";
-import { agentContext, authenticateAgentToken, type AgentPrincipal } from "../domain/agents";
+import { AGENT_NAME_HEADER, agentContext, authenticateAgentToken, resolveNamedSubagent, type AgentPrincipal } from "../domain/agents";
 import { PROMPTS, SERVER_INSTRUCTIONS } from "./guidance";
 import { toolError, type PheanTool, type ToolContext } from "./tool";
 import { TOOLS } from "./tools";
@@ -60,7 +60,11 @@ export function createPheanMcpHandler(deps: PheanMcpDeps): (request: Request) =>
 
   const verifyToken = async (request: Request, bearerToken?: string): Promise<AuthInfo | undefined> => {
     if (!bearerToken) return undefined;
-    const principal = await authenticateAgentToken(deps.getDb(), bearerToken);
+    const token = await authenticateAgentToken(deps.getDb(), bearerToken);
+    if (!token) return undefined;
+    // A worker sharing its agent's key names itself, by header or (for clients that only take a URL) `?agent=`.
+    const named = request.headers.get(AGENT_NAME_HEADER) ?? new URL(request.url).searchParams.get("agent");
+    const principal = named ? await resolveNamedSubagent(deps.getDb(), token, named) : token;
     if (!principal) return undefined;
     const extra: PheanAuthExtra = { principal, origin: getPublicOrigin(request) };
     return { token: bearerToken, clientId: principal.agent.id, scopes: [], extra: { ...extra } };

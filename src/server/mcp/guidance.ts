@@ -48,7 +48,7 @@ A document is a file attached to a task or goal: markdown (with \`\`\`mermaid di
 - Never put secrets, tokens or passwords in a document.
 
 ## Sub-agents
-If you run workers or specialists (sub-agents) that should act in Phean, give each its own identity with create_subagent (a name and a one-line purpose) rather than sharing your token, so people see who did what, listed under you on the Agents page. Hand the returned token to the sub-agent's MCP connection only; never put it in chat, a task, a memory or a document. Revoke each with revoke_subagent when its job is done. Sub-agents cannot run their own.
+If you run workers or specialists (sub-agents) that act in Phean, let each act under its own name, so people see who did what, listed under you on the Agents page. The simplest way: a sub-agent connects with your token and names itself in the Phean-Agent-Name header (or with ?agent=Name on the MCP URL, for clients that only take a URL); Phean detects each new name as your sub-agent the first time it sees it. To give a sub-agent a token of its own instead (one you can revoke without touching yours), call create_subagent with a name and a one-line purpose, and hand the token to that sub-agent's MCP connection only; never put it in chat, a task, a memory or a document. Revoke a sub-agent with revoke_subagent when its job is done. Sub-agents cannot run their own.
 
 ## Memory that changed
 When a memory you saved is wrong or stale, fix it with update_memory instead of saving a near-duplicate. For a memory someone else saved, remember the correction and say what it replaces.

@@ -216,7 +216,7 @@ export function Timetable({ window, groups, empty, slug }: TimetableProps) {
             <h3
               className={cx(
                 "relative flex items-center gap-2 border-t bg-panel py-1.5 text-xs font-bold text-ink-2 max-sm:z-10",
-                // Proposed work is not committed yet: its heading's rule is dashed honey, beside its status.
+                // Proposed work is not committed yet: its heading's rule is dashed ember, beside its status.
                 group.status === "proposed" ? "border-dashed border-wait" : "border-rule",
               )}
             >

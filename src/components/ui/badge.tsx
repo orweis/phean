@@ -10,6 +10,7 @@ const TONES: Record<Tone, string> = {
   warning: "bg-wait-tint text-wait-ink",
   danger: "bg-late-tint text-late-ink",
   accent: "bg-signal-tint text-signal-ink",
+  fresh: "bg-inbox-tint text-inbox-ink",
 };
 
 export function Badge({ tone = "neutral", children, className }: { tone?: Tone; children: ReactNode; className?: string }) {
