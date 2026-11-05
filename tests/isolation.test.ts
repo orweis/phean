@@ -1,6 +1,8 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { tasks } from "@/server/db/schema";
+import { eq } from "drizzle-orm";
+
+import { agents, tasks } from "@/server/db/schema";
 import { approveAgent, authenticateAgentToken, findRenewableAgent, resolveOAuthAgent, revokeAgent } from "@/server/domain/agents";
 import type { Ctx } from "@/server/domain/context";
 import { listActivity } from "@/server/domain/events";
@@ -26,6 +28,7 @@ import {
   type Task,
 } from "@/server/domain/tasks";
 import { getWorkspaceOverviews, listMemberships } from "@/server/domain/tenants";
+import { createPheanMcpHandler } from "@/server/mcp/handler";
 import { deleteWebhook, watch } from "@/server/domain/webhooks";
 
 import { createTestDb, seedWorkspace, type TestDb, type Workspace } from "./support/db";
@@ -220,6 +223,26 @@ describe("tenant isolation", () => {
         await client.close();
       }
     });
+  });
+
+  it("keeps the admin tools list_agents, list_members and revoke_agent inside the agent's workspace", async () => {
+    await testDb.db.update(agents).set({ accessLevel: "admin" }).where(eq(agents.id, globex.scout.agentId));
+    const client = await connectMcpClient(createPheanMcpHandler({ getDb: () => testDb.db }), globex.scout.token);
+    try {
+      const listed = dataOf<{ agents: { id: string; name: string }[] }>(await client.callTool({ name: "list_agents", arguments: {} }));
+      expect(listed.agents.map((agent) => agent.id)).toContain(globex.scout.agentId);
+      expect(listed.agents.map((agent) => agent.id)).not.toContain(acme.scout.agentId);
+
+      const members = dataOf<{ members: { name: string }[] }>(await client.callTool({ name: "list_members", arguments: {} }));
+      expect(members.members).toEqual([{ name: "Eli", role: "owner" }]);
+
+      const reached = await client.callTool({ name: "revoke_agent", arguments: { agentId: acme.scout.agentId } });
+      expect(reached.isError).toBe(true);
+      expect(textOf(reached)).toContain("not_found");
+      expect(await authenticateAgentToken(testDb.db, acme.scout.token)).not.toBeNull();
+    } finally {
+      await client.close();
+    }
   });
 
   it("shows each user only the workspaces they belong to", async () => {

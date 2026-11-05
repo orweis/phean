@@ -245,7 +245,7 @@ describe("renewing an agent", () => {
 describe("resolving an agent", () => {
   it("resolves a live agent to its level and tenant, and records last seen", async () => {
     const { agent } = await approveAgent(miaCtx, { name: "Laptop", ...grant });
-    expect(await resolveOAuthAgent(testDb.db, agent.id)).toEqual({ agent: { id: agent.id, name: "Laptop", level: "write" }, tenant: ws.tenant });
+    expect(await resolveOAuthAgent(testDb.db, agent.id)).toEqual({ agent: { id: agent.id, name: "Laptop", level: "write" }, accessExpiresAt: agent.accessExpiresAt, tenant: ws.tenant });
     expect((await rowOf(agent.id)).lastSeenAt).toBeInstanceOf(Date);
   });
 
@@ -310,7 +310,7 @@ describe("resolving an agent", () => {
     const { person, ctx } = await joinWorkspace("Ada", "admin");
     const { agent, token } = await createAgent(ctx, { name: "Fixed" });
     await leave(ctx, person);
-    expect(await authenticateAgentToken(testDb.db, token)).toEqual({ agent: { id: agent.id, name: "Fixed", level: "write" }, tenant: ws.tenant });
+    expect(await authenticateAgentToken(testDb.db, token)).toEqual({ agent: { id: agent.id, name: "Fixed", level: "write" }, accessExpiresAt: null, tenant: ws.tenant });
   });
 });
 

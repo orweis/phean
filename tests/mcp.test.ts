@@ -1,10 +1,14 @@
 import type { Client } from "@modelcontextprotocol/client";
+import { eq } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { isoDayFromToday } from "@/lib/dates";
-import { createAgent, revokeAgent } from "@/server/domain/agents";
+import type { AgentAccessLevel } from "@/lib/domain";
+import { agents } from "@/server/db/schema";
+import { agentContext, authenticateAgentToken, createAgent, listAgents, revokeAgent } from "@/server/domain/agents";
 import { answerInput } from "@/server/domain/tasks";
 import { createPheanMcpHandler } from "@/server/mcp/handler";
+import { toolAllowed } from "@/server/mcp/tool";
 import { TOOLS } from "@/server/mcp/tools";
 import { dispatchDue } from "@/server/webhooks/dispatch";
 
@@ -82,7 +86,7 @@ describe("MCP authentication", () => {
 describe("MCP surface", () => {
   it("advertises every tool with annotations, plus prompts and instructions", async () => {
     const { tools } = await scout.listTools();
-    expect(tools.map((tool) => tool.name).sort()).toEqual(TOOLS.map((tool) => tool.name).sort());
+    expect(tools.map((tool) => tool.name).sort()).toEqual(TOOLS.filter((tool) => !tool.adminOnly).map((tool) => tool.name).sort());
     expect(tools).toHaveLength(42);
     const byName = new Map(tools.map((tool) => [tool.name, tool]));
     expect(byName.get("list_tasks")?.annotations?.readOnlyHint).toBe(true);
@@ -385,5 +389,146 @@ describe("multiple agents sharing a workspace", () => {
     expect(textOf(probe)).toContain("not_found");
     expect(dataOf<{ results: unknown[] }>(await call(outsider, "search", { query: "bank" })).results).toEqual([]);
     expect(dataOf<{ workspace: { slug: string } }>(await call(outsider, "whoami")).workspace.slug).not.toBe(ws.tenant.slug);
+  });
+});
+
+/** A key agent in this workspace at the given level, connected over MCP. */
+async function agentAt(level: AgentAccessLevel, name = `Agent ${level}`) {
+  const { agent, token } = await createAgent(ws.human, { name });
+  await testDb.db.update(agents).set({ accessLevel: level }).where(eq(agents.id, agent.id));
+  const principal = (await authenticateAgentToken(testDb.db, token))!;
+  const ctx = { ...agentContext(testDb.db, principal), url: (path: string) => new URL(path, TEST_ORIGIN).toString(), accessEndsAt: null };
+  return { agentId: agent.id, ctx, client: await connectMcpClient(handler, token) };
+}
+
+describe("tools by access level", () => {
+  const listed = async (level: AgentAccessLevel) => {
+    const { client } = await agentAt(level);
+    try {
+      return (await client.listTools()).tools;
+    } finally {
+      await client.close();
+    }
+  };
+
+  it("read agents list only read-only tools", async () => {
+    const tools = await listed("read");
+    expect(tools.length).toBeGreaterThan(10);
+    expect(tools.filter((tool) => !tool.annotations?.readOnlyHint).map((tool) => tool.name)).toEqual([]);
+    expect(tools.map((tool) => tool.name)).toEqual(expect.arrayContaining(["whoami", "list_tasks", "search"]));
+    expect(tools.map((tool) => tool.name)).not.toContain("list_agents");
+  });
+
+  it("write agents do not list admin tools", async () => {
+    const names = (await listed("write")).map((tool) => tool.name);
+    expect(names).toEqual(expect.arrayContaining(["capture_tasks", "revoke_subagent"]));
+    for (const tool of TOOLS.filter((tool) => tool.adminOnly)) expect(names).not.toContain(tool.name);
+  });
+
+  it("admin agents list the admin tools", async () => {
+    const names = (await listed("admin")).map((tool) => tool.name);
+    expect(names).toEqual(expect.arrayContaining(["list_agents", "revoke_agent", "list_members"]));
+    expect(names).toHaveLength(TOOLS.length);
+  });
+
+  it("lists nothing a level could not call", async () => {
+    for (const level of ["read", "write", "admin"] as const) {
+      const names = (await listed(level)).map((tool) => tool.name);
+      const actor = { type: "agent", id: "x", name: "x", role: `agent_${level}` } as const;
+      expect(names.sort()).toEqual(TOOLS.filter((tool) => toolAllowed(tool, actor)).map((tool) => tool.name).sort());
+    }
+  });
+
+  /** Valid input for every tool that changes something, so the refusal comes from the permission and not the schema. */
+  const INPUT: Record<string, Record<string, unknown>> = {
+    create_goal: { title: "G" },
+    update_goal: { goalId: "g_x", title: "G" },
+    capture_tasks: { tasks: [{ title: "T" }] },
+    update_task: { taskId: "t_x", title: "T" },
+    assign_tasks_to_goal: { taskIds: ["t_x"], goalId: "g_x" },
+    claim_task: { taskId: "t_x" },
+    link_session: { taskId: "t_x", session: { sessionId: "s1" } },
+    request_input: { taskId: "t_x", question: "Which?" },
+    wait_for_answers: { timeoutSeconds: 1 },
+    collect_answers: {},
+    resolve_input: { taskId: "t_x" },
+    release_task: { taskId: "t_x" },
+    complete_task: { taskId: "t_x" },
+    remember: { content: "A fact" },
+    update_memory: { memoryId: "m_x", content: "A fact" },
+    forget: { memoryId: "m_x" },
+    create_subagent: { name: "Worker" },
+    revoke_subagent: { agentId: "ag_x" },
+    revoke_agent: { agentId: "ag_x" },
+    attach_document: { title: "D", content: "text" },
+    update_document: { documentId: "d_x", title: "D" },
+    delete_document: { documentId: "d_x" },
+    register_webhook: { url: "https://example.com/hook" },
+    ping_webhook: {},
+    delete_webhook: {},
+    watch: { entityType: "task", entityId: "t_x" },
+    unwatch: { entityType: "task", entityId: "t_x" },
+  };
+  const changing = TOOLS.filter((tool) => !tool.annotations.readOnlyHint);
+
+  it("has a sample input for every tool that changes something", () => {
+    expect(changing.map((tool) => tool.name).sort()).toEqual(Object.keys(INPUT).sort());
+  });
+
+  for (const tool of changing) {
+    it(`${tool.name} is refused for a read agent`, async () => {
+      const { ctx, client } = await agentAt("read");
+      try {
+        const result = await tool.execute(ctx, INPUT[tool.name]);
+        expect(result.isError).toBe(true);
+        expect(textOf(result)).toMatch(/^forbidden:/);
+        // Over the wire it is not even offered, so calling it by name finds nothing.
+        await expect(call(client, tool.name, INPUT[tool.name])).rejects.toThrow(/not found/i);
+      } finally {
+        await client.close();
+      }
+    });
+  }
+
+  it("list_members has names and roles but no email addresses or ids", async () => {
+    const { client } = await agentAt("admin");
+    try {
+      const members = dataOf<{ members: Record<string, unknown>[] }>(await call(client, "list_members")).members;
+      expect(members).toEqual([{ name: "Dana", role: "owner" }]);
+    } finally {
+      await client.close();
+    }
+  });
+
+  it("list_agents shows no user ids, and revoke_agent cuts off another agent but refuses itself", async () => {
+    const admin = await agentAt("admin");
+    try {
+      const { agents: rows } = dataOf<{ agents: { id: string; name: string; you: boolean }[] }>(await call(admin.client, "list_agents"));
+      expect(rows.map((row) => row.name)).toEqual(expect.arrayContaining(["Scout", "Closer", "Agent admin"]));
+      expect(rows.find((row) => row.you)?.id).toBe(admin.agentId);
+      expect(JSON.stringify(rows)).not.toContain("createdByUserId");
+
+      const self = await call(admin.client, "revoke_agent", { agentId: admin.agentId });
+      expect(textOf(self)).toContain("forbidden: An agent cannot revoke itself");
+
+      expect(dataOf<{ agent: { id: string } }>(await call(admin.client, "revoke_agent", { agentId: ws.scout.agentId })).agent.id).toBe(ws.scout.agentId);
+      expect((await listAgents(ws.human, {})).find((row) => row.id === ws.scout.agentId)?.revokedAt).not.toBeNull();
+      await expect(connectMcpClient(handler, ws.scout.token)).rejects.toThrow();
+    } finally {
+      await admin.client.close();
+    }
+  });
+
+  it("whoami reports the level and when access ends", async () => {
+    const write = await agentAt("write");
+    const expiry = new Date(Date.now() + 86_400_000);
+    await testDb.db.update(agents).set({ accessExpiresAt: expiry }).where(eq(agents.id, write.agentId));
+    const admin = await agentAt("admin");
+    try {
+      expect(dataOf(await call(write.client, "whoami"))).toMatchObject({ level: "write", accessEndsAt: expiry.toISOString() });
+      expect(dataOf(await call(admin.client, "whoami"))).toMatchObject({ level: "admin", accessEndsAt: null });
+    } finally {
+      await Promise.all([write.client.close(), admin.client.close()]);
+    }
   });
 });

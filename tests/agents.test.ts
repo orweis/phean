@@ -32,7 +32,7 @@ describe("agent tokens", () => {
     expect(agent.lastSeenAt).toBeNull();
 
     const principal = await authenticateAgentToken(testDb.db, token);
-    expect(principal).toEqual({ agent: { id: agent.id, name: "Runner", level: "write" }, tenant: owner.tenant });
+    expect(principal).toEqual({ agent: { id: agent.id, name: "Runner", level: "write" }, accessExpiresAt: null, tenant: owner.tenant });
     const [row] = await testDb.db.select().from(agents).where(eq(agents.id, agent.id));
     expect(row?.lastSeenAt).toBeInstanceOf(Date);
 

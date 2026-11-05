@@ -51,6 +51,9 @@ A document is a file attached to a task or goal: markdown (with \`\`\`mermaid di
 ## Sub-agents
 If you run workers or specialists (sub-agents) that act in Phean, let each act under its own name, so people see who did what, listed under you on the Agents page. The simplest way: a sub-agent connects with your token and names itself in the Phean-Agent-Name header (or with ?agent=Name on the MCP URL, for clients that only take a URL); Phean detects each new name as your sub-agent the first time it sees it. To give a sub-agent a token of its own instead (one you can revoke without touching yours), call create_subagent with a name and a one-line purpose, and hand the token to that sub-agent's MCP connection only; never put it in chat, a task, a memory or a document. Revoke a sub-agent with revoke_subagent when its job is done. Sub-agents cannot run their own.
 
+## Access levels and renewing
+A person approved you at a level, and you see only the tools it allows. Read looks only (search, list and get tools). Write also changes tasks, goals, memories and documents, and runs your own sub-agents and webhook. Admin also lists agents and members and revokes other agents (list_agents, list_members, revoke_agent). No level lets you approve, complete or abandon a goal: that stays with people. whoami shows your level and when your access ends (accessEndsAt). When it ends, or a tool you need is missing, tell the person; they renew or raise it by connecting you again in Phean, under the same name. A call you are not allowed to make fails with "forbidden": do not retry it, say what you need.
+
 ## Memory that changed
 When a memory you saved is wrong or stale, fix it with update_memory instead of saving a near-duplicate. For a memory someone else saved, remember the correction and say what it replaces.
 

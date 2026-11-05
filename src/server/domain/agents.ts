@@ -9,7 +9,7 @@ import { ACCESS_LEVEL_META, AGENT_TOKEN_PREFIX, grantableLevels, highestGrantabl
 import type { Db } from "../db/client";
 import { publicColumns } from "../db/columns";
 import { newId } from "../db/ids";
-import { agents, member, oauthRefreshToken, organization, type AgentRow } from "../db/schema";
+import { agents, member, oauthRefreshToken, organization, user, type AgentRow } from "../db/schema";
 import { liveAgent } from "./agent-liveness";
 import { agentRole, inTenant, inTransaction, type Ctx, type Tenant } from "./context";
 import { conflict, forbidden, invalid, notFound } from "./errors";
@@ -40,6 +40,18 @@ export const listAgents = service(Empty, async (ctx): Promise<Agent[]> => {
     .from(agents)
     .where(inTenant(ctx, agents))
     .orderBy(asc(agents.createdAt));
+});
+
+/** Who is in the workspace, by name and role only: no emails or ids, so an agent can name people without learning more. */
+export const listMemberNames = service(Empty, async (ctx): Promise<{ name: string; role: string }[]> => {
+  assertCan(ctx, "agent:manage");
+  const rows = await ctx.db
+    .select({ name: user.name, role: member.role })
+    .from(member)
+    .innerJoin(user, eq(user.id, member.userId))
+    .where(eq(member.organizationId, ctx.tenant.id))
+    .orderBy(asc(member.createdAt));
+  return rows.map(({ name, role }) => ({ name, role: toMemberRole(role) }));
 });
 
 /** Sub-agents one agent may run at once, so a runaway orchestrator cannot mint tokens without end. */
@@ -222,6 +234,8 @@ export const revokeAgent = service(AgentRefInput, async (ctx, { agentId }): Prom
 
 export interface AgentPrincipal {
   agent: { id: string; name: string; level: AgentAccessLevel };
+  /** When its access lapses (the sooner of its own and its parent's); null for a key. */
+  accessExpiresAt: Date | null;
   tenant: Tenant;
 }
 
@@ -253,6 +267,8 @@ async function resolvePrincipal(db: Db, match: SQL | undefined): Promise<AgentPr
       id: agents.id,
       name: agents.name,
       level: agents.accessLevel,
+      expiresAt: agents.accessExpiresAt,
+      parentExpiresAt: parentAgent.accessExpiresAt,
       authKind: agents.authKind,
       approverRole: approver.role,
       parentLevel: parentAgent.accessLevel,
@@ -276,6 +292,7 @@ async function resolvePrincipal(db: Db, match: SQL | undefined): Promise<AgentPr
   const level = row.parentLevel && row.parentAuthKind ? lowerLevel(own, grantedLevel(row.parentLevel, row.parentAuthKind, row.parentApproverRole)) : own;
   return {
     agent: { id: row.id, name: row.name, level },
+    accessExpiresAt: [row.expiresAt, row.parentExpiresAt].filter((date): date is Date => !!date).sort((a, b) => a.getTime() - b.getTime())[0] ?? null,
     tenant: { id: row.tenantId, slug: row.tenantSlug, name: row.tenantName },
   };
 }

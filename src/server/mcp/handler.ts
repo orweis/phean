@@ -1,15 +1,17 @@
 import type { AuthInfo, McpServer, ServerContext } from "@modelcontextprotocol/server";
 import { createMcpHandler, getPublicOrigin, withMcpAuth } from "mcp-handler";
 
-import { AGENT_TOKEN_PREFIX } from "@/lib/domain";
+import { AGENT_TOKEN_PREFIX, type AgentAccessLevel } from "@/lib/domain";
 
 import packageJson from "../../../package.json" with { type: "json" };
 import { verifyOAuthToken as verifyDeploymentToken, type OAuthTokenVerifier } from "../auth/oauth";
 import { appUrl } from "../config";
 import type { Db } from "../db/client";
+import { agentRole } from "../domain/context";
 import { AGENT_NAME_HEADER, agentContext, authenticateAgentToken, resolveNamedSubagent, resolveOAuthAgent, type AgentPrincipal } from "../domain/agents";
+import { forbidden } from "../domain/errors";
 import { PROMPTS, SERVER_INSTRUCTIONS } from "./guidance";
-import { toolError, type PheanTool, type ToolContext } from "./tool";
+import { toolAllowed, toolError, type PheanTool, type ToolContext } from "./tool";
 import { TOOLS } from "./tools";
 
 export interface PheanMcpDeps {
@@ -29,7 +31,7 @@ type ToolCallContext = Pick<ServerContext, "http">;
 function toolContext(db: Db, call: ToolCallContext): ToolContext | null {
   const extra = call.http?.authInfo?.extra as PheanAuthExtra | undefined;
   if (!extra) return null;
-  return { ...agentContext(db, extra.principal), url: (path) => new URL(path, extra.origin).toString() };
+  return { ...agentContext(db, extra.principal), url: (path) => new URL(path, extra.origin).toString(), accessEndsAt: extra.principal.accessExpiresAt };
 }
 
 function registerTool(server: McpServer, tool: PheanTool, getDb: () => Db): void {
@@ -39,13 +41,17 @@ function registerTool(server: McpServer, tool: PheanTool, getDb: () => Db): void
     async (input: unknown, call: ToolCallContext) => {
       const ctx = toolContext(getDb(), call);
       if (!ctx) return toolError(new Error("MCP request reached a tool without verified agent credentials"));
+      // The list already leaves it out; this holds if a level's handler is ever reached with another's principal.
+      if (!toolAllowed(tool, ctx.actor)) return toolError(forbidden("Your access level does not allow this tool. Ask a person to reconnect you with more access."));
       return tool.execute(ctx, input);
     },
   );
 }
 
-export function registerPheanServer(server: McpServer, { getDb }: PheanMcpDeps): void {
-  for (const tool of TOOLS) registerTool(server, tool, getDb);
+/** Registers what an agent of this level may use: `tools/list` shows exactly these. */
+export function registerPheanServer(server: McpServer, { getDb }: PheanMcpDeps, level: AgentAccessLevel): void {
+  const actor = { type: "agent", id: "", name: "", role: agentRole(level) } as const;
+  for (const tool of TOOLS) if (toolAllowed(tool, actor)) registerTool(server, tool, getDb);
   for (const prompt of PROMPTS) {
     server.registerPrompt(prompt.name, { title: prompt.title, description: prompt.description }, () => ({
       description: prompt.description,
@@ -60,10 +66,24 @@ export function registerPheanServer(server: McpServer, { getDb }: PheanMcpDeps):
  */
 export function createPheanMcpHandler(deps: PheanMcpDeps): (request: Request) => Promise<Response> {
   const { getDb, verifyOAuthToken = verifyDeploymentToken } = deps;
-  const handler = createMcpHandler((server) => registerPheanServer(server, deps), {
-    serverInfo: { name: "phean", version: packageJson.version },
-    instructions: SERVER_INSTRUCTIONS,
-  });
+  // mcp-handler fixes the tool list when it builds a handler, so each level gets its own, made on first use.
+  const handlers = new Map<AgentAccessLevel, (request: Request) => Promise<Response>>();
+  const handlerFor = (level: AgentAccessLevel) => {
+    let handler = handlers.get(level);
+    if (!handler) {
+      handler = createMcpHandler((server) => registerPheanServer(server, deps, level), {
+        serverInfo: { name: "phean", version: packageJson.version },
+        instructions: SERVER_INSTRUCTIONS,
+      });
+      handlers.set(level, handler);
+    }
+    return handler;
+  };
+  const handler = (request: Request & { auth?: AuthInfo }) => {
+    const principal = (request.auth?.extra as PheanAuthExtra | undefined)?.principal;
+    if (!principal) return Promise.resolve(new Response("Unauthorized", { status: 401 }));
+    return handlerFor(principal.agent.level)(request);
+  };
 
   const authenticate = async (bearerToken: string): Promise<AgentPrincipal | null> => {
     if (bearerToken.startsWith(AGENT_TOKEN_PREFIX)) return authenticateAgentToken(getDb(), bearerToken);

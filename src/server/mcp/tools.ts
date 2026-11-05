@@ -7,7 +7,7 @@ import { routes } from "@/lib/routes";
 import { listActivity } from "../domain/events";
 import { createGoal, listGoals, updateGoal } from "../domain/goals";
 import { forget, recall, remember, updateMemory } from "../domain/memory";
-import { createSubagent, revokeAgent } from "../domain/agents";
+import { createSubagent, listAgents, listMemberNames, revokeAgent } from "../domain/agents";
 import { getBoard, getGoalDetail, getStatusSummary, getTimeline } from "../domain/overview";
 import { ACTIONS, can } from "../domain/policy";
 import { AskInput, Empty, GoalRefInput, VisualizeInput } from "../domain/schemas";
@@ -65,11 +65,13 @@ export const TOOLS: readonly PheanTool[] = [
     name: "whoami",
     title: "Who am I",
     description:
-      "Your agent identity, the workspace you are connected to, what you may do, the dashboard link to share with humans, and the board's stages (workflow): each has a key, a name people see, and the status kind it belongs to. Move a task to a workspace's own stage with update_task stage.",
+      "Your agent identity, your access level (read, write or admin) and when your access ends (accessEndsAt; null for a key that does not lapse), the workspace you are connected to, what you may do, the dashboard link to share with humans, and the board's stages (workflow): each has a key, a name people see, and the status kind it belongs to. Move a task to a workspace's own stage with update_task stage.",
     input: Empty,
     readOnly: true,
     run: async (ctx) => ({
       agent: { id: ctx.actor.id, name: ctx.actor.name },
+      level: ctx.actor.role.replace(/^agent_/, ""),
+      accessEndsAt: ctx.accessEndsAt?.toISOString() ?? null,
       workspace: ctx.tenant,
       dashboardUrl: ctx.url(routes.workspace(ctx.tenant.slug)),
       permissions: ACTIONS.filter((action) => can(ctx.actor, action)),
@@ -279,10 +281,54 @@ export const TOOLS: readonly PheanTool[] = [
   serviceTool({
     name: "revoke_subagent",
     title: "Revoke sub-agent",
-    description: "Cut off one of your own sub-agents once its job is done; its past work stays attributed to it.",
+    description:
+      "Cut off one of your own sub-agents once its job is done; its past work stays attributed to it. Pass its agentId (from create_subagent or list_agents). It cannot revoke any other agent; an Admin agent uses revoke_agent for that.",
     destructive: true,
     service: revokeAgent,
     key: "subagent",
+  }),
+  defineTool({
+    name: "list_agents",
+    title: "List agents",
+    description:
+      "Admin access only. The agents connected to this workspace that are not revoked: id, name, access level, how it signs in (key or oauth), when its access ends (null for keys), its parent if it is a sub-agent, and when it was last seen. Use it to find the agentId for revoke_agent.",
+    adminOnly: true,
+    readOnly: true,
+    input: Empty,
+    run: async (ctx) => ({
+      agents: (await listAgents(ctx, {}))
+        .filter((agent) => !agent.revokedAt)
+        .map((agent) => ({
+          id: agent.id,
+          name: agent.name,
+          level: agent.accessLevel,
+          signIn: agent.authKind,
+          accessEndsAt: agent.accessExpiresAt?.toISOString() ?? null,
+          parentAgentId: agent.parentAgentId,
+          purpose: agent.purpose,
+          lastSeenAt: agent.lastSeenAt?.toISOString() ?? null,
+          you: agent.id === ctx.actor.id,
+        })),
+    }),
+  }),
+  serviceTool({
+    name: "revoke_agent",
+    title: "Revoke agent",
+    description:
+      "Admin access only. Cut off any agent in this workspace, and every sub-agent it runs, when it is misbehaving or no longer needed; its past work stays attributed to it. Find the agentId with list_agents. You cannot revoke yourself: ask a person to. Its approver can reconnect it later.",
+    adminOnly: true,
+    destructive: true,
+    service: revokeAgent,
+    key: "agent",
+  }),
+  serviceTool({
+    name: "list_members",
+    title: "List members",
+    description: "Admin access only. The people in this workspace, by name and role (owner, admin, member), so you can tell who approved or runs what. It has no emails or ids.",
+    adminOnly: true,
+    readOnly: true,
+    service: listMemberNames,
+    key: "members",
   }),
 
   // Documents
