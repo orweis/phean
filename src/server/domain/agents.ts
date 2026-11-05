@@ -11,7 +11,7 @@ import { publicColumns } from "../db/columns";
 import { newId } from "../db/ids";
 import { agents, events, member, oauthRefreshToken, organization, user, type AgentRow } from "../db/schema";
 import { liveAgent } from "./agent-liveness";
-import { agentRole, inTenant, inTransaction, type Ctx, type Tenant } from "./context";
+import { agentRole, inTenant, inTransaction, type Actor, type Ctx, type Tenant } from "./context";
 import { conflict, forbidden, invalid, notFound } from "./errors";
 import { recordEvent } from "./events";
 import { assertCan, can } from "./policy";
@@ -194,7 +194,8 @@ export const approveAgent = service(ApproveAgentInput, async (ctx, { name, level
       if (!existing) throw conflict(`"${name}" was revoked just now. Approve it again.`);
     }
 
-    const [agent] = await tx.db.update(agents).set(grant).where(and(inTenant(tx, agents), eq(agents.id, existing.id))).returning(agentColumns);
+    // The client this renewal replaces loses its access token as well as its refresh tokens.
+    const [agent] = await tx.db.update(agents).set({ ...grant, tokensNotBefore: new Date() }).where(and(inTenant(tx, agents), eq(agents.id, existing.id))).returning(agentColumns);
     await revokeTokensOf(tx.db, existing.id);
     await recordEvent(tx, {
       action: "agent.renewed",
@@ -207,28 +208,44 @@ export const approveAgent = service(ApproveAgentInput, async (ctx, { name, level
   });
 });
 
-function assertCanRevoke(ctx: Ctx, target: Agent): void {
-  const { actor } = ctx;
-  if (actor.type === "agent" && actor.id === target.id) throw forbidden("An agent cannot revoke itself. Ask a workspace admin to revoke it.");
-  if (can(actor, "agent:manage")) return;
-  if (actor.type === "agent") {
-    if (target.parentAgentId !== actor.id) throw forbidden("Agents revoke only their own sub-agents. Ask a workspace admin to revoke this one.");
-    return;
-  }
-  if (target.createdByUserId !== actor.id) assertCan(ctx, "agent:manage");
-}
+type RevokeTarget = Pick<Agent, "id" | "parentAgentId" | "createdByUserId">;
 
 /**
- * Revokes an agent and every sub-agent it runs, and their tokens. A person needs `agent:manage`, or
- * `agent:connect` for an agent they approved. An agent needs `agent:manage` to revoke any agent but
- * itself; otherwise, with `agent:delegate`, only its own sub-agents.
+ * Whether this actor may revoke this agent, given the agent it works for (`parent`), if any.
+ * `revokeAgent` holds every revoke to it, and the Agents page offers Revoke by it. A person needs
+ * `agent:manage`, or `agent:connect` and to have approved the agent or the agent it works for. An
+ * agent needs `agent:manage` for any agent but itself, or `agent:delegate` for its own sub-agents.
  */
+export function canRevoke(actor: Actor, target: RevokeTarget, parent: RevokeTarget | undefined): boolean {
+  if (actor.type === "agent") {
+    if (actor.id === target.id) return false;
+    return can(actor, "agent:manage") || (can(actor, "agent:delegate") && target.parentAgentId === actor.id);
+  }
+  if (can(actor, "agent:manage")) return true;
+  if (!can(actor, "agent:connect")) return false;
+  const approvedParent = target.parentAgentId !== null && parent?.id === target.parentAgentId && parent.createdByUserId === actor.id;
+  return target.createdByUserId === actor.id || approvedParent;
+}
+
+function assertCanRevoke(ctx: Ctx, target: RevokeTarget, parent: RevokeTarget | undefined): void {
+  const { actor } = ctx;
+  if (canRevoke(actor, target, parent)) return;
+  if (actor.type === "agent" && actor.id === target.id) throw forbidden("An agent cannot revoke itself. Ask a workspace admin to revoke it.");
+  if (actor.type === "agent" && can(actor, "agent:delegate")) throw forbidden("Agents revoke only their own sub-agents. Ask a workspace admin to revoke this one.");
+  assertCan(ctx, "agent:manage");
+  throw forbidden("You cannot revoke this agent.");
+}
+
+/** Revokes an agent and every sub-agent it runs, and their tokens, if `canRevoke` allows it. */
 export const revokeAgent = service(AgentRefInput, async (ctx, { agentId }): Promise<Agent> => {
   if (!can(ctx.actor, "agent:connect") && !can(ctx.actor, "agent:delegate")) assertCan(ctx, "agent:manage");
   return inTransaction(ctx, async (tx) => {
     const [target] = await tx.db.select(agentColumns).from(agents).where(and(inTenant(tx, agents), eq(agents.id, agentId), isNull(agents.revokedAt)));
     if (!target) throw notFound("active agent", agentId);
-    assertCanRevoke(tx, target);
+    const [parent] = target.parentAgentId
+      ? await tx.db.select(agentColumns).from(agents).where(and(inTenant(tx, agents), eq(agents.id, target.parentAgentId)))
+      : [];
+    assertCanRevoke(tx, target, parent);
     const revoked = await tx.db
       .update(agents)
       .set({ revokedAt: new Date() })
@@ -340,9 +357,21 @@ export async function authenticateAgentToken(db: Db, token: string): Promise<Age
   return resolvePrincipal(db, eq(agents.tokenHash, hashToken(token)));
 }
 
-/** Resolves the agent a verified OAuth token names. Returns null unless it is a live OAuth agent. */
-export async function resolveOAuthAgent(db: Db, agentId: string): Promise<AgentPrincipal | null> {
-  return resolvePrincipal(db, and(eq(agents.id, agentId), eq(agents.authKind, "oauth")));
+/**
+ * A token issued in the second of the agent's last renewal or later. `iat` counts whole seconds, so
+ * a token issued in the same second as the renewal is kept rather than refused.
+ */
+function issuedSinceRenewal(issuedAt: number): SQL {
+  return or(isNull(agents.tokensNotBefore), lt(agents.tokensNotBefore, sql`to_timestamp(${Math.floor(issuedAt) + 1})`))!;
+}
+
+/**
+ * Resolves the agent a verified OAuth token names. Returns null unless it is a live OAuth agent and,
+ * given the token's `iat` in seconds, the token was not issued before the agent's last renewal.
+ * Leave `issuedAt` out only for a token being issued now.
+ */
+export async function resolveOAuthAgent(db: Db, agentId: string, issuedAt?: number): Promise<AgentPrincipal | null> {
+  return resolvePrincipal(db, and(eq(agents.id, agentId), eq(agents.authKind, "oauth"), issuedAt === undefined ? undefined : issuedSinceRenewal(issuedAt)));
 }
 
 /** The header a sub-agent sends with its parent's token to say who it is. */

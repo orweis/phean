@@ -113,10 +113,20 @@ describe("consentScope", () => {
     expect(consentScope("phean:write", "write")).toBe("phean:write");
   });
 
-  it("leaves the scope alone when nothing would remain, since consent refuses an empty one", () => {
-    expect(consentScope("phean:admin", "read")).toBeUndefined();
+  it("keeps only offline_access when every requested level is above the chosen one", () => {
+    expect(consentScope("phean:admin offline_access", "read")).toBe("offline_access");
+    expect(consentScope("phean:write phean:admin offline_access", "read")).toBe("offline_access");
+  });
+
+  it("has no honest scope when the client asked only for levels above the chosen one", () => {
+    expect(consentScope("phean:admin", "read")).toBeNull();
+    expect(consentScope("phean:write phean:admin", "read")).toBeNull();
+  });
+
+  it("leaves a request that names no level alone, since consent refuses an empty scope", () => {
     expect(consentScope(null, "read")).toBeUndefined();
     expect(consentScope("", "read")).toBeUndefined();
+    expect(consentScope("offline_access", "read")).toBeUndefined();
   });
 });
 
@@ -243,10 +253,37 @@ describe("the signed request behind the dialog", () => {
     expect((await readConsentRequest(server.auth, fresh.search.slice(1))).status).toBe("ok");
   });
 
+  it("a token's scope never names a level above the one chosen, whatever the client asked for", async () => {
+    const levels = ["read", "write", "admin"] as const;
+    const signedIn = await signUpOwner(testDb.db, server, "scopes");
+    for (const requested of ["phean:read phean:write phean:admin offline_access", "phean:admin offline_access", "phean:write phean:admin offline_access", "phean:admin", "phean:write"]) {
+      for (const level of levels) {
+        const clientId = await registerClientId(server);
+        const { verifier, challenge } = pkce();
+        const response = await server.auth.handler(authorizeRequest(server, signedIn.cookie, clientId, challenge, { scope: requested }));
+        const query = new URL(response.headers.get("location")!, server.baseUrl).search.slice(1);
+        const scope = consentScope(new URLSearchParams(query).get("scope"), level);
+        // The dialog refuses this choice rather than issue a token that names more.
+        if (scope === null) {
+          expect(requested.split(" ").every((name) => levels.indexOf(name.slice("phean:".length) as (typeof levels)[number]) > levels.indexOf(level))).toBe(true);
+          continue;
+        }
+        const { agent } = await approveAgent(signedIn.ctx, { name: `${requested} ${level}`, level, lifetimeDays: 1, oauthClientId: clientId });
+        const { url } = await completeConsent(server.auth, new Headers({ cookie: signedIn.cookie }), { agentId: agent.id, oauthQuery: query, scope });
+        const tokens = (await (await redeem(server, clientId, new URL(url).searchParams.get("code")!, verifier)).json()) as { scope: string; access_token: string };
+        const claims = JSON.parse(Buffer.from(tokens.access_token.split(".")[1]!, "base64url").toString()) as { scope: string };
+        for (const named of [tokens.scope, claims.scope]) {
+          const above = named.split(" ").filter((name) => name.startsWith("phean:") && levels.indexOf(name.slice("phean:".length) as (typeof levels)[number]) > levels.indexOf(level));
+          expect(above, `${requested} at ${level}`).toEqual([]);
+        }
+      }
+    }
+  });
+
   it("a token carries the narrowed scope for the chosen level, and the same audience", async () => {
     const { ctx, cookie, clientId, verifier, query } = await signedQuery();
     const { agent } = await approveAgent(ctx, { name: "Reader", level: "read", lifetimeDays: 1, oauthClientId: clientId });
-    const scope = consentScope(new URLSearchParams(query).get("scope"), "read");
+    const scope = consentScope(new URLSearchParams(query).get("scope"), "read") ?? undefined;
     const { url } = await completeConsent(server.auth, new Headers({ cookie }), { agentId: agent.id, oauthQuery: query, scope });
 
     const response = await redeem(server, clientId, new URL(url).searchParams.get("code")!, verifier);

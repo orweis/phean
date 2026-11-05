@@ -29,7 +29,7 @@ import { formatDay, pluralize, timeAgo } from "@/lib/format";
 import { routes } from "@/lib/routes";
 import { requireWorkspace } from "@/server/auth/session";
 import { mcpResourceUrl } from "@/server/config";
-import { listAgents, type ListedAgent } from "@/server/domain/agents";
+import { canRevoke, listAgents, type ListedAgent } from "@/server/domain/agents";
 import { getAgentWorkload } from "@/server/domain/overview";
 import { can } from "@/server/domain/policy";
 import { listWebhooks, type Webhook } from "@/server/domain/webhooks";
@@ -72,11 +72,9 @@ export default async function AgentsPage({ params }: PageProps<"/w/[slug]/agents
   const signInUrl = mcpResourceUrl(slug);
   const loadById = new Map(workload.map((load) => [load.agent.id, load]));
   const hookByAgent = new Map(hooks.map((hook) => [hook.agentId, hook]));
-  const canManage = can(ctx.actor, "agent:manage");
   const canConnect = can(ctx.actor, "agent:connect");
   const canIssueKey = can(ctx.actor, "agent:issue_key");
   const canRemoveWebhooks = can(ctx.actor, "webhook:manage");
-  const viewerId = ctx.actor.type === "user" ? ctx.actor.id : null;
   // Sub-agents sit right under the agent they work for.
   const byId = new Map(agents.map((agent) => [agent.id, agent]));
   const children = new Map<string, ListedAgent[]>();
@@ -97,8 +95,8 @@ export default async function AgentsPage({ params }: PageProps<"/w/[slug]/agents
       endsWithParent: !!parent && endsAt !== null && endsAt.getTime() === parent.accessExpiresAt?.getTime() && endsAt.getTime() !== agent.accessExpiresAt?.getTime(),
       level: agent.level,
       status,
-      // People revoke agents they approved; revoking a parent takes its sub-agents with it.
-      revocable: status !== "revoked" && (canManage || (viewerId !== null && agent.createdByUserId === viewerId)),
+      // By the rule the revoke itself is held to; revoking a parent takes its sub-agents with it.
+      revocable: status !== "revoked" && canRevoke(ctx.actor, agent, parent),
     };
   });
   const hasActions = rows.some((row) => row.revocable || (canRemoveWebhooks && hookByAgent.has(row.agent.id)));

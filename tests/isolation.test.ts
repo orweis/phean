@@ -194,8 +194,11 @@ describe("tenant isolation", () => {
     await expect(revokeAgent(globexOwner, { agentId: agent.id })).rejects.toMatchObject({ code: "not_found" });
     await expect(revokeAgent(globexAgent, { agentId: agent.id })).rejects.toMatchObject({ code: "not_found" });
 
-    // The same person in another workspace: it is not theirs to renew there.
+    // The same person in another workspace: it is not theirs to renew there, nor its sub-agents to revoke.
     const samePerson = { ...globexOwner, actor: acmeOwner.actor };
+    const { createSubagent, agentContext } = await import("@/server/domain/agents");
+    const { agent: worker } = await createSubagent(agentContext(testDb.db, (await resolveOAuthAgent(testDb.db, agent.id))!), { name: "Worker" });
+    await expect(revokeAgent(samePerson, { agentId: worker.id })).rejects.toMatchObject({ code: "not_found" });
     expect(await findRenewableAgent(samePerson, "Laptop")).toBeNull();
     const { agent: there, renewed } = await approveAgent(samePerson, grant);
     expect(renewed).toBe(false);
@@ -227,7 +230,7 @@ describe("tenant isolation", () => {
     it("a workspace's own URL lets in only that workspace's agents", async () => {
       const server = createOAuthServer(testDb.db);
       const connected = await connectOAuthAgent(testDb.db, server, "oauth-acme");
-      const handler = createPheanMcpHandler({ getDb: () => testDb.db, verifyOAuthToken: () => Promise.resolve({ agentId: connected.agentId }) });
+      const handler = createPheanMcpHandler({ getDb: () => testDb.db, verifyOAuthToken: () => Promise.resolve({ agentId: connected.agentId, issuedAt: Math.floor(Date.now() / 1000) }) });
       // Another workspace's key, and a token the verifier accepts but whose agent works elsewhere.
       await expect(connectMcpClient(handler, globex.scout.token, { url: `${OAUTH_BASE}/mcp/w/${acme.tenant.slug}` })).rejects.toThrow();
       await expect(connectMcpClient(handler, "verified-token", { url: `${OAUTH_BASE}/mcp/w/${acme.tenant.slug}` })).rejects.toThrow();

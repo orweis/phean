@@ -98,7 +98,7 @@ The workspace's URL is its own OAuth resource, so a second workspace on the same
 
 Access tokens last an hour and refresh on their own until the lifetime the person chose. A bot that can't open a browser gets a fixed `phn_` key instead, which an owner or admin issues under **Key for a bot** on the same page; it is shown once and sent as `Authorization: Bearer phn_...`.
 
-Either credential resolves to one row of `agents`, which alone selects the workspace and the agent identity. Revoking, expiry, and the approver leaving the workspace take effect on the next request.
+Either credential resolves to one row of `agents`, which alone selects the workspace and the agent identity. Revoking, expiry, and the approver leaving the workspace take effect on the next request. So does a renewal: approving the same name again, from any client, refuses access tokens issued before it (`agents.tokens_not_before`, to the second) and deletes the old refresh tokens.
 
 **Self-hosting needs HTTPS.** OAuth requires the issuer and the MCP resource to be HTTPS anywhere but loopback (`localhost`, `127.0.0.1`), and Better Auth fails on first use otherwise, sign-in included. Put the deployment behind TLS and set `BETTER_AUTH_URL` to its `https://` address; clients must connect at exactly that address.
 
@@ -121,4 +121,5 @@ Previews are behind Vercel Authentication. To call a preview's `/mcp` from an ag
 - **Rollback**: promote a previous deployment. Migrations only move forward, so write them to be backward compatible with the previous release (add columns before using them; drop them a release later).
 - **Database branches**: Neon creates a branch per preview, so schema changes are exercised on a copy of production data before merge.
 - **Webhooks**: deliveries go out right after the change commits. The cron in `vercel.json` (every minute; Hobby plans allow only daily crons, so this needs Pro) retries failures and prunes deliveries after 7 days. A webhook disabled after repeated failures shows its reason on the Agents page; the agent re-enables it by registering again.
-- **Rate limiting**: sign-in, sign-up and OAuth client registration are rate-limited by Better Auth, with counters stored in Postgres so the limit holds across serverless instances.
+- **Rate limiting**: sign-in, sign-up, OAuth client registration (5 a minute per address) and OAuth authorize (60 a minute per address) are rate-limited by Better Auth, with counters stored in Postgres so the limit holds across serverless instances. Authorize is limited because it fetches and stores a Client ID Metadata Document client before anyone signs in.
+- **Unused OAuth clients**: anyone may register a client (`oauth_client`) without signing in. Clients over 24 hours old that no one consented to and that hold no token are deleted, up to 20 at a time, whenever a client registers or a metadata-document client authorizes; there is no job to schedule. A client deleted this way gets `invalid_client` on its next request, and registers again, or is fetched again from its metadata document, as MCP clients do.

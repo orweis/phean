@@ -1,7 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
 
-import { cimd } from "@better-auth/cimd";
+import { cimd, isCimdClientIdUrlCandidate } from "@better-auth/cimd";
 import { fetchClientMetadataResource } from "@better-auth/cimd/node";
 import { mcp } from "@better-auth/mcp";
 import { oauthProviderAuthServerMetadata } from "@better-auth/oauth-provider";
@@ -21,6 +21,7 @@ import * as authSchema from "../db/schema/auth";
 import { oauthResource } from "../db/schema/auth";
 import { resolveOAuthAgent } from "../domain/agents";
 import { findTenantBySlug } from "../domain/tenants";
+import { OAUTH_AUTHORIZE_LIMIT, pruneUnusedClients } from "./clients";
 
 const SEVEN_DAYS_IN_SECONDS = 60 * 60 * 24 * 7;
 const ONE_HOUR_IN_SECONDS = 60 * 60;
@@ -92,10 +93,14 @@ export function createAuth(database: Db, baseUrl: string) {
     hooks: {
       before: createAuthMiddleware(async (ctx) => {
         if (ctx.path === "/oauth2/authorize") {
+          // A URL client_id is a CIMD client, which authorize fetches and stores: a moment to clear out unused ones.
+          const clientId = ((ctx.query ?? ctx.body) as { client_id?: unknown } | undefined)?.client_id;
+          if (typeof clientId === "string" && isCimdClientIdUrlCandidate(clientId)) await pruneUnusedClients(database);
           await registerWorkspaceResources(database, baseUrl, requestedResources(ctx.query ?? ctx.body));
           return;
         }
         if (ctx.path !== "/oauth2/register") return;
+        await pruneUnusedClients(database);
         // Open registration is for public clients: the provider would hand anyone who asks a client secret.
         // One that names no method is registered as public, which RFC 7591 3.2.1 allows and the response states.
         const body = (ctx.body ?? {}) as { token_endpoint_auth_method?: unknown };
@@ -125,7 +130,7 @@ export function createAuth(database: Db, baseUrl: string) {
         refreshTokenReuseInterval: REFRESH_REUSE_SECONDS,
         // A DPoP-bound token carries a `cnf` that Phean's bearer check can't honour, so refuse the proof up front.
         dpop: { signingAlgorithms: [] },
-        rateLimit: { register: { window: 60, max: oauthRegisterLimit() } },
+        rateLimit: { register: { window: 60, max: oauthRegisterLimit() }, authorize: { window: 60, max: OAUTH_AUTHORIZE_LIMIT } },
         postLogin: {
           page: "/oauth/approve",
           shouldRedirect: () => false,

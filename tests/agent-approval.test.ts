@@ -10,6 +10,7 @@ import {
   agentContext,
   approveAgent,
   authenticateAgentToken,
+  canRevoke,
   createAgent,
   createSubagent,
   findLastApprovedAgent,
@@ -275,6 +276,21 @@ describe("resolving an agent", () => {
     expect(await resolveOAuthAgent(testDb.db, "ag_unknown")).toBeNull();
   });
 
+  it("refuses a token issued before the last renewal, to the second its iat can say", async () => {
+    const { agent } = await approveAgent(miaCtx, { name: "Laptop", ...grant });
+    expect((await rowOf(agent.id)).tokensNotBefore).toBeNull();
+    const before = Date.now();
+    await approveAgent(miaCtx, { name: "Laptop", ...grant, oauthClientId: "client_2" });
+    expect((await rowOf(agent.id)).tokensNotBefore!.getTime()).toBeGreaterThanOrEqual(before);
+
+    const renewedAt = new Date("2026-11-06T10:00:00.700Z");
+    await testDb.db.update(agents).set({ tokensNotBefore: renewedAt }).where(eq(agents.id, agent.id));
+    const second = Math.floor(renewedAt.getTime() / 1000);
+    expect(await resolveOAuthAgent(testDb.db, agent.id, second - 1)).toBeNull();
+    expect(await resolveOAuthAgent(testDb.db, agent.id, second)).not.toBeNull();
+    expect(await resolveOAuthAgent(testDb.db, agent.id, second + 60)).not.toBeNull();
+  });
+
   it("resumes when the approver returns", async () => {
     const { agent } = await approveAgent(miaCtx, { name: "Laptop", ...grant });
     await leave(miaCtx, mia);
@@ -429,6 +445,26 @@ describe("revoking an agent", () => {
 
     await expect(revokeAgent(miaCtx, { agentId: agent.id })).resolves.toMatchObject({ id: agent.id });
     expect((await rowOf(agent.id)).revokedAt).toBeInstanceOf(Date);
+  });
+
+  it("a member revokes one sub-agent of an agent they approved, but not another member's", async () => {
+    const { agent } = await approveAgent(miaCtx, { name: "Laptop", ...grant });
+    const { agent: worker } = await createSubagent(await signedIn(agent.id), { name: "Worker" });
+    const { agent: other } = await createSubagent(await signedIn(agent.id), { name: "Other" });
+    expect((await rowOf(worker.id)).createdByUserId).toBeNull();
+
+    const { ctx: theo } = await joinWorkspace("Theo", "member");
+    await expect(revokeAgent(theo, { agentId: worker.id })).rejects.toMatchObject({ code: "forbidden" });
+
+    await expect(revokeAgent(miaCtx, { agentId: worker.id })).resolves.toMatchObject({ id: worker.id });
+    expect((await rowOf(worker.id)).revokedAt).toBeInstanceOf(Date);
+    expect((await rowOf(other.id)).revokedAt).toBeNull();
+    expect((await rowOf(agent.id)).revokedAt).toBeNull();
+
+    // The Agents page offers Revoke by the same rule.
+    expect(canRevoke(miaCtx.actor, await rowOf(other.id), await rowOf(agent.id))).toBe(true);
+    expect(canRevoke(theo.actor, await rowOf(other.id), await rowOf(agent.id))).toBe(false);
+    expect(canRevoke(theo.actor, await rowOf(other.id), undefined)).toBe(false);
   });
 
   it("an owner revokes anyone's agent", async () => {

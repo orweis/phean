@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import type { z } from "zod";
 
 import type { ActionState } from "@/lib/action-state";
+import { ACCESS_LEVEL_META } from "@/lib/domain";
 import { authorizeRetryPath, consentScope, levelField, renewalKey, type ConsentOutcome } from "@/lib/oauth-consent";
 import { attempt } from "@/server/actions";
 import { auth, completeConsent } from "@/server/auth/auth";
@@ -11,6 +12,7 @@ import { readConsentRequest } from "@/server/auth/consent";
 import { getSession } from "@/server/auth/session";
 import { getDb } from "@/server/db/client";
 import { approveAgent, findRenewableAgent } from "@/server/domain/agents";
+import { invalid } from "@/server/domain/errors";
 import { ApproveAgentInput } from "@/server/domain/schemas";
 import { listMemberships, userContext } from "@/server/domain/tenants";
 import { formToInput } from "@/server/forms";
@@ -65,8 +67,12 @@ export async function decideConsentAction(_previous: ActionState, formData: Form
 
   const allowed = await attempt(async () => {
     const input = formToInput(fields, ApproveAgentInput) as Omit<z.input<typeof ApproveAgentInput>, "oauthClientId">;
+    // Checked before approving, so a refused choice leaves no agent behind.
+    const level = ApproveAgentInput.shape.level.safeParse(input.level);
+    const scope = level.success ? consentScope(request.scope, level.data) : undefined;
+    if (scope === null && level.success) throw invalid(`This client asked only for more than ${ACCESS_LEVEL_META[level.data].label} access. Choose a higher level, or Cancel.`);
     const { agent } = await approveAgent(ctx, { ...input, oauthClientId: request.clientId });
-    return completeConsent(auth, requestHeaders, { agentId: agent.id, oauthQuery, scope: consentScope(request.scope, agent.accessLevel) });
+    return completeConsent(auth, requestHeaders, { agentId: agent.id, oauthQuery, scope: scope ?? undefined });
   });
   return allowed.ok ? goOn(allowed.value.url, "allowed") : allowed.state;
 }

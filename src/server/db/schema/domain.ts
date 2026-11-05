@@ -108,6 +108,11 @@ export const agents = pgTable(
     createdAt: timestampTz("created_at").notNull().defaultNow(),
     lastSeenAt: timestampTz("last_seen_at"),
     revokedAt: timestampTz("revoked_at"),
+    /**
+     * When an OAuth agent was last renewed. An access token issued in an earlier second (its `iat`)
+     * is refused, so the client a renewal replaced loses its hour-long token too. Null until renewed.
+     */
+    tokensNotBefore: timestampTz("tokens_not_before"),
   },
   (t) => [
     unique("agents_tenant_id_uq").on(t.tenantId, t.id),

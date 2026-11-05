@@ -68,13 +68,18 @@ const LEVEL_SCOPE_PREFIX = "phean:";
 
 /**
  * What a token's `scope` says for the chosen level: the requested scopes at or below it, and
- * `offline_access`. It is a hint, since the agents row decides real access. Undefined leaves the
- * request as it stands: consent refuses an empty scope, and may not add one that was not requested.
+ * `offline_access`. It is a hint, since the agents row decides real access, but it never names a
+ * level above the chosen one. Consent refuses an empty scope and one that was not requested, so:
+ * `offline_access` alone when every level requested is above the chosen one; undefined, leaving the
+ * request as it stands, when it names no level; and null when it names only levels above the chosen
+ * one and nothing else, which no token can honestly carry.
  */
-export function consentScope(requested: string | null | undefined, level: AgentAccessLevel): string | undefined {
+export function consentScope(requested: string | null | undefined, level: AgentAccessLevel): string | null | undefined {
   const allowed = AGENT_ACCESS_LEVELS.slice(0, AGENT_ACCESS_LEVELS.indexOf(level) + 1).map((name) => `${LEVEL_SCOPE_PREFIX}${name}`);
-  const kept = (requested ?? "").split(" ").filter((scope) => scope === "offline_access" || allowed.includes(scope));
-  return kept.some((scope) => scope !== "offline_access") ? kept.join(" ") : undefined;
+  const scopes = (requested ?? "").split(" ").filter(Boolean);
+  if (!scopes.some((scope) => scope.startsWith(LEVEL_SCOPE_PREFIX))) return undefined;
+  const kept = scopes.filter((scope) => scope === "offline_access" || allowed.includes(scope));
+  return kept.length ? kept.join(" ") : null;
 }
 
 /**
