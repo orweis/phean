@@ -50,6 +50,13 @@
       "when": 1793800826905,
       "tag": "0006_webhook_headers",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1793864536219,
+      "tag": "0007_workflow_and_documents",
+      "breakpoints": true
     }
   ]
 }

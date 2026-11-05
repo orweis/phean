@@ -9,6 +9,7 @@ import { FlowStat } from "@/components/charts/flow-bar";
 import { Timetable } from "@/components/charts/timetable";
 import { EditGoalForm, NewGoalForm } from "@/components/goal-forms";
 import { GoalStatusActions } from "@/components/goal-status-actions";
+import { DocumentChips } from "@/components/documents/document-chips";
 import { GoalTree } from "@/components/goal-tree";
 import { MemoryList } from "@/components/memory-list";
 import { RememberForm } from "@/components/remember-form";
@@ -24,6 +25,7 @@ import { subtreeIds } from "@/lib/goal-tree";
 import { routes } from "@/lib/routes";
 import { groupByGoal, journeyTotals, windowSpan } from "@/lib/timeline";
 import { requireWorkspace } from "@/server/auth/session";
+import { listDocuments } from "@/server/domain/documents";
 import { listGoals } from "@/server/domain/goals";
 import { getGoalDetail, getJourneys } from "@/server/domain/overview";
 import { can } from "@/server/domain/policy";
@@ -45,8 +47,13 @@ export async function generateMetadata({ params }: PageProps<"/w/[slug]/goals/[i
 export default async function GoalPage({ params }: PageProps<"/w/[slug]/goals/[id]">) {
   const { slug, id } = await params;
   const { ctx } = await requireWorkspace(slug);
-  const [{ goal, ancestors, tasks, memories, activity }, goals, { window, journeys }] = await orNotFound(
-    Promise.all([loadGoalDetail(slug, id), listGoals(ctx, {}), getJourneys(ctx, { goalId: id, days: TIMETABLE_DAYS })]),
+  const [{ goal, ancestors, tasks, memories, activity }, goals, { window, journeys }, documents] = await orNotFound(
+    Promise.all([
+      loadGoalDetail(slug, id),
+      listGoals(ctx, {}),
+      getJourneys(ctx, { goalId: id, days: TIMETABLE_DAYS }),
+      listDocuments(ctx, { goalId: id, limit: 20 }),
+    ]),
   );
   const canWrite = can(ctx.actor, "task:write");
   const canDecide = can(ctx.actor, "goal:decide");
@@ -226,6 +233,14 @@ export default async function GoalPage({ params }: PageProps<"/w/[slug]/goals/[i
               )}
             </CardBody>
           </Card>
+          {documents.length > 0 && (
+            <Card>
+              <CardHeader title="Documents" description="Attached to this goal; documents on its tasks show on each task." />
+              <CardBody>
+                <DocumentChips documents={documents} slug={slug} max={20} />
+              </CardBody>
+            </Card>
+          )}
           <Card>
             <CardHeader title="Activity" />
             <CardBody>

@@ -82,12 +82,15 @@
 
   /* The four stations a task passes through, in chart order. */
   --color-station-inbox: var(--color-signal);
+  /* Parked work: a grey quieter than to do's lavender, since nothing is planned for it yet. */
+  --color-station-backlog: oklch(84% 0.015 280);
   --color-station-todo: oklch(80% 0.06 300);
   --color-station-progress: oklch(55% 0.19 292);
   --color-station-done: oklch(62% 0.13 158);
   /* Darker cuts of the waiting stations for thin timetable lines, at 3:1 on a card. */
   --color-line-inbox: oklch(64% 0.16 46);
   --color-line-todo: oklch(60% 0.07 298);
+  --color-line-backlog: oklch(62% 0.03 280);
 
   --color-focus: oklch(54% 0.2 292);
   --color-selection: oklch(50% 0.2 292 / 0.2);
@@ -349,11 +352,13 @@
       --color-arrive-ink: oklch(79% 0.12 158);
       --color-arrive-tint: oklch(28% 0.05 160);
 
+      --color-station-backlog: oklch(46% 0.02 285);
       --color-station-todo: oklch(58% 0.06 298);
       --color-station-progress: oklch(65% 0.17 292);
       --color-station-done: oklch(68% 0.13 158);
       --color-line-inbox: oklch(76% 0.15 52);
       --color-line-todo: oklch(64% 0.06 298);
+      --color-line-backlog: oklch(66% 0.03 280);
 
       --color-focus: oklch(72% 0.15 294);
       --color-selection: oklch(55% 0.19 292 / 0.4);
@@ -484,5 +489,124 @@
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+/* Documents: Markdown set in the ledger's type, with token colours in both appearances. */
+@layer components {
+  .doc-prose {
+    color: var(--color-ink);
+    font-size: var(--text-sm);
+    line-height: 1.6;
+    overflow-wrap: anywhere;
+
+    & > * + * {
+      margin-top: 0.85em;
+    }
+
+    /* Headings arrive a level down (the page's h1 is the title); their size follows the Markdown level. */
+    & :is(h2, h3, h4, h5, h6) {
+      font-weight: 600;
+      line-height: 1.3;
+      margin-top: 1.4em;
+    }
+
+    & [data-level="1"] {
+      font-size: var(--text-xl);
+      font-weight: 700;
+    }
+
+    & [data-level="2"] {
+      font-size: var(--text-lg);
+    }
+
+    & [data-level="3"] {
+      font-size: var(--text-md);
+    }
+
+    & a {
+      color: var(--color-accent-ink);
+      text-decoration-line: underline;
+      text-underline-offset: 2px;
+    }
+
+    & ul,
+    & ol {
+      padding-left: 1.4em;
+    }
+
+    & ul {
+      list-style: disc;
+    }
+
+    & ol {
+      list-style: decimal;
+    }
+
+    & li + li {
+      margin-top: 0.25em;
+    }
+
+    & li::marker {
+      color: var(--color-muted);
+    }
+
+    & blockquote {
+      border-left: 2px solid var(--color-rule);
+      padding-left: 0.85em;
+      color: var(--color-ink-2);
+    }
+
+    & code {
+      font-family: var(--font-mono);
+      font-size: 0.85em;
+      background-color: var(--color-fill);
+      border-radius: var(--radius-xs);
+      padding: 0.1em 0.3em;
+    }
+
+    & pre {
+      overflow-x: auto;
+      background-color: var(--color-fill);
+      border-radius: var(--radius-md);
+      padding: 0.75em 1em;
+    }
+
+    & pre code {
+      background: none;
+      padding: 0;
+    }
+
+    & table {
+      display: block;
+      overflow-x: auto;
+      border-collapse: collapse;
+    }
+
+    & th,
+    & td {
+      border: 1px solid var(--color-rule);
+      padding: 0.35em 0.7em;
+      text-align: left;
+    }
+
+    & th {
+      font-weight: 600;
+      background-color: var(--color-fill);
+    }
+
+    & hr {
+      border-color: var(--color-rule);
+    }
+
+    & img {
+      max-width: 100%;
+      border-radius: var(--radius-md);
+    }
+
+    & input[type="checkbox"] {
+      margin-right: 0.4em;
+      accent-color: var(--color-accent);
+    }
   }
 }

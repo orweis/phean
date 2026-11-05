@@ -7,13 +7,15 @@ export const ACTIONS = [
   "goal:decide",
   "task:write",
   "memory:write",
+  "document:write",
   "agent:manage",
   "webhook:manage",
   "member:manage",
+  "workflow:manage",
 ] as const;
 export type Action = (typeof ACTIONS)[number];
 
-const CONTRIBUTE: readonly Action[] = ["workspace:read", "goal:write", "task:write", "memory:write"];
+const CONTRIBUTE: readonly Action[] = ["workspace:read", "goal:write", "task:write", "memory:write", "document:write"];
 
 /**
  * The whole authorization model. `goal:decide` (approve, achieve, abandon) is human-only:
@@ -33,6 +35,7 @@ const DENIAL_MESSAGES: Partial<Record<Action, string>> = {
   "agent:manage": "Only workspace owners and admins can manage agent tokens.",
   "webhook:manage": "Only agents (for their own webhook) and workspace owners and admins can manage webhooks.",
   "member:manage": "Only workspace owners and admins can manage members.",
+  "workflow:manage": "Only workspace owners and admins can change the board's stages.",
 };
 
 export function can(actor: Actor, action: Action): boolean {

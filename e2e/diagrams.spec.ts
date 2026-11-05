@@ -50,7 +50,7 @@ test("the overview leads with status, the line and the goal map", async ({ page 
 test("the timeline charts how the work moved, with the numbers on request", async ({ page }) => {
   await page.goto("/w/globex/timeline");
   const flow = card(page, "How the work moved");
-  await expect(flow.locator("figure svg path")).toHaveCount(4);
+  await expect(flow.locator("figure svg path")).toHaveCount(5);
   const numbers = flow.getByRole("table", { name: "Tasks at each status at the end of each day" });
   await expect(numbers).toBeHidden();
   await flow.getByText("Show the numbers").click();
@@ -119,7 +119,8 @@ test("a goal page rolls up its sub-goals and draws its own timetable", async ({ 
 test("the board lanes follow the stations in order", async ({ page }) => {
   await page.goto("/w/globex/board");
   const lanes = page.locator("section[aria-labelledby^=lane-] h2");
-  await expect(lanes).toHaveText(["Inbox", "To do", "In progress", "Done"]);
+  await expect(lanes).toHaveText(["Inbox", "Backlog", "To do", "In progress", "Done"]);
+  await expect(lane(page, "backlog")).toContainText("Evaluate a second payroll provider");
   await expect(lane(page, "in_progress")).toContainText("Chase three overdue invoices");
 
   const done = lane(page, "done").locator("article[data-task]");

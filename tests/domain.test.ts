@@ -647,7 +647,7 @@ describe("read models", () => {
     expect([...stats.keys()]).toEqual([ws.tenant.id, quiet.id]);
     expect(stats.get(ws.tenant.id)).toMatchObject({ openTasks: 1, inbox: 1, agents: 2 });
     expect(stats.get(quiet.id)).toEqual({
-      tasksByStatus: { inbox: 0, todo: 0, in_progress: 0, done: 0, dropped: 0 },
+      tasksByStatus: { inbox: 0, backlog: 0, todo: 0, in_progress: 0, done: 0, dropped: 0 },
       goalsByStatus: { proposed: 0, active: 0, achieved: 0, abandoned: 0 },
       openTasks: 0,
       inbox: 0,
@@ -696,8 +696,8 @@ describe("read models", () => {
     await completeTask(human, { taskId: created[0]!.id });
 
     const board = await getBoard(human, { goalId: goal.id });
-    const titles = Object.fromEntries(board.columns.map((column) => [column.status, column.tasks.map((task) => task.title)]));
-    expect(titles).toEqual({ inbox: [], todo: ["Order desks"], in_progress: [], done: ["Sign lease"] });
+    const titles = Object.fromEntries(board.columns.map((column) => [column.stage.key, column.tasks.map((task) => task.title)]));
+    expect(titles).toEqual({ inbox: [], backlog: [], todo: ["Order desks"], in_progress: [], done: ["Sign lease"] });
     await expect(getBoard(human, { goalId: "g_missing" })).rejects.toMatchObject({ code: "not_found" });
   });
 
@@ -708,8 +708,8 @@ describe("read models", () => {
     await completeTask(scout, { taskId: created[2]!.id });
 
     const board = await getBoard(human, { heldBy: ws.scout.agentId });
-    const titles = Object.fromEntries(board.columns.map((column) => [column.status, column.tasks.map((task) => task.title)]));
-    expect(titles).toEqual({ inbox: [], todo: [], in_progress: ["Held"], done: [] });
+    const titles = Object.fromEntries(board.columns.map((column) => [column.stage.key, column.tasks.map((task) => task.title)]));
+    expect(titles).toEqual({ inbox: [], backlog: [], todo: [], in_progress: ["Held"], done: [] });
   });
 
   it("lists dated work soonest first and leaves out dropped tasks", async () => {
@@ -784,5 +784,122 @@ describe("read models", () => {
       ["Closer", 1, 1],
       ["Scout", 1, 0],
     ]);
+  });
+});
+
+const newTodo = async (title: string) => (await captureTasks(human, { tasks: [{ title, status: "todo" }] })).created[0]!;
+
+describe("workflow stages", () => {
+  it("starts with the built-in stages, Backlog included, and renames, hides and adds stages within a kind", async () => {
+    const { getWorkflow, saveWorkflow } = await import("@/server/domain/workflow");
+    expect((await getWorkflow(human, {})).map((stage) => stage.key)).toEqual(["inbox", "backlog", "todo", "in_progress", "done"]);
+
+    const saved = await saveWorkflow(human, {
+      stages: [
+        { key: "inbox", label: "Inbox", kind: "inbox" },
+        { key: "backlog", label: "Someday", kind: "backlog", hidden: true },
+        { key: "todo", label: "Ready", kind: "todo" },
+        { key: "in_progress", label: "Doing", kind: "in_progress" },
+        { label: "In review", kind: "in_progress" },
+        { key: "done", label: "Done", kind: "done" },
+      ],
+    });
+    expect(saved.map((stage) => [stage.key, stage.label, stage.kind, stage.hidden])).toEqual([
+      ["inbox", "Inbox", "inbox", false],
+      ["backlog", "Someday", "backlog", true],
+      ["todo", "Ready", "todo", false],
+      ["in_progress", "Doing", "in_progress", false],
+      ["in-review", "In review", "in_progress", false],
+      ["done", "Done", "done", false],
+    ]);
+    // A kind keeps its built-in stage, and work always has somewhere visible to go.
+    await expect(saveWorkflow(human, { stages: saved.filter((stage) => stage.key !== "todo") })).rejects.toMatchObject({ code: "invalid" });
+    await expect(saveWorkflow(human, { stages: saved.map((stage) => (stage.kind === "done" ? { ...stage, hidden: true } : stage)) })).rejects.toMatchObject({ code: "invalid" });
+    await expect(saveWorkflow(human, { stages: saved.map((stage) => (stage.key === "in-review" ? { ...stage, kind: "todo" as const } : stage)) })).rejects.toMatchObject({ code: "invalid" });
+  });
+
+  it("moves tasks to a stage, which sets their status, and puts them back in their kind's stage when it goes", async () => {
+    const { saveWorkflow } = await import("@/server/domain/workflow");
+    const stages = await saveWorkflow(human, {
+      stages: [
+        { key: "inbox", label: "Inbox", kind: "inbox" },
+        { key: "backlog", label: "Backlog", kind: "backlog" },
+        { key: "todo", label: "To do", kind: "todo" },
+        { key: "in_progress", label: "In progress", kind: "in_progress" },
+        { label: "Review", kind: "in_progress" },
+        { key: "done", label: "Done", kind: "done" },
+      ],
+    });
+    const task = await newTodo("Write the release notes");
+    const inReview = await updateTask(human, { taskId: task.id, stage: "review" });
+    expect(inReview).toMatchObject({ status: "in_progress", stage: "review" });
+    const [event] = await listActivity(human, { limit: 1 });
+    expect(event).toMatchObject({ summary: 'moved "Write the release notes" to Review', data: expect.objectContaining({ status: "in_progress", stage: "review" }) });
+
+    // A status alone puts it in that kind's own stage; a stage of another kind is refused.
+    await expect(updateTask(human, { taskId: task.id, stage: "review", status: "todo" })).rejects.toMatchObject({ code: "invalid" });
+    await expect(updateTask(human, { taskId: task.id, stage: "nope" })).rejects.toMatchObject({ code: "invalid" });
+    expect(await updateTask(human, { taskId: task.id, status: "backlog" })).toMatchObject({ status: "backlog", stage: null });
+    expect(await updateTask(human, { taskId: task.id, stage: "done" })).toMatchObject({ status: "done", stage: null });
+
+    await updateTask(human, { taskId: task.id, stage: "review" });
+    const board = await getBoard(human, {});
+    expect(board.columns.find((column) => column.stage.key === "review")?.tasks.map((t) => t.id)).toEqual([task.id]);
+    await saveWorkflow(human, { stages: stages.filter((stage) => stage.key !== "review") });
+    expect((await getTask(human, { taskId: task.id })).task).toMatchObject({ status: "in_progress", stage: null });
+  });
+
+  it("keeps a hidden lane on the board while tasks are still in it", async () => {
+    const { getWorkflow, saveWorkflow } = await import("@/server/domain/workflow");
+    const stages = await getWorkflow(human, {});
+    await saveWorkflow(human, { stages: stages.map((stage) => (stage.key === "backlog" ? { ...stage, hidden: true } : stage)) });
+    expect((await getBoard(human, {})).columns.map((column) => column.stage.key)).not.toContain("backlog");
+    const parked = await newTodo("Someday: a team offsite");
+    await updateTask(human, { taskId: parked.id, status: "backlog" });
+    expect((await getBoard(human, {})).columns.find((column) => column.stage.key === "backlog")?.stage.hidden).toBe(true);
+  });
+});
+
+describe("documents", () => {
+  it("attaches a draft to a task, shows it on the task, and reads it back", async () => {
+    const { attachDocument, getDocument, listDocuments } = await import("@/server/domain/documents");
+    const task = await newTodo("Reply to Globex");
+    const document = await attachDocument(scout, { title: "Draft reply", taskId: task.id, summary: "For Dana to approve", content: "# Hi Priya\n\nWe offer 5%." });
+    expect(document).toMatchObject({ format: "markdown", version: 1, createdByName: "Scout", size: 24 });
+    expect(document).not.toHaveProperty("storageKey");
+
+    const { task: view } = await getTask(human, { taskId: task.id });
+    expect(view.documents).toEqual([{ id: document.id, title: "Draft reply", format: "markdown" }]);
+    expect(await getDocument(closer, { documentId: document.id })).toMatchObject({ content: "# Hi Priya\n\nWe offer 5%." });
+    expect((await listDocuments(human, { query: "approve" })).map((d) => [d.id, d.taskTitle])).toEqual([[document.id, "Reply to Globex"]]);
+    expect(await actionsOf(human, document.id)).toEqual(["document.attached"]);
+  });
+
+  it("keeps formats honest: text in content, files as base64, and within the size limits", async () => {
+    const { attachDocument, getDocument } = await import("@/server/domain/documents");
+    await expect(attachDocument(scout, { title: "Logo", format: "png", content: "not bytes" })).rejects.toMatchObject({ code: "invalid" });
+    await expect(attachDocument(scout, { title: "Notes", format: "markdown", contentBase64: "aGk=" })).rejects.toMatchObject({ code: "invalid" });
+    await expect(attachDocument(scout, { title: "Logo", format: "png", contentBase64: "***" })).rejects.toMatchObject({ code: "invalid" });
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).toString("base64");
+    const image = await attachDocument(scout, { title: "Logo", format: "png", contentBase64: png });
+    expect(await getDocument(human, { documentId: image.id })).toMatchObject({ contentBase64: png, document: { size: 8 } });
+  });
+
+  it("versions edits, refuses one made on a stale version, and lets agents change only their own", async () => {
+    const { attachDocument, deleteDocument, getDocument, updateDocument } = await import("@/server/domain/documents");
+    const document = await attachDocument(scout, { title: "Handoff", content: "Done: A. Next: B." });
+    const edited = await updateDocument(human, { documentId: document.id, content: "Done: A, B. Next: C.", expectedVersion: 1 });
+    expect(edited).toMatchObject({ version: 2, updatedByName: "Dana" });
+    await expect(updateDocument(scout, { documentId: document.id, content: "Done: A.", expectedVersion: 1 })).rejects.toMatchObject({ code: "conflict" });
+    await expect(updateDocument(scout, { documentId: document.id, content: "Done: A, B. Next: C." })).rejects.toMatchObject({ code: "invalid" });
+    await expect(updateDocument(closer, { documentId: document.id, title: "Mine now" })).rejects.toMatchObject({ code: "forbidden" });
+    await expect(deleteDocument(closer, { documentId: document.id })).rejects.toMatchObject({ code: "forbidden" });
+    expect(await getDocument(scout, { documentId: document.id })).toMatchObject({ content: "Done: A, B. Next: C." });
+
+    // A person's document is open to agents; an agent's to people.
+    const notes = await attachDocument(human, { title: "Notes", content: "x" });
+    await expect(updateDocument(closer, { documentId: notes.id, content: "y" })).resolves.toMatchObject({ version: 2 });
+    await expect(deleteDocument(scout, { documentId: document.id })).resolves.toEqual({ deleted: document.id });
+    await expect(getDocument(human, { documentId: document.id })).rejects.toMatchObject({ code: "not_found" });
   });
 });

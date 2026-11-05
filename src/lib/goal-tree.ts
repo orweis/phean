@@ -3,9 +3,10 @@ import type { TaskStatus } from "./domain";
 
 export interface TaskCounts {
   inbox: number;
+  backlog: number;
   todo: number;
   in_progress: number;
-  /** Inbox, to do and in progress together. */
+  /** Inbox, backlog, to do and in progress together. */
   open: number;
   done: number;
   /** Open plus done; dropped tasks do not count toward progress. */
@@ -31,7 +32,7 @@ export interface TreeNode<G> {
   children: TreeNode<G>[];
 }
 
-export const EMPTY_COUNTS: TaskCounts = { inbox: 0, todo: 0, in_progress: 0, open: 0, done: 0, total: 0 };
+export const EMPTY_COUNTS: TaskCounts = { inbox: 0, backlog: 0, todo: 0, in_progress: 0, open: 0, done: 0, total: 0 };
 
 function addCounts(a: TaskCounts, b: TaskCounts): TaskCounts {
   const sum = { ...a };

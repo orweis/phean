@@ -1,12 +1,14 @@
-import { Check, ChevronsUpDown, LayoutList } from "lucide-react";
+import { Check, ChevronsUpDown, LayoutList, Settings } from "lucide-react";
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
 
 import { routes } from "@/lib/routes";
 import type { Tenant } from "@/server/domain/context";
 import { getAppearance } from "@/server/web";
 
 import { AppearancePicker } from "./appearance-picker";
+import { CloseMenusOnNavigate } from "./close-menus-on-navigate";
+import { KeyboardShortcuts, ShortcutsButton } from "./keyboard-shortcuts";
 import { Logo } from "./logo";
 import { SignOutButton } from "./sign-out-button";
 import { Avatar } from "./ui/avatar";
@@ -14,7 +16,7 @@ import { Popover } from "./ui/popover";
 
 function WorkspaceSwitcher({ current, workspaces }: { current: Tenant; workspaces: readonly Tenant[] }) {
   return (
-    <details className="group relative min-w-0">
+    <details data-menu className="group relative min-w-0">
       <summary className="flex h-8 min-w-0 list-none items-center gap-1.5 rounded-full px-3 text-sm font-semibold text-ink transition-colors duration-(--dur-micro) hover:bg-fill group-open:bg-fill [&::-webkit-details-marker]:hidden">
         <span className="truncate">{current.name}</span>
         <ChevronsUpDown className="size-3.5 shrink-0 text-muted" aria-hidden />
@@ -32,13 +34,16 @@ function WorkspaceSwitcher({ current, workspaces }: { current: Tenant; workspace
             {workspace.id === current.id && <Check className="size-3.5 text-accent-ink" aria-hidden />}
           </Link>
         ))}
-        <Link
-          href={routes.workspaces()}
-          className="mt-1 flex items-center gap-1.5 rounded-md border-t border-rule px-2.5 py-1.5 text-sm text-ink-2 hover:bg-fill"
-        >
-          <LayoutList className="size-3.5" aria-hidden />
-          All workspaces
-        </Link>
+        <div className="mt-1 border-t border-rule pt-1">
+          <Link href={routes.settings(current.slug)} className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm text-ink-2 hover:bg-fill">
+            <Settings className="size-3.5" aria-hidden />
+            Settings for {current.name}
+          </Link>
+          <Link href={routes.workspaces()} className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm text-ink-2 hover:bg-fill">
+            <LayoutList className="size-3.5" aria-hidden />
+            All workspaces
+          </Link>
+        </div>
       </div>
     </details>
   );
@@ -72,7 +77,8 @@ async function AccountMenu({ user }: { user: Viewer }) {
         </div>
       </div>
       <AppearancePicker initial={appearance} className="mt-4" />
-      <div className="mt-4 border-t border-rule pt-3">
+      <div className="mt-4 space-y-1 border-t border-rule pt-3">
+        <ShortcutsButton />
         <SignOutButton />
       </div>
     </Popover>
@@ -89,6 +95,10 @@ interface AppHeaderProps {
 export function AppHeader({ user, workspace, children }: AppHeaderProps) {
   return (
     <header className="glass-bar text-ink">
+      <KeyboardShortcuts />
+      <Suspense>
+        <CloseMenusOnNavigate />
+      </Suspense>
       <div className="mx-auto flex h-14 max-w-7xl items-center gap-2 px-4 sm:px-6">
         <Logo href={routes.workspaces()} className="shrink-0" />
         {workspace && (

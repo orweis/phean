@@ -3,14 +3,13 @@ import { and, asc, count, desc, eq, gte, inArray, isNotNull, max, ne, or, sql, t
 import {
   GOAL_STATUSES,
   OPEN_TASK_STATUSES,
-  STATIONS,
   TASK_STATUSES,
   zeroCounts,
   type GoalStatus,
-  type Station,
   type TaskStatus,
 } from "@/lib/domain";
 import { subtreeIds } from "@/lib/goal-tree";
+import { stageOf, type Stage } from "@/lib/workflow";
 import { buildJourneys, fitWindow, TIMELINE_AHEAD_DAYS, timeWindow, type Journey, type TimeWindow } from "@/lib/timeline";
 
 import type { Db } from "../db/client";
@@ -26,6 +25,7 @@ import { assertCan } from "./policy";
 import { BoardInput, Empty, GoalRefInput, GoalScopeInput, JourneysInput } from "./schemas";
 import { service } from "./service";
 import { byUrgency, isAwaitingInput, isDueWithinWeek, isOpenTask, isOverdue, selectTaskViews, type TaskView } from "./tasks";
+import { loadWorkflow } from "./workflow";
 
 export interface WorkspaceStats {
   tasksByStatus: Record<TaskStatus, number>;
@@ -197,8 +197,14 @@ async function goalScope(ctx: Ctx, goalId: string | undefined): Promise<SQL | un
   return inArray(tasks.goalId, subtreeIds(hierarchy, goalId));
 }
 
+export interface BoardColumn {
+  stage: Stage;
+  tasks: TaskView[];
+}
+
 export interface Board {
-  columns: { status: Station; tasks: TaskView[] }[];
+  /** One lane per visible stage in flow order, plus any hidden stage that still holds tasks. */
+  columns: BoardColumn[];
 }
 
 const BOARD_OPEN_LIMIT = 500;
@@ -217,12 +223,13 @@ export const getBoard = service(BoardInput, async (ctx, { goalId, doneLimit, hel
           .orderBy(desc(tasks.completedAt))
           .limit(doneLimit),
   ]);
-  return {
-    columns: STATIONS.map((status) => ({
-      status,
-      tasks: status === "done" ? done : open.filter((task) => task.status === status),
-    })),
-  };
+  const workflow = await loadWorkflow(ctx);
+  const columns = workflow.map((stage) => ({ stage, tasks: [] as TaskView[] }));
+  for (const task of [...open, ...done]) {
+    const home = stageOf(workflow, task);
+    columns.find((column) => column.stage.key === home?.key)?.tasks.push(task);
+  }
+  return { columns: columns.filter((column) => !column.stage.hidden || column.tasks.length > 0) };
 });
 
 /** Tasks with due dates, soonest first, for timeline views. */

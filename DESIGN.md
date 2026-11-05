@@ -32,11 +32,13 @@ colors:
   arrive: "oklch(58% 0.13 158)"
   arrive-ink: "oklch(44% 0.1 158)"
   arrive-tint: "oklch(95.6% 0.032 160)"
+  station-backlog: "oklch(84% 0.015 280)"
   station-todo: "oklch(80% 0.06 300)"
   station-progress: "oklch(55% 0.19 292)"
   station-done: "oklch(62% 0.13 158)"
   line-inbox: "oklch(64% 0.16 46)"
   line-todo: "oklch(60% 0.07 298)"
+  line-backlog: "oklch(62% 0.03 280)"
   focus: "oklch(54% 0.2 292)"
   dusk: "oklch(27% 0.09 292)"
   dusk-2: "oklch(34% 0.11 292)"
@@ -75,10 +77,12 @@ colors:
   dark-arrive: "oklch(68% 0.13 158)"
   dark-arrive-ink: "oklch(79% 0.12 158)"
   dark-arrive-tint: "oklch(28% 0.05 160)"
+  dark-station-backlog: "oklch(46% 0.02 285)"
   dark-station-todo: "oklch(58% 0.06 298)"
   dark-station-progress: "oklch(65% 0.17 292)"
   dark-station-done: "oklch(68% 0.13 158)"
   dark-line-todo: "oklch(64% 0.06 298)"
+  dark-line-backlog: "oklch(66% 0.03 280)"
   dark-focus: "oklch(72% 0.15 294)"
   dark-hill: "oklch(63% 0.17 292)"
   dark-dusk: "oklch(23% 0.07 292)"
@@ -278,7 +282,7 @@ A cool lavender ground under a violet brand, with one ember signal and four stat
 - **Honey** (`wait`, `wait-ink`, `wait-tint`): what waits on a person (goals awaiting a decision, and agent questions: the Waiting on you badge, the question under it on a card, the rule beside it on the overview), high priority, read-only access.
 - **Moving** (`move`, `move-ink`, `move-tint`): in-progress work, active goals and agent claims. It is the violet, by reference, so moving work and the brand are one hue.
 - **Arrived green** (`arrive`, `arrive-ink`, `arrive-tint`): done tasks, achieved goals, active agents.
-- **The four stations**: inbox is ember (`station-inbox`), to do is lavender (`station-todo`), in progress is violet (`station-progress`), and done is green (`station-done`). Thin timetable lines use the darker cuts `line-inbox` and `line-todo`, which keep 3:1 against a card.
+- **The five stations**: inbox is ember (`station-inbox`), backlog is a quiet grey (`station-backlog`), to do is lavender (`station-todo`), in progress is violet (`station-progress`), and done is green (`station-done`). Thin timetable lines use the darker cuts `line-inbox`, `line-backlog` and `line-todo`, which keep 3:1 against a card; backlog's line is dotted, since nothing is planned for it yet. A workspace's own stages take the colour of their kind: a "Review" stage inside In progress is violet.
 
 ### Neutral
 
@@ -419,6 +423,18 @@ Glass floats with a 16px corner that grow in from their anchor (220ms, from 97% 
 ### Status region
 
 One polite `role="status"` region per workspace, a glass float at the bottom centre of the screen. Actions say what they did there, naming the object, with Undo when the reverse exists; a notice stays about six seconds, longer while it is hovered or holds focus, and Undo is reachable with Tab. The background refresh speaks there too, only when something new waits on the person, and at most once a minute.
+
+### Board stages and Settings
+
+The board's lanes are the workspace's stages, edited on the Settings page (from the workspace menu, never the tab rail, so configuration stays out of the daily view). Each stage takes its kind's station colour on its rail; a hidden lane that still holds tasks says "Hidden". More than four lanes scroll sideways on a wide screen rather than squeeze. A card's ⋯ menu lists every visible stage under "Move to", so a phone or a narrow lane can still go from Inbox straight to Done.
+
+### Documents
+
+A document reads like a page of the ledger: its title as the page's headline (Markdown headings sit a level below it), Markdown set in the body face with token colours, tables ruled in hairlines, code on `fill`, and Mermaid diagrams drawn on a panel in the appearance's own theme, with their source one click away. On a task, each document is a quiet `fill` chip with a document icon and no arrow, since it stays inside Phean. The editor is a monospace field with a live preview beside it on wide screens and a Write and Preview switch on phones.
+
+### Keyboard shortcuts
+
+`?` opens a legend of every shortcut as a glass sheet (it is also in the account menu). Keys are shown as small `kbd` capsules in a hairline outline. Shortcuts never fire while focus is in a field.
 
 ### Toolbar filters and search
 

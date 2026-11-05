@@ -14,7 +14,9 @@ import {
   type RequestOutcome,
   type TaskLink,
 } from "@/lib/agent-sessions";
-import { isOpenTaskStatus, OPEN_TASK_STATUSES, SOURCE_META, TASK_STATUS_META } from "@/lib/domain";
+import { isOpenTaskStatus, OPEN_TASK_STATUSES, SOURCE_META, TASK_STATUS_META, type TaskStatus } from "@/lib/domain";
+import type { DocumentRef } from "@/lib/documents";
+import { isBuiltIn, stageLabel, type Stage } from "@/lib/workflow";
 import { truncate } from "@/lib/format";
 
 import { patchOf, publicColumns } from "../db/columns";
@@ -25,6 +27,7 @@ import { conflict, invalid, notFound } from "./errors";
 import { recordEvent, recordEvents, taskActivity, type Activity } from "./events";
 import { assertGoalsExist, findGoal } from "./goals";
 import { assertCan } from "./policy";
+import { loadWorkflow } from "./workflow";
 import {
   AnswerInput,
   RetractAnswerInput,
@@ -57,6 +60,8 @@ export type TaskView = Task & {
   parentTitle: string | null;
   subtaskCount: number;
   subtasksDone: number;
+  /** Documents attached to the task, oldest first. */
+  documents: DocumentRef[];
 };
 
 export const taskColumns = publicColumns(tasks, ["tenantId", "search"]);
@@ -101,6 +106,9 @@ export function selectTaskViews(ctx: Ctx, where?: SQL) {
       // Dropped subtasks are not part of the work any more.
       subtaskCount: subtaskTally(sql`sub.status <> 'dropped'`),
       subtasksDone: subtaskTally(sql`sub.status = 'done'`),
+      // What lists show of each attached document: enough to mark it and link to it.
+      documents: sql<DocumentRef[]>`coalesce((select json_agg(json_build_object('id', doc.id, 'title', doc.title, 'format', doc.format) order by doc.created_at)
+        from documents as doc where doc.tenant_id = ${tasks.tenantId} and doc.task_id = ${tasks.id}), '[]'::json)`,
     })
     .from(tasks)
     .leftJoin(goals, and(eq(goals.tenantId, tasks.tenantId), eq(goals.id, tasks.goalId)))
@@ -295,11 +303,29 @@ async function capture(ctx: Ctx, drafts: z.output<typeof TaskDraft>[]): Promise<
   });
 }
 
+/**
+ * Resolves a requested stage and status into what the task stores: a stage sets the status to its
+ * kind (and is kept only when it is not the kind's own stage); a new status alone leaves any stage
+ * of the old one.
+ */
+function placement(workflow: readonly Stage[], current: Task, status: TaskStatus | undefined, stage: string | null | undefined) {
+  if (stage === undefined) return { status, stage: status !== undefined && status !== current.status ? null : undefined };
+  if (stage === null) return { status, stage: null };
+  const target = workflow.find((candidate) => candidate.key === stage);
+  if (!target) throw invalid(`There is no stage "${stage}" in this workspace. whoami lists its stages.`);
+  if (status !== undefined && status !== target.kind) throw invalid(`The "${target.label}" stage is a ${target.kind} stage, so it cannot go with status "${status}".`);
+  return { status: target.kind, stage: isBuiltIn(target) ? null : target.key };
+}
+
 export const updateTask = service(UpdateTaskInput, async (ctx, input): Promise<Task> => {
   assertCan(ctx, "task:write");
-  const { taskId, addLinks, removeLinks, ...fields } = input;
+  const { taskId, addLinks, removeLinks, ...requested } = input;
+  const current0 = await findTask(ctx, taskId);
+  const workflow = requested.stage !== undefined || requested.status !== undefined ? await loadWorkflow(ctx) : [];
+  const placed = placement(workflow, current0, requested.status, requested.stage);
+  const fields = { ...requested, status: placed.status, stage: placed.stage === current0.stage ? undefined : placed.stage };
   if (fields.links && (addLinks || removeLinks)) throw invalid("Pass links to replace them all, or addLinks and removeLinks to change some, not both.");
-  const current = await findTask(ctx, taskId);
+  const current = current0;
   if (fields.goalId) await assertGoalsExist(ctx, [fields.goalId]);
   if (fields.parentTaskId) await assertValidParent(ctx, fields.parentTaskId, current.id);
 
@@ -309,6 +335,7 @@ export const updateTask = service(UpdateTaskInput, async (ctx, input): Promise<T
   if (changed.length === 0) throw invalid("Nothing to update: pass at least one field to change.");
 
   const statusChange = fields.status !== undefined && fields.status !== current.status ? fields.status : null;
+  const moved = statusChange !== null || fields.stage !== undefined;
   if (statusChange) {
     await assertNotClaimedByOther(ctx, current);
     patch.completedAt = statusChange === "done" ? new Date() : null;
@@ -330,11 +357,11 @@ export const updateTask = service(UpdateTaskInput, async (ctx, input): Promise<T
       action: "task.updated",
       entityType: "task",
       entityId: current.id,
-      summary: statusChange
-        ? `moved "${task!.title}" to ${TASK_STATUS_META[statusChange].label}`
+      summary: moved
+        ? `moved "${task!.title}" to ${stageLabel(workflow, task!)}`
         : `updated "${task!.title}" (${changed.join(", ")})`,
       // The status lets the timeline replay where a task stood on each day.
-      data: { changed, goalId: task!.goalId, ...(statusChange && { status: statusChange }) },
+      data: { changed, goalId: task!.goalId, ...(statusChange && { status: statusChange }), ...(moved && { stage: task!.stage }) },
     });
     return task!;
   });
@@ -349,7 +376,8 @@ export const claimTask = service(ClaimTaskInput, async (ctx, { taskId, session }
     // One conditional UPDATE: concurrent claims cannot both succeed.
     const [claimed] = await tx.db
       .update(tasks)
-      .set({ claimedByAgentId: me, claimedAt: new Date(), status: "in_progress" })
+      // A task already in one of the workspace's in-progress stages ("Review") stays in it.
+      .set({ claimedByAgentId: me, claimedAt: new Date(), status: "in_progress", stage: sql`case when ${tasks.status} = 'in_progress' then ${tasks.stage} else null end` })
       .where(
         and(
           inTenant(tx, tasks),
@@ -590,6 +618,7 @@ export const releaseTask = service(TaskRefInput, async (ctx, { taskId }): Promis
         claimedAt: null,
         ...closeOpenRequest(),
         status: current.status === "in_progress" ? "todo" : current.status,
+        stage: current.status === "in_progress" ? null : current.stage,
       })
       .where(tenantRow(tx, tasks, taskId))
       .returning(taskColumns);
@@ -617,7 +646,7 @@ export const completeTask = service(CompleteTaskInput, async (ctx, { taskId, not
   return inTransaction(ctx, async (tx) => {
     const [task] = await tx.db
       .update(tasks)
-      .set({ status: "done", completedAt: new Date(), claimedByAgentId: null, claimedAt: null, ...closeOpenRequest(), description })
+      .set({ status: "done", stage: null, completedAt: new Date(), claimedByAgentId: null, claimedAt: null, ...closeOpenRequest(), description })
       .where(tenantRow(tx, tasks, taskId))
       .returning(taskColumns);
     await recordEvent(tx, {

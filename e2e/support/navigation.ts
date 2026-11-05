@@ -8,6 +8,7 @@ const TABS = {
   Board: routes.board,
   Timeline: routes.timeline,
   Memory: routes.memory,
+  Documents: routes.documents,
   Search: routes.search,
   Agents: routes.agents,
   Members: routes.members,

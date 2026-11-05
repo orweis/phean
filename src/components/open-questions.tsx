@@ -8,6 +8,7 @@ import type { TaskView } from "@/server/domain/tasks";
 
 import { ResumeLink, ResumePopover, TaskLinks } from "./agent-sessions";
 import { DecisionKeys } from "./decision-keys";
+import { DocumentChips } from "./documents/document-chips";
 import { GoalLink } from "./goal-link";
 import { ActionButton } from "./ui/action-button";
 import { ActionForm } from "./ui/action-form";
@@ -177,11 +178,13 @@ export function OpenQuestions({
                 </div>
                 {request.context && <p className="mt-2.5 text-sm whitespace-pre-line text-ink-2">{request.context}</p>}
                 <TaskLinks links={request.links} className="mt-2.5" />
+                <DocumentChips documents={task.documents} slug={slug} className="mt-2" />
               </>
             ) : (
               <>
                 {request.context && <p className="mt-2 text-sm whitespace-pre-line text-ink-2">{request.context}</p>}
                 <TaskLinks links={request.links} className="mt-2.5" />
+                <DocumentChips documents={task.documents} slug={slug} className="mt-2" />
                 <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-2">
                   <Resume session={session} prominent />
                   {canAnswer && <OtherAnswer taskId={task.id} slug={slug} request={request} />}

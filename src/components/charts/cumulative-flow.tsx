@@ -10,7 +10,7 @@ import { FlowLegend } from "./flow-bar";
 import { describeCounts, STATION_STYLE } from "./stations";
 
 /** Bottom to top: finished work is the floor the open stations ride on. */
-const LAYERS: readonly Station[] = ["done", "in_progress", "todo", "inbox"];
+const LAYERS: readonly Station[] = ["done", "in_progress", "todo", "backlog", "inbox"];
 const LEGEND_ORDER: readonly Station[] = [...LAYERS].reverse();
 /** Days with tasks on the line before the flow is drawn; fewer show no trend. */
 const MIN_HISTORY_DAYS = 3;

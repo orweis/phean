@@ -1,4 +1,4 @@
-import { Bot, CalendarClock, Check, CornerDownRight, Ellipsis, ListChecks, Trash2, Unlock } from "lucide-react";
+import { ArrowRight, Bot, CalendarClock, Check, CornerDownRight, Ellipsis, ListChecks, Trash2, Unlock } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
@@ -7,20 +7,24 @@ import { webUrl } from "@/lib/agent-sessions";
 import { cx } from "@/lib/cx";
 import { isLate, isOpenTaskStatus, PRIORITY_META, SOURCE_META, TASK_STATUS_META, type TaskStatus } from "@/lib/domain";
 import { formatDueDate, relativeDue, truncate } from "@/lib/format";
+import { stageLabel, stageOf, visibleStages, type Workflow } from "@/lib/workflow";
 import type { TaskView } from "@/server/domain/tasks";
+import { workspaceWorkflow } from "@/server/web";
 
 import { OutsideLink, QuestionNote, ResumePopover, TaskLinks, WaitingBadge } from "./agent-sessions";
+import { DocumentChips } from "./documents/document-chips";
 import { EditTaskPopover } from "./edit-task-form";
 import { GoalLink } from "./goal-link";
 import type { GoalOption } from "./goal-options";
 import { ActionButton } from "./ui/action-button";
-import { MetaBadge } from "./ui/badge";
+import { Badge, MetaBadge } from "./ui/badge";
 import { Popover } from "./ui/popover";
 import type { UndoSpec } from "./ui/status-region";
 
 /** The one-click next step for each status; "done" goes through complete so it is logged as completion. */
 const NEXT_STEP: Partial<Record<TaskStatus, { label: string; status: TaskStatus; notice: (title: string) => string }>> = {
   inbox: { label: "Accept", status: "todo", notice: (title) => `Moved ${title} to To do` },
+  backlog: { label: "Plan", status: "todo", notice: (title) => `Planned ${title}` },
   todo: { label: "Start", status: "in_progress", notice: (title) => `Started ${title}` },
   in_progress: { label: "Done", status: "done", notice: (title) => `Done: ${title}` },
   done: { label: "Reopen", status: "todo", notice: (title) => `Reopened ${title}` },
@@ -33,19 +37,19 @@ const CARD_EXCERPT = 80;
 /** A task's title as the status region quotes it. */
 const quoted = (task: TaskView) => `“${truncate(task.title, 60)}”`;
 
-/** The move that puts a task back where it stood: complete it again, or set its old status. */
-export function moveBack(task: Pick<TaskView, "id" | "status" | "title">, restored: string): UndoSpec {
-  return task.status === "done"
-    ? { action: completeTaskAction, fields: { taskId: task.id }, done: restored }
-    : { action: updateTaskAction, fields: { taskId: task.id, status: task.status }, done: restored };
+/** The move that puts a task back where it stood: its own stage, or its old status when dropped. */
+export function moveBack(task: Pick<TaskView, "id" | "status" | "stage">, workflow: Workflow, restored: string): UndoSpec {
+  const stage = stageOf(workflow, task);
+  return { action: updateTaskAction, fields: { taskId: task.id, ...(stage ? { stage: stage.key } : { status: task.status }) }, done: restored };
 }
 
 /** The next step, as the one prominent action of a task; the rest wait in its ⋯ menu. */
-function NextStep({ task, slug }: { task: TaskView; slug: string }) {
+async function NextStep({ task, slug }: { task: TaskView; slug: string }) {
   const next = NEXT_STEP[task.status];
   if (!next) return null;
   const taskId = task.id;
-  const back = moveBack(task, `${quoted(task)} is back in ${TASK_STATUS_META[task.status].label}.`);
+  const workflow = await workspaceWorkflow(slug);
+  const back = moveBack(task, workflow, `${quoted(task)} is back in ${stageLabel(workflow, task)}.`);
   return next.status === "done" ? (
     <ActionButton
       action={completeTaskAction}
@@ -76,15 +80,39 @@ function NextStep({ task, slug }: { task: TaskView; slug: string }) {
 }
 
 /**
- * Release and Drop, the rare moves, behind one ghost ⋯ that is always visible. Drop is undone
- * from the status region rather than confirmed, since it is frequent and fully reversible.
+ * Every other move, behind one ghost ⋯ that is always visible: straight to any stage (inbox to done
+ * in one step, which a narrow lane or a phone has no room to show as buttons), then Release and
+ * Drop. Each is undone from the status region rather than confirmed, since all are reversible.
  */
-function MoreActions({ task, slug }: { task: TaskView; slug: string }) {
+async function MoreActions({ task, slug }: { task: TaskView; slug: string }) {
   const taskId = task.id;
   const canDrop = isOpenTaskStatus(task.status);
-  if (!task.claimedByName && !canDrop) return null;
+  const workflow = await workspaceWorkflow(slug);
+  const here = stageOf(workflow, task);
+  const back = moveBack(task, workflow, `${quoted(task)} is back in ${stageLabel(workflow, task)}.`);
+  const targets = visibleStages(workflow).filter((stage) => stage.key !== here?.key);
   return (
     <Popover menu variant="ghost" label={<Ellipsis aria-hidden />} triggerLabel={`More actions for ${task.title}`} triggerClassName="px-2">
+      <p className="px-2.5 pt-1 pb-1 text-xs text-muted">Move to</p>
+      <div role="group" aria-label="Move to">
+        {targets.map((stage) => (
+          <ActionButton
+            key={stage.key}
+            action={updateTaskAction}
+            workspace={slug}
+            fields={{ taskId, stage: stage.key }}
+            notice={`Moved ${quoted(task)} to ${stage.label}`}
+            undo={back}
+            closeOnSuccess
+            size="menu"
+            variant="ghost"
+          >
+            <ArrowRight aria-hidden />
+            {stage.label}
+          </ActionButton>
+        ))}
+      </div>
+      {(task.claimedByName || canDrop) && <div className="my-1 border-t border-rule" />}
       {task.claimedByName && (
         <ActionButton
           action={releaseTaskAction}
@@ -105,7 +133,7 @@ function MoreActions({ task, slug }: { task: TaskView; slug: string }) {
           workspace={slug}
           fields={{ taskId, status: "dropped" }}
           notice={`Dropped ${quoted(task)}`}
-          undo={moveBack(task, `Restored ${quoted(task)}.`)}
+          undo={back}
           exits
           closeOnSuccess
           size="menu"
@@ -130,6 +158,12 @@ function SourceLabel({ task }: { task: TaskView }) {
   ) : (
     <span>{label}</span>
   );
+}
+
+/** Where a task stands, named as the workspace names its stage ("In review"), in its kind's tone. */
+async function StageBadge({ task, slug }: { task: TaskView; slug: string }) {
+  const workflow = await workspaceWorkflow(slug);
+  return <Badge tone={TASK_STATUS_META[task.status].tone}>{stageLabel(workflow, task)}</Badge>;
 }
 
 /** "Nov 2 · 2 days late", the due date as compact rows show it, inline with the title. */
@@ -232,6 +266,7 @@ export function TaskCard({ task, slug, canWrite, showGoal = true, goals = [] }: 
         <TaskMeta task={task} slug={slug} showGoal={showGoal} />
       </div>
       <TaskLinks links={task.links} className="mt-2" />
+      <DocumentChips documents={task.documents} slug={slug} className="mt-2" />
       {task.inputRequest && <QuestionNote request={task.inputRequest} className="mt-2" />}
       <TaskActionRow task={task} slug={slug} canWrite={canWrite} goals={goals} className="mt-2.5" />
     </article>
@@ -268,10 +303,11 @@ export function TaskRow({ task, slug, canWrite, showGoal = true, goals = [], lea
       <div className="min-w-0 flex-1 basis-56">
         <TaskTitle task={task} after={lead && task.dueDate ? <span className="sm:hidden"><InlineDue dueDate={task.dueDate} late={isLate(task)} /></span> : undefined} />
         <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
-          <MetaBadge meta={TASK_STATUS_META} value={task.status} />
+          <StageBadge task={task} slug={slug} />
           <TaskMeta task={task} slug={slug} showGoal={showGoal} showDue={showDue} />
         </div>
         <TaskLinks links={task.links} className="mt-1.5" />
+        <DocumentChips documents={task.documents} slug={slug} className="mt-1.5" />
       </div>
       <TaskActionRow task={task} slug={slug} canWrite={canWrite} goals={goals} />
     </li>

@@ -169,7 +169,7 @@ export function statusAt(journey: Journey, at: Date): TaskStatus | undefined {
 }
 
 export interface Segment {
-  status: "inbox" | "todo" | "in_progress";
+  status: "inbox" | "backlog" | "todo" | "in_progress";
   /** Fractions of the window, 0 to 1. */
   from: number;
   to: number;

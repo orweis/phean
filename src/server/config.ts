@@ -42,3 +42,13 @@ export function oauthProviders(): { github?: OAuthCredentials; google?: OAuthCre
     google: pick(process.env.GOOGLE_CLIENT_ID, process.env.GOOGLE_CLIENT_SECRET),
   };
 }
+
+/**
+ * Where document bytes live. A Vercel Blob store (private access) when its read-write token is set,
+ * the database otherwise: local development, tests, and a deployment without a store connected.
+ */
+export function blobStoreConfig(): { driver: "vercel-blob"; token: string } | { driver: "database" } {
+  const token = process.env.BLOB_READ_WRITE_TOKEN;
+  if (process.env.PHEAN_BLOB_DRIVER !== "database" && token) return { driver: "vercel-blob", token };
+  return { driver: "database" };
+}
