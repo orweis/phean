@@ -2,13 +2,13 @@ import { createHash, randomBytes } from "node:crypto";
 
 import { and, asc, count, eq, isNull, lt, or, sql } from "drizzle-orm";
 
-import { AGENT_TOKEN_PREFIX, LIMITS } from "@/lib/domain";
+import { AGENT_TOKEN_PREFIX, LIMITS, lowerLevel, type AgentAccessLevel } from "@/lib/domain";
 
 import type { Db } from "../db/client";
 import { publicColumns } from "../db/columns";
 import { newId } from "../db/ids";
 import { agents, organization, type AgentRow } from "../db/schema";
-import { inTenant, inTransaction, type Ctx, type Tenant } from "./context";
+import { agentRole, inTenant, inTransaction, type Ctx, type Tenant } from "./context";
 import { conflict, forbidden, invalid, notFound } from "./errors";
 import { recordEvent } from "./events";
 import { assertCan } from "./policy";
@@ -66,6 +66,7 @@ async function issue(ctx: Ctx, values: { name: string; parent?: Agent; purpose?:
         name: values.name,
         tokenHash,
         tokenPrefix,
+        accessLevel: values.parent ? lowerLevel(values.parent.accessLevel, "write") : "write",
         parentAgentId: values.parent?.id ?? null,
         purpose: values.purpose ?? "",
         createdByUserId: tx.actor.type === "user" ? tx.actor.id : null,
@@ -84,7 +85,7 @@ async function issue(ctx: Ctx, values: { name: string; parent?: Agent; purpose?:
 
 /** Creates an agent identity, optionally as another agent's sub-agent. The plaintext token is returned once and never stored. */
 export const createAgent = service(CreateAgentInput, async (ctx, { name, parentAgentId }): Promise<{ agent: Agent; token: string }> => {
-  assertCan(ctx, "agent:manage");
+  assertCan(ctx, "agent:issue_key");
   const parent = parentAgentId ? await parentFor(ctx, parentAgentId) : undefined;
   return issue(ctx, { name, parent });
 });
@@ -133,7 +134,7 @@ export const revokeAgent = service(AgentRefInput, async (ctx, { agentId }): Prom
 });
 
 export interface AgentPrincipal {
-  agent: { id: string; name: string };
+  agent: { id: string; name: string; level: AgentAccessLevel };
   tenant: Tenant;
 }
 
@@ -146,6 +147,7 @@ export async function authenticateAgentToken(db: Db, token: string): Promise<Age
     .select({
       agentId: agents.id,
       agentName: agents.name,
+      agentLevel: agents.accessLevel,
       tenantId: organization.id,
       tenantSlug: organization.slug,
       tenantName: organization.name,
@@ -167,7 +169,7 @@ export async function authenticateAgentToken(db: Db, token: string): Promise<Age
     );
 
   return {
-    agent: { id: row.agentId, name: row.agentName },
+    agent: { id: row.agentId, name: row.agentName, level: row.agentLevel },
     tenant: { id: row.tenantId, slug: row.tenantSlug, name: row.tenantName },
   };
 }
@@ -218,6 +220,7 @@ export async function resolveNamedSubagent(db: Db, principal: AgentPrincipal, ra
           tokenHash: key,
           tokenPrefix: parent.tokenPrefix,
           parentAgentId: parent.id,
+          accessLevel: lowerLevel(parent.accessLevel, "write"),
           sharesParentKey: true,
           lastSeenAt: new Date(),
         })
@@ -241,13 +244,13 @@ export async function resolveNamedSubagent(db: Db, principal: AgentPrincipal, ra
     .update(agents)
     .set({ lastSeenAt: new Date() })
     .where(and(eq(agents.id, sub.id), or(isNull(agents.lastSeenAt), lt(agents.lastSeenAt, sql`now() - ${LAST_SEEN_RESOLUTION}`))));
-  return { agent: { id: sub.id, name: sub.name }, tenant: principal.tenant };
+  return { agent: { id: sub.id, name: sub.name, level: sub.accessLevel }, tenant: principal.tenant };
 }
 
 export function agentContext(db: Db, principal: AgentPrincipal): Ctx {
   return {
     db,
     tenant: principal.tenant,
-    actor: { type: "agent", id: principal.agent.id, name: principal.agent.name, role: "agent" },
+    actor: { type: "agent", id: principal.agent.id, name: principal.agent.name, role: agentRole(principal.agent.level) },
   };
 }

@@ -44,6 +44,24 @@ export type ActorType = (typeof ACTOR_TYPES)[number];
 export const MEMBER_ROLES = ["owner", "admin", "member"] as const;
 export type MemberRole = (typeof MEMBER_ROLES)[number];
 
+/** How much an agent may do: read the workspace, contribute to it, or also manage other agents. */
+export const AGENT_ACCESS_LEVELS = ["read", "write", "admin"] as const;
+export type AgentAccessLevel = (typeof AGENT_ACCESS_LEVELS)[number];
+
+/** How long an agent's approval lasts, in days. There is no "never". */
+export const AGENT_LIFETIME_DAYS = [1, 7, 30, 90, 365] as const;
+export const DEFAULT_AGENT_LIFETIME_DAYS = 30;
+
+/** The levels a person of this role may grant: members stop at Write, owners and admins may grant Admin. */
+export function grantableLevels(role: MemberRole): readonly AgentAccessLevel[] {
+  return role === "member" ? ["read", "write"] : AGENT_ACCESS_LEVELS;
+}
+
+/** The lower of two levels. */
+export function lowerLevel(a: AgentAccessLevel, b: AgentAccessLevel): AgentAccessLevel {
+  return AGENT_ACCESS_LEVELS.indexOf(a) <= AGENT_ACCESS_LEVELS.indexOf(b) ? a : b;
+}
+
 export const INVITABLE_ROLES = ["member", "admin"] as const satisfies readonly MemberRole[];
 
 /** What a watch, and so a webhook delivery, can be about. */
@@ -187,6 +205,12 @@ export const MEMORY_KIND_META: Record<MemoryKind, EnumMeta> = {
   decision: { label: "Choice", tone: "neutral" },
   context: { label: "Context", tone: "neutral" },
   note: { label: "Note", tone: "neutral" },
+};
+
+export const ACCESS_LEVEL_META: Record<AgentAccessLevel, EnumMeta> = {
+  read: { label: "Read", tone: "neutral" },
+  write: { label: "Write", tone: "info" },
+  admin: { label: "Admin", tone: "warning" },
 };
 
 export const ROLE_META: Record<MemberRole | "platform_admin", EnumMeta> = {

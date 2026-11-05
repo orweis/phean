@@ -21,6 +21,7 @@ import type { AgentSession, InputAnswer, InputRequest, TaskLink } from "../../..
 import { DOCUMENT_FORMATS } from "../../../lib/documents";
 import {
   ACTOR_TYPES,
+  AGENT_ACCESS_LEVELS,
   GOAL_STATUSES,
   MEMORY_KINDS,
   PRIORITIES,
@@ -37,6 +38,8 @@ export const goalStatusEnum = pgEnum("goal_status", GOAL_STATUSES);
 export const priorityEnum = pgEnum("priority", PRIORITIES);
 export const sourceEnum = pgEnum("task_source", SOURCES);
 export const memoryKindEnum = pgEnum("memory_kind", MEMORY_KINDS);
+export const agentAuthKindEnum = pgEnum("agent_auth_kind", ["key", "oauth"]);
+export const agentAccessLevelEnum = pgEnum("agent_access_level", AGENT_ACCESS_LEVELS);
 export const actorTypeEnum = pgEnum("actor_type", ACTOR_TYPES);
 
 const tsvector = customType<{ data: string }>({
@@ -82,8 +85,15 @@ export const agents = pgTable(
     id: text("id").primaryKey(),
     tenantId: tenantId(),
     name: text("name").notNull(),
-    tokenHash: text("token_hash").notNull().unique(),
-    tokenPrefix: text("token_prefix").notNull(),
+    /** Null for an agent that signs in with OAuth: it holds no key of its own. */
+    tokenHash: text("token_hash").unique(),
+    tokenPrefix: text("token_prefix"),
+    /** `key`: a `phn_` token a person issued. `oauth`: it signed in through the OAuth flow and was approved. */
+    authKind: agentAuthKindEnum("auth_kind").notNull().default("key"),
+    accessLevel: agentAccessLevelEnum("access_level").notNull().default("write"),
+    /** When an OAuth approval lapses; null for keys. */
+    accessExpiresAt: timestampTz("access_expires_at"),
+    oauthClientId: text("oauth_client_id"),
     createdByUserId: text("created_by_user_id").references(() => user.id, { onDelete: "set null" }),
     /** The agent this one works for, when it is a sub-agent (one level deep). */
     parentAgentId: text("parent_agent_id"),
@@ -102,6 +112,10 @@ export const agents = pgTable(
   (t) => [
     unique("agents_tenant_id_uq").on(t.tenantId, t.id),
     index("agents_tenant_idx").on(t.tenantId),
+    // One live OAuth agent per person and name, so reconnecting renews instead of piling up.
+    uniqueIndex("agents_oauth_name_uq")
+      .on(t.tenantId, t.createdByUserId, t.name)
+      .where(sql`${t.authKind} = 'oauth' and ${t.revokedAt} is null`),
     foreignKey({ name: "agents_parent_fk", columns: [t.tenantId, t.parentAgentId], foreignColumns: [t.tenantId, t.id] }),
   ],
 );

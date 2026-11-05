@@ -71,6 +71,13 @@
       "when": 1793875787448,
       "tag": "0009_detected_subagents",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1793891487429,
+      "tag": "0010_bumpy_gamora",
+      "breakpoints": true
     }
   ]
 }

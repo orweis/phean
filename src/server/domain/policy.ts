@@ -9,6 +9,8 @@ export const ACTIONS = [
   "memory:write",
   "document:write",
   "agent:manage",
+  "agent:connect",
+  "agent:issue_key",
   "agent:delegate",
   "webhook:manage",
   "member:manage",
@@ -25,16 +27,20 @@ const CONTRIBUTE: readonly Action[] = ["workspace:read", "goal:write", "task:wri
 const PERMISSIONS: Record<Role, readonly Action[]> = {
   owner: ACTIONS,
   admin: ACTIONS,
-  member: [...CONTRIBUTE, "goal:decide"],
-  // An agent registers and removes its own webhook; owners and admins can remove any agent's.
-  // An agent registers its own webhook and issues tokens for its own sub-agents.
-  agent: [...CONTRIBUTE, "agent:delegate", "webhook:manage"],
+  // Members approve agents they connect, up to Write.
+  member: [...CONTRIBUTE, "goal:decide", "agent:connect"],
+  // A Read agent only looks. A Write agent registers its own webhook and issues tokens for its own
+  // sub-agents; owners and admins can remove any agent's webhook. An Admin agent also manages agents.
+  agent_read: ["workspace:read"],
+  agent_write: [...CONTRIBUTE, "agent:delegate", "webhook:manage"],
+  agent_admin: [...CONTRIBUTE, "agent:delegate", "webhook:manage", "agent:manage"],
   platform_admin: ["workspace:read"],
 };
 
 const DENIAL_MESSAGES: Partial<Record<Action, string>> = {
   "goal:decide": "Only a human can approve, complete, or abandon a goal. Ask them to review it in the Phean web app.",
   "agent:manage": "Only workspace owners and admins can manage agent tokens.",
+  "agent:issue_key": "Only workspace owners and admins can issue agent keys. Connect the agent with OAuth instead.",
   "webhook:manage": "Only agents (for their own webhook) and workspace owners and admins can manage webhooks.",
   "member:manage": "Only workspace owners and admins can manage members.",
   "workflow:manage": "Only workspace owners and admins can change the board's stages.",
