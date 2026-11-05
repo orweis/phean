@@ -13,6 +13,7 @@ import {
 } from "@/lib/agent-sessions";
 import { appearanceCookie, colorSchemeFor, parseAppearance, themeColorFor } from "@/lib/appearance";
 import { addDays, dayOf, daysBetween, isoDate, isoDayFromToday, isPastDue, startOfUtcDay, todayIso } from "@/lib/dates";
+import { faviconBadgeText } from "@/lib/favicon";
 import {
   isLate,
   isOneOf,
@@ -305,5 +306,16 @@ describe("search highlighting", () => {
     expect(cut).toContain("invoice");
     expect(cut.length).toBeLessThanOrEqual(82);
     expect(excerpt("short text", searchTerms("x"))).toBe("short text");
+  });
+});
+
+describe("the favicon badge", () => {
+  it("counts what waits, caps at 99+, and shows nothing at zero", () => {
+    expect(faviconBadgeText(0)).toBeNull();
+    expect(faviconBadgeText(-3)).toBeNull();
+    expect(faviconBadgeText(Number.NaN)).toBeNull();
+    expect(faviconBadgeText(1)).toBe("1");
+    expect(faviconBadgeText(99)).toBe("99");
+    expect(faviconBadgeText(100)).toBe("99+");
   });
 });
