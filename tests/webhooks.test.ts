@@ -1,8 +1,8 @@
 import { and, eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { webhookDeliveries, webhooks } from "@/server/db/schema";
-import { revokeAgent } from "@/server/domain/agents";
+import { agents, member, webhookDeliveries, webhooks } from "@/server/db/schema";
+import { agentContext, approveAgent, resolveOAuthAgent, revokeAgent } from "@/server/domain/agents";
 import type { Ctx } from "@/server/domain/context";
 import { inTransaction } from "@/server/domain/context";
 import { createGoal, setGoalStatus } from "@/server/domain/goals";
@@ -14,7 +14,7 @@ import { SIGNATURE_HEADER, verifySignature } from "@/server/webhooks/signing";
 import { setDispatchScheduler } from "@/server/webhooks/trigger";
 import { assertWebhookUrlSafe, isPrivateAddress } from "@/server/webhooks/url-safety";
 
-import { createTestDb, seedWorkspace, type TestDb, type Workspace } from "./support/db";
+import { addMember, asUser, createTestDb, seedUser, seedWorkspace, type TestDb, type Workspace } from "./support/db";
 
 let testDb: TestDb;
 let ws: Workspace;
@@ -417,5 +417,85 @@ describe("deliveries stay in their workspace", () => {
     expect(mine(received, url)).toEqual([]);
     const queued = await testDb.db.select().from(webhookDeliveries).where(and(eq(webhookDeliveries.tenantId, other.tenant.id)));
     expect(queued).toEqual([]);
+  });
+});
+
+describe("webhooks pause with their agent", () => {
+  const grant = { level: "write", lifetimeDays: 30, oauthClientId: "client_1" } as const;
+
+  /** An OAuth agent approved by a new member, with a webhook, following one task. */
+  async function approvedWithWebhook() {
+    const person = await seedUser(testDb.db, "Mia");
+    await addMember(testDb.db, ws.tenant, person, "member");
+    const { agent } = await approveAgent(asUser(testDb.db, ws.tenant, person, "member"), { name: "Laptop", ...grant });
+    const principal = await resolveOAuthAgent(testDb.db, agent.id);
+    const ctx = agentContext(testDb.db, principal!);
+    const url = endpoint();
+    await registerWebhook(ctx, { url });
+    const task = await todo(ctx, "Draft the launch post");
+    return { person, agent, url, task };
+  }
+  const expire = (id: string) => testDb.db.update(agents).set({ accessExpiresAt: new Date(Date.now() - 1000) }).where(eq(agents.id, id));
+  const renew = (id: string) => testDb.db.update(agents).set({ accessExpiresAt: new Date(Date.now() + 86_400_000) }).where(eq(agents.id, id));
+  const touch = (task: { id: string }, title: string) => updateTask(human, { taskId: task.id, title });
+  const rows = (webhookId?: string) => testDb.db.select().from(webhookDeliveries).where(eq(webhookDeliveries.tenantId, ws.tenant.id)).then((all) => all.filter((row) => !webhookId || row.webhookId === webhookId));
+  const hookOf = async (agentId: string) => (await testDb.db.select().from(webhooks).where(eq(webhooks.agentId, agentId)))[0]!;
+
+  it("an expired agent's webhook queues nothing and stays active", async () => {
+    const { agent, task } = await approvedWithWebhook();
+    await expire(agent.id);
+    await touch(task, "Draft the launch post v2");
+    expect(await rows()).toEqual([]);
+    expect(await hookOf(agent.id)).toMatchObject({ status: "active", consecutiveFailures: 0 });
+  });
+
+  it("renewal resumes delivery of new events", async () => {
+    const { agent, url, task } = await approvedWithWebhook();
+    await expire(agent.id);
+    await touch(task, "Draft the launch post v2");
+    await renew(agent.id);
+    await touch(task, "Draft the launch post v3");
+    const { received, deps } = receiver();
+    await dispatchDue(testDb.db, deps);
+    expect(eventsTo(received, url).map((event) => event.action)).toEqual(["task.updated"]);
+    expect(await rows()).toHaveLength(1);
+  });
+
+  it("an orphaned agent's webhook pauses, and resumes if the approver returns", async () => {
+    const { person, agent, url, task } = await approvedWithWebhook();
+    await testDb.db.delete(member).where(and(eq(member.organizationId, ws.tenant.id), eq(member.userId, person.id)));
+    await touch(task, "Draft the launch post v2");
+    expect(await rows()).toEqual([]);
+    expect(await hookOf(agent.id)).toMatchObject({ status: "active", consecutiveFailures: 0 });
+    await addMember(testDb.db, ws.tenant, person, "member");
+    await touch(task, "Draft the launch post v3");
+    const { received, deps } = receiver();
+    await dispatchDue(testDb.db, deps);
+    expect(eventsTo(received, url)).toHaveLength(1);
+  });
+
+  it("a delivery already queued when the agent expired is not sent", async () => {
+    const { agent, url, task } = await approvedWithWebhook();
+    await touch(task, "Draft the launch post v2");
+    expect(await rows()).toHaveLength(1);
+    await expire(agent.id);
+    const { received, deps } = receiver();
+    const report = await dispatchDue(testDb.db, deps);
+    expect(mine(received, url)).toEqual([]);
+    expect(report).toEqual({ batches: 0, delivered: 0, failed: 0 });
+    expect(await rows()).toMatchObject([{ status: "dead", lastError: "agent_inactive", attempts: 0 }]);
+    // Pausing is not failing: no strike toward auto-disable, no backoff, still active.
+    const hook = await hookOf(agent.id);
+    expect(hook).toMatchObject({ status: "active", consecutiveFailures: 0, lastError: null });
+    expect(hook.nextAttemptAt.getTime()).toBeLessThanOrEqual(Date.now());
+    expect((await getWebhook(human, { agentId: agent.id })).recent[0]).toMatchObject({ status: "dead", lastError: "agent_inactive" });
+  });
+
+  it("revoking still disables the webhook", async () => {
+    const { agent, task } = await approvedWithWebhook();
+    await revokeAgent(human, { agentId: agent.id });
+    await touch(task, "Draft the launch post v2");
+    expect(await hookOf(agent.id)).toMatchObject({ status: "disabled", disabledReason: "The agent was revoked." });
+    expect(await rows()).toEqual([]);
   });
 });
