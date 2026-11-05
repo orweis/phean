@@ -28,7 +28,7 @@ export function AgentWorkload({ loads, empty }: { loads: readonly AgentLoad[]; e
   return (
     <ul>
       {loads.map(({ agent, claimed, completedLast7Days }) => {
-        const status = agentStatus(agent);
+        const status = agentStatus({ ...agent, accessExpiresAt: agent.accessEndsAt });
         return (
           <li key={agent.id} className="border-b border-rule py-3 first:pt-0 last:border-b-0 last:pb-0">
             <div className="flex items-center gap-2 text-sm">

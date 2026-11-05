@@ -19,10 +19,8 @@ import {
   ACCESS_LEVEL_META,
   AGENT_CONNECTION_META,
   AGENT_STATUS_META,
-  agentAccessEnds,
   agentConnection,
   agentStatus,
-  lowerLevel,
   WEBHOOK_STATE_META,
   webhookState,
   type AgentStatus,
@@ -30,7 +28,8 @@ import {
 import { formatDay, pluralize, timeAgo } from "@/lib/format";
 import { routes } from "@/lib/routes";
 import { requireWorkspace } from "@/server/auth/session";
-import { listAgents, type Agent } from "@/server/domain/agents";
+import { mcpResourceUrl } from "@/server/config";
+import { listAgents, type ListedAgent } from "@/server/domain/agents";
 import { getAgentWorkload } from "@/server/domain/overview";
 import { can } from "@/server/domain/policy";
 import { listWebhooks, type Webhook } from "@/server/domain/webhooks";
@@ -62,12 +61,15 @@ function WhatAgentsGet() {
 export default async function AgentsPage({ params }: PageProps<"/w/[slug]/agents">) {
   const { slug } = await params;
   const { ctx } = await requireWorkspace(slug);
-  const [agents, workload, mcpUrl, hooks] = await Promise.all([
+  const [agents, workload, keyUrl, hooks] = await Promise.all([
     listAgents(ctx, {}),
     getAgentWorkload(ctx, {}),
+    // A fixed key has no audience: the database checks it on whatever host this deployment answers, so the
+    // one the person is using works. OAuth tokens are bound to the configured address, so sign-in uses that.
     absoluteUrl(routes.mcp(slug)),
     listWebhooks(ctx, {}),
   ]);
+  const signInUrl = mcpResourceUrl(slug);
   const loadById = new Map(workload.map((load) => [load.agent.id, load]));
   const hookByAgent = new Map(hooks.map((hook) => [hook.agentId, hook]));
   const canManage = can(ctx.actor, "agent:manage");
@@ -77,22 +79,23 @@ export default async function AgentsPage({ params }: PageProps<"/w/[slug]/agents
   const viewerId = ctx.actor.type === "user" ? ctx.actor.id : null;
   // Sub-agents sit right under the agent they work for.
   const byId = new Map(agents.map((agent) => [agent.id, agent]));
-  const children = new Map<string, Agent[]>();
+  const children = new Map<string, ListedAgent[]>();
   for (const agent of agents) if (agent.parentAgentId) children.set(agent.parentAgentId, [...(children.get(agent.parentAgentId) ?? []), agent]);
   const ordered = agents.filter((agent) => !agent.parentAgentId).flatMap((agent) => [agent, ...(children.get(agent.id) ?? [])]);
   const parents = agents.filter((agent) => !agent.parentAgentId && !agent.revokedAt).map(({ id, name }) => ({ id, name }));
 
-  // A sub-agent lapses with its parent and never has more access than it.
+  // The server's standing: a sub-agent lapses with its parent and never has more access than it, and an
+  // approver who left or was demoted shows here exactly as every request is told.
   const rows = ordered.map((agent) => {
     const parent = agent.parentAgentId ? byId.get(agent.parentAgentId) : undefined;
-    const endsAt = agentAccessEnds(agent, parent);
+    const endsAt = agent.accessEndsAt;
     const status = agentStatus({ ...agent, accessExpiresAt: endsAt });
     return {
       agent,
       parent,
       endsAt,
-      endsWithParent: !!parent && endsAt !== null && endsAt === parent.accessExpiresAt && endsAt !== agent.accessExpiresAt,
-      level: parent ? lowerLevel(agent.accessLevel, parent.accessLevel) : agent.accessLevel,
+      endsWithParent: !!parent && endsAt !== null && endsAt.getTime() === parent.accessExpiresAt?.getTime() && endsAt.getTime() !== agent.accessExpiresAt?.getTime(),
+      level: agent.level,
       status,
       // People revoke agents they approved; revoking a parent takes its sub-agents with it.
       revocable: status !== "revoked" && (canManage || (viewerId !== null && agent.createdByUserId === viewerId)),
@@ -126,14 +129,14 @@ export default async function AgentsPage({ params }: PageProps<"/w/[slug]/agents
               title="Fixed key for an unattended bot"
               className="sm:w-xl"
             >
-              <ConnectAgentForm slug={slug} mcpUrl={mcpUrl} parents={parents} />
+              <ConnectAgentForm slug={slug} mcpUrl={keyUrl} parents={parents} />
             </Popover>
           )
         }
       >
         <div className="grid gap-6 lg:grid-cols-3">
           <div className="min-w-0 lg:col-span-2">
-            <SignInSetup slug={slug} mcpUrl={mcpUrl} />
+            <SignInSetup slug={slug} mcpUrl={signInUrl} />
           </div>
           <div className="min-w-0 lg:border-l lg:border-rule lg:pl-6">
             <WhatAgentsGet />

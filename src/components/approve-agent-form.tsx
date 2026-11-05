@@ -3,13 +3,13 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useFormStatus } from "react-dom";
 
-import { decideConsentAction, type ConsentOutcome } from "@/app/oauth/approve/actions";
+import { decideConsentAction } from "@/app/oauth/approve/actions";
 import type { ActionState } from "@/lib/action-state";
 import { cx } from "@/lib/cx";
 import { addDays, dayOf } from "@/lib/dates";
 import { ACCESS_LEVEL_META, AGENT_LIFETIME_DAYS, DEFAULT_AGENT_LIFETIME_DAYS, LIMITS, lifetimeLabel, type AgentAccessLevel } from "@/lib/domain";
 import { formatLongDay } from "@/lib/format";
-import { renewalKey } from "@/lib/oauth-consent";
+import { consentLeavingText, levelField, renewalKey, type ConsentOutcome } from "@/lib/oauth-consent";
 
 import { ActionForm } from "./ui/action-form";
 import { Button } from "./ui/button";
@@ -17,12 +17,6 @@ import { Field, Input } from "./ui/field";
 import { RADIO_SEGMENT, SEGMENTED } from "./ui/segmented";
 
 const DEFAULT_LEVEL: AgentAccessLevel = "write";
-
-const LEAVING_TEXT: Record<ConsentOutcome, (clientName: string) => string> = {
-  allowed: (clientName) => `Connected. Go back to ${clientName}. You can close this window.`,
-  declined: () => "Cancelled. Nothing was connected. You can close this window.",
-  resume: () => "Taking you back to sign in.",
-};
 
 /** Sends the browser on. A custom scheme leaves this page on screen, so it says what happened instead of keeping a live Allow. */
 function Leaving({ navigate, text }: { navigate: string; text: string }) {
@@ -41,7 +35,7 @@ function ConsentForm({ oauthQuery, clientName, children }: { oauthQuery: string;
     <ActionForm action={decideConsentAction} quiet>
       {(state) => {
         const { navigate, outcome } = state.data ?? {};
-        if (state.status === "success" && typeof navigate === "string") return <Leaving navigate={navigate} text={LEAVING_TEXT[outcome as ConsentOutcome](clientName)} />;
+        if (state.status === "success" && typeof navigate === "string") return <Leaving navigate={navigate} text={consentLeavingText(outcome as ConsentOutcome, clientName)} />;
         return (
           <>
             <input type="hidden" name="oauthQuery" value={oauthQuery} />
@@ -85,30 +79,41 @@ export function DeclineConsentForm({ oauthQuery, clientName }: { oauthQuery: str
   );
 }
 
+/** A choice of workspace and name already known to replace a connection, and whether that agent last connected from another client. */
+export interface KnownRenewal {
+  key: string;
+  otherClient: boolean;
+}
+
 interface ApproveAgentFormProps {
   oauthQuery: string;
   clientName: string;
+  /** The client's own name: the agent name wherever this person has not approved this client before. */
   defaultName: string;
-  workspaces: readonly { slug: string; name: string; levels: readonly AgentAccessLevel[] }[];
-  /** `renewalKey`s of the choices already known to replace a connection. */
-  renewableKeys: readonly string[];
+  /** `lastName`: what this person last approved this client as in that workspace, offered so reconnecting renews it. */
+  workspaces: readonly { slug: string; name: string; levels: readonly AgentAccessLevel[]; lastName?: string }[];
+  renewals: readonly KnownRenewal[];
   /** The server's UTC day, so the end date cannot differ between server and browser. */
   today: string;
 }
 
 /**
  * Every input is controlled, because React resets a form after its action and a re-prompt must keep
- * what was chosen. The level radios share one name across the rows: there is one workspace and
- * one level to choose, and picking a level picks its row.
+ * what was chosen. Each row's levels are a radio group of their own, so arrow keys stay in that
+ * workspace; picking a level picks its row, and only the chosen row's level is posted.
  */
-export function ApproveAgentForm({ oauthQuery, clientName, defaultName, workspaces, renewableKeys, today }: ApproveAgentFormProps) {
-  const [name, setName] = useState(defaultName);
+export function ApproveAgentForm({ oauthQuery, clientName, defaultName, workspaces, renewals, today }: ApproveAgentFormProps) {
   // With a choice of workspaces nothing is preselected: which one a client reaches should be a decision.
   const [workspace, setWorkspace] = useState(workspaces.length === 1 ? workspaces[0]!.slug : null);
+  const nameFor = (slug: string | null) => workspaces.find((candidate) => candidate.slug === slug)?.lastName ?? defaultName;
+  const [name, setName] = useState(() => nameFor(workspace));
+  // Until the person types a name, choosing a workspace offers the name they last approved this client as there.
+  const [named, setNamed] = useState(false);
   const [level, setLevel] = useState(DEFAULT_LEVEL);
   const [days, setDays] = useState<number>(DEFAULT_AGENT_LIFETIME_DAYS);
 
   const pick = (slug: string, picked: AgentAccessLevel) => {
+    if (!named && slug !== workspace) setName(nameFor(slug));
     setWorkspace(slug);
     setLevel(picked);
   };
@@ -117,12 +122,25 @@ export function ApproveAgentForm({ oauthQuery, clientName, defaultName, workspac
     <ConsentForm oauthQuery={oauthQuery} clientName={clientName}>
       {(state) => {
         const key = workspace && renewalKey(workspace, name);
-        const replaces = key !== null && (renewableKeys.includes(key) || state.data?.replaces === key);
+        const known = renewals.find((renewal) => renewal.key === key);
+        const prompted = key !== null && state.data?.replaces === key;
+        const replaces = key !== null && (!!known || prompted);
+        const otherClient = known ? known.otherClient : prompted && state.data?.otherClient === true;
         return (
           <>
             <p className="mt-4 text-sm text-ink-2">Choose the one workspace it can work in.</p>
             <Field label="Agent name" htmlFor="agent-name" className="mt-4">
-              <Input id="agent-name" name="name" required maxLength={LIMITS.name} value={name} onChange={(event) => setName(event.target.value)} />
+              <Input
+                id="agent-name"
+                name="name"
+                required
+                maxLength={LIMITS.name}
+                value={name}
+                onChange={(event) => {
+                  setName(event.target.value);
+                  setNamed(true);
+                }}
+              />
             </Field>
 
             <fieldset className="mt-4">
@@ -140,7 +158,7 @@ export function ApproveAgentForm({ oauthQuery, clientName, defaultName, workspac
                         <legend className="sr-only">Access to {workspaceName}</legend>
                         {levels.map((option) => (
                           <label key={option} className={RADIO_SEGMENT}>
-                            <input type="radio" name="level" value={option} checked={selected && level === option} onChange={() => pick(slug, option)} className="sr-only" />
+                            <input type="radio" name={levelField(slug)} value={option} checked={selected && level === option} onChange={() => pick(slug, option)} className="sr-only" />
                             {ACCESS_LEVEL_META[option].label}
                           </label>
                         ))}
@@ -170,7 +188,12 @@ export function ApproveAgentForm({ oauthQuery, clientName, defaultName, workspac
 
             <input type="hidden" name="replaces" value={replaces ? key : ""} />
             <div role="status">
-              {replaces && <p className="mt-4 rounded-md bg-wait-tint px-3 py-2 text-xs text-wait-ink">You already have an agent with this name. Allowing replaces its connection.</p>}
+              {replaces && (
+                <p className="mt-4 rounded-md bg-wait-tint px-3 py-2 text-xs text-wait-ink">
+                  You already have an agent with this name. Allowing replaces its connection.
+                  {otherClient && " It last connected from a different client."}
+                </p>
+              )}
             </div>
             {/* Allow comes first in the document, so Enter in the name field means Allow; it is drawn last. */}
             <div className="mt-5 flex flex-row-reverse gap-2">

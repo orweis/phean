@@ -4,6 +4,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { DAY_MS } from "@/lib/dates";
+import { agentStatus } from "@/lib/domain";
 import { agents, events, member, oauthClient, oauthRefreshToken, user } from "@/server/db/schema";
 import {
   agentContext,
@@ -11,12 +12,15 @@ import {
   authenticateAgentToken,
   createAgent,
   createSubagent,
+  findLastApprovedAgent,
   findRenewableAgent,
+  listAgents,
   resolveNamedSubagent,
   resolveOAuthAgent,
   revokeAgent,
 } from "@/server/domain/agents";
 import type { Ctx } from "@/server/domain/context";
+import { getAgentWorkload } from "@/server/domain/overview";
 
 import { addMember, asUser, createTestDb, seedUser, seedWorkspace, type TestDb, type TestUser, type Workspace } from "./support/db";
 
@@ -469,5 +473,83 @@ describe("revoking an agent", () => {
     expect(await refreshTokensOf(bystander.id)).toBe(1);
     expect((await rowOf(worker.id)).revokedAt).toBeInstanceOf(Date);
     expect(await authenticateAgentToken(testDb.db, token)).toBeNull();
+  });
+});
+
+describe("listing an agent's standing", () => {
+  const listed = async (id: string) => (await listAgents(owner, {})).find((agent) => agent.id === id)!;
+  const statusOf = async (id: string) => {
+    const agent = await listed(id);
+    return agentStatus({ ...agent, accessExpiresAt: agent.accessEndsAt });
+  };
+
+  it("shows an agent whose approver left as not live, with its own status, until they return", async () => {
+    const { agent } = await approveAgent(miaCtx, { name: "Laptop", ...grant });
+    expect(await listed(agent.id)).toMatchObject({ live: true, level: "write" });
+    await leave(miaCtx, mia);
+    expect(await resolveOAuthAgent(testDb.db, agent.id)).toBeNull();
+    expect(await listed(agent.id)).toMatchObject({ live: false });
+    expect(await statusOf(agent.id)).toBe("approver_left");
+    await addMember(testDb.db, ws.tenant, mia, "member");
+    expect(await listed(agent.id)).toMatchObject({ live: true });
+    expect(await statusOf(agent.id)).not.toBe("approver_left");
+  });
+
+  it("lists the level a demoted approver's agent acts at, not the stored grant", async () => {
+    const { person, ctx } = await joinWorkspace("Ada", "admin");
+    const { agent } = await approveAgent(ctx, { name: "Laptop", ...grant, level: "admin" });
+    expect((await listed(agent.id)).level).toBe("admin");
+    await setRole(ctx, person, "member");
+    const row = await listed(agent.id);
+    expect(row).toMatchObject({ accessLevel: "admin", level: "write", live: true });
+    expect(row.level).toBe((await resolveOAuthAgent(testDb.db, agent.id))?.agent.level);
+  });
+
+  it("ends a sub-agent with its parent, in the list and in the overview's workload", async () => {
+    const { agent: parent } = await approveAgent(miaCtx, { name: "Lead", ...grant });
+    const { agent: sub } = await createSubagent(await signedIn(parent.id), { name: "Worker" });
+    expect((await listed(sub.id)).accessEndsAt).toEqual(parent.accessExpiresAt);
+    await expire(parent.id);
+    expect(await statusOf(sub.id)).toBe("expired");
+    const load = (await getAgentWorkload(owner, {})).find((entry) => entry.agent.id === sub.id)!;
+    expect(agentStatus({ ...load.agent, accessExpiresAt: load.agent.accessEndsAt })).toBe("expired");
+  });
+
+  it("shows a sub-agent as not live when its parent's approver leaves, and caps it at its parent's level", async () => {
+    const { agent: parent } = await approveAgent(miaCtx, { name: "Lead", ...grant });
+    const { agent: sub } = await createSubagent(await signedIn(parent.id), { name: "Worker" });
+    await testDb.db.update(agents).set({ accessLevel: "read" }).where(eq(agents.id, parent.id));
+    expect(await listed(sub.id)).toMatchObject({ accessLevel: "write", level: "read" });
+    await leave(miaCtx, mia);
+    expect(await statusOf(sub.id)).toBe("approver_left");
+    // A fixed key has no approver to lose.
+    expect(await statusOf(ws.scout.agentId)).not.toBe("approver_left");
+  });
+});
+
+describe("the agent last approved for a client", () => {
+  it("is this person's most recent approval or renewal for that client in this workspace, if not revoked", async () => {
+    expect(await findLastApprovedAgent(miaCtx, "client_1")).toBeNull();
+    const { agent: first } = await approveAgent(miaCtx, { name: "Renamed", ...grant });
+    await approveAgent(miaCtx, { name: "Elsewhere", ...grant, oauthClientId: "client_2" });
+    expect((await findLastApprovedAgent(miaCtx, "client_1"))?.name).toBe("Renamed");
+
+    const { agent: second } = await approveAgent(miaCtx, { name: "Second", ...grant });
+    expect((await findLastApprovedAgent(miaCtx, "client_1"))?.id).toBe(second.id);
+    // Renewing makes it the last approved again.
+    await approveAgent(miaCtx, { name: "Renamed", ...grant });
+    expect((await findLastApprovedAgent(miaCtx, "client_1"))?.id).toBe(first.id);
+
+    // Not someone else's, and not a revoked one.
+    expect(await findLastApprovedAgent(owner, "client_1")).toBeNull();
+    await revokeAgent(miaCtx, { agentId: first.id });
+    expect((await findLastApprovedAgent(miaCtx, "client_1"))?.id).toBe(second.id);
+  });
+
+  it("is never found from another workspace", async () => {
+    await approveAgent(miaCtx, { name: "Renamed", ...grant });
+    const other = await seedWorkspace(testDb.db);
+    await addMember(testDb.db, other.tenant, mia, "member");
+    expect(await findLastApprovedAgent(asUser(testDb.db, other.tenant, mia, "member"), "client_1")).toBeNull();
   });
 });

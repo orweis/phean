@@ -89,6 +89,15 @@ describe("agent status and connection", () => {
     expect(agentStatus({ ...agent, accessExpiresAt: past, revokedAt: past }, now)).toBe("revoked");
   });
 
+  it("is approver_left when the server says it cannot act, but revoked and expired still say why first", () => {
+    expect(agentStatus({ ...agent, live: false }, now)).toBe("approver_left");
+    expect(agentStatus({ ...agent, live: true }, now)).toBe("active");
+    expect(agentStatus({ ...agent, live: false, accessExpiresAt: past }, now)).toBe("expired");
+    expect(agentStatus({ ...agent, live: false, revokedAt: past }, now)).toBe("revoked");
+    expect(AGENT_STATUS_META.approver_left.label).toBe("Approver left");
+    expect(AGENT_STATUS_META.approver_left.tone).not.toBe(AGENT_STATUS_META.active.tone);
+  });
+
   it("gives expired its own label and tone", () => {
     expect(AGENT_STATUS_META.expired.label).toBe("Expired");
     expect(AGENT_STATUS_META.expired.tone).not.toBe(AGENT_STATUS_META.revoked.tone);

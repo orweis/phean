@@ -16,7 +16,7 @@ import { auth } from "@/server/auth/auth";
 import { readConsentRequest } from "@/server/auth/consent";
 import { getSession } from "@/server/auth/session";
 import { getDb } from "@/server/db/client";
-import { findRenewableAgent } from "@/server/domain/agents";
+import { findLastApprovedAgent, findRenewableAgent } from "@/server/domain/agents";
 import { listMemberships, userContext } from "@/server/domain/tenants";
 
 export const metadata: Metadata = { title: "Connect an agent" };
@@ -78,11 +78,22 @@ export default async function ApproveAgentPage({ searchParams }: PageProps<"/oau
       </DialogPage>
     );
   }
-  const renewable = clientName
-    ? await Promise.all(
-        memberships.map(async (membership) => ((await findRenewableAgent(userContext(getDb(), membership, session.user), clientName)) ? renewalKey(membership.tenant.slug, clientName) : null)),
-      )
-    : [];
+  // Per workspace, the name this person last approved this client under, so a renamed agent is renewed
+  // rather than doubled; then, for that name and the client's own, whether Allow would replace a connection.
+  const choices = await Promise.all(
+    memberships.map(async (membership) => {
+      const ctx = userContext(getDb(), membership, session.user);
+      const slug = membership.tenant.slug;
+      const lastName = (await findLastApprovedAgent(ctx, request.clientId))?.name;
+      const renewals = await Promise.all(
+        [...new Set([lastName, clientName])].filter((name): name is string => !!name).map(async (name) => {
+          const agent = await findRenewableAgent(ctx, name);
+          return agent && { key: renewalKey(slug, name), otherClient: agent.oauthClientId !== request.clientId };
+        }),
+      );
+      return { slug, lastName, renewals: renewals.filter((renewal) => renewal !== null) };
+    }),
+  );
 
   return (
     <DialogPage title={`Connect ${called} to Phean`}>
@@ -113,8 +124,13 @@ export default async function ApproveAgentPage({ searchParams }: PageProps<"/oau
           oauthQuery={oauthQuery}
           clientName={called}
           defaultName={clientName}
-          workspaces={memberships.map(({ tenant, role }) => ({ slug: tenant.slug, name: tenant.name, levels: grantableLevels(role) }))}
-          renewableKeys={renewable.filter((key) => key !== null)}
+          workspaces={memberships.map(({ tenant, role }, index) => ({
+            slug: tenant.slug,
+            name: tenant.name,
+            levels: grantableLevels(role),
+            lastName: choices[index]!.lastName,
+          }))}
+          renewals={choices.flatMap(({ renewals }) => renewals)}
           today={todayIso()}
         />
       )}

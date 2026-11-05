@@ -26,8 +26,10 @@ export type ConsentRequest =
  */
 export async function readConsentRequest(provider: Auth, oauthQuery: string): Promise<ConsentRequest> {
   const params = new URLSearchParams(oauthQuery);
-  const expiresAt = Number(params.get("exp"));
-  if (!params.has("sig") || !Number.isFinite(expiresAt)) return { status: "invalid" };
+  // Number() reads a missing or empty `exp` as 0, which would look long expired rather than unsigned.
+  const exp = params.get("exp") ?? "";
+  if (!params.has("sig") || !/^\d+$/.test(exp)) return { status: "invalid" };
+  const expiresAt = Number(exp);
   if (expiresAt * 1000 < Date.now()) return { status: "stale", retryPath: authorizeRetryPath(oauthQuery) };
 
   const { secret } = await provider.$context;

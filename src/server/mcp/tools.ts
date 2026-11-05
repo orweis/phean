@@ -271,18 +271,19 @@ export const TOOLS: readonly PheanTool[] = [
     name: "create_subagent",
     title: "Create sub-agent",
     description:
-      "Issue a Phean token of its own for a sub-agent you run (a worker you spawn, a specialist you delegate to), so its work is attributed to it and people see it under you on the Agents page. A sub-agent can also simply share your token and name itself with the Phean-Agent-Name header (or ?agent=Name on the MCP URL); Phean then detects it under you without a token of its own. Give it a name and a one-line purpose. The token is shown once: hand it to the sub-agent's MCP connection and never put it in chat, a task or a document. One level deep: sub-agents cannot have their own. Revoke it with revoke_subagent when its job is done.",
+      "Issue a Phean token of its own for a sub-agent you run (a worker you spawn, a specialist you delegate to), so its work is attributed to it and people see it under you on the Agents page. A sub-agent can also simply share your credential and name itself with the Phean-Agent-Name header (on a fixed key, ?agent=Name on the MCP URL works too); Phean then detects it under you without a token of its own. Give it a name and a one-line purpose. The token is shown once: hand it to the sub-agent's MCP connection and never put it in chat, a task or a document. One level deep: sub-agents cannot have their own. Revoke it with revoke_subagent when its job is done.",
     input: createSubagent.schema,
     run: async (ctx, input) => {
       const { agent, token } = await createSubagent(ctx, input);
-      return { subagent: agent, token, mcpUrl: ctx.url(routes.mcp()), note: "Shown once. Configure the sub-agent with this token as its bearer token." };
+      // A key, so the address this agent reached works for it too; the workspace's own path matches the Agents page.
+      return { subagent: agent, token, mcpUrl: ctx.url(routes.mcp(ctx.tenant.slug)), note: "Shown once. Configure the sub-agent with this token as its bearer token." };
     },
   }),
   serviceTool({
     name: "revoke_subagent",
     title: "Revoke sub-agent",
     description:
-      "Cut off one of your own sub-agents once its job is done; its past work stays attributed to it. Pass its agentId (from create_subagent or list_agents). It cannot revoke any other agent; an Admin agent uses revoke_agent for that.",
+      "Cut off one of your own sub-agents once its job is done; its past work stays attributed to it. Pass its agentId (from create_subagent, or list_agents with Admin access). With Write access it revokes only your own sub-agents. With Admin access it revokes any agent but you, like revoke_agent, which is the clearer call for that.",
     destructive: true,
     service: revokeAgent,
     key: "subagent",
@@ -291,7 +292,7 @@ export const TOOLS: readonly PheanTool[] = [
     name: "list_agents",
     title: "List agents",
     description:
-      "Admin access only. The agents connected to this workspace that are not revoked: id, name, access level, how it signs in (key or oauth), when its access ends (null for keys), its parent if it is a sub-agent, and when it was last seen. Use it to find the agentId for revoke_agent.",
+      "Admin access only. The agents connected to this workspace that are not revoked: id, name, the access level it acts at now (capped by its approver's role and its parent's level), whether it can act now (false when its access ended or its approver left the workspace), how it signs in (key or oauth), when its access ends (null for keys; a sub-agent's ends with its parent's), its parent if it is a sub-agent, and when it was last seen. Use it to find the agentId for revoke_agent.",
     adminOnly: true,
     readOnly: true,
     input: Empty,
@@ -301,9 +302,10 @@ export const TOOLS: readonly PheanTool[] = [
         .map((agent) => ({
           id: agent.id,
           name: agent.name,
-          level: agent.accessLevel,
+          level: agent.level,
+          canAct: agent.live,
           signIn: agent.authKind,
-          accessEndsAt: agent.accessExpiresAt?.toISOString() ?? null,
+          accessEndsAt: agent.accessEndsAt?.toISOString() ?? null,
           parentAgentId: agent.parentAgentId,
           purpose: agent.purpose,
           lastSeenAt: agent.lastSeenAt?.toISOString() ?? null,

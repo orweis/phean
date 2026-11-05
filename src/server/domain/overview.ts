@@ -15,7 +15,7 @@ import { buildJourneys, fitWindow, TIMELINE_AHEAD_DAYS, timeWindow, type Journey
 import type { Db } from "../db/client";
 import { countWhere } from "../db/raw";
 import { agents, events, goals, tasks } from "../db/schema";
-import { listAgents, type Agent } from "./agents";
+import { listAgents, type ListedAgent } from "./agents";
 import { inTenant, type Ctx, type Tenant } from "./context";
 import { notFound } from "./errors";
 import { listActivity, type Activity } from "./events";
@@ -285,7 +285,7 @@ export const getJourneys = service(JourneysInput, async (ctx, { goalId, days }):
 });
 
 export interface AgentLoad {
-  agent: Agent;
+  agent: ListedAgent;
   /** Open tasks the agent holds right now. */
   claimed: number;
   completedLast7Days: number;

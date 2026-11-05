@@ -236,23 +236,31 @@ export const ACCESS_LEVEL_META: Record<AgentAccessLevel, EnumMeta> = {
 /** Matches the window the workspace stats use for "active agents". */
 const ACTIVE_AGENT_WINDOW_MS = 24 * 60 * 60 * 1000;
 
-export type AgentStatus = "active" | "idle" | "expired" | "revoked";
+export type AgentStatus = "active" | "idle" | "expired" | "approver_left" | "revoked";
 
 export const AGENT_STATUS_META: Record<AgentStatus, EnumMeta> = {
   active: { label: "Active", tone: "success" },
   idle: { label: "Idle", tone: "neutral" },
   // Amber, not red: an expired agent is waiting for someone to approve it again, not cut off for cause.
   expired: { label: "Expired", tone: "warning" },
+  // Amber too: it resumes if its approver returns, or someone else connects it again.
+  approver_left: { label: "Approver left", tone: "warning" },
   revoked: { label: "Revoked", tone: "danger" },
 };
 
 /**
- * Where an agent stands: revoked, past the end of its access, or active or idle by when it was last
- * seen. For a sub-agent, pass its access end from `agentAccessEnds`, so it lapses with its parent.
+ * Where an agent stands: revoked, past the end of its access, unable to act for another reason (its
+ * approver, or its parent's, left the workspace), or active or idle by when it was last seen. For a
+ * sub-agent, pass its access end from `agentAccessEnds`, so it lapses with its parent, and `live`
+ * from the server's standing, so this never second-guesses what a request would be told.
  */
-export function agentStatus(agent: { revokedAt: Date | null; lastSeenAt: Date | null; accessExpiresAt: Date | null }, now = Date.now()): AgentStatus {
+export function agentStatus(
+  agent: { revokedAt: Date | null; lastSeenAt: Date | null; accessExpiresAt: Date | null; live?: boolean },
+  now = Date.now(),
+): AgentStatus {
   if (agent.revokedAt) return "revoked";
   if (agent.accessExpiresAt && agent.accessExpiresAt.getTime() <= now) return "expired";
+  if (agent.live === false) return "approver_left";
   return agent.lastSeenAt && now - agent.lastSeenAt.getTime() < ACTIVE_AGENT_WINDOW_MS ? "active" : "idle";
 }
 

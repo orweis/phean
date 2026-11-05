@@ -10,6 +10,7 @@ import { openTab } from "./support/navigation";
 import { OAUTH_CLIENT_STATE, oauthClient, type OAuthTestClient } from "./support/oauth-client";
 
 const REPLACES = "You already have an agent with this name. Allowing replaces its connection.";
+const OTHER_CLIENT = "It last connected from a different client.";
 
 const allow = (page: Page) => page.getByRole("button", { name: "Allow" });
 const accessTo = (page: Page, workspace: string) => page.getByRole("group", { name: `Access to ${workspace}` });
@@ -79,11 +80,39 @@ test.describe("with the demo account", () => {
     await expect(accessTo(page, "Acme Corp").getByRole("radio", { name: "Write" })).toBeChecked();
     await expect(accessTo(page, "Globex").getByRole("radio", { name: "Read" })).not.toBeChecked();
 
+    await test.step("arrow keys move between one workspace's levels and never to another workspace", async () => {
+      const levels = accessTo(page, "Acme Corp");
+      await levels.getByText("Admin", { exact: true }).click();
+      await expect(levels.getByRole("radio", { name: "Admin" })).toBeFocused();
+      await page.keyboard.press("ArrowRight");
+      await expect(levels.getByRole("radio", { name: "Read" })).toBeChecked();
+      await expect(acme).toBeChecked();
+      await expect(globex).not.toBeChecked();
+      await page.keyboard.press("ArrowLeft");
+      await expect(levels.getByRole("radio", { name: "Admin" })).toBeChecked();
+      await expect(acme).toBeChecked();
+    });
+
     await expect(page.getByRole("group", { name: "Access lasts" }).getByRole("radio", { name: "30 days" })).toBeChecked();
     await page.getByRole("group", { name: "Access lasts" }).getByText("1 year", { exact: true }).click();
     await expect(page.getByRole("group", { name: "Access lasts" }).getByRole("radio", { name: "1 year" })).toBeChecked();
     const end = new Date(Date.now() + 365 * 24 * 3600 * 1000).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
     await expect(page.getByText(`Access ends on ${end}.`)).toBeVisible();
+  });
+
+  test("the sign-in address is the deployment's own, whatever host the page was reached on", async ({ page }) => {
+    // Only the page load claims another host, as a proxy or preview alias would.
+    await page.route("**/w/globex/agents", (route) =>
+      route.request().method() === "GET" ? route.continue({ headers: { ...route.request().headers(), "x-forwarded-host": "preview.example" } }) : route.continue(),
+    );
+    await page.goto("/w/globex/agents");
+    await page.getByRole("button", { name: "Connect an agent" }).click();
+    await expect(page.getByText(`${BASE_URL}/mcp/w/globex`, { exact: true })).toBeVisible();
+    await page.getByRole("group", { name: "Client" }).getByRole("button", { name: "Claude Code" }).click();
+    await expect(page.getByText(`claude mcp add --transport http phean-globex ${BASE_URL}/mcp/w/globex`, { exact: true })).toBeVisible();
+    await expect(page.getByText(/preview\.example/)).toHaveCount(0);
+    // A fixed key has no audience, so the key form keeps the host the person used (it is in the page's data until a key is issued).
+    expect(await page.content()).toMatch(/https?:\/\/preview\.example\/mcp\/w\/globex/);
   });
 
   test("a tampered request shows an error and no form", async ({ page }) => {
@@ -255,6 +284,8 @@ test("reusing a name warns before replacing the connection", async ({ page }) =>
     const again = await oauthClient(BASE_URL);
     await openDialog(page, again);
     await expect(warning).toBeVisible();
+    // A new registration is a different client, even under the same name.
+    await expect(page.getByText(OTHER_CLIENT)).toBeVisible();
     await page.getByLabel("Agent name").fill("Another name");
     await expect(warning).toHaveCount(0);
     await page.getByLabel("Agent name").fill("Scripted Client");
@@ -269,11 +300,31 @@ test("reusing a name warns before replacing the connection", async ({ page }) =>
     await allow(page).click();
     await expect(warning).toBeVisible();
     await expect(page).toHaveURL(/\/oauth\/approve/);
+    await expect(page.getByText(OTHER_CLIENT)).toBeVisible();
     await allow(page).click();
 
     const agent = await other.connect();
     expect((await agent.call("whoami")).structuredContent).toMatchObject({ agent: { name: "Scripted Client" }, workspace: { slug: workspace.slug } });
     await agent.close();
+  });
+
+  await test.step("the same client reconnecting is offered the name it was last approved as", async () => {
+    const renamed = await oauthClient(BASE_URL, { clientName: "Renaming Client" });
+    await openDialog(page, renamed, "Renaming Client");
+    await expect(page.getByLabel("Agent name")).toHaveValue("Renaming Client");
+    await page.getByLabel("Agent name").fill("Desk agent");
+    await allow(page).click();
+    await renamed.callback();
+    // The browser lands on the client's receiver; let it finish before going back to authorize.
+    await expect(page.getByText("Connected. You can close this window.")).toBeVisible();
+
+    await page.goto(renamed.authorizationUrl);
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Connect Renaming Client to Phean");
+    await expect(page.getByLabel("Agent name")).toHaveValue("Desk agent");
+    await expect(warning).toBeVisible();
+    await expect(page.getByText(OTHER_CLIENT)).toHaveCount(0);
+    await page.getByRole("button", { name: "Cancel" }).click();
+    await expect(page).not.toHaveURL(/\/oauth\/approve/);
   });
 });
 
@@ -284,9 +335,7 @@ test("a member is not offered Admin or fixed keys, and revokes only the agents t
   const workspace = await newWorkspace(page, "Membership");
   const agentName = `Forged level ${runId()}`;
 
-  await test.step("the owner runs a bot on a fixed key, and the demo account joins as a member", async () => {
-    await openTab(page, workspace.slug, "Agents");
-    await issueToken(page, "Owner bot");
+  await test.step("the demo account joins as a member, is asked to connect the first agent, and the owner runs a bot on a fixed key", async () => {
     await openTab(page, workspace.slug, "Members");
     const panel = popover(card(page, "People"), "Invite");
     await panel.locator("summary").click();
@@ -301,7 +350,12 @@ test("a member is not offered Admin or fixed keys, and revokes only the agents t
     await theirs.goto(link);
     await theirs.getByRole("button", { name: "Accept invitation" }).click();
     await expect(theirs).toHaveURL(`/w/${workspace.slug}`);
+    // A member can connect agents, so an empty workspace leads them there.
+    await expect(theirs.getByRole("link", { name: "Connect an agent" })).toBeVisible();
     await demo.close();
+
+    await openTab(page, workspace.slug, "Agents");
+    await issueToken(page, "Owner bot");
   });
 
   const demo = await browser.newContext({ storageState: DEMO_SESSION });

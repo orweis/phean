@@ -4,7 +4,7 @@ import { headers } from "next/headers";
 import type { z } from "zod";
 
 import type { ActionState } from "@/lib/action-state";
-import { authorizeRetryPath, consentScope, renewalKey } from "@/lib/oauth-consent";
+import { authorizeRetryPath, consentScope, levelField, renewalKey, type ConsentOutcome } from "@/lib/oauth-consent";
 import { attempt } from "@/server/actions";
 import { auth, completeConsent } from "@/server/auth/auth";
 import { readConsentRequest } from "@/server/auth/consent";
@@ -14,9 +14,6 @@ import { approveAgent, findRenewableAgent } from "@/server/domain/agents";
 import { ApproveAgentInput } from "@/server/domain/schemas";
 import { listMemberships, userContext } from "@/server/domain/tenants";
 import { formToInput } from "@/server/forms";
-
-/** "resume" returns to the dialog through authorize; the others have answered the client. */
-export type ConsentOutcome = "allowed" | "declined" | "resume";
 
 /**
  * The browser goes on from the form rather than through `redirect()`: a custom scheme such as
@@ -56,10 +53,18 @@ export async function decideConsentAction(_previous: ActionState, formData: Form
   const name = String(formData.get("name") ?? "");
   const key = renewalKey(slug, name);
   // The warning has to have been on screen for this workspace and name before Allow replaces anything.
-  if (formData.get("replaces") !== key && (await findRenewableAgent(ctx, name))) return { status: "idle", data: { replaces: key }, at: Date.now() };
+  if (formData.get("replaces") !== key) {
+    const renewable = await findRenewableAgent(ctx, name);
+    if (renewable) return { status: "idle", data: { replaces: key, otherClient: renewable.oauthClientId !== request.clientId }, at: Date.now() };
+  }
+
+  // Each workspace's levels are their own radio group, so the level is the chosen row's and no other.
+  const fields = new FormData();
+  for (const field of ["name", "lifetimeDays"]) for (const value of formData.getAll(field)) fields.append(field, value);
+  for (const value of formData.getAll(levelField(slug))) fields.append("level", value);
 
   const allowed = await attempt(async () => {
-    const input = formToInput(formData, ApproveAgentInput) as Omit<z.input<typeof ApproveAgentInput>, "oauthClientId">;
+    const input = formToInput(fields, ApproveAgentInput) as Omit<z.input<typeof ApproveAgentInput>, "oauthClientId">;
     const { agent } = await approveAgent(ctx, { ...input, oauthClientId: request.clientId });
     return completeConsent(auth, requestHeaders, { agentId: agent.id, oauthQuery, scope: consentScope(request.scope, agent.accessLevel) });
   });

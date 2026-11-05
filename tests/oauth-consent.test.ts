@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { grantableLevels, LIMITS, lifetimeLabel } from "@/lib/domain";
-import { authorizeRetryPath, clientDisplayName, consentScope, redirectTarget, renewalKey } from "@/lib/oauth-consent";
+import { authorizeRetryPath, clientDisplayName, consentLeavingText, consentScope, levelField, redirectTarget, renewalKey } from "@/lib/oauth-consent";
 import { safeNextPath } from "@/lib/routes";
 import { completeConsent } from "@/server/auth/auth";
 import { readConsentRequest } from "@/server/auth/consent";
@@ -131,6 +131,22 @@ describe("renewalKey", () => {
   });
 });
 
+describe("levelField", () => {
+  it("gives each workspace its own level group", () => {
+    expect(levelField("acme")).not.toBe(levelField("globex"));
+    expect(levelField("acme")).not.toBe("level");
+  });
+});
+
+describe("consentLeavingText", () => {
+  it("names the client when connected, and does not promise sign-in when starting again", () => {
+    expect(consentLeavingText("allowed", "Cursor")).toBe("Connected. Go back to Cursor. You can close this window.");
+    expect(consentLeavingText("declined", "Cursor")).toContain("Nothing was connected");
+    expect(consentLeavingText("resume", "Cursor")).toBe("Starting the request again.");
+    expect(consentLeavingText("resume", "Cursor")).not.toMatch(/sign in/i);
+  });
+});
+
 describe("framing", () => {
   it("refuses frames on every /oauth page, the two ways browsers read it", async () => {
     const rules = await nextConfig.headers!();
@@ -185,6 +201,16 @@ describe("the signed request behind the dialog", () => {
     tampered.set("redirect_uri", "https://evil.example/cb");
     expect(await readConsentRequest(server.auth, tampered.toString())).toEqual({ status: "invalid" });
     expect(await readConsentRequest(server.auth, "")).toEqual({ status: "invalid" });
+  });
+
+  it("refuses a signature without a time limit rather than sending it back to authorize", async () => {
+    const { query } = await signedQuery();
+    for (const exp of [null, "", "soon", "-1", "1e12"]) {
+      const unsigned = new URLSearchParams(query);
+      if (exp === null) unsigned.delete("exp");
+      else unsigned.set("exp", exp);
+      expect(await readConsentRequest(server.auth, unsigned.toString())).toEqual({ status: "invalid" });
+    }
   });
 
   it("refuses a signed request for another resource, or none", async () => {

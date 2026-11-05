@@ -1,15 +1,15 @@
 import { createHash, randomBytes } from "node:crypto";
 
-import { and, asc, count, eq, isNull, lt, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, count, desc, eq, isNull, lt, or, sql, type SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
 import { addDays } from "@/lib/dates";
-import { ACCESS_LEVEL_META, AGENT_TOKEN_PREFIX, grantableLevels, highestGrantableLevel, LIMITS, lowerLevel, toMemberRole, type AgentAccessLevel } from "@/lib/domain";
+import { ACCESS_LEVEL_META, AGENT_TOKEN_PREFIX, agentAccessEnds, grantableLevels, highestGrantableLevel, LIMITS, lowerLevel, toMemberRole, type AgentAccessLevel } from "@/lib/domain";
 
 import type { Db } from "../db/client";
 import { publicColumns } from "../db/columns";
 import { newId } from "../db/ids";
-import { agents, member, oauthRefreshToken, organization, user, type AgentRow } from "../db/schema";
+import { agents, events, member, oauthRefreshToken, organization, user, type AgentRow } from "../db/schema";
 import { liveAgent } from "./agent-liveness";
 import { agentRole, inTenant, inTransaction, type Ctx, type Tenant } from "./context";
 import { conflict, forbidden, invalid, notFound } from "./errors";
@@ -33,13 +33,14 @@ export function generateAgentToken(): { token: string; tokenHash: string; tokenP
   return { token, tokenHash: hashToken(token), tokenPrefix: token.slice(0, AGENT_TOKEN_PREFIX.length + 6) };
 }
 
-export const listAgents = service(Empty, async (ctx): Promise<Agent[]> => {
+/** An agent as listed: its row, and where it stands now by the same rule every request is held to. */
+export type ListedAgent = Agent & AgentStanding;
+
+/** Every agent in the workspace, oldest first, with whether it may act now and at what level. */
+export const listAgents = service(Empty, async (ctx): Promise<ListedAgent[]> => {
   assertCan(ctx, "workspace:read");
-  return ctx.db
-    .select(agentColumns)
-    .from(agents)
-    .where(inTenant(ctx, agents))
-    .orderBy(asc(agents.createdAt));
+  const rows = await selectStanding(ctx.db, inTenant(ctx, agents)).orderBy(asc(agents.createdAt));
+  return rows.map((row) => ({ ...row.agent, ...standingOf(row) }));
 });
 
 /** Who is in the workspace, by name and role only: no emails or ids, so an agent can name people without learning more. */
@@ -135,6 +136,23 @@ export async function findRenewableAgent(ctx: Ctx, name: string): Promise<Agent 
   assertCan(ctx, "workspace:read");
   if (ctx.actor.type !== "user") return null;
   const [agent] = await ctx.db.select(agentColumns).from(agents).where(renewableBy(ctx, ctx.actor.id, name.trim()));
+  return agent ?? null;
+}
+
+/**
+ * The agent this person last approved, or renewed, for this OAuth client in this workspace, if it is
+ * still renewable. The dialog offers its name, so reconnecting an agent that was renamed renews it.
+ */
+export async function findLastApprovedAgent(ctx: Ctx, oauthClientId: string): Promise<Agent | null> {
+  assertCan(ctx, "workspace:read");
+  if (ctx.actor.type !== "user") return null;
+  const approvedAt = sql`(select max(${events.createdAt}) from ${events} where ${events.tenantId} = ${agents.tenantId} and ${events.entityType} = 'agent' and ${events.entityId} = ${agents.id} and ${events.action} in ('agent.created', 'agent.renewed'))`;
+  const [agent] = await ctx.db
+    .select(agentColumns)
+    .from(agents)
+    .where(and(inTenant(ctx, agents), eq(agents.createdByUserId, ctx.actor.id), eq(agents.oauthClientId, oauthClientId), eq(agents.authKind, "oauth"), isNull(agents.revokedAt)))
+    .orderBy(sql`${approvedAt} desc nulls last`, desc(agents.createdAt))
+    .limit(1);
   return agent ?? null;
 }
 
@@ -239,6 +257,16 @@ export interface AgentPrincipal {
   tenant: Tenant;
 }
 
+/** Where an agent stands now. Requests, the Agents page and `list_agents` all read it from `standingOf`. */
+export interface AgentStanding {
+  /** Whether `liveAgent()` holds: not revoked or lapsed, and its approver (and its parent's) still a member. */
+  live: boolean;
+  /** What it acts at: its grant, capped by its approver's current role and, for a sub-agent, by its parent's level. */
+  level: AgentAccessLevel;
+  /** When its access ends: the sooner of its own end and its parent's; null for a key. */
+  accessEndsAt: Date | null;
+}
+
 const parentAgent = alias(agents, "parent_agent");
 const approver = alias(member, "approver");
 const parentApprover = alias(member, "parent_approver");
@@ -246,6 +274,38 @@ const parentApprover = alias(member, "parent_approver");
 /** A grant, capped by what its approver can grant now. A key has no approver to cap it. */
 function grantedLevel(level: AgentAccessLevel, authKind: "key" | "oauth", approverRole: string | null): AgentAccessLevel {
   return authKind === "oauth" ? lowerLevel(level, highestGrantableLevel(toMemberRole(approverRole))) : level;
+}
+
+/** Agents with what decides their standing: their approver, their parent and its approver, and `liveAgent()` itself. */
+function selectStanding(db: Db, where: SQL | undefined) {
+  return db
+    .select({
+      agent: agentColumns,
+      live: sql<boolean>`(${liveAgent()})`,
+      approverRole: approver.role,
+      parentLevel: parentAgent.accessLevel,
+      parentAuthKind: parentAgent.authKind,
+      parentExpiresAt: parentAgent.accessExpiresAt,
+      parentApproverRole: parentApprover.role,
+      tenantId: organization.id,
+      tenantSlug: organization.slug,
+      tenantName: organization.name,
+    })
+    .from(agents)
+    .innerJoin(organization, eq(organization.id, agents.tenantId))
+    .leftJoin(approver, and(eq(approver.organizationId, agents.tenantId), eq(approver.userId, agents.createdByUserId)))
+    .leftJoin(parentAgent, and(eq(parentAgent.tenantId, agents.tenantId), eq(parentAgent.id, agents.parentAgentId)))
+    .leftJoin(parentApprover, and(eq(parentApprover.organizationId, agents.tenantId), eq(parentApprover.userId, parentAgent.createdByUserId)))
+    .where(where);
+}
+
+type StandingRow = Awaited<ReturnType<typeof selectStanding>>[number];
+
+function standingOf(row: StandingRow): AgentStanding {
+  const { agent } = row;
+  const own = grantedLevel(agent.accessLevel, agent.authKind, row.approverRole);
+  const level = row.parentLevel && row.parentAuthKind ? lowerLevel(own, grantedLevel(row.parentLevel, row.parentAuthKind, row.parentApproverRole)) : own;
+  return { live: Boolean(row.live), level, accessEndsAt: agentAccessEnds(agent, { accessExpiresAt: row.parentExpiresAt }) };
 }
 
 /** Coarse-grained so a busy agent does not write on every request. */
@@ -258,41 +318,18 @@ async function touchAgent(db: Db, agentId: string): Promise<void> {
 
 /**
  * The one way every token path turns an agent row into a principal: null unless `liveAgent()` holds,
- * and the level is the agent's grant, capped by its approver's current role and, for a sub-agent, by
- * its parent's level worked out the same way.
+ * and its level and end of access are its `standingOf`.
  */
 async function resolvePrincipal(db: Db, match: SQL | undefined): Promise<AgentPrincipal | null> {
-  const [row] = await db
-    .select({
-      id: agents.id,
-      name: agents.name,
-      level: agents.accessLevel,
-      expiresAt: agents.accessExpiresAt,
-      parentExpiresAt: parentAgent.accessExpiresAt,
-      authKind: agents.authKind,
-      approverRole: approver.role,
-      parentLevel: parentAgent.accessLevel,
-      parentAuthKind: parentAgent.authKind,
-      parentApproverRole: parentApprover.role,
-      tenantId: organization.id,
-      tenantSlug: organization.slug,
-      tenantName: organization.name,
-    })
-    .from(agents)
-    .innerJoin(organization, eq(organization.id, agents.tenantId))
-    .leftJoin(approver, and(eq(approver.organizationId, agents.tenantId), eq(approver.userId, agents.createdByUserId)))
-    .leftJoin(parentAgent, and(eq(parentAgent.tenantId, agents.tenantId), eq(parentAgent.id, agents.parentAgentId)))
-    .leftJoin(parentApprover, and(eq(parentApprover.organizationId, agents.tenantId), eq(parentApprover.userId, parentAgent.createdByUserId)))
-    .where(and(match, liveAgent()));
+  const [row] = await selectStanding(db, and(match, liveAgent()));
   if (!row) return null;
 
-  await touchAgent(db, row.id);
+  await touchAgent(db, row.agent.id);
 
-  const own = grantedLevel(row.level, row.authKind, row.approverRole);
-  const level = row.parentLevel && row.parentAuthKind ? lowerLevel(own, grantedLevel(row.parentLevel, row.parentAuthKind, row.parentApproverRole)) : own;
+  const { level, accessEndsAt } = standingOf(row);
   return {
-    agent: { id: row.id, name: row.name, level },
-    accessExpiresAt: [row.expiresAt, row.parentExpiresAt].filter((date): date is Date => !!date).sort((a, b) => a.getTime() - b.getTime())[0] ?? null,
+    agent: { id: row.agent.id, name: row.agent.name, level },
+    accessExpiresAt: accessEndsAt,
     tenant: { id: row.tenantId, slug: row.tenantSlug, name: row.tenantName },
   };
 }

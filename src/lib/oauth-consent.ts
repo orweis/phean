@@ -84,3 +84,26 @@ export function consentScope(requested: string | null | undefined, level: AgentA
 export function renewalKey(workspaceSlug: string, name: string): string {
   return `${workspaceSlug}/${name.trim()}`;
 }
+
+/** The form field for one workspace's access level. Each row is its own radio group, so arrow keys stay in it. */
+export function levelField(workspaceSlug: string): string {
+  return `level:${workspaceSlug}`;
+}
+
+/** "resume" returns to the dialog through authorize; the others have answered the client. */
+export type ConsentOutcome = "allowed" | "declined" | "resume";
+
+/**
+ * What the dialog says while the browser goes on. "resume" covers both a signed-out person, who goes
+ * to sign-in, and a request past its time limit, which authorize simply signs again.
+ */
+export function consentLeavingText(outcome: ConsentOutcome, clientName: string): string {
+  switch (outcome) {
+    case "allowed":
+      return `Connected. Go back to ${clientName}. You can close this window.`;
+    case "declined":
+      return "Cancelled. Nothing was connected. You can close this window.";
+    case "resume":
+      return "Starting the request again.";
+  }
+}

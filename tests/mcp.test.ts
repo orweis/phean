@@ -4,9 +4,12 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 
 import { isoDayFromToday } from "@/lib/dates";
 import type { AgentAccessLevel } from "@/lib/domain";
+import { routes } from "@/lib/routes";
+import { mcpResourceTarget, mcpResourceUrl } from "@/server/config";
 import { agents } from "@/server/db/schema";
 import { agentContext, authenticateAgentToken, createAgent, listAgents, revokeAgent } from "@/server/domain/agents";
 import { answerInput } from "@/server/domain/tasks";
+import { SERVER_INSTRUCTIONS } from "@/server/mcp/guidance";
 import { createPheanMcpHandler } from "@/server/mcp/handler";
 import { toolAllowed } from "@/server/mcp/tool";
 import { TOOLS } from "@/server/mcp/tools";
@@ -529,6 +532,53 @@ describe("tools by access level", () => {
       expect(dataOf(await call(admin.client, "whoami"))).toMatchObject({ level: "admin", accessEndsAt: null });
     } finally {
       await Promise.all([write.client.close(), admin.client.close()]);
+    }
+  });
+});
+
+describe("what agents are told about addresses and sub-agents", () => {
+  it("create_subagent hands over the workspace's own MCP address", async () => {
+    const write = await agentAt("write");
+    try {
+      const { mcpUrl } = dataOf<{ mcpUrl: string }>(await call(write.client, "create_subagent", { name: "Worker" }));
+      expect(mcpUrl).toBe(`${TEST_ORIGIN}${routes.mcp(ws.tenant.slug)}`);
+    } finally {
+      await write.client.close();
+    }
+  });
+
+  it("offers ?agent= on the URL only for a fixed key, since a signed-in URL with a query is another resource", () => {
+    expect(mcpResourceTarget(`${mcpResourceUrl(ws.tenant.slug)}?agent=Helper`)).toBeNull();
+    const texts = [SERVER_INSTRUCTIONS, ...TOOLS.map((tool) => tool.description)];
+    const mentions = texts.flatMap((text) => text.split(/(?<=[.;])\s+/)).filter((sentence) => sentence.includes("?agent="));
+    expect(mentions.length).toBeGreaterThan(0);
+    for (const sentence of mentions) expect(sentence).toMatch(/fixed key/);
+  });
+
+  it("revoke_subagent does what its description says for Write and Admin agents", async () => {
+    const description = TOOLS.find((tool) => tool.name === "revoke_subagent")!.description;
+    expect(description).not.toMatch(/cannot revoke any other agent/);
+    expect(description).toMatch(/With Admin access it revokes any agent but you/);
+
+    const write = await agentAt("write");
+    const admin = await agentAt("admin");
+    try {
+      expect(textOf(await call(write.client, "revoke_subagent", { agentId: ws.closer.agentId }))).toMatch(/^forbidden:/);
+      expect(dataOf<{ subagent: { id: string } }>(await call(admin.client, "revoke_subagent", { agentId: ws.closer.agentId })).subagent.id).toBe(ws.closer.agentId);
+    } finally {
+      await Promise.all([write.client.close(), admin.client.close()]);
+    }
+  });
+
+  it("list_agents gives the level an agent acts at and whether it can act", async () => {
+    const admin = await agentAt("admin");
+    const { agent: worker } = await createAgent(ws.human, { name: "Worker", parentAgentId: ws.scout.agentId });
+    await testDb.db.update(agents).set({ accessLevel: "read" }).where(eq(agents.id, ws.scout.agentId));
+    try {
+      const { agents: rows } = dataOf<{ agents: { id: string; level: string; canAct: boolean }[] }>(await call(admin.client, "list_agents"));
+      expect(rows.find((row) => row.id === worker.id)).toMatchObject({ level: "read", canAct: true });
+    } finally {
+      await admin.client.close();
     }
   });
 });
