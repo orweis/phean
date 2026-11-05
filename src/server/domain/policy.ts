@@ -1,41 +1,9 @@
-import type { Actor, Ctx, Role } from "./context";
+import { ACTIONS, PERMISSIONS, type Action } from "@/lib/permissions";
+
+import type { Actor, Ctx } from "./context";
 import { forbidden } from "./errors";
 
-export const ACTIONS = [
-  "workspace:read",
-  "goal:write",
-  "goal:decide",
-  "task:write",
-  "memory:write",
-  "document:write",
-  "agent:manage",
-  "agent:connect",
-  "agent:issue_key",
-  "agent:delegate",
-  "webhook:manage",
-  "member:manage",
-  "workflow:manage",
-] as const;
-export type Action = (typeof ACTIONS)[number];
-
-const CONTRIBUTE: readonly Action[] = ["workspace:read", "goal:write", "task:write", "memory:write", "document:write"];
-
-/**
- * The whole authorization model. `goal:decide` (approve, achieve, abandon) is human-only:
- * this is the server-side enforcement of "the agent proposes, the human disposes".
- */
-const PERMISSIONS: Record<Role, readonly Action[]> = {
-  owner: ACTIONS,
-  admin: ACTIONS,
-  // Members approve agents they connect, up to Write.
-  member: [...CONTRIBUTE, "goal:decide", "agent:connect"],
-  // A Read agent only looks. A Write agent registers its own webhook and issues tokens for its own
-  // sub-agents; owners and admins can remove any agent's webhook. An Admin agent also manages agents.
-  agent_read: ["workspace:read"],
-  agent_write: [...CONTRIBUTE, "agent:delegate", "webhook:manage"],
-  agent_admin: [...CONTRIBUTE, "agent:delegate", "webhook:manage", "agent:manage"],
-  platform_admin: ["workspace:read"],
-};
+export { ACTIONS, type Action };
 
 const DENIAL_MESSAGES: Partial<Record<Action, string>> = {
   "goal:decide": "Only a human can approve, complete, or abandon a goal. Ask them to review it in the Phean web app.",

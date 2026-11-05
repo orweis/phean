@@ -3,10 +3,10 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 
 import { authRouteHandler, authServerMetadataRoute, completeConsent, workspaceResourceMetadata } from "@/server/auth/auth";
 import { readConsentRequest } from "@/server/auth/consent";
-import { OAUTH_AUTHORIZE_LIMIT, pruneUnusedClients, UNUSED_CLIENT_HOURS } from "@/server/auth/clients";
+import { pruneUnusedClients, UNUSED_CLIENT_HOURS } from "@/server/auth/clients";
 import { createOAuthVerifier } from "@/server/auth/oauth";
 import { agents, member, oauthClient, oauthConsent, oauthRefreshToken } from "@/server/db/schema";
-import { approveAgent, createAgent, resolveOAuthAgent, revokeAgent } from "@/server/domain/agents";
+import { approveAgent, approveAgentThen, createAgent, resolveOAuthAgent, revokeAgent } from "@/server/domain/agents";
 import { createPheanMcpHandler } from "@/server/mcp/handler";
 
 import { createTestDb, seedWorkspace, type TestDb } from "./support/db";
@@ -144,9 +144,12 @@ describe("registering a client", () => {
     expect(await testDb.db.select({ id: oauthClient.id }).from(oauthClient)).toHaveLength(before.length);
   });
 
-  it("holds authorize, where a CIMD client is fetched and stored before sign-in, to a limit of its own", () => {
-    const authorizeRule = server.auth.options.plugins.flatMap((plugin) => ("rateLimit" in plugin ? (plugin.rateLimit ?? []) : [])).find((rule) => rule.pathMatcher("/oauth2/authorize"));
-    expect(authorizeRule).toMatchObject({ window: 60, max: OAUTH_AUTHORIZE_LIMIT });
+  it("holds authorize, where a CIMD client is fetched and stored before sign-in, to Better Auth's default unless raised", () => {
+    const authorizeRule = ({ auth }: OAuthServer) =>
+      auth.options.plugins.flatMap((plugin) => ("rateLimit" in plugin ? (plugin.rateLimit ?? []) : [])).find((rule) => rule.pathMatcher("/oauth2/authorize"));
+    expect(authorizeRule(server)).toMatchObject({ window: 60, max: 30 });
+    vi.stubEnv("PHEAN_OAUTH_AUTHORIZE_LIMIT", "1000");
+    expect(authorizeRule(createOAuthServer(testDb.db))?.max).toBe(1000);
   });
 
   it("holds the register route to the built-in limit unless raised", () => {
@@ -341,7 +344,7 @@ describe("the access token at /mcp", () => {
   it("a verified token naming a key's agent is refused", async () => {
     const ws = await seedWorkspace(testDb.db);
     const { db } = testDb;
-    server = { ...server, handler: createPheanMcpHandler({ getDb: () => db, verifyOAuthToken: () => Promise.resolve({ agentId: ws.scout.agentId, issuedAt: Math.floor(Date.now() / 1000) }) }) };
+    server = { ...server, handler: createPheanMcpHandler({ getDb: () => db, verifyOAuthToken: () => Promise.resolve({ agentId: ws.scout.agentId, clientId: "any-client", issuedAt: Math.floor(Date.now() / 1000) }) }) };
     expect((await initialize("a-verified-token")).status).toBe(401);
     expect((await initialize(ws.scout.token)).status).toBe(200);
   });
@@ -371,6 +374,58 @@ describe("the access token at /mcp", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("a code the replaced client still holds is void after a renewal from another client", async () => {
+    // Client A is approved and handed a code, but has not redeemed it yet.
+    const approved = await approveClient(testDb.db, server, "acme");
+    vi.useFakeTimers({ toFake: ["Date"], now: Date.now() + 2000 });
+    try {
+      const clientB = await registerClientId(server);
+      const b = pkce();
+      const queryB = await authorize(server, approved.cookie, clientB, b.challenge);
+      const { renewed } = await approveAgent(approved.ctx, { name: "Laptop", level: "read", lifetimeDays: 30, oauthClientId: clientB });
+      expect(renewed).toBe(true);
+      await completeConsent(server.auth, new Headers({ cookie: approved.cookie }), { agentId: approved.agentId, oauthQuery: queryB });
+      vi.setSystemTime(Date.now() + 2000);
+
+      const late = await redeem(server, approved.clientId, approved.code, approved.verifier);
+      expect(late.status).toBe(400);
+      expect(await late.json()).toMatchObject({ error: "invalid_grant" });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("a token issued to another client than the agent's is refused, however close to the renewal", async () => {
+    const connected = await connectOAuthAgent(testDb.db, server, "acme");
+    const clientId = await registerClientId(server);
+    const { verifier, challenge } = pkce();
+    const oauthQuery = await authorize(server, connected.cookie, clientId, challenge);
+    await approveAgent(connected.ctx, { name: "Laptop", level: "write", lifetimeDays: 30, oauthClientId: clientId });
+    const { url } = await completeConsent(server.auth, new Headers({ cookie: connected.cookie }), { agentId: connected.agentId, oauthQuery });
+    const tokens = (await (await redeem(server, clientId, new URL(url).searchParams.get("code")!, verifier)).json()) as { access_token: string };
+    // As if the old token had been issued in the renewal's own second.
+    await testDb.db.update(agents).set({ tokensNotBefore: null }).where(eq(agents.id, connected.agentId));
+
+    expect((await initialize(connected.accessToken)).status).toBe(401);
+    expect((await initialize(tokens.access_token)).status).toBe(200);
+  });
+
+  it("a renewal whose consent fails leaves the old connection as it was", async () => {
+    const connected = await connectOAuthAgent(testDb.db, server, "acme");
+    const clientId = await registerClientId(server);
+    const { challenge } = pkce();
+    const oauthQuery = await authorize(server, connected.cookie, clientId, challenge);
+    const tampered = new URLSearchParams(oauthQuery);
+    tampered.set("state", "forged");
+    const consent = (agentId: string) => completeConsent(server.auth, new Headers({ cookie: connected.cookie }), { agentId, oauthQuery: tampered.toString() });
+    await expect(approveAgentThen(connected.ctx, { name: "Laptop", level: "read", lifetimeDays: 30, oauthClientId: clientId }, consent)).rejects.toThrow();
+
+    const [row] = await testDb.db.select().from(agents).where(eq(agents.id, connected.agentId));
+    expect(row).toMatchObject({ accessLevel: "write", oauthClientId: connected.clientId, tokensNotBefore: null });
+    expect((await initialize(connected.accessToken)).status).toBe(200);
+    expect((await refresh(server, connected.clientId, connected.refreshToken)).status).toBe(200);
   });
 
   it("a named sub-agent on an OAuth token works the way it does on a key", async () => {
@@ -536,7 +591,7 @@ describe("a workspace's own URL", () => {
     const globex = await connectOAuthAgent(testDb.db, server, "globex");
     // Even a token the verifier accepts for acme's URL is refused when its agent works in globex.
     const { db } = testDb;
-    server = { ...server, handler: createPheanMcpHandler({ getDb: () => db, verifyOAuthToken: () => Promise.resolve({ agentId: globex.agentId, issuedAt: Math.floor(Date.now() / 1000) }) }) };
+    server = { ...server, handler: createPheanMcpHandler({ getDb: () => db, verifyOAuthToken: () => Promise.resolve({ agentId: globex.agentId, clientId: globex.clientId, issuedAt: Math.floor(Date.now() / 1000) }) }) };
     expect((await initialize("a-verified-token", workspaceUrl(acme.tenant.slug))).status).toBe(401);
     expect((await initialize("a-verified-token", workspaceUrl(globex.tenant.slug))).status).toBe(200);
   });

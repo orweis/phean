@@ -4,6 +4,7 @@
  */
 import type { LinkKind, RequestKind, RequestOutcome } from "./agent-sessions";
 import { isPastDue } from "./dates";
+import { roleCan } from "./permissions";
 
 /** Narrows an untrusted value (a query parameter, a logged event field) to one of `values`. */
 export function isOneOf<V extends string | number>(values: readonly V[], value: unknown): value is V {
@@ -58,9 +59,12 @@ export function lifetimeLabel(days: number): string {
   return days === 1 ? "1 day" : `${days} days`;
 }
 
-/** The levels a person of this role may grant. Only owners and admins may grant Admin; any other role, present or future, stops at Write. */
+/**
+ * The levels a person of this role may grant: Admin only with `agent:manage` in the policy matrix,
+ * since an Admin agent holds it; any other role, present or future, stops at Write.
+ */
 export function grantableLevels(role: string): readonly AgentAccessLevel[] {
-  return role === "owner" || role === "admin" ? AGENT_ACCESS_LEVELS : ["read", "write"];
+  return roleCan(role, "agent:manage") ? AGENT_ACCESS_LEVELS : ["read", "write"];
 }
 
 /** The highest level a person of this role may grant. */

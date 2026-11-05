@@ -11,7 +11,7 @@ import { auth, completeConsent } from "@/server/auth/auth";
 import { readConsentRequest } from "@/server/auth/consent";
 import { getSession } from "@/server/auth/session";
 import { getDb } from "@/server/db/client";
-import { approveAgent, findRenewableAgent } from "@/server/domain/agents";
+import { approveAgentThen, findRenewableAgent } from "@/server/domain/agents";
 import { invalid } from "@/server/domain/errors";
 import { ApproveAgentInput } from "@/server/domain/schemas";
 import { listMemberships, userContext } from "@/server/domain/tenants";
@@ -71,8 +71,9 @@ export async function decideConsentAction(_previous: ActionState, formData: Form
     const level = ApproveAgentInput.shape.level.safeParse(input.level);
     const scope = level.success ? consentScope(request.scope, level.data) : undefined;
     if (scope === null && level.success) throw invalid(`This client asked only for more than ${ACCESS_LEVEL_META[level.data].label} access. Choose a higher level, or Cancel.`);
-    const { agent } = await approveAgent(ctx, { ...input, oauthClientId: request.clientId });
-    return completeConsent(auth, requestHeaders, { agentId: agent.id, oauthQuery, scope: scope ?? undefined });
+    // A renewal replaces the old connection only once the new client has its code.
+    const consent = (agentId: string) => completeConsent(auth, requestHeaders, { agentId, oauthQuery, scope: scope ?? undefined });
+    return (await approveAgentThen(ctx, { ...input, oauthClientId: request.clientId }, consent)).issued;
   });
   return allowed.ok ? goOn(allowed.value.url, "allowed") : allowed.state;
 }

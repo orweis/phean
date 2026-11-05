@@ -82,6 +82,17 @@ export function consentScope(requested: string | null | undefined, level: AgentA
   return kept.length ? kept.join(" ") : null;
 }
 
+/** The levels a request's scope names, lowest first: empty when it names none. */
+export function requestedLevels(requested: string | null | undefined): AgentAccessLevel[] {
+  const scopes = (requested ?? "").split(" ");
+  return AGENT_ACCESS_LEVELS.filter((level) => scopes.includes(`${LEVEL_SCOPE_PREFIX}${level}`));
+}
+
+/** The levels a token for this request can be issued at: those `consentScope` has an honest scope for. */
+export function issuableLevels(requested: string | null | undefined): AgentAccessLevel[] {
+  return AGENT_ACCESS_LEVELS.filter((level) => consentScope(requested, level) !== null);
+}
+
 /**
  * Identifies a choice of workspace and name, so a warning about replacing a connection is tied to
  * that choice. A slug never holds "/", and a form post would turn a newline into CRLF.

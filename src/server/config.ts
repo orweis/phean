@@ -41,6 +41,18 @@ export function oauthRegisterLimit(): number {
   return Number.isInteger(raised) && raised > 0 ? raised : OAUTH_REGISTER_LIMIT;
 }
 
+/**
+ * Better Auth's own limit on authorize, per client address a minute, made explicit: each request may
+ * fetch and store a CIMD client before anyone signs in.
+ */
+const OAUTH_AUTHORIZE_LIMIT = 30;
+
+/** The UI tests authorize many clients from one address; a deployment leaves this unset. */
+export function oauthAuthorizeLimit(): number {
+  const raised = Number(process.env.PHEAN_OAUTH_AUTHORIZE_LIMIT);
+  return Number.isInteger(raised) && raised > 0 ? raised : OAUTH_AUTHORIZE_LIMIT;
+}
+
 /** Every origin a browser may legitimately use to reach this deployment. */
 export function trustedOrigins(): string[] {
   const hosts = [

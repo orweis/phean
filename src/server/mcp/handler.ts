@@ -92,7 +92,7 @@ export function createPheanMcpHandler(deps: PheanMcpDeps): (request: Request) =>
     if (bearerToken.startsWith(AGENT_TOKEN_PREFIX)) principal = await authenticateAgentToken(getDb(), bearerToken);
     else {
       const verified = await verifyOAuthToken(bearerToken, mcpResourceUrl(slug ?? undefined));
-      principal = verified && (await resolveOAuthAgent(getDb(), verified.agentId, verified.issuedAt));
+      principal = verified && (await resolveOAuthAgent(getDb(), verified.agentId, verified));
     }
     return principal && (slug === null || principal.tenant.slug === slug) ? principal : null;
   };

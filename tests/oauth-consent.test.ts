@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { grantableLevels, LIMITS, lifetimeLabel } from "@/lib/domain";
-import { authorizeRetryPath, clientDisplayName, consentLeavingText, consentScope, levelField, redirectTarget, renewalKey } from "@/lib/oauth-consent";
+import { authorizeRetryPath, clientDisplayName, consentLeavingText, consentScope, issuableLevels, levelField, redirectTarget, renewalKey, requestedLevels } from "@/lib/oauth-consent";
 import { safeNextPath } from "@/lib/routes";
 import { completeConsent } from "@/server/auth/auth";
 import { readConsentRequest } from "@/server/auth/consent";
@@ -127,6 +127,21 @@ describe("consentScope", () => {
     expect(consentScope(null, "read")).toBeUndefined();
     expect(consentScope("", "read")).toBeUndefined();
     expect(consentScope("offline_access", "read")).toBeUndefined();
+  });
+});
+
+describe("what the client asked for", () => {
+  it("names the levels the request names, lowest first", () => {
+    expect(requestedLevels("phean:admin phean:read offline_access")).toEqual(["read", "admin"]);
+    expect(requestedLevels("offline_access")).toEqual([]);
+    expect(requestedLevels(null)).toEqual([]);
+  });
+
+  it("offers only levels a token can honestly carry", () => {
+    expect(issuableLevels("phean:admin")).toEqual(["admin"]);
+    expect(issuableLevels("phean:write phean:admin")).toEqual(["write", "admin"]);
+    expect(issuableLevels("phean:admin offline_access")).toEqual(["read", "write", "admin"]);
+    expect(issuableLevels("")).toEqual(["read", "write", "admin"]);
   });
 });
 

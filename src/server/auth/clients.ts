@@ -3,9 +3,6 @@ import { and, exists, inArray, lt, not, sql } from "drizzle-orm";
 import type { Db } from "../db/client";
 import { oauthAccessToken, oauthClient, oauthConsent, oauthRefreshToken } from "../db/schema";
 
-/** Authorize requests one address may make a minute. Each may fetch and store a CIMD client before anyone signs in. */
-export const OAUTH_AUTHORIZE_LIMIT = 60;
-
 /** How long a client may sit unused before it is removed: a connection is begun and finished well within it. */
 export const UNUSED_CLIENT_HOURS = 24;
 

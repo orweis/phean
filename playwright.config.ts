@@ -37,6 +37,8 @@ export default defineConfig({
       PHEAN_WEBHOOK_ALLOW_PRIVATE: "1",
       // Every spec registers its OAuth clients from this one address.
       PHEAN_OAUTH_REGISTER_LIMIT: "1000",
+      // And sends every dialog through authorize from it.
+      PHEAN_OAUTH_AUTHORIZE_LIMIT: "1000",
     },
   },
 });

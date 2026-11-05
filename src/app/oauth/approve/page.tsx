@@ -9,7 +9,7 @@ import { Logo } from "@/components/logo";
 import { Card } from "@/components/ui/card";
 import { todayIso } from "@/lib/dates";
 import { grantableLevels } from "@/lib/domain";
-import { authorizeRetryPath, clientDisplayName, renewalKey } from "@/lib/oauth-consent";
+import { authorizeRetryPath, clientDisplayName, issuableLevels, renewalKey, requestedLevels } from "@/lib/oauth-consent";
 import { queryStringOf, routes } from "@/lib/routes";
 import { attempt } from "@/server/actions";
 import { auth } from "@/server/auth/auth";
@@ -131,6 +131,8 @@ export default async function ApproveAgentPage({ searchParams }: PageProps<"/oau
             lastName: choices[index]!.lastName,
           }))}
           renewals={choices.flatMap(({ renewals }) => renewals)}
+          asked={requestedLevels(request.scope)}
+          issuable={issuableLevels(request.scope)}
           today={todayIso()}
         />
       )}

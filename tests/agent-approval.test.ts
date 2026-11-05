@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import { and, eq, sql } from "drizzle-orm";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DAY_MS } from "@/lib/dates";
 import { agentStatus } from "@/lib/domain";
@@ -96,6 +96,8 @@ async function joinWorkspace(name: string, role: "admin" | "member") {
   await addMember(testDb.db, ws.tenant, person, role);
   return { person, ctx: asUser(testDb.db, ws.tenant, person, role) };
 }
+
+afterEach(() => vi.useRealTimers());
 
 beforeAll(async () => {
   testDb = await createTestDb();
@@ -286,9 +288,12 @@ describe("resolving an agent", () => {
     const renewedAt = new Date("2026-11-06T10:00:00.700Z");
     await testDb.db.update(agents).set({ tokensNotBefore: renewedAt }).where(eq(agents.id, agent.id));
     const second = Math.floor(renewedAt.getTime() / 1000);
-    expect(await resolveOAuthAgent(testDb.db, agent.id, second - 1)).toBeNull();
-    expect(await resolveOAuthAgent(testDb.db, agent.id, second)).not.toBeNull();
-    expect(await resolveOAuthAgent(testDb.db, agent.id, second + 60)).not.toBeNull();
+    const token = (issuedAt: number) => ({ issuedAt, clientId: "client_2" });
+    expect(await resolveOAuthAgent(testDb.db, agent.id, token(second - 1))).toBeNull();
+    expect(await resolveOAuthAgent(testDb.db, agent.id, token(second))).not.toBeNull();
+    expect(await resolveOAuthAgent(testDb.db, agent.id, token(second + 60))).not.toBeNull();
+    // Only the client it was last approved for.
+    expect(await resolveOAuthAgent(testDb.db, agent.id, { issuedAt: second + 60, clientId: "client_1" })).toBeNull();
   });
 
   it("resumes when the approver returns", async () => {
@@ -565,16 +570,23 @@ describe("listing an agent's standing", () => {
 
 describe("the agent last approved for a client", () => {
   it("is this person's most recent approval or renewal for that client in this workspace, if not revoked", async () => {
+    // Each approval a second after the last, as a person's would be, so the order never rests on clock resolution.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const approve = (input: Parameters<typeof approveAgent>[1]) => {
+      vi.setSystemTime(Date.now() + 1000);
+      return approveAgent(miaCtx, input);
+    };
     expect(await findLastApprovedAgent(miaCtx, "client_1")).toBeNull();
-    const { agent: first } = await approveAgent(miaCtx, { name: "Renamed", ...grant });
-    await approveAgent(miaCtx, { name: "Elsewhere", ...grant, oauthClientId: "client_2" });
+    const { agent: first } = await approve({ name: "Renamed", ...grant });
+    await approve({ name: "Elsewhere", ...grant, oauthClientId: "client_2" });
     expect((await findLastApprovedAgent(miaCtx, "client_1"))?.name).toBe("Renamed");
 
-    const { agent: second } = await approveAgent(miaCtx, { name: "Second", ...grant });
+    const { agent: second } = await approve({ name: "Second", ...grant });
     expect((await findLastApprovedAgent(miaCtx, "client_1"))?.id).toBe(second.id);
     // Renewing makes it the last approved again.
-    await approveAgent(miaCtx, { name: "Renamed", ...grant });
+    await approve({ name: "Renamed", ...grant });
     expect((await findLastApprovedAgent(miaCtx, "client_1"))?.id).toBe(first.id);
+    vi.useRealTimers();
 
     // Not someone else's, and not a revoked one.
     expect(await findLastApprovedAgent(owner, "client_1")).toBeNull();

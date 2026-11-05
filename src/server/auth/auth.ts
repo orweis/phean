@@ -15,13 +15,13 @@ import { organization } from "better-auth/plugins/organization";
 import { WORKSPACE_SLUG_PATTERN } from "@/lib/domain";
 import { routes } from "@/lib/routes";
 
-import { appUrl, mcpResourceUrl, oauthProviders, oauthRegisterLimit, trustedOrigins } from "../config";
+import { appUrl, mcpResourceUrl, oauthAuthorizeLimit, oauthProviders, oauthRegisterLimit, trustedOrigins } from "../config";
 import { lazyDb, type Db } from "../db/client";
 import * as authSchema from "../db/schema/auth";
 import { oauthResource } from "../db/schema/auth";
 import { resolveOAuthAgent } from "../domain/agents";
 import { findTenantBySlug } from "../domain/tenants";
-import { OAUTH_AUTHORIZE_LIMIT, pruneUnusedClients } from "./clients";
+import { pruneUnusedClients } from "./clients";
 
 const SEVEN_DAYS_IN_SECONDS = 60 * 60 * 24 * 7;
 const ONE_HOUR_IN_SECONDS = 60 * 60;
@@ -130,7 +130,7 @@ export function createAuth(database: Db, baseUrl: string) {
         refreshTokenReuseInterval: REFRESH_REUSE_SECONDS,
         // A DPoP-bound token carries a `cnf` that Phean's bearer check can't honour, so refuse the proof up front.
         dpop: { signingAlgorithms: [] },
-        rateLimit: { register: { window: 60, max: oauthRegisterLimit() }, authorize: { window: 60, max: OAUTH_AUTHORIZE_LIMIT } },
+        rateLimit: { register: { window: 60, max: oauthRegisterLimit() }, authorize: { window: 60, max: oauthAuthorizeLimit() } },
         postLogin: {
           page: "/oauth/approve",
           shouldRedirect: () => false,

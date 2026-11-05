@@ -1,7 +1,8 @@
 import { createHash, randomBytes } from "node:crypto";
 
-import { and, asc, count, desc, eq, isNull, lt, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, count, eq, inArray, isNull, lt, or, sql, type SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
+import type { z } from "zod";
 
 import { addDays } from "@/lib/dates";
 import { ACCESS_LEVEL_META, AGENT_TOKEN_PREFIX, agentAccessEnds, grantableLevels, highestGrantableLevel, LIMITS, lowerLevel, toMemberRole, type AgentAccessLevel } from "@/lib/domain";
@@ -9,14 +10,14 @@ import { ACCESS_LEVEL_META, AGENT_TOKEN_PREFIX, agentAccessEnds, grantableLevels
 import type { Db } from "../db/client";
 import { publicColumns } from "../db/columns";
 import { newId } from "../db/ids";
-import { agents, events, member, oauthRefreshToken, organization, user, type AgentRow } from "../db/schema";
+import { agents, member, oauthRefreshToken, organization, user, verification, type AgentRow } from "../db/schema";
 import { liveAgent } from "./agent-liveness";
 import { agentRole, inTenant, inTransaction, type Actor, type Ctx, type Tenant } from "./context";
 import { conflict, forbidden, invalid, notFound } from "./errors";
 import { recordEvent } from "./events";
 import { assertCan, can } from "./policy";
 import { AgentRefInput, ApproveAgentInput, CreateAgentInput, CreateSubagentInput, Empty } from "./schemas";
-import { service } from "./service";
+import { parseInput, service } from "./service";
 import { disableWebhooksOf } from "./webhooks";
 
 export type Agent = Omit<AgentRow, "tenantId" | "tokenHash">;
@@ -146,66 +147,97 @@ export async function findRenewableAgent(ctx: Ctx, name: string): Promise<Agent 
 export async function findLastApprovedAgent(ctx: Ctx, oauthClientId: string): Promise<Agent | null> {
   assertCan(ctx, "workspace:read");
   if (ctx.actor.type !== "user") return null;
-  const approvedAt = sql`(select max(${events.createdAt}) from ${events} where ${events.tenantId} = ${agents.tenantId} and ${events.entityType} = 'agent' and ${events.entityId} = ${agents.id} and ${events.action} in ('agent.created', 'agent.renewed'))`;
+  // When it was made or last renewed. Each is one person's separate approval, a submit of its own.
+  const approvedAt = sql`coalesce(${agents.tokensNotBefore}, ${agents.createdAt})`;
   const [agent] = await ctx.db
     .select(agentColumns)
     .from(agents)
     .where(and(inTenant(ctx, agents), eq(agents.createdByUserId, ctx.actor.id), eq(agents.oauthClientId, oauthClientId), eq(agents.authKind, "oauth"), isNull(agents.revokedAt)))
-    .orderBy(sql`${approvedAt} desc nulls last`, desc(agents.createdAt))
+    .orderBy(sql`${approvedAt} desc`)
     .limit(1);
   return agent ?? null;
 }
 
 /**
- * A person approves an agent that signed in with OAuth. The same person, workspace and name renews
- * that row, keeping its history and watches and replacing its old tokens; anything else is a new agent.
+ * Better Auth's authorization codes for this agent that are still waiting to be redeemed. They are
+ * rows of `verification` whose JSON value names the agent; other kinds of row may not be JSON at all.
  */
-export const approveAgent = service(ApproveAgentInput, async (ctx, { name, level, lifetimeDays, oauthClientId }): Promise<{ agent: Agent; renewed: boolean }> => {
+function pendingCodesOf(agentId: string): SQL {
+  return sql`(case when ${verification.value} like '{"type":"authorization_code"%' then ${verification.value}::jsonb ->> 'referenceId' end) = ${agentId}`;
+}
+
+/**
+ * A person approves an agent that signed in with OAuth, and `issue` hands its client a code. The same
+ * person, workspace and name renews that row, keeping its history and watches; anything else is a new
+ * agent. A renewal issues the code first and only then replaces the old connection (its grant, its
+ * refresh tokens, its pending codes, and through `tokensNotBefore` and the client check its access
+ * tokens), so an `issue` that fails leaves the old connection exactly as it was.
+ */
+export async function approveAgentThen<T>(
+  ctx: Ctx,
+  input: z.input<typeof ApproveAgentInput>,
+  issue: (agentId: string) => Promise<T>,
+): Promise<{ agent: Agent; renewed: boolean; issued: T }> {
+  const { name, level, lifetimeDays, oauthClientId } = parseInput(ApproveAgentInput, input);
   assertCan(ctx, "agent:connect");
   const { actor } = ctx;
   if (actor.type !== "user" || actor.role === "platform_admin") throw forbidden("Only a person can approve an agent.");
   const levelLabel = ACCESS_LEVEL_META[level].label;
   if (!grantableLevels(actor.role).includes(level)) throw forbidden(`Your role cannot grant ${levelLabel} access. Ask a workspace admin.`);
-  const grant = { accessLevel: level, accessExpiresAt: addDays(new Date(), lifetimeDays), oauthClientId };
+  const grantAt = (now: Date) => ({ accessLevel: level, accessExpiresAt: addDays(now, lifetimeDays), oauthClientId });
   const terms = `${levelLabel} access for ${lifetimeDays} day${lifetimeDays === 1 ? "" : "s"}`;
 
-  return inTransaction(ctx, async (tx) => {
-    const lockRenewable = async () => (await tx.db.select(agentColumns).from(agents).where(renewableBy(tx, actor.id, name)).for("update"))[0];
+  // A new agent is made first: its code must name a row that exists.
+  const created = await inTransaction(ctx, async (tx) => {
+    const now = new Date();
+    const [row] = await tx.db
+      .insert(agents)
+      .values({ id: newId("ag"), tenantId: tx.tenant.id, name, authKind: "oauth", createdByUserId: actor.id, createdAt: now, ...grantAt(now) })
+      // An agent of this name exists, or a concurrent approval got there first: this waits for it, and renews what is there.
+      .onConflictDoNothing({ target: [agents.tenantId, agents.createdByUserId, agents.name], where: sql`${agents.authKind} = 'oauth' and ${agents.revokedAt} is null` })
+      .returning(agentColumns);
+    if (!row) return null;
+    await recordEvent(tx, {
+      action: "agent.created",
+      entityType: "agent",
+      entityId: row.id,
+      summary: `connected a new agent "${name}" with ${terms}`,
+      data: { parentAgentId: null, level, lifetimeDays },
+    });
+    return row;
+  });
+  if (created) return { agent: created, renewed: false, issued: await issue(created.id) };
 
-    let existing = await lockRenewable();
-    if (!existing) {
-      const [created] = await tx.db
-        .insert(agents)
-        .values({ id: newId("ag"), tenantId: tx.tenant.id, name, authKind: "oauth", createdByUserId: actor.id, ...grant })
-        // A concurrent approval got there first: this waits for it, then renews what it made.
-        .onConflictDoNothing({ target: [agents.tenantId, agents.createdByUserId, agents.name], where: sql`${agents.authKind} = 'oauth' and ${agents.revokedAt} is null` })
-        .returning(agentColumns);
-      if (created) {
-        await recordEvent(tx, {
-          action: "agent.created",
-          entityType: "agent",
-          entityId: created.id,
-          summary: `connected a new agent "${name}" with ${terms}`,
-          data: { parentAgentId: null, level, lifetimeDays },
-        });
-        return { agent: created, renewed: false };
-      }
-      existing = await lockRenewable();
-      if (!existing) throw conflict(`"${name}" was revoked just now. Approve it again.`);
-    }
+  const [current] = await ctx.db.select(agentColumns).from(agents).where(renewableBy(ctx, actor.id, name));
+  if (!current) throw conflict(`"${name}" was revoked just now. Approve it again.`);
+  // The codes outstanding before this one is issued: whichever client holds them, they are replaced.
+  const replacedCodes = (await ctx.db.select({ id: verification.id }).from(verification).where(pendingCodesOf(current.id))).map(({ id }) => id);
+  const issued = await issue(current.id);
 
-    // The client this renewal replaces loses its access token as well as its refresh tokens.
-    const [agent] = await tx.db.update(agents).set({ ...grant, tokensNotBefore: new Date() }).where(and(inTenant(tx, agents), eq(agents.id, existing.id))).returning(agentColumns);
-    await revokeTokensOf(tx.db, existing.id);
+  const agent = await inTransaction(ctx, async (tx) => {
+    const [locked] = await tx.db.select(agentColumns).from(agents).where(and(renewableBy(tx, actor.id, name), eq(agents.id, current.id))).for("update");
+    if (!locked) throw conflict(`"${name}" was revoked just now. Approve it again.`);
+    const now = new Date();
+    // Also when it was last approved: `findLastApprovedAgent` orders by it.
+    const [renewed] = await tx.db.update(agents).set({ ...grantAt(now), tokensNotBefore: now }).where(and(inTenant(tx, agents), eq(agents.id, locked.id))).returning(agentColumns);
+    await revokeTokensOf(tx.db, locked.id);
+    if (replacedCodes.length) await tx.db.delete(verification).where(inArray(verification.id, replacedCodes));
     await recordEvent(tx, {
       action: "agent.renewed",
       entityType: "agent",
-      entityId: existing.id,
+      entityId: locked.id,
       summary: `renewed agent "${name}" with ${terms}`,
       data: { level, lifetimeDays },
     });
-    return { agent: agent!, renewed: true };
+    return renewed!;
   });
+  return { agent, renewed: true, issued };
+}
+
+/** `approveAgentThen` with nothing to issue: the dialog's action issues a code, everything else just approves. */
+export const approveAgent = service(ApproveAgentInput, async (ctx, input): Promise<{ agent: Agent; renewed: boolean }> => {
+  const { agent, renewed } = await approveAgentThen(ctx, input, () => Promise.resolve());
+  return { agent, renewed };
 });
 
 type RevokeTarget = Pick<Agent, "id" | "parentAgentId" | "createdByUserId">;
@@ -365,13 +397,22 @@ function issuedSinceRenewal(issuedAt: number): SQL {
   return or(isNull(agents.tokensNotBefore), lt(agents.tokensNotBefore, sql`to_timestamp(${Math.floor(issuedAt) + 1})`))!;
 }
 
+/** What a verified access token says beyond the agent: when it was issued and to which client. */
+export interface OAuthTokenFacts {
+  /** Its `iat`, in seconds. */
+  issuedAt: number;
+  /** Its `azp`: the client it was issued to. */
+  clientId: string;
+}
+
 /**
  * Resolves the agent a verified OAuth token names. Returns null unless it is a live OAuth agent and,
- * given the token's `iat` in seconds, the token was not issued before the agent's last renewal.
- * Leave `issuedAt` out only for a token being issued now.
+ * given the token, it went to the client the agent was last approved for and was not issued before
+ * the agent's last renewal. Leave `token` out only for a token being issued now.
  */
-export async function resolveOAuthAgent(db: Db, agentId: string, issuedAt?: number): Promise<AgentPrincipal | null> {
-  return resolvePrincipal(db, and(eq(agents.id, agentId), eq(agents.authKind, "oauth"), issuedAt === undefined ? undefined : issuedSinceRenewal(issuedAt)));
+export async function resolveOAuthAgent(db: Db, agentId: string, token?: OAuthTokenFacts): Promise<AgentPrincipal | null> {
+  const fromToken = token && and(eq(agents.oauthClientId, token.clientId), issuedSinceRenewal(token.issuedAt));
+  return resolvePrincipal(db, and(eq(agents.id, agentId), eq(agents.authKind, "oauth"), fromToken));
 }
 
 /** The header a sub-agent sends with its parent's token to say who it is. */

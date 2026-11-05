@@ -1,15 +1,14 @@
 import { verifyJwsAccessToken } from "better-auth/oauth2";
 
 import { appUrl, mcpResourceUrl } from "../config";
+import type { OAuthTokenFacts } from "../domain/agents";
 import { auth, type Auth } from "./auth";
 
 /** `audience` is the endpoint the token was sent to; it defaults to the one the verifier was made for. */
 export type OAuthTokenVerifier = (token: string, audience?: string) => Promise<VerifiedOAuthToken | null>;
 
-export interface VerifiedOAuthToken {
+export interface VerifiedOAuthToken extends OAuthTokenFacts {
   agentId: string;
-  /** The token's `iat`, in seconds: a token from before the agent's last renewal is refused. */
-  issuedAt: number;
 }
 
 /** JOSE errors that mean the keys couldn't be read, not that the token is bad. */
@@ -41,8 +40,9 @@ export function createOAuthVerifier(provider: Pick<Auth, "api">, expected: { iss
       if (isRejectedToken(error)) return null;
       throw error;
     });
-    if (!payload || payload.cnf || typeof payload.agent_id !== "string" || typeof payload.iat !== "number") return null;
-    return { agentId: payload.agent_id, issuedAt: payload.iat };
+    const clientId = payload?.azp ?? payload?.client_id;
+    if (!payload || payload.cnf || typeof payload.agent_id !== "string" || typeof payload.iat !== "number" || typeof clientId !== "string") return null;
+    return { agentId: payload.agent_id, issuedAt: payload.iat, clientId };
   };
 }
 

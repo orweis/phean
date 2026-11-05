@@ -15,9 +15,11 @@ const OTHER_CLIENT = "It last connected from a different client.";
 const allow = (page: Page) => page.getByRole("button", { name: "Allow" });
 const accessTo = (page: Page, workspace: string) => page.getByRole("group", { name: `Access to ${workspace}` });
 
-/** Opens the dialog as the client would, and waits for it. */
-async function openDialog(page: Page, client: OAuthTestClient, clientName = "Scripted Client") {
-  await page.goto(client.authorizationUrl);
+/** Opens the dialog as the client would, and waits for it. `scope` replaces the scope the client asks for. */
+async function openDialog(page: Page, client: OAuthTestClient, clientName = "Scripted Client", scope?: string) {
+  const url = new URL(client.authorizationUrl);
+  if (scope !== undefined) url.searchParams.set("scope", scope);
+  await page.goto(url.toString());
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(`Connect ${clientName} to Phean`);
 }
 
@@ -52,6 +54,23 @@ test.describe("with the demo account", () => {
     await openDialog(page, client);
     await expect(page.getByRole("radio", { name: "Globex" })).toBeChecked();
     await expect(page.getByRole("radio", { name: "Acme Corp" })).toHaveCount(0);
+    await page.getByRole("button", { name: "Cancel" }).click();
+    expect((await client.callback()).searchParams.get("error")).toBe("access_denied");
+  });
+
+  test("a client that asks only for some levels says so, and is offered only those", async ({ page }) => {
+    const client = await oauthClient(BASE_URL);
+    await openDialog(page, client, "Scripted Client", "phean:write");
+    await expect(page.getByText("This client asks for Write access.")).toBeVisible();
+    const acme = accessTo(page, "Acme Corp");
+    await expect(acme.getByRole("radio", { name: "Read" })).toBeDisabled();
+    await expect(acme.getByRole("radio", { name: "Write" })).toBeEnabled();
+    await expect(acme.getByRole("radio", { name: "Admin" })).toBeEnabled();
+    await expect(page.getByText("Read is unavailable, since this client asked only for Write.")).toBeVisible();
+
+    // Choosing the workspace picks a level the client can be given.
+    await page.getByRole("radio", { name: "Acme Corp" }).check();
+    await expect(acme.getByRole("radio", { name: "Write" })).toBeChecked();
     await page.getByRole("button", { name: "Cancel" }).click();
     expect((await client.callback()).searchParams.get("error")).toBe("access_denied");
   });
@@ -368,6 +387,17 @@ test("a member is not offered Admin or fixed keys, and revokes only the agents t
       await expect(accessTo(dialog, "Acme Corp").getByRole("radio", { name: "Admin" })).toHaveCount(1);
       await expect(accessTo(dialog, workspace.name).getByRole("radio", { name: "Write" })).toHaveCount(1);
       await expect(accessTo(dialog, workspace.name).getByRole("radio", { name: "Admin" })).toHaveCount(0);
+    });
+
+    await test.step("a client that asks only for Admin is not offered where the member cannot give it, and the dialog says why", async () => {
+      const adminOnly = await demo.newPage();
+      await openDialog(adminOnly, await oauthClient(BASE_URL), "Scripted Client", "phean:admin");
+      await expect(adminOnly.getByText("This client asks for Admin access.")).toBeVisible();
+      await expect(adminOnly.getByRole("radio", { name: workspace.name })).toBeDisabled();
+      await expect(adminOnly.getByText("Your role here can't give Admin access, which is what this client asks for.")).toBeVisible();
+      await expect(accessTo(adminOnly, "Acme Corp").getByRole("radio", { name: "Admin" })).toBeEnabled();
+      await expect(accessTo(adminOnly, "Acme Corp").getByRole("radio", { name: "Write" })).toBeDisabled();
+      await adminOnly.close();
     });
 
     await test.step("a forged Admin is refused, and no agent is made", async () => {

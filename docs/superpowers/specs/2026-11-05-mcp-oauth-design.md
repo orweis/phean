@@ -96,7 +96,7 @@ When access ends, the client gets a 401 and sends the person back through the di
 **Renewing (my calls):**
 
 - The match is the same person, workspace and agent name, not the client id, because a client id is shared across installs under CIMD and can change under DCR.
-- A match on an agent that hasn't been revoked renews that row, keeping its history and watches, and replaces its old tokens: it deletes the refresh tokens, and `agents.tokens_not_before` refuses any access token issued in an earlier second. The dialog says so before Allow, for example "You already have an agent with this name. Allowing replaces its connection."
+- A match on an agent that hasn't been revoked renews that row, keeping its history and watches, and replaces its old tokens once the new client has its code: it deletes the refresh tokens and unredeemed codes, `agents.tokens_not_before` refuses any access token issued in an earlier second, and an access token whose `azp` is not the agent's `oauth_client_id` is refused. The dialog says so before Allow, for example "You already have an agent with this name. Allowing replaces its connection."
 - Any other name creates a new agent, so two laptops stay two agents when given two names.
 - Revoking is final. A revoked agent never comes back, and approving again under its name creates a new row, leaving the old history in place.
 

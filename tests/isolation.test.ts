@@ -230,7 +230,7 @@ describe("tenant isolation", () => {
     it("a workspace's own URL lets in only that workspace's agents", async () => {
       const server = createOAuthServer(testDb.db);
       const connected = await connectOAuthAgent(testDb.db, server, "oauth-acme");
-      const handler = createPheanMcpHandler({ getDb: () => testDb.db, verifyOAuthToken: () => Promise.resolve({ agentId: connected.agentId, issuedAt: Math.floor(Date.now() / 1000) }) });
+      const handler = createPheanMcpHandler({ getDb: () => testDb.db, verifyOAuthToken: () => Promise.resolve({ agentId: connected.agentId, clientId: connected.clientId, issuedAt: Math.floor(Date.now() / 1000) }) });
       // Another workspace's key, and a token the verifier accepts but whose agent works elsewhere.
       await expect(connectMcpClient(handler, globex.scout.token, { url: `${OAUTH_BASE}/mcp/w/${acme.tenant.slug}` })).rejects.toThrow();
       await expect(connectMcpClient(handler, "verified-token", { url: `${OAUTH_BASE}/mcp/w/${acme.tenant.slug}` })).rejects.toThrow();

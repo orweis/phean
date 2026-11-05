@@ -190,7 +190,7 @@ Auth tables (`user`, `session`, `account`, `verification`, `organization`, `memb
 - Either way, each agent is a named identity, so every change is attributed, and cutting it off (revoking, expiry, its approver leaving) takes effect on its next request because every request reads the row. Revoking an agent revokes its sub-agents, disables their webhooks and deletes their refresh tokens; an expired or orphaned agent's webhooks pause until it is renewed.
 - **Platform admins**: emails in `PHEAN_PLATFORM_ADMINS` with a *verified* address see every workspace read-only. This is the operator's status-per-customer view.
 
-The policy matrix (`domain/policy.ts`). An agent's role is its effective level: `agent_read`, `agent_write` or `agent_admin`.
+The policy matrix (`lib/permissions.ts`, enforced by `domain/policy.ts`). An agent's role is its effective level: `agent_read`, `agent_write` or `agent_admin`.
 
 | Action | owner / admin | member | Admin agent | Write agent | Read agent | platform_admin |
 | --- | --- | --- | --- | --- | --- | --- |

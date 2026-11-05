@@ -7,6 +7,7 @@ import { saveWorkflow } from "@/server/domain/workflow";
 import { deleteWebhook } from "@/server/domain/webhooks";
 import { AGENT_ROLES, type Actor, type Ctx, type Role } from "@/server/domain/context";
 import { grantableLevels } from "@/lib/domain";
+import { PERMISSIONS, roleCan } from "@/lib/permissions";
 import { createGoal, setGoalStatus } from "@/server/domain/goals";
 import { ACTIONS, can, type Action } from "@/server/domain/policy";
 import { captureTasks } from "@/server/domain/tasks";
@@ -59,6 +60,11 @@ describe("policy matrix", () => {
     expect(can(person("admin"), "agent:issue_key")).toBe(true);
     expect(grantableLevels("member")).toEqual(["read", "write"]);
     expect(grantableLevels("owner")).toEqual(["read", "write", "admin"]);
+  });
+
+  it("lets a person grant Admin exactly when their role manages agents in the policy matrix", () => {
+    for (const role of Object.keys(PERMISSIONS)) expect(grantableLevels(role).includes("admin"), role).toBe(roleCan(role, "agent:manage"));
+    expect(roleCan("constructor", "agent:manage")).toBe(false);
   });
 });
 
