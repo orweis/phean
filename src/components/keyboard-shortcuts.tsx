@@ -23,7 +23,7 @@ const GROUPS = [
   {
     title: "Decisions and the overview",
     keys: [
-      { keys: ["1", "–", "9"], what: "Pick the focused request's option" },
+      { keys: ["1", "–", "9"], what: "Pick the selected request's option" },
       { keys: ["J"], what: "Next request" },
       { keys: ["K"], what: "Previous request" },
     ],
