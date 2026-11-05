@@ -2,12 +2,11 @@ import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/cli
 
 export type ToolArgs = Record<string, unknown>;
 
-/** An agent connected to a Phean deployment's MCP endpoint with its bearer token. */
-export async function connectAgent(baseUrl: string, token: string, name: string) {
+/** Connects to Phean's MCP endpoint; with `agentName`, as a sub-agent sharing the token's key under that name. */
+export async function connectAgent(baseUrl: string, token: string, name: string, agentName?: string) {
   const client = new Client({ name, version: "1.0.0" });
-  await client.connect(
-    new StreamableHTTPClientTransport(new URL("/mcp", baseUrl), { requestInit: { headers: { Authorization: `Bearer ${token}` } } }),
-  );
+  const headers: Record<string, string> = { Authorization: `Bearer ${token}`, ...(agentName && { "Phean-Agent-Name": agentName }) };
+  await client.connect(new StreamableHTTPClientTransport(new URL("/mcp", baseUrl), { requestInit: { headers } }));
   /** Calls a tool and returns its structured result, throwing on a tool error. */
   const call = async <T = ToolArgs>(tool: string, args: ToolArgs = {}): Promise<T> => {
     const result = await client.callTool({ name: tool, arguments: args });

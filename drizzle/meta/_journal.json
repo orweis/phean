@@ -64,6 +64,13 @@
       "when": 1793873017762,
       "tag": "0008_subagents",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1793875787448,
+      "tag": "0009_detected_subagents",
+      "breakpoints": true
     }
   ]
 }

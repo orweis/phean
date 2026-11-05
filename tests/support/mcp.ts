@@ -10,11 +10,12 @@ export function inProcessFetch(handler: Handler) {
   return (input: string | URL | Request, init?: RequestInit) => handler(new Request(input, init));
 }
 
-export async function connectMcpClient(handler: Handler, token: string): Promise<Client> {
+/** Connects as the token's agent, or, given `options`, as a sub-agent sharing its key under a name of its own. */
+export async function connectMcpClient(handler: Handler, token: string, options: { agentName?: string; url?: string } = {}): Promise<Client> {
   const client = new Client({ name: "phean-test-agent", version: "1.0.0" });
-  const transport = new StreamableHTTPClientTransport(new URL(MCP_URL), {
+  const transport = new StreamableHTTPClientTransport(new URL(options.url ?? MCP_URL), {
     fetch: inProcessFetch(handler),
-    requestInit: { headers: { Authorization: `Bearer ${token}` } },
+    requestInit: { headers: { Authorization: `Bearer ${token}`, ...(options.agentName && { "Phean-Agent-Name": options.agentName }) } },
   });
   await client.connect(transport);
   return client;

@@ -107,17 +107,23 @@ test("an owner manages goals, memory, search, agents and members", async ({ page
 
   await test.step("an agent's sub-agent shows under it, and revoking the agent cuts both off at once", async () => {
     const helper = await asAgent(token, (agent) => agent.call<{ subagent: { id: string }; token: string }>("create_subagent", { name: "Researcher", purpose: "Reads vendor contracts" }));
+    // A worker on the agent's own key, naming itself, shows up under it without a token of its own.
+    const worker = await connectAgent(BASE_URL, token, "phean-e2e-worker", "Clause checker");
+    await worker.call("whoami");
+    await worker.client.close();
     await openTab(page, slug, "Agents");
+    await expect(page.getByRole("row").filter({ hasText: "Clause checker" })).toContainText("Detected · shares Night shift's key");
     // The connect form folds to a bar once agents exist; the agents lead the page.
     await expect(page.getByRole("button", { name: "Connect an agent" })).toHaveAttribute("aria-expanded", "false");
-    const row = page.getByRole("row").filter({ hasText: "Night shift" }).filter({ hasNotText: "Researcher" });
+    const row = page.getByRole("row").filter({ hasText: "Night shift" }).filter({ hasNotText: "Researcher" }).filter({ hasNotText: "Clause checker" });
     const sub = page.locator(`tr[data-agent="${helper.subagent.id}"]`);
     await expect(sub).toContainText("Reads vendor contracts");
     await expect(sub).toContainText("sub-agent of Night shift");
-    await expect(row).toContainText("Runs 1 sub-agent");
+    await expect(row).toContainText("Runs 2 sub-agents");
     await row.getByRole("button", { name: "Revoke" }).click();
     await expect(row).toContainText("Revoked");
     await expect(sub).toContainText("Revoked");
+    await expect(page.getByRole("row").filter({ hasText: "Clause checker" })).toContainText("Revoked");
     await expect(connectAgent(BASE_URL, helper.token, "revoked helper")).rejects.toThrow();
     await expect(row.getByRole("button", { name: "Revoke" })).toHaveCount(0);
     await expect(connectAgent(BASE_URL, token, "revoked")).rejects.toThrow();

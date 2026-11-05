@@ -2,7 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 
 import { and, asc, count, eq, isNull, lt, or, sql } from "drizzle-orm";
 
-import { AGENT_TOKEN_PREFIX } from "@/lib/domain";
+import { AGENT_TOKEN_PREFIX, LIMITS } from "@/lib/domain";
 
 import type { Db } from "../db/client";
 import { publicColumns } from "../db/columns";
@@ -170,6 +170,78 @@ export async function authenticateAgentToken(db: Db, token: string): Promise<Age
     agent: { id: row.agentId, name: row.agentName },
     tenant: { id: row.tenantId, slug: row.tenantSlug, name: row.tenantName },
   };
+}
+
+/** The header a sub-agent sends with its parent's token to say who it is. */
+export const AGENT_NAME_HEADER = "phean-agent-name";
+
+/** A name a sub-agent may give itself: printable, trimmed, within the name limit. */
+export function subagentName(raw: string | null | undefined): string | null {
+  const name = (raw ?? "").replace(/\s+/g, " ").trim();
+  if (!name || name.length > LIMITS.name || /[\u0000-\u001f\u007f]/.test(name)) return null;
+  return name;
+}
+
+/** What stands in for a detected sub-agent's token hash: never a real hash, and one per name under a parent. */
+const sharedKey = (parentId: string, name: string) => `shared:${parentId}:${name.toLowerCase()}`;
+
+/**
+ * The identity behind a request that carries an agent's own token and a name of its own
+ * (Phean-Agent-Name): that agent's sub-agent of that name, made the first time Phean sees it, so
+ * workers that share their orchestrator's key are still told apart and listed under it. A revoked
+ * name stays refused (null). An agent at its limit of sub-agents, or a sub-agent's own token, keeps
+ * acting as itself.
+ */
+export async function resolveNamedSubagent(db: Db, principal: AgentPrincipal, rawName: string | null | undefined): Promise<AgentPrincipal | null> {
+  const name = subagentName(rawName);
+  if (!name) return principal;
+  const [parent] = await db.select(agentColumns).from(agents).where(eq(agents.id, principal.agent.id));
+  if (!parent || parent.parentAgentId || name.toLowerCase() === parent.name.toLowerCase()) return principal;
+
+  const key = sharedKey(parent.id, name);
+  const find = () => db.select(agentColumns).from(agents).where(and(eq(agents.tenantId, principal.tenant.id), eq(agents.tokenHash, key)));
+  let [sub] = await find();
+  if (!sub) {
+    const ctx = agentContext(db, principal);
+    const [{ active }] = (await db
+      .select({ active: count() })
+      .from(agents)
+      .where(and(inTenant(ctx, agents), eq(agents.parentAgentId, parent.id), isNull(agents.revokedAt)))) as [{ active: number }];
+    if (Number(active) >= MAX_SUBAGENTS) return principal;
+    await inTransaction(ctx, async (tx) => {
+      const [created] = await tx.db
+        .insert(agents)
+        .values({
+          id: newId("ag"),
+          tenantId: tx.tenant.id,
+          name,
+          tokenHash: key,
+          tokenPrefix: parent.tokenPrefix,
+          parentAgentId: parent.id,
+          sharesParentKey: true,
+          lastSeenAt: new Date(),
+        })
+        // Two first requests at once: one row wins, the other reads it below.
+        .onConflictDoNothing({ target: agents.tokenHash })
+        .returning(agentColumns);
+      if (created) {
+        await recordEvent(tx, {
+          action: "agent.created",
+          entityType: "agent",
+          entityId: created.id,
+          summary: `started "${name}" as a sub-agent, on its own key`,
+          data: { parentAgentId: parent.id, sharesParentKey: true },
+        });
+      }
+    });
+    [sub] = await find();
+  }
+  if (!sub || sub.revokedAt) return null;
+  await db
+    .update(agents)
+    .set({ lastSeenAt: new Date() })
+    .where(and(eq(agents.id, sub.id), or(isNull(agents.lastSeenAt), lt(agents.lastSeenAt, sql`now() - ${LAST_SEEN_RESOLUTION}`))));
+  return { agent: { id: sub.id, name: sub.name }, tenant: principal.tenant };
 }
 
 export function agentContext(db: Db, principal: AgentPrincipal): Ctx {

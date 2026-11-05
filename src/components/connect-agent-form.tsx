@@ -99,6 +99,10 @@ function TokenReveal({ token, agentName, slug, mcpUrl }: { token: string; agentN
             <CopyButton value={setup.code} variant="ghost" />
           </div>
           <pre className="overflow-x-auto rounded-md bg-dusk p-3 font-mono text-xs leading-relaxed text-dusk-ink">{setup.code}</pre>
+          <p className="mt-2 text-xs text-muted">
+            Sub-agents can share this token: give each a <code className="font-mono">Phean-Agent-Name</code> header (or{" "}
+            <code className="font-mono">?agent=Name</code> on the URL) and Phean lists it under {agentName} by that name.
+          </p>
         </div>
       </div>
     </div>

@@ -269,7 +269,7 @@ export const TOOLS: readonly PheanTool[] = [
     name: "create_subagent",
     title: "Create sub-agent",
     description:
-      "Issue a Phean token for a sub-agent you run (a worker you spawn, a specialist you delegate to), so its work is attributed to it and people see it under you on the Agents page. Give it a name and a one-line purpose. The token is shown once: hand it to the sub-agent's MCP connection and never put it in chat, a task or a document. One level deep: sub-agents cannot have their own. Revoke it with revoke_subagent when its job is done.",
+      "Issue a Phean token of its own for a sub-agent you run (a worker you spawn, a specialist you delegate to), so its work is attributed to it and people see it under you on the Agents page. A sub-agent can also simply share your token and name itself with the Phean-Agent-Name header (or ?agent=Name on the MCP URL); Phean then detects it under you without a token of its own. Give it a name and a one-line purpose. The token is shown once: hand it to the sub-agent's MCP connection and never put it in chat, a task or a document. One level deep: sub-agents cannot have their own. Revoke it with revoke_subagent when its job is done.",
     input: createSubagent.schema,
     run: async (ctx, input) => {
       const { agent, token } = await createSubagent(ctx, input);

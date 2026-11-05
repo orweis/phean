@@ -146,9 +146,14 @@ export default async function AgentsPage({ params }: PageProps<"/w/[slug]/agents
                               </p>
                             )}
                             {running > 0 && <p className="text-xs text-muted">Runs {pluralize(running, "sub-agent")}</p>}
-                            <p className="font-mono text-xs whitespace-nowrap text-muted" title={`Token starting ${agent.tokenPrefix}`}>
-                              {agent.tokenPrefix}…
-                            </p>
+                            {agent.sharesParentKey ? (
+                              // Detected: it connects with its agent's token and names itself, so it has no token of its own.
+                              <p className="text-xs whitespace-nowrap text-muted">Detected · shares {nameOf.get(agent.parentAgentId!)}&apos;s key</p>
+                            ) : (
+                              <p className="font-mono text-xs whitespace-nowrap text-muted" title={`Token starting ${agent.tokenPrefix}`}>
+                                {agent.tokenPrefix}…
+                              </p>
+                            )}
                           </div>
                         </div>
                       </td>

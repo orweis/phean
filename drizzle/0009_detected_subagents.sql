@@ -1,0 +1,1 @@
+ALTER TABLE "agents" ADD COLUMN "shares_parent_key" boolean DEFAULT false NOT NULL;

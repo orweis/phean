@@ -26,9 +26,12 @@ colors:
   late: "oklch(56% 0.2 22)"
   late-ink: "oklch(49% 0.18 22)"
   late-tint: "oklch(96% 0.018 18)"
-  wait: "oklch(79% 0.14 86)"
-  wait-ink: "oklch(47% 0.095 76)"
-  wait-tint: "oklch(96.5% 0.045 92)"
+  wait: "{colors.signal}"
+  wait-ink: "oklch(49% 0.15 40)"
+  wait-tint: "{colors.signal-tint}"
+  inbox: "oklch(68% 0.12 232)"
+  inbox-ink: "oklch(47% 0.11 237)"
+  inbox-tint: "oklch(95.5% 0.025 230)"
   arrive: "oklch(58% 0.13 158)"
   arrive-ink: "oklch(44% 0.1 158)"
   arrive-tint: "oklch(95.6% 0.032 160)"
@@ -36,7 +39,7 @@ colors:
   station-todo: "oklch(80% 0.06 300)"
   station-progress: "oklch(55% 0.19 292)"
   station-done: "oklch(62% 0.13 158)"
-  line-inbox: "oklch(64% 0.16 46)"
+  line-inbox: "oklch(60% 0.12 235)"
   line-todo: "oklch(60% 0.07 298)"
   line-backlog: "oklch(62% 0.03 280)"
   focus: "oklch(54% 0.2 292)"
@@ -71,9 +74,12 @@ colors:
   dark-late: "oklch(66% 0.18 22)"
   dark-late-ink: "oklch(77% 0.13 22)"
   dark-late-tint: "oklch(25% 0.03 20)"
-  dark-wait: "oklch(81% 0.13 86)"
-  dark-wait-ink: "oklch(85% 0.11 88)"
-  dark-wait-tint: "oklch(28% 0.045 80)"
+  dark-wait: "{colors.dark-signal}"
+  dark-wait-ink: "oklch(80% 0.13 56)"
+  dark-wait-tint: "{colors.dark-signal-tint}"
+  dark-inbox: "oklch(68% 0.11 232)"
+  dark-inbox-ink: "oklch(82% 0.08 228)"
+  dark-inbox-tint: "oklch(29% 0.05 235)"
   dark-arrive: "oklch(68% 0.13 158)"
   dark-arrive-ink: "oklch(79% 0.12 158)"
   dark-arrive-tint: "oklch(28% 0.05 160)"
@@ -274,15 +280,16 @@ A cool lavender ground under a violet brand, with one ember signal and four stat
 
 ### Secondary
 
-- **Boulder ember** (`signal`, oklch(73% 0.165 50) · dark oklch(76% 0.15 52)): the boulder in the logo, the tab rail's counts of what needs a person, the inbox station, the last station on the landing route, and the one call to action on a dusk band. Labels on it are `on-signal`. `signal-shade` is the boulder's shaded side; `signal-ink` is ember text, used only in the accent badge on `signal-tint`.
+- **Boulder ember** (`signal`, oklch(73% 0.165 50) · dark oklch(76% 0.15 52)): the boulder in the logo, the tab rail's counts of what needs a person, everything waiting on a person (as `wait`), the last station on the landing route, and the one call to action on a dusk band. Labels on it are `on-signal`. `signal-shade` is the boulder's shaded side; `signal-ink` is ember text, used only in the accent badge on `signal-tint`.
 
 ### Tertiary
 
 - **Late crimson** (`late`, `late-ink`, `late-tint`): the now line, late tracks and cards, urgent priority, and destructive buttons.
-- **Honey** (`wait`, `wait-ink`, `wait-tint`): what waits on a person (goals awaiting a decision, and agent questions: the Waiting on you badge, the question under it on a card, the rule beside it on the overview), high priority, read-only access.
+- **Waiting ember** (`wait`, `wait-ink`, `wait-tint`): what waits on a person, in the theme's own ember (goals awaiting approval, and agent questions: the Waiting on you badge, the question under it on a card, the rule beside it on the overview), high priority, read-only access. `wait` and `wait-tint` are the ember itself; `wait-ink` is a deeper cut for text, at 5.9:1 on its tint.
+- **Inbox sky** (`inbox`, `inbox-ink`, `inbox-tint`): what just arrived and is still to triage: the inbox station, its line and its badge. A cool sky blue, so it never reads as waiting on a person, which is ember's alone.
 - **Moving** (`move`, `move-ink`, `move-tint`): in-progress work, active goals and agent claims. It is the violet, by reference, so moving work and the brand are one hue.
 - **Arrived green** (`arrive`, `arrive-ink`, `arrive-tint`): done tasks, achieved goals, active agents.
-- **The five stations**: inbox is ember (`station-inbox`), backlog is a quiet grey (`station-backlog`), to do is lavender (`station-todo`), in progress is violet (`station-progress`), and done is green (`station-done`). Thin timetable lines use the darker cuts `line-inbox`, `line-backlog` and `line-todo`, which keep 3:1 against a card; backlog's line is dotted, since nothing is planned for it yet. A workspace's own stages take the colour of their kind: a "Review" stage inside In progress is violet.
+- **The five stations**: inbox is sky (`station-inbox`), backlog is a quiet grey (`station-backlog`), to do is lavender (`station-todo`), in progress is violet (`station-progress`), and done is green (`station-done`). Thin timetable lines use the darker cuts `line-inbox`, `line-backlog` and `line-todo`, which keep 3:1 against a card; backlog's line is dotted, since nothing is planned for it yet. A workspace's own stages take the colour of their kind: a "Review" stage inside In progress is violet.
 
 ### Neutral
 
@@ -296,7 +303,7 @@ A cool lavender ground under a violet brand, with one ember signal and four stat
 
 ### Dark appearance
 
-Every token above is redefined under the custom `dark` variant, which holds when `<html data-appearance>` is `dark`, or when it is `system` (or missing) and the device prefers dark. The attribute comes from the `phean-appearance` cookie, read by `getAppearance()` in the root layout, so the first paint is already in the chosen appearance; the picker sets the attribute and the cookie together, and the change is instant. The ground drops to oklch(16.5% 0.022 292), panels to 21% and fills to 26.5%, all on the violet hue; text inverts to a lavender white; each `-ink` lifts to a light cut of its hue (violet ink to 77%, crimson to 77%, honey to 85%, green to 79%); and each `-tint` becomes a deep wash of its hue around 28% lightness. Glass turns to smoked violet with a light rim. The `theme-color` and `color-scheme` metas follow the choice: `#f7f5fb` in light, `#0e0d17` in dark, and one of each, by media query, under System.
+Every token above is redefined under the custom `dark` variant, which holds when `<html data-appearance>` is `dark`, or when it is `system` (or missing) and the device prefers dark. The attribute comes from the `phean-appearance` cookie, read by `getAppearance()` in the root layout, so the first paint is already in the chosen appearance; the picker sets the attribute and the cookie together, and the change is instant. The ground drops to oklch(16.5% 0.022 292), panels to 21% and fills to 26.5%, all on the violet hue; text inverts to a lavender white; each `-ink` lifts to a light cut of its hue (violet ink to 77%, crimson to 77%, ember to 80%, sky to 82%, green to 79%); and each `-tint` becomes a deep wash of its hue around 28% lightness. Glass turns to smoked violet with a light rim. The `theme-color` and `color-scheme` metas follow the choice: `#f7f5fb` in light, `#0e0d17` in dark, and one of each, by media query, under System.
 
 ### Named Rules
 
@@ -304,7 +311,7 @@ Every token above is redefined under the custom `dark` variant, which holds when
 
 **The Prominence Rule.** A view has one or two filled violet actions at most. The forward step repeated on every row of a list (Done on each task) is tinted, and the rest are secondary or ghost.
 
-**The One Ember Rule.** Ember marks what is new and what needs a person: the boulder, the counts on the rail, the inbox, and one call to action on a dusk band. It is never a panel fill and never body text.
+**The One Ember Rule.** Ember marks what needs a person: the boulder, the counts on the rail, what waits on someone's answer or approval, and one call to action on a dusk band. New work in the inbox is sky, not ember. Ember is never a panel fill and never body text.
 
 **The Station Rule.** A station hue means that status everywhere: in the flow bar, the rail atop each board column, the cumulative flow and the timetable. Nothing else borrows those hues except the violet, which the brand and in-progress share on purpose.
 
@@ -397,7 +404,7 @@ Controls are capsules: buttons, tabs, badges, count chips, segmented controls an
 ### Cards / Containers
 
 - **Corner Style:** 14px.
-- **Background:** panel; the question and decision cards are honey and the late card crimson, in both their border and header, and a tinted header's description takes the tone's ink rather than grey.
+- **Background:** panel; the question and decision cards are ember and the late card crimson, in both their border and header, and a tinted header's description takes the tone's ink rather than grey.
 - **Shadow Strategy:** none (see Elevation & Depth).
 - **Border:** one hairline.
 - **Internal Padding:** 20px; the header is ruled off from the body.
@@ -474,7 +481,7 @@ A stacked area of how many tasks stood at each station at the end of each day: d
 
 ### Goal map
 
-The goal tree as a line with stations: a violet ring per active goal, a dashed honey ring while proposed, a filled green dot when achieved, a grey one when abandoned, branches for sub-goals, and a flow bar of each goal's tasks with its percentage done.
+The goal tree as a line with stations: a violet ring per active goal, a dashed ember ring while proposed, a filled green dot when achieved, a grey one when abandoned, branches for sub-goals, and a flow bar of each goal's tasks with its percentage done.
 
 ## Do's and Don'ts
 
