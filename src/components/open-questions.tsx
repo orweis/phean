@@ -2,7 +2,7 @@ import { Bot, Check, Ellipsis } from "lucide-react";
 import Link from "next/link";
 
 import { answerInputAction, retractAnswerAction } from "@/app/w/[slug]/actions";
-import { sessionOfAsker, type AgentSession, type InputRequest } from "@/lib/agent-sessions";
+import { askedInApp, askerName, sessionOfAsker, type AgentSession, type InputRequest } from "@/lib/agent-sessions";
 import { LIMITS, REQUEST_KIND_META } from "@/lib/domain";
 import { cx } from "@/lib/cx";
 import { timeAgo, truncate } from "@/lib/format";
@@ -166,8 +166,8 @@ export function OpenQuestions({
             </div>
             <p className="mt-0.5 flex flex-wrap items-center gap-x-1 text-xs text-muted">
               <Bot className="size-3" aria-hidden />
-              {request.agentName} asked {timeAgo(request.askedAt)}
-              {session?.app && ` in ${session.app}`}
+              {askerName(request)} asked {timeAgo(request.askedAt)}
+              {askedInApp(request, session?.app) && ` in ${askedInApp(request, session?.app)}`}
               {showGoal && task.goalId && task.goalTitle && (
                 <>
                   <span aria-hidden> · </span>

@@ -152,7 +152,7 @@ export const SessionInput = z
     sessionId: ref(LIMITS.ref).describe("Your session, conversation or thread id"),
     messageId: ref(LIMITS.ref).describe("The message to pick up from, if your client has message ids"),
     command: ref(LIMITS.command).describe("Shell command that resumes this session, e.g. `claude --resume <id>`"),
-    app: ref(LIMITS.name).describe("Where this session lives: Claude Code, Cursor, ChatGPT, Slack..."),
+    app: ref(LIMITS.name).describe("The app where the person reaches this conversation: Claude Code, Cursor, ChatGPT, Slack... Not your own or your bot's name."),
     brief: z.string().trim().max(LIMITS.brief).default("").describe("Where things stand, in a sentence"),
   })
   .refine((session) => Boolean(session.url || session.sessionId || session.command), {

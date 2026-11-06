@@ -1,5 +1,6 @@
 import type { AuthInfo, McpServer, ServerContext } from "@modelcontextprotocol/server";
 import { createMcpHandler, getPublicOrigin, withMcpAuth } from "mcp-handler";
+import { z } from "zod";
 
 import { AGENT_TOKEN_PREFIX, type AgentAccessLevel } from "@/lib/domain";
 import { routes } from "@/lib/routes";
@@ -29,22 +30,44 @@ interface PheanAuthExtra {
 
 type ToolCallContext = Pick<ServerContext, "http">;
 
-function toolContext(db: Db, call: ToolCallContext): ToolContext | null {
+/**
+ * Every tool takes `actingAs`: one key shared by several bots (a hub relaying for others, an
+ * orchestrator's workers) names the bot behind each call, and the call is filed under that
+ * sub-agent, exactly as the `Phean-Agent-Name` header would file it. It never widens access: a
+ * named sub-agent acts in its parent's workspace with an agent's permissions.
+ */
+export const ACTING_AS = z
+  .string()
+  .trim()
+  .max(80)
+  .optional()
+  .describe(
+    "The name of the bot behind this call, when one Phean key serves several (a hub relaying for other bots, an orchestrator's workers). Phean files the call under that sub-agent of yours and shows it to people by that name. Leave it out when you act as yourself.",
+  );
+
+async function toolContext(db: Db, call: ToolCallContext, actingAs: string | undefined): Promise<ToolContext | null> {
   const extra = call.http?.authInfo?.extra as PheanAuthExtra | undefined;
   if (!extra) return null;
-  return { ...agentContext(db, extra.principal), url: (path) => new URL(path, extra.origin).toString(), accessEndsAt: extra.principal.accessExpiresAt };
+  const principal = actingAs ? await resolveNamedSubagent(db, extra.principal, actingAs) : extra.principal;
+  if (!principal) throw forbidden(`The sub-agent "${actingAs}" was revoked. Ask a workspace admin, or act under another name.`);
+  return { ...agentContext(db, principal), url: (path) => new URL(path, extra.origin).toString(), accessEndsAt: principal.accessExpiresAt };
 }
 
 function registerTool(server: McpServer, tool: PheanTool, getDb: () => Db): void {
   server.registerTool(
     tool.name,
-    { title: tool.title, description: tool.description, inputSchema: tool.inputSchema, annotations: tool.annotations },
-    async (input: unknown, call: ToolCallContext) => {
-      const ctx = toolContext(getDb(), call);
-      if (!ctx) return toolError(new Error("MCP request reached a tool without verified agent credentials"));
-      // The list already leaves it out; this holds if a level's handler is ever reached with another's principal.
-      if (!toolAllowed(tool, ctx.actor)) return toolError(forbidden("Your access level does not allow this tool. Ask a person to reconnect you with more access."));
-      return tool.execute(ctx, input);
+    { title: tool.title, description: tool.description, inputSchema: tool.inputSchema.extend({ actingAs: ACTING_AS }), annotations: tool.annotations },
+    async (raw: unknown, call: ToolCallContext) => {
+      const { actingAs, ...input } = raw as { actingAs?: string };
+      try {
+        const ctx = await toolContext(getDb(), call, actingAs || undefined);
+        if (!ctx) return toolError(new Error("MCP request reached a tool without verified agent credentials"));
+        // The list is the token's level; a sub-agent named by actingAs may hold less, so check the one acting.
+        if (!toolAllowed(tool, ctx.actor)) return toolError(forbidden("Your access level does not allow this tool. Ask a person to reconnect you with more access."));
+        return tool.execute(ctx, input);
+      } catch (error) {
+        return toolError(error);
+      }
     },
   );
 }
