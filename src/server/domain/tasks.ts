@@ -470,8 +470,16 @@ export const requestInput = service(AskInput, async (ctx, { taskId, question, ki
       throw conflict(`"${current.title}" already waits on ${open.agentName}'s question. Wait until it is answered.`);
     }
 
+    // A sub-agent asks in its own name; people also see the agent it works for.
+    const parent = alias(agents, "parent");
+    const [via] = await tx.db
+      .select({ name: parent.name })
+      .from(agents)
+      .innerJoin(parent, eq(parent.id, agents.parentAgentId))
+      .where(and(inTenant(tx, agents), eq(agents.id, me)));
     const inputRequest: InputRequest = {
       id: newId("q"),
+      ...(via && { viaAgentName: via.name }),
       kind,
       question,
       context,
@@ -603,6 +611,7 @@ export const retractAnswer = service(RetractAnswerInput, async (ctx, { taskId, r
       context: record.context,
       options: record.options,
       ...(record.multiple && { multiple: true }),
+      ...(record.viaAgentName && { viaAgentName: record.viaAgentName }),
       links: record.links,
       agentId: record.agentId,
       agentName: record.agentName,

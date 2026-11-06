@@ -63,6 +63,8 @@ export interface InputRequest {
   links: TaskLink[];
   agentId: string;
   agentName: string;
+  /** The agent whose key it asked through, when the asker is one of its sub-agents (the bot behind a hub). */
+  viaAgentName?: string;
   /** ISO timestamp. */
   askedAt: string;
 }
@@ -130,6 +132,17 @@ export function movesSession(previous: AgentSession | undefined, next: AgentSess
 
 export function resumeLabel(session: Pick<AgentSession, "app">): string {
   return session.app ? `Resume in ${session.app}` : "Resume conversation";
+}
+
+/** Who asked, as people read it: the bot behind a shared key, then the agent it asked through. */
+export function askerName(request: Pick<InputRequest, "agentName" | "viaAgentName">): string {
+  return request.viaAgentName ? `${request.agentName} (via ${request.viaAgentName})` : request.agentName;
+}
+
+/** The app a question was asked in, unless it only repeats the asker's own name ("Grok Bot asked in Grok Bot"). */
+export function askedInApp(request: Pick<InputRequest, "agentName" | "viaAgentName">, app: string | null | undefined): string | null {
+  const same = (name: string | undefined) => Boolean(name && app && name.trim().toLowerCase() === app.trim().toLowerCase());
+  return app && !same(request.agentName) && !same(request.viaAgentName) ? app : null;
 }
 
 /** The session of the agent that asked, which is where its question is best answered. */

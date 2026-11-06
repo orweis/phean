@@ -1,6 +1,6 @@
 import { Bot, Check, Clock } from "lucide-react";
 
-import { chosenOptions, DELIVERED_OUTCOMES, type InputAnswer } from "@/lib/agent-sessions";
+import { askerName, chosenOptions, DELIVERED_OUTCOMES, type InputAnswer } from "@/lib/agent-sessions";
 import { cx } from "@/lib/cx";
 import { REQUEST_KIND_META, REQUEST_OUTCOME_META } from "@/lib/domain";
 import { timeAgo } from "@/lib/format";
@@ -67,7 +67,7 @@ export function AnsweredDecisions({ records, slug }: { records: readonly Decisio
           </div>
           <p className="mt-0.5 flex flex-wrap items-center gap-x-1 text-xs text-muted">
             <Bot className="size-3" aria-hidden />
-            {request.agentName} asked {timeAgo(request.askedAt)}
+            {askerName(request)} asked {timeAgo(request.askedAt)}
             {task.goalId && task.goalTitle && (
               <>
                 <span aria-hidden> · </span>
