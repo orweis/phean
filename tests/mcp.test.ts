@@ -143,6 +143,35 @@ describe("sub-agents sharing their agent's key", () => {
     await expect(connectMcpClient(handler, ws.scout.token, { agentName: "Vendor researcher" })).rejects.toThrow();
     await Promise.all([researcher.close(), again.close()]);
   });
+
+  it("files a hub's calls under the bot it names in actingAs, and shows it as asking via the hub", async () => {
+    const { agent } = dataOf<{ agent: { id: string; name: string } }>(await call(scout, "whoami", { actingAs: "Grok research" }));
+    expect(agent.name).toBe("Grok research");
+    const {
+      created: [task],
+    } = dataOf<{ created: { id: string; createdByName: string }[] }>(
+      await call(scout, "capture_tasks", { tasks: [{ title: "Price the renewal" }], actingAs: "Grok research" }),
+    );
+    expect(task).toMatchObject({ createdByName: "Grok research" });
+    const { task: asked } = dataOf<{ task: { inputRequest: { agentName: string; viaAgentName: string } } }>(
+      await call(scout, "request_input", { taskId: task!.id, question: "Hold the list price?", actingAs: "Grok research", session: { url: "https://grok.com/c/1", app: "Grok research" } }),
+    );
+    expect(asked.inputRequest).toMatchObject({ agentName: "Grok research", viaAgentName: "Scout" });
+    const { askedInApp, askerName } = await import("@/lib/agent-sessions");
+    expect(askerName(asked.inputRequest)).toBe("Grok research (via Scout)");
+    expect(askedInApp(asked.inputRequest, "Grok research")).toBeNull();
+    expect(askedInApp(asked.inputRequest, "Slack")).toBe("Slack");
+
+    // Without actingAs the agent is itself; a revoked name is refused, not silently filed as the hub.
+    expect(dataOf<{ agent: { id: string } }>(await call(scout, "whoami")).agent.id).toBe(ws.scout.agentId);
+    const { listAgents, revokeAgent } = await import("@/server/domain/agents");
+    const sub = (await listAgents(ws.human, {})).find((row) => row.name === "Grok research")!;
+    expect(sub).toMatchObject({ parentAgentId: ws.scout.agentId, sharesParentKey: true });
+    await revokeAgent(ws.human, { agentId: sub.id });
+    const refused = await scout.callTool({ name: "whoami", arguments: { actingAs: "Grok research" } });
+    expect(refused.isError).toBe(true);
+    expect(textOf(refused)).toContain("revoked");
+  });
 });
 
 describe("documents and stages over MCP", () => {

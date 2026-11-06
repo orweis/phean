@@ -31,7 +31,9 @@ Call `request_input` with these fields:
 | `options` | For decisions: 2-5 short, mutually exclusive answers, each a few words. The person clicks one. Leave it out for open questions. |
 | `multiple` | `true` when several options may apply together ("Which channels should announce the launch?"). The person ticks any number and sends them together; the options need not be exclusive then, and you need at least two. Phrase the question to match: "Pick any that apply". |
 | `links` | References, as `[{ url, title, kind }]`. See below. Always include them. |
-| `session` | Where the person can resume with you: `{ url, app, brief }`, or `sessionId` / `command` when you have no link. |
+| `session` | Where the person can resume with you: `{ url, app, brief }`, or `sessionId` / `command` when you have no link. `app` is where the person reaches the conversation (Slack, Claude), never your own name. |
+
+If one Phean key serves several bots (you relay for others, or run workers), add `actingAs` with the name of the bot asking, on this and every other call you make for it. Phean files the request under that bot as your sub-agent and shows it as "Research bot (via <you>)", so the person knows who is asking.
 
 ### Links
 
