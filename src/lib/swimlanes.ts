@@ -25,3 +25,17 @@ export function swimlaneOf(task: Placeable): Swimlane {
   if (task.claimedByAgentId) return "agents";
   return task.createdByType === "agent" ? "agents" : "people";
 }
+
+/** Whether a person sees the board split into the People and Agents rows; kept per browser in a cookie. */
+export const BOARD_ROWS_COOKIE = "phean-board-rows";
+export const BOARD_ROWS = ["split", "single"] as const;
+export type BoardRows = (typeof BOARD_ROWS)[number];
+
+export function parseBoardRows(value: string | undefined): BoardRows {
+  return value === "single" ? "single" : "split";
+}
+
+/** A `document.cookie` assignment that keeps the choice for a year on this origin. */
+export function boardRowsCookie(rows: BoardRows, secure: boolean): string {
+  return [`${BOARD_ROWS_COOKIE}=${rows}`, "Path=/", `Max-Age=${60 * 60 * 24 * 365}`, "SameSite=Lax", ...(secure ? ["Secure"] : [])].join("; ");
+}

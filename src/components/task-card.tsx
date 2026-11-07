@@ -270,7 +270,7 @@ export function TaskActionRow({ task, slug, canWrite, goals, className }: TaskVi
   return (
     <div className={cx("flex flex-wrap items-center gap-x-3 gap-y-1.5", className)}>
       {canWrite && <NextStep task={task} slug={slug} />}
-      {canWrite && <EditTaskPopover task={task} slug={slug} goals={goals ?? []} />}
+      {canWrite && <EditTaskPopover task={task} slug={slug} goals={goals ?? []} compact={task.agentSessions.length > 0} />}
       <ResumePopover sessions={task.agentSessions} />
       {canWrite && (
         <div className="ml-auto">
@@ -287,7 +287,7 @@ export function TaskCard({ task, slug, canWrite, showGoal = true, goals = [] }: 
     <article
       data-task={task.id}
       className={cx(
-        "rounded-md border bg-panel p-3 has-[a[data-task-link]:focus-visible]:outline-2 has-[a[data-task-link]:focus-visible]:outline-offset-2 has-[a[data-task-link]:focus-visible]:outline-focus",
+        "@container rounded-md border bg-panel p-3 has-[a[data-task-link]:focus-visible]:outline-2 has-[a[data-task-link]:focus-visible]:outline-offset-2 has-[a[data-task-link]:focus-visible]:outline-focus",
         isLate(task) ? "border-late/45" : "border-rule",
         LEAVING,
       )}

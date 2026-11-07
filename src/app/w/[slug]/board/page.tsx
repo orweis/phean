@@ -1,14 +1,17 @@
 import type { Metadata } from "next";
 import { Columns3Cog, X } from "lucide-react";
+import { cookies } from "next/headers";
 import Link from "next/link";
 import { Suspense } from "react";
 
+import { BoardRowsToggle } from "@/components/board-rows-toggle";
 import { GoalFilter } from "@/components/goal-filter";
 import { KanbanBoard } from "@/components/kanban-board";
 import { ManualEntry } from "@/components/manual-entry";
 import { PageHeader } from "@/components/page-header";
 import { ButtonLink } from "@/components/ui/button";
 import { queryParam, routes } from "@/lib/routes";
+import { BOARD_ROWS_COOKIE, parseBoardRows } from "@/lib/swimlanes";
 import { requireWorkspace } from "@/server/auth/session";
 import { listAgents } from "@/server/domain/agents";
 import { listGoals } from "@/server/domain/goals";
@@ -27,6 +30,7 @@ export default async function BoardPage({ params, searchParams }: PageProps<"/w/
   const [board, goals, agents] = await Promise.all([orNotFound(getBoard(ctx, { goalId, heldBy })), listGoals(ctx, {}), heldBy ? listAgents(ctx, {}) : []]);
   const holder = heldBy ? agents.find((agent) => agent.id === heldBy) : undefined;
   const canWrite = can(ctx.actor, "task:write");
+  const rows = parseBoardRows((await cookies()).get(BOARD_ROWS_COOKIE)?.value);
 
   return (
     <>
@@ -50,6 +54,7 @@ export default async function BoardPage({ params, searchParams }: PageProps<"/w/
             <Suspense>
               <GoalFilter goals={goals} />
             </Suspense>
+            <BoardRowsToggle rows={rows} />
             {/* The lanes are the workspace's stages, set in Settings; owners and admins reach them from here too. */}
             {can(ctx.actor, "workflow:manage") && (
               <ButtonLink href={routes.settings(slug)} variant="ghost" size="sm">
@@ -69,7 +74,7 @@ export default async function BoardPage({ params, searchParams }: PageProps<"/w/
           </Link>
         </p>
       )}
-      <KanbanBoard board={board} slug={slug} canWrite={canWrite} goals={goals} goalId={goalId} lane={queryParam(query.lane)} />
+      <KanbanBoard board={board} slug={slug} canWrite={canWrite} goals={goals} goalId={goalId} lane={queryParam(query.lane)} rows={rows} />
     </>
   );
 }
