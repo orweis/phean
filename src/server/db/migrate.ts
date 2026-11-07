@@ -5,7 +5,7 @@ import { drizzle as drizzlePg } from "drizzle-orm/node-postgres";
 import { migrate as migratePg } from "drizzle-orm/node-postgres/migrator";
 import { drizzle as drizzlePglite } from "drizzle-orm/pglite";
 import { migrate as migratePglite } from "drizzle-orm/pglite/migrator";
-import { Pool } from "pg";
+import { Client } from "pg";
 
 import { openPglite } from "./pglite";
 import { isPostgresUrl, postgresConnectionString } from "./url";
@@ -17,14 +17,26 @@ export async function migratePgliteClient(client: PGlite): Promise<void> {
   await migratePglite(drizzlePglite(client), { migrationsFolder: MIGRATIONS_FOLDER });
 }
 
-/** Applies pending migrations to the database behind `url`, then closes the connection. */
+/** A fixed key for the session-level advisory lock migrations take (any constant bigint). */
+export const MIGRATION_LOCK_KEY = 72_450_919_301;
+
+/**
+ * Applies pending migrations to the database behind `url`, then closes the connection. Two builds
+ * can migrate the same database at once (a merge deploys production while the branch deploys a
+ * preview), and Drizzle's migrator takes no lock: both would run the same new migration, and the
+ * second would fail on "already exists". So each takes an advisory lock on its one connection
+ * first; the second waits, then finds the migrations applied and has nothing to do.
+ */
 export async function migrateDatabase(url: string): Promise<void> {
   if (isPostgresUrl(url)) {
-    const pool = new Pool({ connectionString: postgresConnectionString(url), max: 1 });
+    const client = new Client({ connectionString: postgresConnectionString(url) });
+    await client.connect();
     try {
-      await migratePg(drizzlePg(pool), { migrationsFolder: MIGRATIONS_FOLDER });
+      await client.query("select pg_advisory_lock($1)", [MIGRATION_LOCK_KEY]);
+      await migratePg(drizzlePg(client), { migrationsFolder: MIGRATIONS_FOLDER });
     } finally {
-      await pool.end();
+      // Ending the session releases the lock even if migrating failed.
+      await client.end();
     }
     return;
   }
