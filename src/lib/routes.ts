@@ -41,6 +41,8 @@ export const routes = {
   settings: (slug: string) => `/w/${slug}/settings`,
   invite: (invitationId: string) => `/invite/${invitationId}`,
   mcp: () => "/mcp",
+  /** The realtime event stream agents open over a WebSocket. */
+  events: () => "/api/events",
 } as const;
 
 /** A single non-empty search param value; Next passes repeated keys as arrays. */
