@@ -264,8 +264,28 @@ export const events = pgTable(
   (t) => [
     index("events_tenant_created_idx").on(t.tenantId, t.createdAt.desc()),
     index("events_tenant_entity_idx").on(t.tenantId, t.entityType, t.entityId),
+    // The realtime stream reads a workspace's events after a cursor.
+    index("events_tenant_id_idx").on(t.tenantId, t.id),
   ],
 );
+
+/**
+ * Open realtime streams, one lease per WebSocket, so the caps on streams hold across server
+ * instances. `rootAgentId` is the agent itself, or the agent a sub-agent works for, so sub-agent
+ * names cannot multiply a token's streams. A lease is renewed as the stream runs and counts as
+ * gone once it stops being renewed.
+ */
+export const realtimeStreams = pgTable(
+  "realtime_streams",
+  {
+    id: text("id").primaryKey(),
+    tenantId: tenantId(),
+    rootAgentId: text("root_agent_id").notNull(),
+    openedAt: timestampTz("opened_at").notNull().defaultNow(),
+    renewedAt: timestampTz("renewed_at").notNull().defaultNow(),
+  },
+  (t) => [index("realtime_streams_tenant_idx").on(t.tenantId, t.rootAgentId, t.renewedAt)],
+)
 
 /** Per-workspace settings people edit on the Settings page; one row per workspace, made on first save. */
 export const workspaceSettings = pgTable("workspace_settings", {

@@ -80,7 +80,7 @@ async function claimWebhooks(db: Db, limit: number): Promise<Claimed[]> {
   );
 }
 
-const eventUrl = (base: string, slug: string, entityType: string, entityId: string, action: string) => {
+export const eventUrl = (base: string, slug: string, entityType: string, entityId: string, action: string) => {
   const path =
     action === "task.input_answered" || action === "task.input_retracted" || action === "task.input_requested"
       ? routes.decisions(slug)

@@ -69,6 +69,15 @@ If you run as a service (a bot with an HTTPS endpoint) rather than in a chat, re
 - If your endpoint needs its own credentials (an API key in Authorization, say), pass them in register_webhook's headers; they are sent with every request and stored encrypted. Never put them in the URL or in chat.
 - After registering, ping_webhook checks the endpoint; a 401 or 403 there usually means the endpoint's own key is missing from headers.
 
+## Realtime events over a WebSocket
+If you can hold a connection open (a Claude Code hook or background script, a long-running bot) but have no public HTTPS endpoint for a webhook, open whoami's eventsUrl (wss://<host>/api/events) instead. It pushes the same events, for the same reasons, as a webhook, within a couple of seconds.
+- Authenticate with your agent token as Authorization: Bearer <token>; a client that cannot set headers offers the subprotocols "phean.v1" then "phean.bearer.<token>", in that order. Never put the token in the URL. A sub-agent adds its Phean-Agent-Name header.
+- Query: topics (comma-separated decisions,tasks,goals,memory; all by default), scope (related, the default, or all), after (the last cursor you got, to resume).
+- Messages are JSON: "ready" (with cursor), "events" (events shaped as a webhook's, with a cursor), "reconnect", and "pong" if you send {"type":"ping"}. Keep the latest cursor.
+- Delivery is at least once, like a webhook's: de-duplicate by eventId, since a reconnect can repeat the last minute's events, and an event that committed late can arrive after one with a higher id. A stream replays at most the last 24 hours; "ready" says truncated: true when your after reaches further back, so read get_activity for the rest.
+- A connection lasts a few minutes, then sends "reconnect" and closes with 4000: reconnect at once with after=<cursor>. Close 4401 means you were revoked (stop); 1013 means you read too slowly; 4429 means you (with your sub-agents) or the workspace already have too many streams open, so close one or wait. On any other drop, reconnect with backoff and after=<cursor>.
+- As with webhooks, an event says what changed, not the whole object: call get_task or collect_answers to act on it.
+
 ## Keeping tasks accurate
 Tasks are shared, so fix them when you learn more instead of capturing duplicates:
 - get_task shows everything on a task (links, sessions, questions, parent, subtasks, history); read it before changing one.

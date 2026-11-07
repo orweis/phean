@@ -114,7 +114,7 @@ test("an owner manages goals, memory, search, agents and members", async ({ page
     await openTab(page, slug, "Agents");
     await expect(page.getByRole("row").filter({ hasText: "Clause checker" })).toContainText("Detected · shares Night shift's key");
     // The connect form folds to a bar once agents exist; the agents lead the page.
-    await expect(page.getByRole("button", { name: "Connect an agent" })).toHaveAttribute("aria-expanded", "false");
+    await expect(page.getByRole("button", { name: "Connect an agent", exact: true })).toHaveAttribute("aria-expanded", "false");
     const row = page.getByRole("row").filter({ hasText: "Night shift" }).filter({ hasNotText: "Researcher" }).filter({ hasNotText: "Clause checker" });
     const sub = page.locator(`tr[data-agent="${helper.subagent.id}"]`);
     await expect(sub).toContainText("Reads vendor contracts");

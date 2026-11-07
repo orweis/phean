@@ -72,6 +72,8 @@ export const TOOLS: readonly PheanTool[] = [
       agent: { id: ctx.actor.id, name: ctx.actor.name },
       workspace: ctx.tenant,
       dashboardUrl: ctx.url(routes.workspace(ctx.tenant.slug)),
+      // The realtime stream: the same origin, over a WebSocket.
+      eventsUrl: ctx.url(routes.events()).replace(/^http/, "ws"),
       permissions: ACTIONS.filter((action) => can(ctx.actor, action)),
       workflow: (await getWorkflow(ctx, {})).map(({ key, label, kind, hidden }) => ({ key, label, status: kind, ...(hidden && { hidden }) })),
       serverTime: new Date().toISOString(),
