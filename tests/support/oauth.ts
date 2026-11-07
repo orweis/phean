@@ -3,7 +3,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { vi } from "vitest";
 
 import { completeConsent, createAuth, type Auth } from "@/server/auth/auth";
-import { createOAuthVerifier } from "@/server/auth/oauth";
+import { createOAuthVerifier, type OAuthTokenVerifier } from "@/server/auth/oauth";
 import { mcpResourceUrl } from "@/server/config";
 import type { Db } from "@/server/db/client";
 import { approveAgent } from "@/server/domain/agents";
@@ -23,6 +23,8 @@ export interface OAuthServer {
   baseUrl: string;
   auth: Auth;
   handler: (request: Request) => Promise<Response>;
+  /** The verifier the handler uses, for other endpoints that take the same tokens (the event stream). */
+  verifyOAuthToken: OAuthTokenVerifier;
 }
 
 /** The real provider and the real MCP handler on one test database. Call `vi.unstubAllEnvs()` after the test. */
@@ -31,7 +33,7 @@ export function createOAuthServer(db: Db, baseUrl = OAUTH_BASE): OAuthServer {
   vi.stubEnv("BETTER_AUTH_SECRET", "phean-oauth-tests-only-secret-0123456789");
   const auth = createAuth(db, baseUrl);
   const verifyOAuthToken = createOAuthVerifier(auth, { issuer: `${baseUrl}/api/auth`, audience: mcpResourceUrl() });
-  return { baseUrl, auth, handler: createPheanMcpHandler({ getDb: () => db, verifyOAuthToken }) };
+  return { baseUrl, auth, verifyOAuthToken, handler: createPheanMcpHandler({ getDb: () => db, verifyOAuthToken }) };
 }
 
 export function jsonPost(url: string, body: unknown, headers: Record<string, string> = {}): Request {

@@ -32,7 +32,7 @@ export async function GET(request: Request): Promise<Response> {
     return await upgradeWebSocket(
       (socket) => {
         // The stream outlives this handler; keep the function alive until the socket closes.
-        waitUntil(runEventStream(socket as unknown as StreamSocket, { db, principal: auth.principal, options, origin, deadline: getDeadline() }));
+        waitUntil(runEventStream(socket as unknown as StreamSocket, { db, principal: auth.principal, options, origin, deadline: getDeadline(), tokenExpiresAt: auth.tokenExpiresAt }));
       },
       { maxPayload: STREAM_LIMITS.maxClientMessage },
     );

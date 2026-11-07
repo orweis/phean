@@ -8,6 +8,7 @@ import { createOAuthVerifier } from "@/server/auth/oauth";
 import { agents, member, oauthClient, oauthConsent, oauthRefreshToken } from "@/server/db/schema";
 import { approveAgent, approveAgentThen, createAgent, resolveOAuthAgent, revokeAgent } from "@/server/domain/agents";
 import { createPheanMcpHandler } from "@/server/mcp/handler";
+import { authenticateStream } from "@/server/realtime/auth";
 
 import { createTestDb, seedWorkspace, type TestDb } from "./support/db";
 import { connectMcpClient, dataOf } from "./support/mcp";
@@ -344,7 +345,7 @@ describe("the access token at /mcp", () => {
   it("a verified token naming a key's agent is refused", async () => {
     const ws = await seedWorkspace(testDb.db);
     const { db } = testDb;
-    server = { ...server, handler: createPheanMcpHandler({ getDb: () => db, verifyOAuthToken: () => Promise.resolve({ agentId: ws.scout.agentId, clientId: "any-client", issuedAt: Math.floor(Date.now() / 1000) }) }) };
+    server = { ...server, handler: createPheanMcpHandler({ getDb: () => db, verifyOAuthToken: () => Promise.resolve({ agentId: ws.scout.agentId, clientId: "any-client", issuedAt: Math.floor(Date.now() / 1000), expiresAt: Math.floor(Date.now() / 1000) + 3600 }) }) };
     expect((await initialize("a-verified-token")).status).toBe(401);
     expect((await initialize(ws.scout.token)).status).toBe(200);
   });
@@ -591,7 +592,7 @@ describe("a workspace's own URL", () => {
     const globex = await connectOAuthAgent(testDb.db, server, "globex");
     // Even a token the verifier accepts for acme's URL is refused when its agent works in globex.
     const { db } = testDb;
-    server = { ...server, handler: createPheanMcpHandler({ getDb: () => db, verifyOAuthToken: () => Promise.resolve({ agentId: globex.agentId, clientId: globex.clientId, issuedAt: Math.floor(Date.now() / 1000) }) }) };
+    server = { ...server, handler: createPheanMcpHandler({ getDb: () => db, verifyOAuthToken: () => Promise.resolve({ agentId: globex.agentId, clientId: globex.clientId, issuedAt: Math.floor(Date.now() / 1000), expiresAt: Math.floor(Date.now() / 1000) + 3600 }) }) };
     expect((await initialize("a-verified-token", workspaceUrl(acme.tenant.slug))).status).toBe(401);
     expect((await initialize("a-verified-token", workspaceUrl(globex.tenant.slug))).status).toBe(200);
   });
@@ -618,5 +619,62 @@ describe("a workspace's own URL", () => {
     const clientId = await registerClientId(server);
     const response = await server.auth.handler(authorizeRequest(server, cookie, clientId, pkce().challenge, { resource: workspaceUrl("no-such-workspace") }));
     expect(response.headers.get("location")).toContain("invalid_target");
+  });
+
+  it("its token opens the event stream as its agent, and a token claiming another workspace's URL does not", async () => {
+    const signedIn = await signUpOwner(testDb.db, server, "acme");
+    const { tokens, agentId } = await connectAtWorkspaceUrl(signedIn);
+    const opened = await openStream(tokens!.access_token);
+    expect(opened).toMatchObject({ principal: { agent: { id: agentId }, tenant: { id: signedIn.tenant.id } } });
+
+    // Even a token the verifier accepts for acme's URL is refused when its agent works in globex.
+    const globex = await connectOAuthAgent(testDb.db, server, "globex");
+    const forged = unsignedToken({ aud: workspaceUrl(signedIn.tenant.slug) });
+    const verified = () => Promise.resolve({ agentId: globex.agentId, clientId: globex.clientId, issuedAt: Math.floor(Date.now() / 1000), expiresAt: Math.floor(Date.now() / 1000) + 3600 });
+    await expect(openStream(forged, {}, verified)).resolves.toMatchObject({ status: 401 });
+    await expect(openStream(unsignedToken({ aud: workspaceUrl(globex.tenant.slug) }), {}, verified)).resolves.toMatchObject({ principal: { agent: { id: globex.agentId } } });
+  });
+});
+
+/** A JWT-shaped token with these claims and no valid signature, for the audience the stream reads before verifying. */
+function unsignedToken(claims: Record<string, unknown>): string {
+  const part = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64url");
+  return `${part({ alg: "EdDSA", typ: "at+jwt" })}.${part(claims)}.c2ln`;
+}
+
+/** The event stream's handshake checks, as `/api/events` runs them, with the test deployment's verifier. */
+function openStream(token: string, headers: Record<string, string> = {}, verifyOAuthToken = server.verifyOAuthToken) {
+  return authenticateStream(testDb.db, new Headers({ authorization: `Bearer ${token}`, ...headers }), { verifyOAuthToken });
+}
+
+describe("the event stream on an OAuth token", () => {
+  it("opens as the agent, and ends by the token's expiry", async () => {
+    const connected = await connectOAuthAgent(testDb.db, server, "acme");
+    const opened = await openStream(connected.accessToken);
+    if ("error" in opened) throw new Error(opened.error);
+    expect(opened.principal).toMatchObject({ agent: { id: connected.agentId, level: "write" }, tenant: { id: connected.tenant.id } });
+    const { exp } = JSON.parse(Buffer.from(connected.accessToken.split(".")[1]!, "base64url").toString()) as { exp: number };
+    expect(opened.tokenExpiresAt).toEqual(new Date(exp * 1000));
+  });
+
+  it("names a sub-agent the way the MCP endpoint does", async () => {
+    const connected = await connectOAuthAgent(testDb.db, server, "acme");
+    const opened = await openStream(connected.accessToken, { "phean-agent-name": "Listener" });
+    if ("error" in opened) throw new Error(opened.error);
+    expect(opened.principal.agent).toMatchObject({ name: "Listener" });
+    const [row] = await testDb.db.select().from(agents).where(eq(agents.id, opened.principal.agent.id));
+    expect(row).toMatchObject({ parentAgentId: connected.agentId });
+  });
+
+  it("is refused once the agent is revoked, and for another deployment's or another endpoint's token", async () => {
+    const connected = await connectOAuthAgent(testDb.db, server, "acme");
+    const foreign = await connectOAuthAgent(testDb.db, createOAuthServer(testDb.db, "http://localhost:3300"), "foreign");
+    vi.stubEnv("BETTER_AUTH_URL", OAUTH_BASE);
+    await expect(openStream(foreign.accessToken)).resolves.toMatchObject({ status: 401 });
+    await expect(openStream(unsignedToken({ aud: `${OAUTH_BASE}/elsewhere` }), {}, () => Promise.reject(new Error("never verified")))).resolves.toMatchObject({ status: 401 });
+    await expect(openStream("not-a-jwt")).resolves.toMatchObject({ status: 401 });
+
+    await revokeAgent(connected.ctx, { agentId: connected.agentId });
+    await expect(openStream(connected.accessToken)).resolves.toMatchObject({ status: 401 });
   });
 });

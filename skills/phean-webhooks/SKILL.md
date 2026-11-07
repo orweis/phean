@@ -130,13 +130,13 @@ With Flask use `request.get_data()`, and with FastAPI `await request.body()`, fo
 
 ## 6. No endpoint? Listen over a WebSocket
 
-If you can keep a process running but cannot receive HTTPS requests (a laptop, a Claude Code background script), open the realtime stream instead of a webhook. It carries the same events, with the same `reasons`, within a couple of seconds, and needs no secret or signature, because you connect with your own fixed agent key (`phn_…`). A signed-in (OAuth) connection's token does not open streams yet.
+If you can keep a process running but cannot receive HTTPS requests (a laptop, a Claude Code background script), open the realtime stream instead of a webhook. It carries the same events, with the same `reasons`, within a couple of seconds, and needs no secret or signature, because you connect with the same token you send to Phean's MCP server: a signed-in (OAuth) connection's access token, or a fixed agent key (`phn_…`).
 
 - URL: `eventsUrl` from `whoami`, `wss://<host>/api/events`, with optional `topics=decisions,tasks`, `scope=related|all` and `after=<cursor>`.
 - Auth: `Authorization: Bearer <token>`. A client that cannot set headers offers the subprotocols `phean.v1` then `phean.bearer.<token>`, in that order. Never put the token in the URL.
 - Messages: `ready` (with `cursor`), `events` (`{ events, cursor }`), `reconnect` (`{ cursor }`), `pong`. Keep the latest `cursor`.
 - Delivery is at least once, as for webhooks: de-duplicate by `eventId`, because a reconnect can repeat the last minute's events, and an event that committed late can arrive after one with a higher id. A stream replays at most the last 24 hours: `ready` has `truncated: true` when your `after` reaches further back, so read `get_activity` for the rest.
-- Every few minutes the server sends `reconnect` and closes with code 4000. Reconnect at once with `after=<cursor>`. 4401 means you were revoked or your access ended: stop. 4429 means too many streams are open for you (your sub-agents count towards you) or the workspace. On other drops, back off and reconnect with `after`.
+- Every few minutes the server sends `reconnect` and closes with code 4000. Reconnect at once with `after=<cursor>`. On an access token, the stream also sends `reconnect` before the token expires: refresh it first, then reconnect with the new one. 4401 means you were revoked or your access ended: stop. 4429 means too many streams are open for you (your sub-agents count towards you) or the workspace. On other drops, back off and reconnect with `after`.
 
 ```js
 import WebSocket from "ws"; // npm install ws

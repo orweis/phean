@@ -9,6 +9,8 @@ export type OAuthTokenVerifier = (token: string, audience?: string) => Promise<V
 
 export interface VerifiedOAuthToken extends OAuthTokenFacts {
   agentId: string;
+  /** Its `exp`, in seconds. */
+  expiresAt: number;
 }
 
 /** JOSE errors that mean the keys couldn't be read, not that the token is bad. */
@@ -41,8 +43,8 @@ export function createOAuthVerifier(provider: Pick<Auth, "api">, expected: { iss
       throw error;
     });
     const clientId = payload?.azp ?? payload?.client_id;
-    if (!payload || payload.cnf || typeof payload.agent_id !== "string" || typeof payload.iat !== "number" || typeof clientId !== "string") return null;
-    return { agentId: payload.agent_id, issuedAt: payload.iat, clientId };
+    if (!payload || payload.cnf || typeof payload.agent_id !== "string" || typeof payload.iat !== "number" || typeof payload.exp !== "number" || typeof clientId !== "string") return null;
+    return { agentId: payload.agent_id, issuedAt: payload.iat, expiresAt: payload.exp, clientId };
   };
 }
 

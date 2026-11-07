@@ -20,6 +20,7 @@ let testDb: TestDb;
 let server: Server;
 let base: string;
 let limits: Partial<StreamLimits> = FAST;
+let tokenExpiresAt: Date | undefined;
 const sockets: WebSocket[] = [];
 
 /** The route's checks and the real stream, on a plain Node server, since only Vercel's runtime upgrades in a route handler. */
@@ -35,7 +36,7 @@ beforeAll(async () => {
       socket.end(`HTTP/1.1 ${"error" in auth ? auth.status : 400} Refused\r\n\r\n`);
       return;
     }
-    wss.handleUpgrade(req, socket, head, (ws) => void runEventStream(ws, { db: testDb.db, principal: auth.principal, options, origin: "https://phean.test", limits }));
+    wss.handleUpgrade(req, socket, head, (ws) => void runEventStream(ws, { db: testDb.db, principal: auth.principal, options, origin: "https://phean.test", limits, tokenExpiresAt }));
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   base = `ws://127.0.0.1:${(server.address() as AddressInfo).port}/api/events`;
@@ -43,6 +44,7 @@ beforeAll(async () => {
 afterEach(() => {
   for (const socket of sockets.splice(0)) socket.terminate();
   limits = FAST;
+  tokenExpiresAt = undefined;
 });
 afterAll(async () => {
   await new Promise((resolve) => server.close(resolve));
@@ -152,6 +154,16 @@ describe("the realtime event stream", () => {
     const client = connect(ws.scout.token);
     const { cursor } = (await client.next("ready")) as Extract<StreamMessage, { type: "ready" }>;
     expect(await client.next("reconnect")).toMatchObject({ type: "reconnect", cursor });
+    expect(await client.closed).toMatchObject({ code: CLOSE.reconnect });
+  });
+
+  it("asks the agent to reconnect by the time its OAuth access token runs out", async () => {
+    tokenExpiresAt = new Date(Date.now() + 300);
+    const client = connect(ws.scout.token);
+    const ready = (await client.next("ready")) as Extract<StreamMessage, { type: "ready" }>;
+    // reconnectAt is reckoned a moment after the lifetime was, so allow a few milliseconds.
+    expect(new Date(ready.reconnectAt).getTime()).toBeLessThanOrEqual(tokenExpiresAt.getTime() + 50);
+    expect(await client.next("reconnect")).toMatchObject({ type: "reconnect", cursor: ready.cursor });
     expect(await client.closed).toMatchObject({ code: CLOSE.reconnect });
   });
 

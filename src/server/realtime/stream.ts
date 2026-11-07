@@ -126,6 +126,8 @@ interface StreamDeps {
   limits?: Partial<StreamLimits>;
   /** When the platform ends this invocation; the stream asks the agent to reconnect well before. */
   deadline?: Date;
+  /** When the OAuth access token the stream opened with runs out; the stream asks the agent to reconnect by then. */
+  tokenExpiresAt?: Date;
 }
 
 /** Leeway before the invocation's deadline for the reconnect message and the close to go out. */
@@ -141,9 +143,11 @@ const DEADLINE_MARGIN_MS = 15_000;
  * back over the last minute and sends what it has not sent yet, and a reconnect may repeat recent
  * events. Agents de-duplicate by `eventId`, as they do for webhooks.
  */
-export function runEventStream(socket: StreamSocket, { db, principal, options, origin, limits: overrides, deadline }: StreamDeps): Promise<void> {
+export function runEventStream(socket: StreamSocket, { db, principal, options, origin, limits: overrides, deadline, tokenExpiresAt }: StreamDeps): Promise<void> {
   const limits: StreamLimits = { ...STREAM_LIMITS, ...overrides };
   if (deadline) limits.lifetimeMs = Math.max(5_000, Math.min(limits.lifetimeMs, deadline.getTime() - Date.now() - DEADLINE_MARGIN_MS));
+  // The token was checked once, at the handshake; it does not outlive its own expiry here.
+  if (tokenExpiresAt) limits.lifetimeMs = Math.max(0, Math.min(limits.lifetimeMs, tokenExpiresAt.getTime() - Date.now()));
   const agentId = principal.agent.id;
   const tenantId = principal.tenant.id;
   const listener: Listener = { agentId, topics: options.topics, scope: options.scope };
