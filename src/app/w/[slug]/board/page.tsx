@@ -35,12 +35,13 @@ export default async function BoardPage({ params, searchParams }: PageProps<"/w/
         description={
           canWrite ? (
             <>
-              Every task by status. <span className="pointer-coarse:hidden">Drag a card to another lane to move it, or use its buttons.</span>
+              Every task by status, in two rows: People, for work waiting on you or another person, and Agents, for work agents hold or captured.{" "}
+              <span className="pointer-coarse:hidden">Drag a card to another lane to move it, or use its buttons.</span>
               <span className="hidden pointer-coarse:inline">Move a card with its buttons.</span> Edit changes its details. Done shows the 20 most
               recently completed.
             </>
           ) : (
-            "Every task by status. Done shows the 20 most recently completed."
+            "Every task by status, in two rows: People, for work waiting on a person, and Agents, for work agents hold or captured. Done shows the 20 most recently completed."
           )
         }
         actions={
