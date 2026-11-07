@@ -138,6 +138,20 @@ test("the board lanes follow the stations in order", async ({ page }) => {
   await expect(agents("done").getByText("Show fewer")).toBeVisible();
 });
 
+test("the People and Agents rows can be switched off, and the choice is remembered", async ({ page }) => {
+  await page.goto("/w/globex/board");
+  const rows = page.getByRole("group", { name: "Board rows" });
+  await expect(page.locator("[data-swimlane]").first()).toBeVisible();
+  await rows.getByText("One row", { exact: true }).click();
+  await expect(page.locator("[data-swimlane]")).toHaveCount(0);
+  await expect(lane(page, "in_progress")).toContainText("Chase three overdue invoices");
+  await page.reload();
+  await expect(page.locator("[data-swimlane]")).toHaveCount(0);
+  await expect(rows.getByRole("radio", { name: "One row" })).toBeChecked();
+  await rows.getByText("People and agents", { exact: true }).click();
+  await expect(page.locator('[data-swimlane="people"]').first()).toBeVisible();
+});
+
 test("the workspaces table shows open work per workspace", async ({ page }) => {
   await page.goto("/workspaces");
   for (const name of ["Acme Corp", "Globex"]) {
