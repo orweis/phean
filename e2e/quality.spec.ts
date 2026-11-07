@@ -1,8 +1,9 @@
 import { expect, test, type Page } from "@playwright/test";
 
 import { expectAccessible, expectNothingCutOff, expectNowClearOfDates } from "./support/checks";
-import { DEMO_SESSION } from "./support/env";
+import { BASE_URL, DEMO_SESSION } from "./support/env";
 import { card, entryKind, popover } from "./support/locators";
+import { oauthClient } from "./support/oauth-client";
 
 const PAGES = [
   "/workspaces",
@@ -35,6 +36,7 @@ const PANELS = [
   ["/w/globex/decisions", "More for"],
   ["/w/globex/memory", "Add"],
   ["/w/globex/documents", "New document"],
+  ["/w/globex/agents", "Key for a bot"],
 ] as const;
 
 async function openPanel(page: Page, path: string, trigger: string) {
@@ -65,6 +67,17 @@ test.describe("signed in", () => {
       await expectAccessible(page);
     });
   }
+
+  /** The approval dialog is not in PAGES: it needs a live signed request, so a client asks for one. */
+  async function openApprovalDialog(page: Page) {
+    await page.goto((await oauthClient(BASE_URL)).authorizationUrl);
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Connect Scripted Client to Phean");
+  }
+
+  test("the approval dialog has no detectable accessibility violations", async ({ page }) => {
+    await openApprovalDialog(page);
+    await expectAccessible(page);
+  });
 
   test("a goal page has no detectable accessibility violations", async ({ page }) => {
     await page.goto(await goalPage(page));
@@ -243,6 +256,11 @@ test.describe("signed in", () => {
         await expectNothingCutOff(page);
       });
     }
+
+    test("the approval dialog keeps everything inside the screen", async ({ page }) => {
+      await openApprovalDialog(page);
+      await expectNothingCutOff(page);
+    });
 
     test("a goal page keeps everything inside the screen", async ({ page }) => {
       await page.goto(await goalPage(page));

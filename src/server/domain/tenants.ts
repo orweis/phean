@@ -1,6 +1,6 @@
 import { and, asc, count, eq, gt } from "drizzle-orm";
 
-import type { MemberRole } from "@/lib/domain";
+import { toMemberRole, type MemberRole } from "@/lib/domain";
 
 import type { Db } from "../db/client";
 import { invitation, member, organization, user } from "../db/schema";
@@ -16,14 +16,6 @@ export interface Membership {
 }
 
 const tenantColumns = { id: organization.id, slug: organization.slug, name: organization.name };
-
-/** Better Auth stores roles as a comma-separated list (or none); Phean uses the most privileged one. */
-export function toMemberRole(raw: string | null): MemberRole {
-  const roles = (raw ?? "").split(",").map((role) => role.trim());
-  if (roles.includes("owner")) return "owner";
-  if (roles.includes("admin")) return "admin";
-  return "member";
-}
 
 export function userContext(db: Db, membership: Membership, person: { id: string; name: string }): Ctx {
   return { db, tenant: membership.tenant, actor: { type: "user", id: person.id, name: person.name, role: membership.role } };

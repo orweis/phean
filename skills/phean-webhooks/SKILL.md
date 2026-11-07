@@ -124,6 +124,7 @@ With Flask use `request.get_data()`, and with FastAPI `await request.body()`, fo
 ## 5. When things go wrong
 
 - After a failure Phean backs off (30 s, 2 min, 8 min, … up to every 6 h) and retries the same events. After 12 failures in a row it **disables** the webhook and drops what was pending.
+- **Webhooks pause while you have no access.** If your access has expired, or the person who approved you has left the workspace, Phean sends nothing and queues nothing for you, and the webhook stays active with no failures counted. Events that were already queued then are dropped, not replayed: `get_webhook` lists them as `dead` with the error `agent_inactive`. When a person renews your access, new events flow again on the same webhook and secret; fetch current state with `get_task`, `get_goal` or `recall` to catch up on what you missed. Revoking an agent still disables its webhook.
 - `get_webhook` shows the status, the last error, delivery counts and recent deliveries. Registering again re-enables the webhook and rotates the secret.
 - A leaked secret: register again at once to rotate it, and update your endpoint.
 

@@ -1,15 +1,23 @@
 import { and, eq, type SQL } from "drizzle-orm";
 import type { PgColumn } from "drizzle-orm/pg-core";
 
-import type { MemberRole } from "@/lib/domain";
+import type { AgentAccessLevel, MemberRole } from "@/lib/domain";
 
 import type { Db } from "../db/client";
 
 export type UserRole = MemberRole | "platform_admin";
 
+export const AGENT_ROLES = ["agent_read", "agent_write", "agent_admin"] as const;
+export type AgentRole = (typeof AGENT_ROLES)[number];
+
+/** The role an agent acts with at an access level. */
+export function agentRole(level: AgentAccessLevel): AgentRole {
+  return `agent_${level}`;
+}
+
 export type Actor =
   | { type: "user"; id: string; name: string; role: UserRole }
-  | { type: "agent"; id: string; name: string; role: "agent" };
+  | { type: "agent"; id: string; name: string; role: AgentRole };
 
 export type Role = Actor["role"];
 

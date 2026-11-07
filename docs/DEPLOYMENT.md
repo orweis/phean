@@ -4,8 +4,9 @@ Phean is one Next.js app: the web UI, the auth endpoints, and the remote MCP end
 
 ```mermaid
 flowchart LR
-    Agents["Agents (MCP clients)"] -->|"Bearer phn_ token"| Mcp["/mcp"]
-    People[People in a browser] --> Web["Web UI + /api/auth"]
+    Agents["Agents (MCP clients)"] -->|"Bearer OAuth token or phn_ key"| Mcp["/mcp"]
+    Agents -.->|"discover, register, refresh"| Web
+    People[People in a browser] -->|"sign in, approve agents"| Web["Web UI + /api/auth"]
     subgraph vercel [Vercel project phean, Permit team]
         Mcp
         Web
@@ -49,8 +50,10 @@ Why Neon: goals form a hierarchy (recursive CTEs), memory and tasks need full-te
 | Variable | Required | Purpose |
 | --- | --- | --- |
 | `DATABASE_URL` | yes | Set by the Neon integration |
-| `BETTER_AUTH_SECRET` | yes | Signs sessions. Already set; rotate with `openssl rand -base64 32` (this signs everyone out) |
-| `BETTER_AUTH_URL` | no | Canonical public URL. Defaults to the production domain on production and the deployment URL on previews |
+| `BETTER_AUTH_SECRET` | yes | Signs sessions and the dialog's approval requests, and encrypts the OAuth signing key. Already set; see [Rotating `BETTER_AUTH_SECRET`](#rotating-better_auth_secret) before changing it |
+| `BETTER_AUTH_URL` | no | Canonical public URL, and with it the OAuth issuer and the audience of MCP tokens. Defaults to the production domain on production and the deployment URL on previews. Must be HTTPS, or HTTP on loopback only: anything else makes Better Auth fail on first use, sign-in included. OAuth clients must connect at this exact address, so a branch alias needs it set |
+| `PHEAN_OAUTH_AUTHORIZE_LIMIT` | no | Raises how many OAuth authorize requests one address may make a minute (default 30). The UI tests set it, since every dialog they open comes from one address. Leave it unset on a real deployment |
+| `PHEAN_OAUTH_REGISTER_LIMIT` | no | Raises how many OAuth clients one address may register a minute (default 5). The UI tests set it, since they all register from one address. Leave it unset on a real deployment |
 | `PHEAN_PLATFORM_ADMINS` | no | Comma-separated emails with read-only access to every workspace (the operator's status-per-customer view). Only counts for **verified** emails, which in practice means accounts that signed in with GitHub or Google |
 | `CRON_SECRET` | yes, for webhooks | Vercel sends it to the every-minute webhook sweep (`/api/webhooks/dispatch`, declared in `vercel.json`); production refuses the sweep without it. Generate with `openssl rand -base64 32` |
 | `PHEAN_WEBHOOK_KEY` | no | Encrypts stored webhook signing secrets. Defaults to a key derived from `BETTER_AUTH_SECRET`; rotating either makes stored secrets unreadable, and agents re-register their webhooks |
@@ -76,7 +79,7 @@ curl https://<domain>/api/health
 # {"status":"ok","database":"ok","latencyMs":12}
 ```
 
-Then sign up, create a workspace, and issue two agent tokens on the Agents page. Run the two-agent demo against the deployment:
+Then sign up, create a workspace, and connect a real client with only the URL (`claude mcp add --transport http phean-smoke https://<domain>/mcp/w/<workspace>`): it should open the approval dialog, and `whoami` should name the workspace afterwards. To run the two-agent demo, issue two fixed keys under **Key for a bot** on the Agents page:
 
 ```bash
 pnpm demo:agents https://<domain> phn_first_token phn_second_token
@@ -86,22 +89,28 @@ It captures tasks (including a duplicate that must be skipped), proposes goals, 
 
 ## Connecting agents
 
-On the workspace's **Agents** page, an owner or admin issues a token per agent. The token is shown once, with copy-paste setup for Cursor, Claude Code, and VS Code:
+An agent connects with only the URL: its workspace's, `/mcp/w/<slug>`, or the shared `/mcp`. Its client gets a 401 naming the matching `/.well-known/oauth-protected-resource/...` document, finds the authorization server at `/api/auth`, registers itself (open dynamic registration for public clients, or a Client ID Metadata Document), and sends the person to `/oauth/approve` to sign in and choose the agent's name, workspace, level and lifetime. The workspace's **Agents** page has the snippets:
 
-```json
-{
-  "mcpServers": {
-    "phean-acme": {
-      "url": "https://<domain>/mcp",
-      "headers": { "Authorization": "Bearer phn_..." }
-    }
-  }
-}
+```bash
+claude mcp add --transport http phean-acme https://<domain>/mcp/w/acme
 ```
 
-The token alone selects the workspace and the agent identity. Revoking it takes effect on the next request.
+The workspace's URL is its own OAuth resource, so a second workspace on the same client is a second sign-in rather than an overwrite (Cursor and VS Code key logins by URL). The agent's row still decides the workspace; the URL only has to agree, and a credential for another workspace gets a 401 there.
 
-Clients that cannot send custom headers can use the `mcp-remote` bridge until MCP OAuth lands (see the plan's phase 2).
+Access tokens last an hour and refresh on their own until the lifetime the person chose. A bot that can't open a browser gets a fixed `phn_` key instead, which an owner or admin issues under **Key for a bot** on the same page; it is shown once and sent as `Authorization: Bearer phn_...`.
+
+Either credential resolves to one row of `agents`, which alone selects the workspace and the agent identity. Revoking, expiry, and the approver leaving the workspace take effect on the next request. So does a renewal: approving the same name again, from any client, deletes the old refresh tokens and any code not yet redeemed, and refuses access tokens issued before it (`agents.tokens_not_before`, to the second) or to another client than the one it was approved for (the token's `azp` against `agents.oauth_client_id`). It does this only once the new client's code is issued, so a renewal that fails leaves the old connection working.
+
+**Self-hosting needs HTTPS.** OAuth requires the issuer and the MCP resource to be HTTPS anywhere but loopback (`localhost`, `127.0.0.1`), and Better Auth fails on first use otherwise, sign-in included. Put the deployment behind TLS and set `BETTER_AUTH_URL` to its `https://` address; clients must connect at exactly that address.
+
+## Rotating `BETTER_AUTH_SECRET`
+
+Generate a new one with `openssl rand -base64 32`. Changing it:
+
+- signs everyone out;
+- invalidates approval requests already open in the dialog: the person starts again from their client;
+- leaves the OAuth signing key in `jwks` unreadable, since it is encrypted with the secret. Delete those rows in the same change (`delete from jwks;`). Phean makes a new key on first use; access tokens signed with the old one stop verifying, and clients refresh to get new ones;
+- makes stored webhook secrets unreadable unless `PHEAN_WEBHOOK_KEY` is set, so agents register their webhooks again.
 
 ## Preview deployments
 
@@ -113,4 +122,5 @@ Previews are behind Vercel Authentication. To call a preview's `/mcp` from an ag
 - **Rollback**: promote a previous deployment. Migrations only move forward, so write them to be backward compatible with the previous release (add columns before using them; drop them a release later).
 - **Database branches**: Neon creates a branch per preview, so schema changes are exercised on a copy of production data before merge.
 - **Webhooks**: deliveries go out right after the change commits. The cron in `vercel.json` (every minute; Hobby plans allow only daily crons, so this needs Pro) retries failures and prunes deliveries after 7 days. A webhook disabled after repeated failures shows its reason on the Agents page; the agent re-enables it by registering again.
-- **Rate limiting**: sign-in and sign-up are rate-limited by Better Auth, with counters stored in Postgres so the limit holds across serverless instances.
+- **Rate limiting**: sign-in, sign-up, OAuth client registration (5 a minute per address) and OAuth authorize (30 a minute per address, Better Auth's default made explicit) are rate-limited by Better Auth, with counters stored in Postgres so the limit holds across serverless instances. Authorize is limited because it fetches and stores a Client ID Metadata Document client before anyone signs in.
+- **Unused OAuth clients**: anyone may register a client (`oauth_client`) without signing in. Clients over 24 hours old that no one consented to and that hold no token are deleted, up to 20 at a time, whenever a client registers or a metadata-document client authorizes; there is no job to schedule. A client deleted this way gets `invalid_client` on its next request, and registers again, or is fetched again from its metadata document, as MCP clients do.

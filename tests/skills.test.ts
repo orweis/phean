@@ -10,14 +10,14 @@ import { LINK_KINDS, REQUEST_KINDS } from "@/lib/agent-sessions";
 import { DOCUMENT_FORMATS } from "@/lib/documents";
 import { AskInput, AttachDocumentInput, MAX_WAIT_SECONDS, RegisterWebhookInput, WaitForAnswersInput } from "@/server/domain/schemas";
 import { TOOLS } from "@/server/mcp/tools";
-import { backoffSeconds, MAX_CONSECUTIVE_FAILURES, REQUEST_TIMEOUT_MS } from "@/server/webhooks/dispatch";
+import { AGENT_INACTIVE, backoffSeconds, MAX_CONSECUTIVE_FAILURES, REQUEST_TIMEOUT_MS } from "@/server/webhooks/dispatch";
 import { SIGNATURE_HEADER, signPayload, verifySignature } from "@/server/webhooks/signing";
 
 const read = (name: string) => readFileSync(new URL(`../skills/${name}/SKILL.md`, import.meta.url), "utf8");
 const SKILLS = { "phean-decisions": read("phean-decisions"), "phean-webhooks": read("phean-webhooks"), "phean-documents": read("phean-documents") };
 const TOOL_NAMES = new Set(TOOLS.map((tool) => tool.name));
-/** Delivery reasons look like tool names (snake_case) but are payload values. */
-const REASONS = ["asked_by_you", "in_watched_goal", "about_watched_task"];
+/** Delivery reasons and the delivery error look like tool names (snake_case) but are payload values. */
+const REASONS = ["asked_by_you", "in_watched_goal", "about_watched_task", AGENT_INACTIVE];
 
 const codeBlock = (skill: string, language: string) => new RegExp("```" + language + "\\n([\\s\\S]+?)\\n```").exec(skill)![1]!;
 

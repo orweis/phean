@@ -8,11 +8,12 @@ export interface McpClientSetup {
 
 /**
  * Copy-paste setup for common MCP clients. The server is named after the workspace so one
- * client can hold several Phean workspaces side by side.
+ * client can hold several Phean workspaces side by side. Without a token the snippet is just the
+ * URL: the client signs in through the browser (OAuth). With one, it sends the fixed key.
  */
-export function mcpClientSetups({ url, token, workspace }: { url: string; token: string; workspace: string }): McpClientSetup[] {
+export function mcpClientSetups({ url, token, workspace }: { url: string; token?: string; workspace: string }): McpClientSetup[] {
   const name = `phean-${workspace}`;
-  const authorization = `Bearer ${token}`;
+  const headers = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
   const json = (value: unknown) => JSON.stringify(value, null, 2);
 
   return [
@@ -20,19 +21,19 @@ export function mcpClientSetups({ url, token, workspace }: { url: string; token:
       id: "cursor",
       label: "Cursor",
       where: "~/.cursor/mcp.json (or .cursor/mcp.json in a project)",
-      code: json({ mcpServers: { [name]: { url, headers: { Authorization: authorization } } } }),
+      code: json({ mcpServers: { [name]: { url, ...headers } } }),
     },
     {
       id: "claude-code",
       label: "Claude Code",
       where: "Run in a terminal",
-      code: `claude mcp add --transport http ${name} ${url} --header "Authorization: ${authorization}"`,
+      code: `claude mcp add --transport http ${name} ${url}${token ? ` --header "Authorization: Bearer ${token}"` : ""}`,
     },
     {
       id: "vscode",
       label: "VS Code",
       where: ".vscode/mcp.json",
-      code: json({ servers: { [name]: { type: "http", url, headers: { Authorization: authorization } } } }),
+      code: json({ servers: { [name]: { type: "http", url, ...headers } } }),
     },
   ];
 }

@@ -1,14 +1,17 @@
 import type { CallToolResult, ToolAnnotations } from "@modelcontextprotocol/server";
 import type { z } from "zod";
 
-import type { Ctx } from "../domain/context";
+import type { Actor, Ctx } from "../domain/context";
 import { isDomainError } from "../domain/errors";
+import { can } from "../domain/policy";
 import type { ServiceFn } from "../domain/service";
 
 /** A domain context plus what tools need to link humans back to the web app. */
 export interface ToolContext extends Ctx {
   /** Absolute URL for an in-app path, on the origin the agent connected to. */
   url: (path: string) => string;
+  /** When the calling agent's access lapses; null for a key. */
+  accessEndsAt: Date | null;
 }
 
 export interface PheanTool {
@@ -17,7 +20,17 @@ export interface PheanTool {
   description: string;
   inputSchema: z.ZodObject;
   annotations: ToolAnnotations;
+  adminOnly?: boolean;
   execute: (ctx: ToolContext, input: unknown) => Promise<CallToolResult>;
+}
+
+/**
+ * Whether an actor is offered a tool: management tools need `agent:manage`, anything else that
+ * is not read-only needs `task:write`, and read-only tools are open to every level.
+ */
+export function toolAllowed(tool: PheanTool, actor: Actor): boolean {
+  if (tool.adminOnly) return can(actor, "agent:manage");
+  return tool.annotations.readOnlyHint === true || can(actor, "task:write");
 }
 
 interface ToolMeta {
@@ -26,6 +39,8 @@ interface ToolMeta {
   description: string;
   /** Read-only tools never change workspace state. */
   readOnly?: boolean;
+  /** Agent management: only agents with `agent:manage` (Admin access) are offered or may call it. */
+  adminOnly?: boolean;
   /** Destructive tools remove information (as opposed to adding or updating it). */
   destructive?: boolean;
 }
@@ -44,6 +59,7 @@ export function defineTool<S extends z.ZodObject, O extends object>(spec: ToolSp
     title: spec.title,
     description: spec.description,
     inputSchema: spec.input,
+    ...(spec.adminOnly && { adminOnly: true }),
     annotations: {
       title: spec.title,
       readOnlyHint: spec.readOnly ?? false,

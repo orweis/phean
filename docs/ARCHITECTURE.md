@@ -12,14 +12,19 @@ flowchart LR
     subgraph app [Next.js app on Vercel]
         Mcp["/mcp: declarative tools + guidance"]
         Web["Web UI: server components + tenantAction"]
-        Auth["/api/auth: Better Auth"]
+        Approve["/oauth/approve: the approval dialog"]
+        Auth["/api/auth: Better Auth (sessions, OAuth server)"]
         Domain["Domain services: policy, goals, tasks, memory, search, events, read models"]
     end
     Db[("Neon Postgres (PGlite locally)")]
-    AgentA -->|"Bearer phn_ token"| Mcp
-    AgentB -->|"Bearer phn_ token"| Mcp
+    AgentA -->|"Bearer OAuth access token"| Mcp
+    AgentA -.->|"discover, register, token, refresh"| Auth
+    AgentB -->|"Bearer phn_ key (bots)"| Mcp
     Browser -->|session cookie| Web
+    Browser -->|"sign in, Allow"| Approve
     Browser --> Auth
+    Approve --> Domain
+    Approve --> Auth
     Mcp --> Domain
     Web --> Domain
     Domain --> Db
@@ -29,7 +34,8 @@ flowchart LR
 ## Request flow
 
 1. **Resolve a context.** The adapter turns its credential into `Ctx = { db, tenant, actor }`:
-   - MCP: the bearer token is hashed and looked up. The token alone determines the tenant and the agent, so no tool takes a workspace argument.
+   - MCP: the bearer is either a fixed `phn_` key, hashed and looked up (`authenticateAgentToken`), or an OAuth access token, a JWT whose signature, issuer, audience (the endpoint it was sent to, `/mcp` or `/mcp/w/<slug>`), type and expiry are checked locally against the deployment's keys (`verifyOAuthToken`) and whose only claim Phean reads is `agent_id` (`resolveOAuthAgent`). Both end at one `agents` row, read through `liveAgent()`: not revoked, not past `access_expires_at`, an OAuth agent's approver still a member, and a sub-agent's parent all of those too. The row, never a claim or tool input, determines the tenant, the agent and its level, so no tool takes a workspace argument. A `Phean-Agent-Name` header then turns the principal into that agent's named sub-agent. At a workspace's own URL, `/mcp/w/<slug>`, a credential whose agent works in any other workspace is refused: the address must agree with the row, never choose it. Without a live credential the endpoint answers 401 with `WWW-Authenticate` naming `/.well-known/oauth-protected-resource` plus the endpoint's path, which is how a client finds the authorization server.
+   - The agent's effective level is the lowest of its stored level, what its approver can grant now (an OAuth agent whose approver is demoted from admin drops to Write at once), and its parent's effective level. Each level gets its own MCP server, so `tools/list` shows only the tools that level may call.
    - Web: the session cookie gives the user, and the URL slug is resolved against that user's memberships. Non-members get the same 404 as a missing workspace.
 2. **Validate.** Input is parsed with the service's zod schema. MCP tools and web forms use the same schema.
 3. **Run the service.** It checks policy (`assertCan`), scopes every query by `tenant_id`, writes the change and its activity event in one transaction, and returns plain data.
@@ -46,6 +52,8 @@ src/
 │   ├── api/auth/[...all]        # Better Auth
 │   ├── api/health               # Liveness + database round trip
 │   ├── (auth)/                  # sign-in, sign-up, invite/[id] (shared centered layout)
+│   ├── oauth/approve/           # The agent approval dialog: name, workspace, level, lifetime
+│   ├── .well-known/             # OAuth protected resource and authorization server metadata
 │   ├── workspaces/              # Status per customer + create workspace
 │   ├── w/[slug]/                # Overview, board, timeline, goals/[id], memory, search, agents, members
 │   │   ├── actions.ts           # Every workspace mutation, one line each via tenantAction
@@ -146,14 +154,15 @@ Auth tables (`user`, `session`, `account`, `verification`, `organization`, `memb
 
 | Table | Highlights |
 | --- | --- |
-| `agents` | `token_hash` (SHA-256, unique), `token_prefix` for display, `last_seen_at` (written at most once a minute), `revoked_at` |
+| `agents` | One row per agent identity, whatever its credential. `auth_kind` (`key` or `oauth`), `access_level` (`read`, `write`, `admin`; keys and existing agents are `write`), `access_expires_at` (null for keys), `created_by_user_id` (who issued or approved it), `oauth_client_id`. `token_hash` (SHA-256, unique) and `token_prefix` for a `phn_` key, both null for an OAuth agent. `last_seen_at` (written at most once a minute), `revoked_at`. One live OAuth agent per approver and name, so approving the same name again renews that row (its history and watches stay) |
+| OAuth tables | `oauth_client`, `oauth_access_token`, `oauth_refresh_token`, `oauth_consent`, `oauth_resource`, `oauth_client_resource`, `oauth_client_assertion` and `jwks`, from `@better-auth/mcp`, `@better-auth/cimd` and the `jwt` plugin. Consents reference the agent id. Revoking an agent deletes its refresh tokens in `revokeTokensOf` |
 | `goals` | Adjacency list (`parent_id`), max depth 4, cycle-checked with a recursive CTE. `status` enum; approval recorded in `approved_by_*` |
 | `tasks` | Status, priority, source, `source_ref`, `due_date`, `tags text[]`, `claimed_by_agent_id`. Unique `(tenant_id, source, source_ref)` when `source_ref` is set, so agents scanning the same inbox never capture an item twice. `agent_sessions jsonb` (one `AgentSession` per agent, newest first, at most 8), `input_request jsonb` (the open question or decision, or null), `input_answers jsonb` (closed requests with their outcome and answer, newest first, at most 20) and `links jsonb` (references agents left, at most 10) hold the hand-offs to people. `parent_task_id` makes a task a subtask (composite FK within the tenant; one level deep, checked in `assertValidParent`) |
 | `memories` | Long-term workspace memory: `kind` (fact, preference, decision, context, note), content, tags, optional goal or task link |
 | `workspace_settings` | One row per workspace, made on first save: `workflow jsonb`, the board's stages (see Stages below) |
 | `documents` | Files on tasks and goals: `format` (markdown, text, json, csv, yaml, mermaid, html, pdf, png, jpeg, gif, webp), `summary`, `size`, `sha256`, `version`, and `storage_key`, where the bytes live in the blob store. Title and summary are searchable |
 | `document_blobs` | Document bytes (`bytea`) when no Vercel Blob store is configured |
-| `agents` (sub-agents) | `parent_agent_id` (composite FK within the tenant, one level deep) and `purpose`. An agent mints tokens for its own sub-agents with `create_subagent` (at most 20 active), so each worker's work is attributed to it; revoking a parent revokes its sub-agents and disables their webhooks. A sub-agent can also share its parent's token and name itself with the `Phean-Agent-Name` header (or `?agent=` on the MCP URL): MCP auth (`resolveNamedSubagent`) finds or makes the parent's sub-agent of that name (`shares_parent_key`; its `token_hash` is a `shared:` placeholder no real token hashes to, which also keeps one row per name), and acts as it. A hub that relays for several bots can instead pass `actingAs` on any tool call, which `mcp/handler.ts` adds to every tool's input and resolves the same way per call. A revoked name is refused; an agent at its limit keeps acting as itself. A request a sub-agent asks records its parent as `viaAgentName`, so people read "Grok research (via Grok Bot)" |
+| `agents` (sub-agents) | `parent_agent_id` (composite FK within the tenant, one level deep) and `purpose`. An agent mints tokens for its own sub-agents with `create_subagent` (at most 20 active), so each worker's work is attributed to it; revoking a parent revokes its sub-agents and disables their webhooks. A sub-agent can also share its parent's token and name itself with the `Phean-Agent-Name` header (or, on a fixed key, `?agent=` on the MCP URL; an OAuth resource URL with a query is a different resource and is refused): MCP auth (`resolveNamedSubagent`) finds or makes the parent's sub-agent of that name (`shares_parent_key`; its `token_hash` is a `shared:` placeholder no real token hashes to, which also keeps one row per name), and acts as it. A hub that relays for several bots can instead pass `actingAs` on any tool call, which `mcp/handler.ts` adds to every tool's input and resolves the same way per call, then checks the tool against that sub-agent's own level. A revoked name is refused; an agent at its limit keeps acting as itself. A request a sub-agent asks records its parent as `viaAgentName`, so people read "Grok research (via Grok Bot)" |
 | `events` | Append-only activity log with actor, action, entity, summary, and JSONB `data`; indexed on `(tenant_id, created_at desc)` |
 
 **Tenant isolation is structural.** Every domain table has `tenant_id` (cascade-deleted with the organization) and composite foreign keys such as `(tenant_id, goal_id) → goals(tenant_id, id)`. A task cannot point at another tenant's goal even if a service had a bug.
@@ -176,23 +185,30 @@ Auth tables (`user`, `session`, `account`, `verification`, `organization`, `memb
 
 - **People**: Better Auth with email and password, plus GitHub and Google when configured. Sessions are cookies. Sign-in and sign-up go through Better Auth's HTTP endpoints, which are rate-limited with counters in Postgres.
 - **Workspaces**: the Better Auth organization plugin. Roles are owner, admin, and member. Invitations are links: the invitation id is the unguessable capability, and accepting requires signing in with the invited email.
-- **Agents**: `phn_` tokens with 256 bits of randomness, shown once, stored as hashes, revocable instantly. Each token is a named agent identity, so every change is attributed.
+- **Agents, by OAuth** (the main path): Phean is an OAuth 2.1 authorization server for its own MCP endpoint, through `@better-auth/mcp`, `@better-auth/cimd` and the `jwt` plugin. A client knowing only the URL reads the protected resource metadata, then the authorization server metadata at `/api/auth`, identifies itself by a Client ID Metadata Document or open dynamic registration (public clients only, rate limited per address), and sends the person to `/oauth/approve` with PKCE (S256). The dialog, a signed request the provider hands over, asks for the agent's name, one workspace, a level (only those the person may grant) and a lifetime (1, 7, 30, 90 or 365 days, no "never"). On Allow, `approveAgent` creates or renews the agent and the provider issues a one-hour access token bound to the URL the client connected to (`/mcp`, or the workspace's `/mcp/w/<slug>`) carrying `agent_id`, plus a refresh token. A workspace's URL gets its `oauth_resource` row the first time a client asks for it; the dialog then offers only that workspace, and `customAccessTokenClaims` refuses a token for it to an agent of any other. Refresh re-checks the agent through `resolveOAuthAgent`, so a lapsed agent cannot refresh, and a replayed refresh token gets the same answer for 30 seconds (see `REFRESH_REUSE_SECONDS` in `auth/auth.ts`). Each approval reaches one workspace; another workspace is another connection, at that workspace's URL, because Cursor and VS Code keep one login per URL (see the spike notes' "Real clients").
+- **Agents, by fixed key**: `phn_` keys with 256 bits of randomness, shown once, stored as hashes, revocable instantly, for bots that cannot open a browser. Only owners and admins issue them (`agent:issue_key`); they have Write access and no end date. An agent with `agent:delegate` issues keys for its own sub-agents.
+- Either way, each agent is a named identity, so every change is attributed, and cutting it off (revoking, expiry, its approver leaving) takes effect on its next request because every request reads the row. Revoking an agent revokes its sub-agents, disables their webhooks and deletes their refresh tokens; an expired or orphaned agent's webhooks pause until it is renewed.
 - **Platform admins**: emails in `PHEAN_PLATFORM_ADMINS` with a *verified* address see every workspace read-only. This is the operator's status-per-customer view.
 
-The policy matrix (`domain/policy.ts`):
+The policy matrix (`lib/permissions.ts`, enforced by `domain/policy.ts`). An agent's role is its effective level: `agent_read`, `agent_write` or `agent_admin`.
 
-| Action | owner / admin | member | agent | platform_admin |
-| --- | --- | --- | --- | --- |
-| `workspace:read` | yes | yes | yes | yes |
-| `goal:write`, `task:write`, `memory:write` | yes | yes | yes | no |
-| `goal:decide` (approve, achieve, abandon) | yes | yes | **no** | no |
-| `agent:manage`, `member:manage` | yes | no | no | no |
+| Action | owner / admin | member | Admin agent | Write agent | Read agent | platform_admin |
+| --- | --- | --- | --- | --- | --- | --- |
+| `workspace:read` | yes | yes | yes | yes | yes | yes |
+| `goal:write`, `task:write`, `memory:write`, `document:write` | yes | yes | yes | yes | no | no |
+| `goal:decide` (approve, achieve, abandon) | yes | yes | **no** | **no** | **no** | no |
+| `agent:connect` (approve an agent, up to Write for members) | yes | yes | no | no | no | no |
+| `agent:delegate` (sub-agents), `webhook:manage` (its own) | yes | no | yes | yes | no | no |
+| `agent:manage` (revoke any agent) | yes | no | yes | no | no | no |
+| `agent:issue_key`, `member:manage`, `workflow:manage` | yes | no | no | no | no | no |
+
+A member can also revoke the agents they approved (`assertCanRevoke` in `domain/agents.ts`). Sub-agents get the lower of their parent's level and Write, so an Admin agent's workers cannot manage agents. An Admin agent cannot issue keys, because a key would outlive its expiry, or manage members, because an invitation would be a way around `goal:decide`.
 
 "The agent proposes, the human disposes" is enforced here, not just in the prompts. Agent-created goals always start `proposed`, and only people can change a goal's status.
 
 ## MCP surface
 
-Endpoint `POST /mcp` (Streamable HTTP, stateless, via `mcp-handler`), header `Authorization: Bearer phn_...`. A fresh server is built per request from the declarative tool list.
+Endpoint `POST /mcp` (Streamable HTTP, stateless, via `mcp-handler`), header `Authorization: Bearer <OAuth access token or phn_ key>`. Each access level has its own server, built on first use from the declarative tool list: a Read agent sees only `readOnly` tools, and the `adminOnly` tools (`list_agents`, `revoke_agent`, `list_members`) appear only for Admin agents. A tool call is checked against the level again when it runs.
 
 | Area | Tools |
 | --- | --- |
@@ -319,18 +335,20 @@ Vitest, with a fresh in-memory PGlite database per suite and the real migrations
 - `policy`: the full role-by-action matrix, including agents being unable to decide goals.
 - `isolation`: users and agents in one workspace cannot read, reference, or change another's data, through services, MCP, and the database's own foreign keys.
 - `tenants`: members, pending invitations and share links, and reading Better Auth's role lists as one role.
-- `agents`: token entropy and hashing, authentication, last-seen tracking, revocation.
+- `agents`: token entropy and hashing, authentication, last-seen tracking, revocation, and sub-agents living and dying with their parent.
+- `oauth`, `agent-approval`, `oauth-consent`: discovery documents, the 401 challenge, registration, PKCE, audience and expiry checks, revoked, expired, orphaned and demoted agents, renewal keeping the same agent, each level against each tool, and the dialog's choices.
 - `mcp`: an MCP SDK client over Streamable HTTP against the real route handler, covering auth failures, tool list and annotations, prompts, errors, how tools name their results, the Mermaid views, two agents coordinating, and an agent asking a person and reading the answer.
 - `config`: the environment readers (app URL precedence, trusted origins, platform admins, OAuth providers, database URLs).
 - `views`, `lib`, `web`: Mermaid builders, dates, slugs, pure helpers, routes, MCP client snippets, form-to-schema parsing, and how server actions report failures.
 - `timeline`: journeys replayed from events, track segments and ends, window fitting, cumulative flow, totals, grouping by goal, and which tracks the overview picks as most pressing.
 
-Playwright drives Chromium against a production build (`next start` on port 3200) with a fresh on-disk PGlite seeded with the demo account. A setup project signs in once and the specs reuse its session, because sign-in is rate limited. Better Auth allows three sign-ups per 10 seconds from one client, so a spec that writes signs up at most one person (`newWorkspace` in `e2e/support/accounts.ts`), and a second person is the demo account in a browser context of its own. `e2e/support/agents.ts` issues a token from the Agents page and runs an agent over real MCP, and `openTab` (`e2e/support/navigation.ts`) moves between workspace tabs and waits for the new page.
+Playwright drives Chromium against a production build (`next start` on port 3200) with a fresh on-disk PGlite seeded with the demo account. A setup project signs in once and the specs reuse its session, because sign-in is rate limited. Better Auth allows three sign-ups per 10 seconds from one client, so a spec that writes signs up at most one person (`newWorkspace` in `e2e/support/accounts.ts`), and a second person is the demo account in a browser context of its own. `e2e/support/agents.ts` issues a fixed key from the Agents page's **Key for a bot** panel and runs an agent over real MCP, `e2e/support/oauth-client.ts` is a scripted OAuth client that knows only the URL, and `openTab` (`e2e/support/navigation.ts`) moves between workspace tabs and waits for the new page.
 
 - `journey`: the whole loop on a fresh account. A person signs up, creates a workspace, and issues a token; an agent connects over real MCP, proposes a goal, and captures and claims work; the person approves the goal and moves a task across the board; the overview, timeline, goal page, and workspaces table show the result.
 - `resume`: an agent links a web session and a CLI session and asks two questions; the person sees them on the overview, the nav, and the board, follows the link, copies the session id and command, answers one in Phean and marks the other answered, and the agent reads the answer on the task.
 - `manual-entry`: every place a person adds a task or goal by hand, and that each stays a quiet ghost button.
-- `workspace-admin`: editing a goal and walking it through approve, abandon, and reactivate; remembering, filtering, and forgetting memory; search results and their links; revoking an agent and its token failing at once; inviting a colleague, cancelling an invitation, the demo account accepting its link, and removing it again.
+- `workspace-admin`: editing a goal and walking it through approve, abandon, and reactivate; remembering, filtering, and forgetting memory; search results and their links; revoking an agent and its token failing at once; inviting a colleague, cancelling an invitation, the demo account accepting its link, and removing it again. A member gets the keyless snippets but no fixed keys, and revokes the agent they approved but not the owner's; an owner issues a key from the quiet control, and the table shows each agent's connection, level and end date.
+- `oauth`: a client connecting with only the URL, the approval dialog's choices, renewing by name, a member not offered Admin, tampered and expired requests, and clients on custom schemes.
 - `diagrams`: the overview's order and its pressing tracks, the timetable's stations, ends, late notes, window switch and hover, the cumulative flow and its numbers table, window fitting, goal filtering, the goal page roll-up, board lanes and the folded Done lane, and the workspaces flow bars.
 - `quality`: axe accessibility scans on every page and with the Resume and Answer panels open, nothing cut off at 375px, the phone card order, popovers inside the screen, and the Now chip clear of every date label at desktop and phone widths.
 - `public`: the landing page's sample timetable, sign-in redirects, a refused password, and accessibility of the signed-out pages.

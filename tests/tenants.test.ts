@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { addDays } from "@/lib/dates";
+import { toMemberRole } from "@/lib/domain";
 import { invitation } from "@/server/db/schema";
 import {
   countMembers,
@@ -10,7 +11,6 @@ import {
   findTenantBySlug,
   listMembers,
   listPendingInvitations,
-  toMemberRole,
 } from "@/server/domain/tenants";
 
 import { addMember, createTestDb, seedUser, seedWorkspace, type TestDb, type Workspace } from "./support/db";

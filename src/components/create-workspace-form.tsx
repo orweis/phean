@@ -10,13 +10,15 @@ import { ActionForm } from "./ui/action-form";
 import { Field, Input } from "./ui/field";
 import { SubmitButton } from "./ui/submit-button";
 
-export function CreateWorkspaceForm() {
+/** With `next`, creating the workspace goes there instead of to the workspace. */
+export function CreateWorkspaceForm({ next }: { next?: string }) {
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
   const [slugEdited, setSlugEdited] = useState(false);
 
   return (
     <ActionForm action={createWorkspaceAction} className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+      {next && <input type="hidden" name="next" value={next} />}
       <Field label="Workspace name" htmlFor="workspace-name">
         <Input
           id="workspace-name"
