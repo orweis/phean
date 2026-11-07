@@ -79,6 +79,29 @@ export async function trackActorWatches(ctx: Ctx, rows: readonly RoutedEvent[]):
  * (an agent whose access lapsed hears nothing until it is renewed), in the caller's transaction. Returns how many were queued, so the caller knows to wake the
  * dispatcher once the transaction commits.
  */
+/** What one listening agent (a webhook, or a realtime stream) asked to hear. */
+export interface Listener {
+  agentId: string;
+  topics: readonly WebhookTopic[];
+  scope: "related" | "all";
+}
+
+/**
+ * Why `listener` hears `event`, or nothing when it does not: an answer to its own question, an
+ * object it watches (`watching` holds `type|id` keys of its watches), or, with scope "all", any
+ * event in its topics. An agent never hears about its own actions.
+ */
+export function reasonsFor(event: RoutedEvent, listener: Listener, watching: ReadonlySet<string>, actorAgentId: string | null): string[] {
+  if (listener.agentId === actorAgentId) return [];
+  const topics = topicsOf(event.action);
+  if (!topics.some((topic) => listener.topics.includes(topic))) return [];
+  const reasons = new Set<string>();
+  if (ANSWER_ACTIONS.has(event.action) && event.data.agentId === listener.agentId) reasons.add("asked_by_you");
+  for (const key of concerns(event)) if (watching.has(`${key.type}|${key.id}`)) reasons.add(key.reason);
+  if (reasons.size === 0 && listener.scope === "all") reasons.add("workspace");
+  return [...reasons];
+}
+
 export async function enqueueDeliveries(ctx: Ctx, rows: readonly RoutedEvent[]): Promise<number> {
   const routable = rows.filter((row) => topicsOf(row.action).length > 0);
   if (routable.length === 0) return 0;
@@ -103,21 +126,20 @@ export async function enqueueDeliveries(ctx: Ctx, rows: readonly RoutedEvent[]):
           ),
         )
     : [];
-  const watching = new Set(watched.map((row) => `${row.agentId}|${row.type}|${row.id}`));
+  const watchingByAgent = new Map<string, Set<string>>();
+  for (const row of watched) {
+    const keys = watchingByAgent.get(row.agentId) ?? new Set<string>();
+    keys.add(`${row.type}|${row.id}`);
+    watchingByAgent.set(row.agentId, keys);
+  }
   const actorAgent = ctx.actor.type === "agent" ? ctx.actor.id : null;
 
-  const deliveries = routable.flatMap((event) => {
-    const topics = topicsOf(event.action);
-    return hooks.flatMap((hook) => {
-      // An agent never hears about its own actions.
-      if (hook.agentId === actorAgent || !topics.some((topic) => hook.topics.includes(topic))) return [];
-      const reasons = new Set<string>();
-      if (ANSWER_ACTIONS.has(event.action) && event.data.agentId === hook.agentId) reasons.add("asked_by_you");
-      for (const key of concerns(event)) if (watching.has(`${hook.agentId}|${key.type}|${key.id}`)) reasons.add(key.reason);
-      if (reasons.size === 0 && hook.scope === "all") reasons.add("workspace");
-      return reasons.size ? [{ tenantId: ctx.tenant.id, webhookId: hook.id, eventId: event.id, reasons: [...reasons] }] : [];
-    });
-  });
+  const deliveries = routable.flatMap((event) =>
+    hooks.flatMap((hook) => {
+      const reasons = reasonsFor(event, hook, watchingByAgent.get(hook.agentId) ?? new Set(), actorAgent);
+      return reasons.length ? [{ tenantId: ctx.tenant.id, webhookId: hook.id, eventId: event.id, reasons }] : [];
+    }),
+  );
   if (deliveries.length === 0) return 0;
   await ctx.db.insert(webhookDeliveries).values(deliveries).onConflictDoNothing();
   return deliveries.length;

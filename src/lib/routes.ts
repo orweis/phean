@@ -44,6 +44,8 @@ export const routes = {
   mcp: (slug?: string) => (slug === undefined ? "/mcp" : `/mcp/w/${slug}`),
   /** The dialog for connecting an MCP client, on the signed query the OAuth provider sent it. */
   oauthApprove: (oauthQuery: string) => `/oauth/approve?${oauthQuery}`,
+  /** The realtime event stream agents open over a WebSocket. */
+  events: () => "/api/events",
 } as const;
 
 /** A single non-empty search param value; Next passes repeated keys as arrays. */

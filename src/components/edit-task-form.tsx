@@ -16,10 +16,11 @@ import { SubmitButton } from "./ui/submit-button";
  * Edits a task's fields in place. Status moves stay with the card's buttons and drag and drop, so
  * this panel never changes where a task stands. Without goals to choose from, the goal is kept.
  */
-export function EditTaskPopover({ task, slug, goals }: { task: TaskView; slug: string; goals: readonly GoalOption[] }) {
+/** With `compact`, a narrow card (a board lane with Resume beside Edit) shows only the pencil, so the row stays on one line. */
+export function EditTaskPopover({ task, slug, goals, compact = false }: { task: TaskView; slug: string; goals: readonly GoalOption[]; compact?: boolean }) {
   const id = (field: string) => `edit-${task.id}-${field}`;
   return (
-    <Popover label="Edit" icon={<Pencil aria-hidden />} look="link" align="left" title="Edit task" triggerLabel={`Edit ${task.title}`}>
+    <Popover label={compact ? <span className="@max-[14.5rem]:sr-only">Edit</span> : "Edit"} icon={<Pencil aria-hidden />} look="link" align="left" title="Edit task" triggerLabel={`Edit ${task.title}`}>
       <ActionForm action={updateTaskAction} workspace={slug} className="space-y-3" notice={`Saved “${task.title}”`} closeOnSuccess>
         <input type="hidden" name="taskId" value={task.id} />
         <Field label="Title" htmlFor={id("title")}>

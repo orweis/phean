@@ -1,9 +1,10 @@
-import { Archive, EyeOff } from "lucide-react";
+import { Archive, Bot, EyeOff, User } from "lucide-react";
 import Link from "next/link";
 
 import { archiveDoneTasksAction } from "@/app/w/[slug]/actions";
 import { cx } from "@/lib/cx";
 import { routes } from "@/lib/routes";
+import { SWIMLANE_META, SWIMLANES, swimlaneOf, type BoardRows, type Swimlane } from "@/lib/swimlanes";
 import type { Stage } from "@/lib/workflow";
 import type { Board } from "@/server/domain/overview";
 import type { TaskView } from "@/server/domain/tasks";
@@ -35,6 +36,61 @@ function Cards({ tasks, stage, slug, canWrite, goals }: LaneProps & { tasks: rea
       card
     );
   });
+}
+
+const ROW_ICON: Record<Swimlane, typeof User> = { people: User, agents: Bot };
+
+/**
+ * One stage's share of a row: its cards under a caption naming the row and its count, so the row
+ * reads across the board; the Agents row is ruled off from People by a hairline, which lines up
+ * across the lanes on a wide screen. With the split off (`swimlane` null) it is the lane's one list.
+ * Done folds all but its latest few, so it does not outrun the rest.
+ */
+function LaneCell({ swimlane, tasks, fold, stage, ...props }: LaneProps & { swimlane: Swimlane | null; tasks: readonly TaskView[]; fold: boolean; stage: Stage }) {
+  const shown = fold ? tasks.slice(0, DONE_SHOWN) : tasks;
+  const folded = tasks.slice(shown.length);
+  const meta = swimlane && SWIMLANE_META[swimlane];
+  const Icon = swimlane && ROW_ICON[swimlane];
+  return (
+    <div
+      role={meta ? "group" : undefined}
+      aria-label={meta ? `${meta.label}: ${stage.label}` : undefined}
+      data-swimlane={swimlane ?? undefined}
+      className={cx("flex min-w-0 flex-col gap-2", swimlane === "agents" && "border-t border-rule pt-3")}
+    >
+      {meta && Icon && (
+        <p className="flex h-5 items-center gap-1.5 px-1 text-xs font-semibold text-ink-2" title={meta.hint}>
+          <Icon className="size-3.5 text-muted" aria-hidden />
+          {meta.label}
+          <span className="figure ml-auto font-normal text-muted">{folded.length > 0 ? `${shown.length} of ${tasks.length}` : tasks.length}</span>
+        </p>
+      )}
+      <Cards tasks={shown} stage={stage} {...props} />
+      {folded.length > 0 && (
+        <details className="group/more">
+          <summary className="cursor-pointer list-none rounded-md py-1.5 text-center text-xs font-semibold text-ink-2 link hover:text-ink [&::-webkit-details-marker]:hidden">
+            <span className="group-open/more:hidden">Show {folded.length} more</span>
+            <span className="hidden group-open/more:inline">Show fewer</span>
+          </summary>
+          <div className="mt-2 flex flex-col gap-2">
+            <Cards tasks={folded} stage={stage} {...props} />
+          </div>
+        </details>
+      )}
+      {tasks.length === 0 && (
+        <p className={cx("rounded-md border border-dashed border-rule px-2 text-center text-xs text-muted", meta ? "py-3" : "py-6")}>
+          {props.canWrite ? (
+            <>
+              <span className="pointer-coarse:hidden">{meta ? "None. Drop a task here" : "Drop a task here"}</span>
+              <span className="hidden pointer-coarse:inline">Nothing here yet</span>
+            </>
+          ) : (
+            "Nothing here"
+          )}
+        </p>
+      )}
+    </div>
+  );
 }
 
 /** The lane a phone shows: the one asked for, else the first with cards, else the first lane. */
@@ -77,6 +133,8 @@ interface KanbanBoardProps {
   goalId?: string;
   /** The `?lane=` a phone asked for. */
   lane?: string;
+  /** Split each lane into the People and Agents rows (the default), or show it as one list. */
+  rows?: BoardRows;
 }
 
 /**
@@ -86,7 +144,8 @@ interface KanbanBoardProps {
  * link to the next, so keyboard users need not tab through every card. More than four lanes
  * scroll sideways on a wide screen rather than squeeze.
  */
-export function KanbanBoard({ board, slug, canWrite, goals = [], goalId, lane }: KanbanBoardProps) {
+export function KanbanBoard({ board, slug, canWrite, goals = [], goalId, lane, rows = "split" }: KanbanBoardProps) {
+  const split = rows === "split";
   const shownOnPhone = phoneLane(board, lane);
   const many = board.columns.length > 4;
   return (
@@ -100,39 +159,19 @@ export function KanbanBoard({ board, slug, canWrite, goals = [], goalId, lane }:
         )}
       >
         {board.columns.map(({ stage, tasks }, index) => {
-          const shown = stage.kind === "done" ? tasks.slice(0, DONE_SHOWN) : tasks;
-          const folded = tasks.slice(shown.length);
           const next = board.columns[index + 1]?.stage;
           // The first Done lane clears every done task at once; the rare, sweeping move asks first.
           const clears = canWrite && tasks.length > 0 && stage.kind === "done" && board.columns.findIndex((column) => column.stage.kind === "done") === index;
           const props = { slug, canWrite, goals, stage };
-          const body = (
-            <div className="flex flex-col gap-2">
-              <Cards tasks={shown} {...props} />
-              {folded.length > 0 && (
-                <details className="group/more">
-                  <summary className="cursor-pointer list-none rounded-md py-1.5 text-center text-xs font-semibold text-ink-2 link hover:text-ink [&::-webkit-details-marker]:hidden">
-                    <span className="group-open/more:hidden">Show {folded.length} more</span>
-                    <span className="hidden group-open/more:inline">Show fewer</span>
-                  </summary>
-                  <div className="mt-2 flex flex-col gap-2">
-                    <Cards tasks={folded} {...props} />
-                  </div>
-                </details>
-              )}
-              {tasks.length === 0 && (
-                <p className="rounded-md border border-dashed border-rule px-1.5 py-6 text-center text-xs text-muted">
-                  {canWrite ? (
-                    <>
-                      <span className="pointer-coarse:hidden">Drop a task here</span>
-                      <span className="hidden pointer-coarse:inline">Nothing here yet</span>
-                    </>
-                  ) : (
-                    "Nothing here"
-                  )}
-                </p>
-              )}
+          // The two horizontal rows: on a wide screen each stage's rows line up across the board.
+          const body = split ? (
+            <div className="flex min-w-0 flex-col gap-3 xl:row-span-2 xl:grid xl:grid-rows-subgrid xl:gap-y-3">
+              {SWIMLANES.map((swimlane) => (
+                <LaneCell key={swimlane} swimlane={swimlane} tasks={tasks.filter((task) => swimlaneOf(task) === swimlane)} fold={stage.kind === "done"} {...props} />
+              ))}
             </div>
+          ) : (
+            <LaneCell swimlane={null} tasks={tasks} fold={stage.kind === "done"} {...props} />
           );
           return (
             <section
@@ -140,16 +179,16 @@ export function KanbanBoard({ board, slug, canWrite, goals = [], goalId, lane }:
               aria-labelledby={`lane-${stage.key}`}
               data-station={stage.kind}
               data-stage={stage.key}
-              className={cx("flex min-w-0 flex-col", stage.key !== shownOnPhone && "max-md:hidden")}
+              className={cx("flex min-w-0 flex-col", split && "xl:row-span-3 xl:grid xl:grid-rows-subgrid xl:gap-y-0", stage.key !== shownOnPhone && "max-md:hidden")}
             >
               <header className="pb-2.5">
                 <span aria-hidden className={`block h-1 rounded-full ${STATION_STYLE[stage.kind].fill}`} />
-                <div className="mt-2.5 flex items-center gap-2 px-1">
+                <div className="mt-2.5 flex h-8 items-center gap-2 px-1">
                   <h2 id={`lane-${stage.key}`} tabIndex={-1} className="min-w-0 scroll-mt-32 truncate text-sm font-bold text-ink outline-none" title={stage.label}>
                     {stage.label}
                   </h2>
                   <span data-count className="figure inline-flex h-5 shrink-0 items-center rounded-full bg-fill px-2 text-xs font-semibold text-ink-2">
-                    {folded.length > 0 ? `${shown.length} of ${tasks.length}` : tasks.length}
+                    {tasks.length}
                   </span>
                   {stage.hidden && (
                     // A hidden stage stays on the board only while tasks are still in it.
@@ -185,7 +224,7 @@ export function KanbanBoard({ board, slug, canWrite, goals = [], goalId, lane }:
                 </div>
               </header>
               {canWrite ? (
-                <DropLane stage={stage} slug={slug} className="min-h-24 flex-1">
+                <DropLane stage={stage} slug={slug} className={cx("min-h-24 min-w-0 flex-1", split && "xl:row-span-2 xl:grid xl:grid-rows-subgrid xl:gap-y-3")}>
                   {body}
                 </DropLane>
               ) : (

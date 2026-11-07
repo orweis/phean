@@ -180,6 +180,21 @@ test.describe("signed in", () => {
     await expect(page).toHaveURL("/w/globex/decisions");
   });
 
+  test("a section's description folds behind (?), shown on hover or a click and closed with Escape", async ({ page }) => {
+    await page.goto("/w/globex/board");
+    const about = page.getByRole("button", { name: "About Board" });
+    const tip = page.getByRole("tooltip").filter({ hasText: "Every task by status" });
+    await expect(tip).not.toBeInViewport();
+    await about.hover();
+    await expect(tip).toBeVisible();
+    await page.mouse.move(0, 0);
+    await about.click();
+    await expect(about).toHaveAttribute("aria-expanded", "true");
+    await expect(tip).toBeInViewport();
+    await page.keyboard.press("Escape");
+    await expect(about).toHaveAttribute("aria-expanded", "false");
+  });
+
   test("the tab's favicon counts the decisions and the inbox, like unread mail", async ({ page }) => {
     await page.goto("/w/globex");
     const rail = page.getByRole("navigation", { name: "Workspace" });

@@ -102,7 +102,7 @@ async function dropForInactiveAgents(db: Db): Promise<void> {
     .where(and(eq(webhookDeliveries.status, "pending"), inArray(webhookDeliveries.webhookId, paused)));
 }
 
-const eventUrl = (base: string, slug: string, entityType: string, entityId: string, action: string) => {
+export const eventUrl = (base: string, slug: string, entityType: string, entityId: string, action: string) => {
   const path =
     action === "task.input_answered" || action === "task.input_retracted" || action === "task.input_requested"
       ? routes.decisions(slug)

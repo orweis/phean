@@ -2,7 +2,8 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   // PGlite ships WebAssembly and data files that must be loaded from node_modules at runtime.
-  serverExternalPackages: ["@electric-sql/pglite"],
+  // ws (the WebSocket server @vercel/functions upgrades with) breaks when bundled; load it from node_modules.
+  serverExternalPackages: ["@electric-sql/pglite", "ws"],
   // A framed dialog could trick someone into clicking Allow. Both headers, for browsers that read only one.
   headers: async () => [
     {

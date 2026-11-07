@@ -165,6 +165,28 @@ describe("tenant isolation", () => {
     expect((await getTask(acmeOwner, { taskId: acmeTask.id })).task.archivedAt).toBeNull();
   });
 
+  it("streams only the agent's own workspace's events over the realtime socket", async () => {
+    const { runEventStream } = await import("@/server/realtime/stream");
+    const sent: string[] = [];
+    const handlers: Record<string, ((...args: unknown[]) => void)[]> = {};
+    const socket = {
+      readyState: 1,
+      bufferedAmount: 0,
+      send: (data: string) => void sent.push(data),
+      close: () => handlers.close?.forEach((handler) => handler()),
+      terminate: () => handlers.close?.forEach((handler) => handler()),
+      ping: () => undefined,
+      on: (event: string, handler: (...args: unknown[]) => void) => void (handlers[event] = [...(handlers[event] ?? []), handler]),
+    };
+    const principal = { agent: { id: globex.scout.agentId, name: "Scout", level: "write" as const }, accessExpiresAt: null, tenant: globex.tenant };
+    const done = runEventStream(socket as never, { db: testDb.db, principal, options: { topics: ["tasks", "goals", "memory", "decisions"], scope: "all", after: 0 }, origin: "https://phean.test", limits: { pollMs: 20 } });
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    socket.close();
+    await done;
+    const pushed = sent.map((data) => JSON.parse(data) as { type: string; events?: { summary: string }[] }).flatMap((message) => message.events ?? []);
+    expect(pushed.map((event) => event.summary).join("\n")).not.toMatch(/merger|Bluebird/i);
+  });
+
   it("keeps each workspace's stages its own", async () => {
     const stages = await getWorkflow(acmeOwner, {});
     await saveWorkflow(acmeOwner, { stages: [...stages, { label: "Legal review", kind: "in_progress" as const, hidden: false }] });

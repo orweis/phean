@@ -2,6 +2,8 @@ import type { ComponentProps, ReactNode } from "react";
 
 import { cx } from "@/lib/cx";
 
+import { InfoTip } from "./info-tip";
+
 export type PanelTone = "plain" | "wait" | "late";
 
 const PANEL_TONES: Record<PanelTone, string> = {
@@ -46,8 +48,14 @@ export function CardHeader({ title, description, action, tone = "plain", divided
       )}
     >
       <div className="min-w-0">
-        <h2 className="text-md font-semibold">{title}</h2>
-        {description && <p className={cx("mt-0.5 text-xs", DESCRIPTION_TONES[tone])}>{description}</p>}
+        <div className="flex items-center gap-1">
+          <h2 className="text-md font-semibold">{title}</h2>
+          {description && (
+            <InfoTip about={typeof title === "string" ? title : "this section"} className={DESCRIPTION_TONES[tone]}>
+              {description}
+            </InfoTip>
+          )}
+        </div>
       </div>
       {action && <div className="flex shrink-0 items-center gap-2">{action}</div>}
     </header>
