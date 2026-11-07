@@ -125,7 +125,7 @@ test.describe("with the demo account", () => {
       route.request().method() === "GET" ? route.continue({ headers: { ...route.request().headers(), "x-forwarded-host": "preview.example" } }) : route.continue(),
     );
     await page.goto("/w/globex/agents");
-    await page.getByRole("button", { name: "Connect an agent" }).click();
+    await page.getByRole("button", { name: "Connect an agent", exact: true }).click();
     await expect(page.getByText(`${BASE_URL}/mcp/w/globex`, { exact: true })).toBeVisible();
     await page.getByRole("group", { name: "Client" }).getByRole("button", { name: "Claude Code" }).click();
     await expect(page.getByText(`claude mcp add --transport http phean-globex ${BASE_URL}/mcp/w/globex`, { exact: true })).toBeVisible();
@@ -416,7 +416,7 @@ test("a member is not offered Admin or fixed keys, and revokes only the agents t
 
     await test.step("a member sees how to connect but not how to issue a fixed key", async () => {
       await member.goto(`/w/${workspace.slug}/agents`);
-      await member.getByRole("button", { name: "Connect an agent" }).click();
+      await member.getByRole("button", { name: "Connect an agent", exact: true }).click();
       await expect(member.getByText(`${BASE_URL}/mcp/w/${workspace.slug}`, { exact: true })).toBeVisible();
       await member.getByRole("group", { name: "Client" }).getByRole("button", { name: "Claude Code" }).click();
       await expect(member.getByText(`claude mcp add --transport http phean-${workspace.slug} ${BASE_URL}/mcp/w/${workspace.slug}`, { exact: true })).toBeVisible();
