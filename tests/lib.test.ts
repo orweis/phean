@@ -14,6 +14,7 @@ import {
 import { appearanceCookie, colorSchemeFor, parseAppearance, themeColorFor } from "@/lib/appearance";
 import { addDays, dayOf, daysBetween, isoDate, isoDayFromToday, isPastDue, startOfUtcDay, todayIso } from "@/lib/dates";
 import { faviconBadgeText } from "@/lib/favicon";
+import { swimlaneOf } from "@/lib/swimlanes";
 import {
   isLate,
   isOneOf,
@@ -317,5 +318,15 @@ describe("the favicon badge", () => {
     expect(faviconBadgeText(1)).toBe("1");
     expect(faviconBadgeText(99)).toBe("99");
     expect(faviconBadgeText(100)).toBe("99+");
+  });
+});
+
+describe("the board's swimlanes", () => {
+  const request = { id: "q_1", kind: "question", question: "?", context: "", options: [], links: [], agentId: "ag_1", agentName: "Scout", askedAt: "2026-11-07T00:00:00Z" } as const;
+  it("puts work waiting on a person with people, and work agents hold or captured with agents", () => {
+    expect(swimlaneOf({ inputRequest: { ...request, options: [], links: [] }, claimedByAgentId: "ag_1", createdByType: "agent" })).toBe("people");
+    expect(swimlaneOf({ inputRequest: null, claimedByAgentId: "ag_1", createdByType: "user" })).toBe("agents");
+    expect(swimlaneOf({ inputRequest: null, claimedByAgentId: null, createdByType: "agent" })).toBe("agents");
+    expect(swimlaneOf({ inputRequest: null, claimedByAgentId: null, createdByType: "user" })).toBe("people");
   });
 });

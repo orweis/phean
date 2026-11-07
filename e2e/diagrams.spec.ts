@@ -123,11 +123,19 @@ test("the board lanes follow the stations in order", async ({ page }) => {
   await expect(lane(page, "backlog")).toContainText("Evaluate a second payroll provider");
   await expect(lane(page, "in_progress")).toContainText("Chase three overdue invoices");
 
-  const done = lane(page, "done").locator("article[data-task]");
-  await expect(done.filter({ visible: true })).toHaveCount(5);
-  await lane(page, "done").getByText(/^Show \d+ more$/).click();
-  await expect(done.filter({ visible: true })).toHaveCount(await done.count());
-  await expect(lane(page, "done").getByText("Show fewer")).toBeVisible();
+  // Two horizontal lanes: work waiting on a person, and work agents carry.
+  const people = (stage: string) => lane(page, stage).locator('[data-swimlane="people"]');
+  const agents = (stage: string) => lane(page, stage).locator('[data-swimlane="agents"]');
+  await expect(people("in_progress")).toContainText("Chase three overdue invoices"); // a decision waits on you
+  await expect(agents("in_progress")).toContainText("Map Stripe products to partner tiers"); // held by an agent
+  await expect(lane(page, "in_progress").getByRole("group", { name: "People: In progress" })).toBeVisible();
+
+  // Done folds each lane to its latest five.
+  const doneAgents = agents("done").locator("article[data-task]");
+  await expect(doneAgents.filter({ visible: true })).toHaveCount(5);
+  await agents("done").getByText(/^Show \d+ more$/).click();
+  await expect(doneAgents.filter({ visible: true })).toHaveCount(await doneAgents.count());
+  await expect(agents("done").getByText("Show fewer")).toBeVisible();
 });
 
 test("the workspaces table shows open work per workspace", async ({ page }) => {

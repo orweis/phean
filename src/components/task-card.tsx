@@ -268,7 +268,7 @@ const LEAVING = "has-[[data-exit][data-pending]]:opacity-40 motion-safe:transiti
 export function TaskActionRow({ task, slug, canWrite, goals, className }: TaskViewProps & { className?: string }) {
   if (!canWrite && task.agentSessions.length === 0) return null;
   return (
-    <div className={cx("flex items-center gap-x-3 gap-y-1.5", className)}>
+    <div className={cx("flex flex-wrap items-center gap-x-3 gap-y-1.5", className)}>
       {canWrite && <NextStep task={task} slug={slug} />}
       {canWrite && <EditTaskPopover task={task} slug={slug} goals={goals ?? []} />}
       <ResumePopover sessions={task.agentSessions} />
