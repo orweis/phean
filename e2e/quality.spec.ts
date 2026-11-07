@@ -330,7 +330,9 @@ test.describe("signed in", () => {
       const question = await entry.locator("blockquote").boundingBox();
       const field = await answer.getByRole("textbox").boundingBox();
       expect(field!.y).toBeGreaterThan(question!.y);
-      await expect(entry.locator("blockquote")).toBeInViewport();
+      // Focusing the field may scroll the entry's own quote under the header; the panel repeats the question for that.
+      const asked = (await entry.locator("blockquote").innerText()).trim();
+      await expect(answer.getByText(asked)).toBeInViewport();
     });
 
     test("the manual entry sheet opens inside the screen and closes on its own", async ({ page }) => {
