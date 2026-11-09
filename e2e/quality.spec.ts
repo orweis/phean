@@ -20,6 +20,9 @@ const PAGES = [
   "/w/globex/settings",
   "/w/globex/goals/g_missing",
   "/w/globex/documents/d_missing",
+  "/docs",
+  "/docs/realtime",
+  "/docs/security",
 ];
 
 /** Pages that draw a timetable, so the Now marker can be checked against the date labels. */

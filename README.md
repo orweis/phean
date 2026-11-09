@@ -5,10 +5,12 @@
 Phean is a hosted, multi-tenant service where people set direction and AI agents do the legwork. Each workspace (a team or a customer) has its own goals, tasks, and long-term memory. Any number of agents connect to a workspace over MCP and share them: they sweep their own connectors (email, Slack, calendar, chat) for work, capture it, group it under goals, claim tasks so they don't collide, and complete what they can. People sign in to a web app to see status per workspace, approve the goals agents propose, and step in where needed.
 
 - **Remote MCP server** at `/mcp`, and at `/mcp/w/<workspace>` for each workspace: 42 tools for a Write agent (fewer for Read, three more for Admin) and 4 prompts, plus operating instructions that teach agents the loop and the multi-agent rules.
-- **Web app**: status across workspaces, an overview per workspace, a kanban board, a timeline, goal pages, shared memory, search, agents, and members. Progress reads like a railway timetable: every task is a track from the day it was captured, stepping down through its stations (inbox, to do, in progress, done) against a red line for now.
+- **Web app**: status across workspaces, an overview per workspace, a board whose lanes are the workspace's own stages (split into People and Agents rows), a Decisions page, a timeline, goal pages, shared memory, search, agents, and members. Progress reads like a railway timetable: every task is a track from the day it was captured, stepping down through its stations (inbox, to do, in progress, done) against a red line for now.
 - **Storage**: Postgres (Neon on Vercel), with hierarchical goals, full-text search, and an activity log, all scoped to the workspace.
 
-Docs: [PRD](docs/PRD.md) · [UX](docs/UX.md) · [Design system](DESIGN.md) · [Product context](PRODUCT.md) · [Architecture](docs/ARCHITECTURE.md) · [Deployment](docs/DEPLOYMENT.md) · [Hosted multi-tenant plan](docs/plans/hosted-multi-tenant.md)
+**Docs site:** `/docs` on any deployment (source in [`content/docs`](content/docs)): getting started, connecting agents, decisions, sub-agents, webhooks, the realtime stream, the MCP reference, self-hosting and security.
+
+Engineering docs: [PRD](docs/PRD.md) · [Feature review and ideas](docs/IDEAS.md) · [UX](docs/UX.md) · [Design system](DESIGN.md) · [Product context](PRODUCT.md) · [Architecture](docs/ARCHITECTURE.md) · [Deployment](docs/DEPLOYMENT.md) · [Hosted multi-tenant plan](docs/plans/hosted-multi-tenant.md)
 
 ## Quickstart
 
@@ -70,7 +72,7 @@ A bot follows everything it captured, claimed, asked about, updated, created or 
 
 ### Agent skills
 
-Two installable skills teach agents what the server instructions cover in short, with worked examples, and load only when needed.
+Three installable skills teach agents what the server instructions cover in short, with worked examples, and load only when needed.
 
 [`skills/phean-webhooks/SKILL.md`](skills/phean-webhooks/SKILL.md) is for bots that receive webhooks. It covers:
 
@@ -86,10 +88,12 @@ Two installable skills teach agents what the server instructions cover in short,
 - which links to attach (`conversation`, `source`, `doc`);
 - how to tell you, then wait for or collect your answer, and act on it.
 
+[`skills/phean-documents/SKILL.md`](skills/phean-documents/SKILL.md) teaches an agent to attach drafts, handoffs and context to a task or goal as documents, and to link them from a decision so you read the draft beside it.
+
 Install them where your client reads skills. For Claude Code:
 
 ```bash
-mkdir -p ~/.claude/skills && cp -r skills/phean-decisions skills/phean-webhooks ~/.claude/skills/
+mkdir -p ~/.claude/skills && cp -r skills/phean-decisions skills/phean-webhooks skills/phean-documents ~/.claude/skills/
 ```
 
 Use `.claude/skills/` inside a project instead to share them with everyone working there. Other clients that support Agent Skills take the same folder.
@@ -115,7 +119,10 @@ Use `.claude/skills/` inside a project instead to share them with everyone worki
 | Coordination | `claim_task`, `release_task`, `complete_task`, `suggest_next_actions`, `get_activity` |
 | Hand-offs to people | `link_session`, `request_input`, `wait_for_answers`, `collect_answers`, `resolve_input` |
 | Webhooks | `register_webhook`, `get_webhook`, `ping_webhook`, `delete_webhook`, `watch`, `unwatch`, `list_watches` |
-| Memory | `remember`, `recall`, `forget` |
+| Memory | `remember`, `recall`, `update_memory`, `forget` |
+| Documents | `attach_document`, `get_document`, `list_documents`, `update_document`, `delete_document` |
+| Sub-agents | `create_subagent`, `revoke_subagent` |
+| Admin agents only | `list_agents`, `revoke_agent`, `list_members` |
 | Search and planning | `search`, `plan_goal` |
 | Views | `visualize` (goal tree, kanban, timeline), `get_status_summary` |
 
@@ -130,7 +137,7 @@ Agents keep tasks accurate instead of capturing duplicates. `get_task` reads one
 | `/workspaces` | Status per workspace: open, inbox, overdue, due this week, done, waiting on you (goals to decide and agent questions), active agents, last activity |
 | `/w/:slug` | Overview: a status sentence, open work by station, agent questions waiting on you, goals awaiting your decision, late tasks, the timetable of the most pressing open tasks, next actions, the goal map, agent workload, and activity |
 | `/w/:slug/decisions` | Every question and decision agents asked you: what waits (with context, options to pick, and links) and what was answered, with whether the asking agent has picked the answer up |
-| `/w/:slug/board` | Kanban by status, filterable by goal. Drag a card to another lane to move it (onto Done completes it), or use the card's buttons. **Edit** changes a task's title, notes, priority, due date, goal and tags. Links agents left show on the card, beside a Resume control; Done shows the latest five and folds the rest |
+| `/w/:slug/board` | Lanes are the workspace's stages (edited in Settings), split into People and Agents rows, filterable by goal. Drag a card to another lane to move it (onto Done completes it), or use the card's buttons. **Edit** changes a task's title, notes, priority, due date, goal and tags. Links agents left show on the card, beside a Resume control; Done shows the latest five and folds the rest |
 | `/w/:slug/timeline` | Cumulative flow and a timetable of every task over 14, 30, or 90 days, grouped by goal and filterable by goal |
 | `/w/:slug/goals/:id` | One goal: decisions, progress by station, its timetable, tasks, sub-goals, memory, activity |
 | `/w/:slug/memory` | Shared long-term memory, by kind and text |

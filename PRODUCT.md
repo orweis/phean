@@ -25,13 +25,14 @@ The agent proposes; the human disposes. Agents may capture, triage, claim, and c
 ## Operating Context
 
 - Web app at `/workspaces` (status per workspace) and `/w/<slug>` (dashboard, board, goals, memory, search, agents, members). Pages refresh every 15 seconds while visible.
-- Agents connect to `/mcp` with a `phn_` bearer token issued on the Agents page.
+- Agents connect to `/mcp` (or a workspace's own `/mcp/w/<slug>`) and are approved in the browser over OAuth, with a level (Read, Write or Admin) and a lifetime. Bots that cannot open a browser use a fixed `phn_` key from the Agents page.
+- Public docs at `/docs`, rendered from `content/docs`.
 - The name is a play on *Sisyphean*: every morning the boulder is back at the bottom of the hill. The tagline is "Humans set the goals. Agents roll the boulder."
 
 ## Capabilities and Constraints
 
 - Goals nest up to four levels; progress rolls up from every descendant task.
-- Task statuses: inbox, to do, in progress, done, dropped. Goal statuses: proposed, active, achieved, abandoned. Priorities: urgent, high, medium, low.
+- Task statuses: inbox, backlog, to do, in progress, done, dropped; the board's lanes are each workspace's own stages over those kinds. Goal statuses: proposed, active, achieved, abandoned. Priorities: urgent, high, medium, low.
 - Tasks carry a creation time, an optional due date (calendar date, no time), a claim time, and a completion time. Goals have no dates of their own.
 - Roles: owner, admin, member, plus read-only platform admin.
 - Next.js on Vercel with Neon Postgres. No client-side data fetching beyond server actions and a periodic refresh.
