@@ -11,6 +11,8 @@ function withQuery(path: string, query: Query = {}): string {
 /** Every in-app path, built in one place so pages, redirects, and MCP links agree. */
 export const routes = {
   home: () => "/",
+  /** The public docs site, or one page of it. */
+  docs: (slug?: string) => (slug ? `/docs/${slug}` : "/docs"),
   signIn: (next?: string) => withQuery("/sign-in", { next }),
   signUp: (next?: string) => withQuery("/sign-up", { next }),
   workspaces: () => "/workspaces",
