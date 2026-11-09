@@ -1,5 +1,9 @@
+import { AGENT_TOKEN_PREFIX } from "@/lib/domain";
+
+import { verifyOAuthToken as verifyDeploymentToken, type OAuthTokenVerifier } from "../auth/oauth";
+import { mcpResourceTarget } from "../config";
 import type { Db } from "../db/client";
-import { AGENT_NAME_HEADER, agentContext, authenticateAgentToken, resolveNamedSubagent, type AgentPrincipal } from "../domain/agents";
+import { AGENT_NAME_HEADER, agentContext, authenticateAgentToken, resolveNamedSubagent, resolveOAuthAgent, type AgentPrincipal } from "../domain/agents";
 import { can } from "../domain/policy";
 
 /** The subprotocol a stream speaks; a client that names any subprotocol must name this one first. */
@@ -43,14 +47,56 @@ export function streamRefusal(db: Db, principal: AgentPrincipal, scope: "related
   return null;
 }
 
-/** The agent a stream request acts as: its token, and a sub-agent's name when it names one. */
-export async function authenticateStream(db: Db, headers: Headers): Promise<{ principal: AgentPrincipal } | { error: string; status: 400 | 401 | 403 }> {
+/**
+ * The MCP endpoint an access token says it was issued for, read before it is verified, when that is
+ * one of this deployment's; the verifier then holds the token to exactly that audience. The stream
+ * belongs to the same protected resource as the MCP endpoints, so a token for `/mcp`, or for the
+ * agent's own workspace URL, opens it.
+ */
+function claimedResource(token: string): { audience: string; slug: string | null } | null {
+  try {
+    const { aud } = JSON.parse(Buffer.from(token.split(".")[1] ?? "", "base64url").toString()) as { aud?: unknown };
+    if (typeof aud !== "string") return null;
+    const target = mcpResourceTarget(aud);
+    return target && { audience: aud, slug: target.slug };
+  } catch {
+    return null;
+  }
+}
+
+/** The agent an OAuth access token names, when it verifies for the endpoint it claims and that endpoint's workspace, if it names one, is the agent's. */
+async function oauthPrincipal(db: Db, token: string, verify: OAuthTokenVerifier): Promise<StreamAuth | null> {
+  const resource = claimedResource(token);
+  if (!resource) return null;
+  const verified = await verify(token, resource.audience);
+  const principal = verified && (await resolveOAuthAgent(db, verified.agentId, verified));
+  if (!verified || !principal || (resource.slug !== null && principal.tenant.slug !== resource.slug)) return null;
+  return { principal, tokenExpiresAt: new Date(verified.expiresAt * 1000) };
+}
+
+export interface StreamAuth {
+  principal: AgentPrincipal;
+  /** When an OAuth access token runs out: the stream ends by then, and the agent reconnects with a fresh one. */
+  tokenExpiresAt?: Date;
+}
+
+/**
+ * The agent a stream request acts as: a fixed `phn_` key or an OAuth access token, held to the same
+ * checks as at the MCP endpoint, and a sub-agent's name when it names one.
+ */
+export async function authenticateStream(
+  db: Db,
+  headers: Headers,
+  { verifyOAuthToken = verifyDeploymentToken }: { verifyOAuthToken?: OAuthTokenVerifier } = {},
+): Promise<StreamAuth | { error: string; status: 400 | 401 | 403 }> {
   const credentials = streamToken(headers);
   if ("error" in credentials) return credentials;
-  const token = await authenticateAgentToken(db, credentials.token);
-  if (!token) return { error: "Unknown or revoked agent token.", status: 401 };
+  const authenticated: StreamAuth | null = credentials.token.startsWith(AGENT_TOKEN_PREFIX)
+    ? await authenticateAgentToken(db, credentials.token).then((principal) => principal && { principal })
+    : await oauthPrincipal(db, credentials.token, verifyOAuthToken);
+  if (!authenticated) return { error: "Unknown, expired or revoked agent token.", status: 401 };
   const named = headers.get(AGENT_NAME_HEADER);
-  const principal = named ? await resolveNamedSubagent(db, token, named) : token;
+  const principal = named ? await resolveNamedSubagent(db, authenticated.principal, named) : authenticated.principal;
   if (!principal) return { error: `The sub-agent "${named}" was revoked.`, status: 403 };
-  return { principal };
+  return { ...authenticated, principal };
 }

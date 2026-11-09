@@ -13,6 +13,7 @@ export function segment(selected: boolean): string {
 /** An option that is a label around a visually hidden radio, selected by `:has(:checked)` without JavaScript. */
 export const RADIO_SEGMENT = cx(
   SEGMENT,
-  "relative flex-1 cursor-pointer text-center text-ink-2 hover:text-ink has-checked:bg-raised has-checked:text-ink has-checked:shadow-raised",
+  "relative flex-1 cursor-pointer text-center text-ink-2 has-enabled:hover:text-ink has-checked:bg-raised has-checked:text-ink has-checked:shadow-raised",
+  "has-disabled:cursor-not-allowed has-disabled:text-faint",
   "has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-focus",
 );

@@ -2,6 +2,8 @@ import { z } from "zod";
 
 import { isResumeUrl, LINK_KINDS, MAX_LINKS, REQUEST_KINDS, RESUME_URL_SCHEMES } from "@/lib/agent-sessions";
 import {
+  AGENT_ACCESS_LEVELS,
+  AGENT_LIFETIME_DAYS,
   GOAL_STATUSES,
   INVITABLE_ROLES,
   LIMITS,
@@ -356,6 +358,12 @@ export const VisualizeInput = z.object({ kind: z.enum(VIEW_KINDS), goalId: goalI
 export const CreateAgentInput = z.object({
   name,
   parentAgentId: z.string().trim().min(1).optional().describe("Issue it as a sub-agent of this agent"),
+});
+export const ApproveAgentInput = z.object({
+  name,
+  level: z.enum(AGENT_ACCESS_LEVELS),
+  lifetimeDays: z.coerce.number().pipe(z.literal(AGENT_LIFETIME_DAYS)),
+  oauthClientId: z.string().trim().min(1).max(LIMITS.url),
 });
 export const AgentRefInput = z.object({ agentId: z.string().trim().min(1) });
 export const CreateSubagentInput = z.object({

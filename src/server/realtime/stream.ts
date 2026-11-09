@@ -5,6 +5,7 @@ import { WEBHOOK_TOPICS, type WebhookTopic } from "@/lib/domain";
 import type { Db } from "../db/client";
 import { newId } from "../db/ids";
 import { agents, events, realtimeStreams, watches } from "../db/schema";
+import { liveAgent } from "../domain/agent-liveness";
 import type { AgentPrincipal } from "../domain/agents";
 import { eventUrl } from "../webhooks/dispatch";
 import { concerns, reasonsFor, topicsOf, type Listener, type RoutedEvent } from "../webhooks/routing";
@@ -44,7 +45,7 @@ export type StreamLimits = Record<keyof typeof STREAM_LIMITS, number>;
 export const CLOSE = {
   /** Time is up for this connection: reconnect with `after` set to the cursor it sent last. */
   reconnect: 4000,
-  /** The agent's token or the agent itself was revoked. */
+  /** The agent lost access: revoked, expired, or its approver or parent gone. */
   revoked: 4401,
   /** Too many open streams for this agent or workspace, or on this server. */
   tooMany: 4429,
@@ -125,6 +126,8 @@ interface StreamDeps {
   limits?: Partial<StreamLimits>;
   /** When the platform ends this invocation; the stream asks the agent to reconnect well before. */
   deadline?: Date;
+  /** When the OAuth access token the stream opened with runs out; the stream asks the agent to reconnect by then. */
+  tokenExpiresAt?: Date;
 }
 
 /** Leeway before the invocation's deadline for the reconnect message and the close to go out. */
@@ -140,9 +143,11 @@ const DEADLINE_MARGIN_MS = 15_000;
  * back over the last minute and sends what it has not sent yet, and a reconnect may repeat recent
  * events. Agents de-duplicate by `eventId`, as they do for webhooks.
  */
-export function runEventStream(socket: StreamSocket, { db, principal, options, origin, limits: overrides, deadline }: StreamDeps): Promise<void> {
+export function runEventStream(socket: StreamSocket, { db, principal, options, origin, limits: overrides, deadline, tokenExpiresAt }: StreamDeps): Promise<void> {
   const limits: StreamLimits = { ...STREAM_LIMITS, ...overrides };
   if (deadline) limits.lifetimeMs = Math.max(5_000, Math.min(limits.lifetimeMs, deadline.getTime() - Date.now() - DEADLINE_MARGIN_MS));
+  // The token was checked once, at the handshake; it does not outlive its own expiry here.
+  if (tokenExpiresAt) limits.lifetimeMs = Math.max(0, Math.min(limits.lifetimeMs, tokenExpiresAt.getTime() - Date.now()));
   const agentId = principal.agent.id;
   const tenantId = principal.tenant.id;
   const listener: Listener = { agentId, topics: options.topics, scope: options.scope };
@@ -254,11 +259,11 @@ export function runEventStream(socket: StreamSocket, { db, principal, options, o
       }
     };
 
-    // Revoked agents are cut off, and the lease is renewed; three failed checks in a row end the stream.
+    // An agent that loses access (revoked, expired, its approver or parent gone) is cut off, and the lease is renewed.
     const recheck = async () => {
       try {
-        const [row] = await db.select({ revokedAt: agents.revokedAt }).from(agents).where(and(eq(agents.tenantId, tenantId), eq(agents.id, agentId)));
-        if (!row || row.revokedAt) return end(CLOSE.revoked, "This agent was revoked");
+        const [row] = await db.select({ live: sql<boolean>`(${liveAgent()})` }).from(agents).where(and(eq(agents.tenantId, tenantId), eq(agents.id, agentId)));
+        if (!row?.live) return end(CLOSE.revoked, "This agent no longer has access");
         if (lease) await db.update(realtimeStreams).set({ renewedAt: new Date() }).where(eq(realtimeStreams.id, lease));
         failedChecks = 0;
       } catch (error) {

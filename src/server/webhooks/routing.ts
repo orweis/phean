@@ -1,8 +1,9 @@
-import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
+import { and, eq, inArray, or, sql } from "drizzle-orm";
 
 import { WATCHED_ENTITY_TYPES, type WatchedEntityType, type WebhookTopic } from "@/lib/domain";
 
 import { agents, watches, webhookDeliveries, webhooks } from "../db/schema";
+import { liveAgent } from "../domain/agent-liveness";
 import type { Ctx } from "../domain/context";
 
 /** The slice of an event that routing reads. */
@@ -74,8 +75,8 @@ export async function trackActorWatches(ctx: Ctx, rows: readonly RoutedEvent[]):
 }
 
 /**
- * Writes the outbox: one delivery per (active webhook, event) for every agent the event concerns,
- * in the caller's transaction. Returns how many were queued, so the caller knows to wake the
+ * Writes the outbox: one delivery per (active webhook, event) for every live agent the event concerns
+ * (an agent whose access lapsed hears nothing until it is renewed), in the caller's transaction. Returns how many were queued, so the caller knows to wake the
  * dispatcher once the transaction commits.
  */
 /** What one listening agent (a webhook, or a realtime stream) asked to hear. */
@@ -109,7 +110,7 @@ export async function enqueueDeliveries(ctx: Ctx, rows: readonly RoutedEvent[]):
     .select({ id: webhooks.id, agentId: webhooks.agentId, topics: webhooks.topics, scope: webhooks.scope })
     .from(webhooks)
     .innerJoin(agents, and(eq(agents.tenantId, webhooks.tenantId), eq(agents.id, webhooks.agentId)))
-    .where(and(eq(webhooks.tenantId, ctx.tenant.id), eq(webhooks.status, "active"), isNull(agents.revokedAt)));
+    .where(and(eq(webhooks.tenantId, ctx.tenant.id), eq(webhooks.status, "active"), liveAgent()));
   if (hooks.length === 0) return 0;
 
   const keys = routable.flatMap(concerns);

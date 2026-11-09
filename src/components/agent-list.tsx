@@ -1,28 +1,11 @@
 import { Bot } from "lucide-react";
 
-import type { Tone } from "@/lib/domain";
 import { cx } from "@/lib/cx";
+import { AGENT_STATUS_META, agentStatus } from "@/lib/domain";
 import { timeAgo } from "@/lib/format";
-import type { Agent } from "@/server/domain/agents";
 import type { AgentLoad } from "@/server/domain/overview";
 
 import { EmptyState } from "./ui/stat";
-
-/** Matches the window the workspace stats use for "active agents". */
-const ACTIVE_WINDOW_MS = 24 * 60 * 60 * 1000;
-
-export type AgentStatus = "active" | "idle" | "revoked";
-
-export const AGENT_STATUS_META: Record<AgentStatus, { label: string; tone: Tone }> = {
-  active: { label: "Active", tone: "success" },
-  idle: { label: "Idle", tone: "neutral" },
-  revoked: { label: "Revoked", tone: "danger" },
-};
-
-export function agentStatus(agent: Agent, now = Date.now()): AgentStatus {
-  if (agent.revokedAt) return "revoked";
-  return agent.lastSeenAt && now - agent.lastSeenAt.getTime() < ACTIVE_WINDOW_MS ? "active" : "idle";
-}
 
 function LoadBar({ value, max, className }: { value: number; max: number; className: string }) {
   return (
@@ -37,7 +20,7 @@ export function AgentWorkload({ loads, empty }: { loads: readonly AgentLoad[]; e
   if (loads.length === 0) {
     return (
       <EmptyState icon={<Bot />} title="No agents connected">
-        {empty ?? "Issue a token on the Agents page and add Phean to your MCP client."}
+        {empty ?? "Add Phean to your MCP client from the Agents page."}
       </EmptyState>
     );
   }
@@ -45,7 +28,7 @@ export function AgentWorkload({ loads, empty }: { loads: readonly AgentLoad[]; e
   return (
     <ul>
       {loads.map(({ agent, claimed, completedLast7Days }) => {
-        const status = agentStatus(agent);
+        const status = agentStatus({ ...agent, accessExpiresAt: agent.accessEndsAt });
         return (
           <li key={agent.id} className="border-b border-rule py-3 first:pt-0 last:border-b-0 last:pb-0">
             <div className="flex items-center gap-2 text-sm">

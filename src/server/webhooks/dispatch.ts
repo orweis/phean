@@ -1,10 +1,11 @@
-import { and, asc, eq, inArray, lt, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, lt, not, sql } from "drizzle-orm";
 
 import { routes } from "@/lib/routes";
 
 import { appUrl } from "../config";
 import type { Db } from "../db/client";
 import { queryRows } from "../db/raw";
+import { liveAgent } from "../domain/agent-liveness";
 import { agents, events, organization, webhookDeliveries, webhooks, type WebhookRow } from "../db/schema";
 import { assertWebhookUrlSafe, allowPrivateWebhooks, resolveHost, type Resolver } from "./url-safety";
 import { decryptSecret, SIGNATURE_HEADER, signPayload } from "./signing";
@@ -64,13 +65,14 @@ interface Claimed {
  * once without two of them sending to the same webhook, which keeps each webhook's events in order.
  */
 async function claimWebhooks(db: Db, limit: number): Promise<Claimed[]> {
+  const live = db.select({ id: agents.id }).from(agents).where(liveAgent());
   return queryRows<Claimed>(
     db,
     sql`
       UPDATE webhooks SET lease_until = now() + make_interval(secs => ${LEASE_SECONDS})
       WHERE id IN (
         SELECT w.id FROM webhooks w
-        WHERE w.status = 'active' AND w.next_attempt_at <= now() AND (w.lease_until IS NULL OR w.lease_until < now())
+        WHERE w.status = 'active' AND w.agent_id IN (${live}) AND w.next_attempt_at <= now() AND (w.lease_until IS NULL OR w.lease_until < now())
           AND EXISTS (SELECT 1 FROM webhook_deliveries d WHERE d.webhook_id = w.id AND d.status = 'pending')
         ORDER BY w.next_attempt_at
         LIMIT ${limit}
@@ -78,6 +80,26 @@ async function claimWebhooks(db: Db, limit: number): Promise<Claimed[]> {
       )
       RETURNING id, tenant_id, agent_id, url, secret_ciphertext, headers_ciphertext, consecutive_failures`,
   );
+}
+
+/** What `last_error` says on a delivery that was never sent because its agent had no access. */
+export const AGENT_INACTIVE = "agent_inactive";
+
+/**
+ * A webhook pauses while its agent has no access (expired, or its approver left). What was queued
+ * before then is marked dead rather than replayed later. It is not a failed send: the webhook stays
+ * active, with no strike toward auto-disable and no backoff, and new events queue again on renewal.
+ */
+async function dropForInactiveAgents(db: Db): Promise<void> {
+  const paused = db
+    .select({ id: webhooks.id })
+    .from(webhooks)
+    .innerJoin(agents, and(eq(agents.tenantId, webhooks.tenantId), eq(agents.id, webhooks.agentId)))
+    .where(and(eq(webhooks.status, "active"), not(liveAgent())));
+  await db
+    .update(webhookDeliveries)
+    .set({ status: "dead", lastError: AGENT_INACTIVE })
+    .where(and(eq(webhookDeliveries.status, "pending"), inArray(webhookDeliveries.webhookId, paused)));
 }
 
 export const eventUrl = (base: string, slug: string, entityType: string, entityId: string, action: string) => {
@@ -262,6 +284,7 @@ async function disable(db: Db, webhookId: string, reason: string): Promise<void>
 export async function dispatchDue(db: Db, deps: DispatchDeps = defaultDispatchDeps()): Promise<DispatchReport> {
   const report: DispatchReport = { batches: 0, delivered: 0, failed: 0 };
   const deadline = Date.now() + deps.budgetMs;
+  await dropForInactiveAgents(db);
   while (Date.now() < deadline) {
     const claimed = await claimWebhooks(db, 10);
     if (claimed.length === 0) break;

@@ -28,7 +28,7 @@ const FEATURES = [
 
 const ROUTE = [
   { title: "Create a workspace", body: "One per team or customer. Invite the people who decide on goals." },
-  { title: "Connect your agents", body: "Issue a token per agent and add the MCP endpoint to Cursor, Claude, or any MCP client." },
+  { title: "Connect your agents", body: "Add the MCP endpoint to Cursor, Claude, or any MCP client, and approve each agent in your browser. No key to copy." },
   { title: "Approve and follow along", body: "Agents capture, triage, and finish work. You approve goals and read the timetable." },
 ];
 

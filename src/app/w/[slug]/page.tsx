@@ -91,7 +91,7 @@ export default async function DashboardPage({ params }: PageProps<"/w/[slug]">) 
   const pressing = mostPressing(journeys, PRESSING_TRACKS, window.now);
   const openTracks = journeyTotals(journeys, window).open;
   const canWrite = can(ctx.actor, "task:write");
-  const connectFirst = workload.length === 0 && can(ctx.actor, "agent:manage");
+  const connectFirst = workload.length === 0 && can(ctx.actor, "agent:connect");
   const asked = new Set(summary.awaitingInputTasks.map((task) => task.id));
   const actions = nextActions.filter((task) => !task.inputRequest).slice(0, NEXT_ACTIONS);
   const merged = summary.awaitingInputTasks.length > 0 && proposed.length > 0 && summary.awaitingInputTasks.length + proposed.length <= MERGED_WAITING;

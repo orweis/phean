@@ -1,7 +1,9 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { tasks } from "@/server/db/schema";
-import { authenticateAgentToken } from "@/server/domain/agents";
+import { eq } from "drizzle-orm";
+
+import { agents, tasks } from "@/server/db/schema";
+import { approveAgent, authenticateAgentToken, findRenewableAgent, resolveOAuthAgent, revokeAgent } from "@/server/domain/agents";
 import type { Ctx } from "@/server/domain/context";
 import { listActivity } from "@/server/domain/events";
 import { createGoal, findGoal, listGoals, updateGoal, type Goal } from "@/server/domain/goals";
@@ -26,9 +28,12 @@ import {
   type Task,
 } from "@/server/domain/tasks";
 import { getWorkspaceOverviews, listMemberships } from "@/server/domain/tenants";
+import { createPheanMcpHandler } from "@/server/mcp/handler";
 import { deleteWebhook, watch } from "@/server/domain/webhooks";
 
 import { createTestDb, seedWorkspace, type TestDb, type Workspace } from "./support/db";
+import { connectMcpClient, dataOf, textOf } from "./support/mcp";
+import { connectOAuthAgent, createOAuthServer, OAUTH_BASE, OAUTH_RESOURCE } from "./support/oauth";
 
 let testDb: TestDb;
 let acme: Workspace;
@@ -173,7 +178,7 @@ describe("tenant isolation", () => {
       ping: () => undefined,
       on: (event: string, handler: (...args: unknown[]) => void) => void (handlers[event] = [...(handlers[event] ?? []), handler]),
     };
-    const principal = { agent: { id: globex.scout.agentId, name: "Scout" }, tenant: globex.tenant };
+    const principal = { agent: { id: globex.scout.agentId, name: "Scout", level: "write" as const }, accessExpiresAt: null, tenant: globex.tenant };
     const done = runEventStream(socket as never, { db: testDb.db, principal, options: { topics: ["tasks", "goals", "memory", "decisions"], scope: "all", after: 0 }, origin: "https://phean.test", limits: { pollMs: 20 } });
     await new Promise((resolve) => setTimeout(resolve, 150));
     socket.close();
@@ -215,6 +220,84 @@ describe("tenant isolation", () => {
   it("binds agent tokens to their own workspace", async () => {
     const principal = await authenticateAgentToken(testDb.db, globex.scout.token);
     expect(principal?.tenant).toEqual(globex.tenant);
+  });
+
+  it("binds an OAuth agent to its own workspace, and keeps other workspaces from revoking or renewing it", async () => {
+    const grant = { name: "Laptop", level: "write", lifetimeDays: 30, oauthClientId: "client_1" } as const;
+    const { agent } = await approveAgent(acmeOwner, grant);
+    expect((await resolveOAuthAgent(testDb.db, agent.id))?.tenant).toEqual(acme.tenant);
+
+    await expect(revokeAgent(globexOwner, { agentId: agent.id })).rejects.toMatchObject({ code: "not_found" });
+    await expect(revokeAgent(globexAgent, { agentId: agent.id })).rejects.toMatchObject({ code: "not_found" });
+
+    // The same person in another workspace: it is not theirs to renew there, nor its sub-agents to revoke.
+    const samePerson = { ...globexOwner, actor: acmeOwner.actor };
+    const { createSubagent, agentContext } = await import("@/server/domain/agents");
+    const { agent: worker } = await createSubagent(agentContext(testDb.db, (await resolveOAuthAgent(testDb.db, agent.id))!), { name: "Worker" });
+    await expect(revokeAgent(samePerson, { agentId: worker.id })).rejects.toMatchObject({ code: "not_found" });
+    expect(await findRenewableAgent(samePerson, "Laptop")).toBeNull();
+    const { agent: there, renewed } = await approveAgent(samePerson, grant);
+    expect(renewed).toBe(false);
+    expect(there.id).not.toBe(agent.id);
+    expect((await resolveOAuthAgent(testDb.db, agent.id))?.tenant).toEqual(acme.tenant);
+  });
+
+  describe("over an OAuth token", () => {
+    afterEach(() => vi.unstubAllEnvs());
+
+    it("an OAuth token for one workspace never sees another's goals", async () => {
+      const server = createOAuthServer(testDb.db);
+      const connected = await connectOAuthAgent(testDb.db, server, "oauth-acme");
+      await createGoal(connected.ctx, { title: "Connected workspace's goal" });
+      const client = await connectMcpClient(server.handler, connected.accessToken, { url: OAUTH_RESOURCE });
+      try {
+        const me = dataOf<{ workspace: { id: string } }>(await client.callTool({ name: "whoami", arguments: {} }));
+        expect(me.workspace.id).toBe(connected.tenant.id);
+        const listed = textOf(await client.callTool({ name: "list_goals", arguments: {} }));
+        expect(listed).toContain("Connected workspace's goal");
+        expect(listed).not.toContain(acmeGoal.title);
+        const reached = await client.callTool({ name: "get_goal", arguments: { goalId: acmeGoal.id } });
+        expect(reached.isError).toBe(true);
+      } finally {
+        await client.close();
+      }
+    });
+
+    it("a workspace's own URL lets in only that workspace's agents", async () => {
+      const server = createOAuthServer(testDb.db);
+      const connected = await connectOAuthAgent(testDb.db, server, "oauth-acme");
+      const handler = createPheanMcpHandler({ getDb: () => testDb.db, verifyOAuthToken: () => Promise.resolve({ agentId: connected.agentId, clientId: connected.clientId, issuedAt: Math.floor(Date.now() / 1000), expiresAt: Math.floor(Date.now() / 1000) + 3600 }) });
+      // Another workspace's key, and a token the verifier accepts but whose agent works elsewhere.
+      await expect(connectMcpClient(handler, globex.scout.token, { url: `${OAUTH_BASE}/mcp/w/${acme.tenant.slug}` })).rejects.toThrow();
+      await expect(connectMcpClient(handler, "verified-token", { url: `${OAUTH_BASE}/mcp/w/${acme.tenant.slug}` })).rejects.toThrow();
+      const own = await connectMcpClient(handler, globex.scout.token, { url: `${OAUTH_BASE}/mcp/w/${globex.tenant.slug}` });
+      try {
+        const me = dataOf<{ workspace: { id: string } }>(await own.callTool({ name: "whoami", arguments: {} }));
+        expect(me.workspace.id).toBe(globex.tenant.id);
+      } finally {
+        await own.close();
+      }
+    });
+  });
+
+  it("keeps the admin tools list_agents, list_members and revoke_agent inside the agent's workspace", async () => {
+    await testDb.db.update(agents).set({ accessLevel: "admin" }).where(eq(agents.id, globex.scout.agentId));
+    const client = await connectMcpClient(createPheanMcpHandler({ getDb: () => testDb.db }), globex.scout.token);
+    try {
+      const listed = dataOf<{ agents: { id: string; name: string }[] }>(await client.callTool({ name: "list_agents", arguments: {} }));
+      expect(listed.agents.map((agent) => agent.id)).toContain(globex.scout.agentId);
+      expect(listed.agents.map((agent) => agent.id)).not.toContain(acme.scout.agentId);
+
+      const members = dataOf<{ members: { name: string }[] }>(await client.callTool({ name: "list_members", arguments: {} }));
+      expect(members.members).toEqual([{ name: "Eli", role: "owner" }]);
+
+      const reached = await client.callTool({ name: "revoke_agent", arguments: { agentId: acme.scout.agentId } });
+      expect(reached.isError).toBe(true);
+      expect(textOf(reached)).toContain("not_found");
+      expect(await authenticateAgentToken(testDb.db, acme.scout.token)).not.toBeNull();
+    } finally {
+      await client.close();
+    }
   });
 
   it("shows each user only the workspaces they belong to", async () => {

@@ -4,6 +4,7 @@
  */
 import type { LinkKind, RequestKind, RequestOutcome } from "./agent-sessions";
 import { isPastDue } from "./dates";
+import { roleCan } from "./permissions";
 
 /** Narrows an untrusted value (a query parameter, a logged event field) to one of `values`. */
 export function isOneOf<V extends string | number>(values: readonly V[], value: unknown): value is V {
@@ -43,6 +44,47 @@ export type ActorType = (typeof ACTOR_TYPES)[number];
 
 export const MEMBER_ROLES = ["owner", "admin", "member"] as const;
 export type MemberRole = (typeof MEMBER_ROLES)[number];
+
+/** How much an agent may do: read the workspace, contribute to it, or also manage other agents. */
+export const AGENT_ACCESS_LEVELS = ["read", "write", "admin"] as const;
+export type AgentAccessLevel = (typeof AGENT_ACCESS_LEVELS)[number];
+
+/** How long an agent's approval lasts, in days. There is no "never". */
+export const AGENT_LIFETIME_DAYS = [1, 7, 30, 90, 365] as const;
+export const DEFAULT_AGENT_LIFETIME_DAYS = 30;
+
+/** What the dialog calls a lifetime. */
+export function lifetimeLabel(days: number): string {
+  if (days === 365) return "1 year";
+  return days === 1 ? "1 day" : `${days} days`;
+}
+
+/**
+ * The levels a person of this role may grant: Admin only with `agent:manage` in the policy matrix,
+ * since an Admin agent holds it; any other role, present or future, stops at Write.
+ */
+export function grantableLevels(role: string): readonly AgentAccessLevel[] {
+  return roleCan(role, "agent:manage") ? AGENT_ACCESS_LEVELS : ["read", "write"];
+}
+
+/** The highest level a person of this role may grant. */
+export function highestGrantableLevel(role: MemberRole): AgentAccessLevel {
+  const levels = grantableLevels(role);
+  return levels[levels.length - 1]!;
+}
+
+/** The lower of two levels. */
+export function lowerLevel(a: AgentAccessLevel, b: AgentAccessLevel): AgentAccessLevel {
+  return AGENT_ACCESS_LEVELS.indexOf(a) <= AGENT_ACCESS_LEVELS.indexOf(b) ? a : b;
+}
+
+/** Better Auth stores roles as a comma-separated list (or none); Phean uses the most privileged one. */
+export function toMemberRole(raw: string | null): MemberRole {
+  const roles = (raw ?? "").split(",").map((role) => role.trim());
+  if (roles.includes("owner")) return "owner";
+  if (roles.includes("admin")) return "admin";
+  return "member";
+}
 
 export const INVITABLE_ROLES = ["member", "admin"] as const satisfies readonly MemberRole[];
 
@@ -188,6 +230,62 @@ export const MEMORY_KIND_META: Record<MemoryKind, EnumMeta> = {
   context: { label: "Context", tone: "neutral" },
   note: { label: "Note", tone: "neutral" },
 };
+
+export const ACCESS_LEVEL_META: Record<AgentAccessLevel, EnumMeta> = {
+  read: { label: "Read", tone: "neutral" },
+  write: { label: "Write", tone: "info" },
+  admin: { label: "Admin", tone: "warning" },
+};
+
+/** Matches the window the workspace stats use for "active agents". */
+const ACTIVE_AGENT_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+export type AgentStatus = "active" | "idle" | "expired" | "approver_left" | "revoked";
+
+export const AGENT_STATUS_META: Record<AgentStatus, EnumMeta> = {
+  active: { label: "Active", tone: "success" },
+  idle: { label: "Idle", tone: "neutral" },
+  // Amber, not red: an expired agent is waiting for someone to approve it again, not cut off for cause.
+  expired: { label: "Expired", tone: "warning" },
+  // Amber too: it resumes if its approver returns, or someone else connects it again.
+  approver_left: { label: "Approver left", tone: "warning" },
+  revoked: { label: "Revoked", tone: "danger" },
+};
+
+/**
+ * Where an agent stands: revoked, past the end of its access, unable to act for another reason (its
+ * approver, or its parent's, left the workspace), or active or idle by when it was last seen. For a
+ * sub-agent, pass its access end from `agentAccessEnds`, so it lapses with its parent, and `live`
+ * from the server's standing, so this never second-guesses what a request would be told.
+ */
+export function agentStatus(
+  agent: { revokedAt: Date | null; lastSeenAt: Date | null; accessExpiresAt: Date | null; live?: boolean },
+  now = Date.now(),
+): AgentStatus {
+  if (agent.revokedAt) return "revoked";
+  if (agent.accessExpiresAt && agent.accessExpiresAt.getTime() <= now) return "expired";
+  if (agent.live === false) return "approver_left";
+  return agent.lastSeenAt && now - agent.lastSeenAt.getTime() < ACTIVE_AGENT_WINDOW_MS ? "active" : "idle";
+}
+
+/** When an agent's access ends: its own end, or its parent's if that comes first. Null for a key that does not lapse. */
+export function agentAccessEnds(agent: { accessExpiresAt: Date | null }, parent?: { accessExpiresAt: Date | null }): Date | null {
+  const ends = [agent.accessExpiresAt, parent?.accessExpiresAt].filter((date): date is Date => !!date);
+  return ends.sort((a, b) => a.getTime() - b.getTime())[0] ?? null;
+}
+
+/** How an agent reaches Phean: signed in through the browser, with a fixed key, or naming itself on its parent's key. */
+export type AgentConnection = "oauth" | "key" | "shared_key";
+
+export const AGENT_CONNECTION_META: Record<AgentConnection, EnumMeta> = {
+  oauth: { label: "OAuth sign-in", tone: "accent" },
+  key: { label: "Fixed key", tone: "neutral" },
+  shared_key: { label: "Shared key", tone: "neutral" },
+};
+
+export function agentConnection(agent: { authKind: "key" | "oauth"; sharesParentKey: boolean }): AgentConnection {
+  return agent.sharesParentKey ? "shared_key" : agent.authKind;
+}
 
 export const ROLE_META: Record<MemberRole | "platform_admin", EnumMeta> = {
   owner: { label: "Owner", tone: "info" },

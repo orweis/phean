@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { appUrl, oauthProviders, platformAdminEmails, trustedOrigins } from "@/server/config";
+import { appUrl, mcpResourceTarget, mcpResourceUrl, oauthProviders, oauthRegisterLimit, platformAdminEmails, trustedOrigins } from "@/server/config";
 import {
   DEFAULT_LOCAL_DATABASE_URL,
   isPostgresUrl,
@@ -18,6 +18,7 @@ const DEPLOYMENT_ENV = [
   "VERCEL_BRANCH_URL",
   "VERCEL_PROJECT_PRODUCTION_URL",
   "PORT",
+  "PHEAN_OAUTH_REGISTER_LIMIT",
   "PHEAN_PLATFORM_ADMINS",
   "GITHUB_CLIENT_ID",
   "GITHUB_CLIENT_SECRET",
@@ -105,5 +106,40 @@ describe("database URL", () => {
     );
     expect(postgresConnectionString("postgres://u:p@localhost:5432/db?sslmode=disable")).toBe("postgres://u:p@localhost:5432/db?sslmode=disable");
     expect(postgresConnectionString("postgres://u:p@localhost:5432/db")).toBe("postgres://u:p@localhost:5432/db");
+  });
+});
+
+describe("OAuth settings", () => {
+  it("names the MCP endpoint under the app's address", () => {
+    vi.stubEnv("BETTER_AUTH_URL", "https://phean.example.com/");
+    expect(mcpResourceUrl()).toBe("https://phean.example.com/mcp");
+    expect(mcpResourceUrl("acme")).toBe("https://phean.example.com/mcp/w/acme");
+  });
+
+  it("tells this deployment's MCP addresses from anything else", () => {
+    vi.stubEnv("BETTER_AUTH_URL", "https://phean.example.com");
+    expect(mcpResourceTarget("https://phean.example.com/mcp")).toEqual({ slug: null });
+    expect(mcpResourceTarget("https://phean.example.com/mcp/w/acme-2")).toEqual({ slug: "acme-2" });
+    for (const other of [
+      "https://other.example.com/mcp",
+      "https://phean.example.com/mcp/",
+      "https://phean.example.com/mcp/w/",
+      "https://phean.example.com/mcp/w/Acme",
+      "https://phean.example.com/mcp/w/acme/extra",
+      "https://phean.example.com/mcp/w/acme?x=1",
+      "https://phean.example.com/other",
+    ]) {
+      expect(mcpResourceTarget(other)).toBeNull();
+    }
+  });
+
+  it("keeps the built-in register limit unless given a whole number above zero", () => {
+    expect(oauthRegisterLimit()).toBe(5);
+    vi.stubEnv("PHEAN_OAUTH_REGISTER_LIMIT", "500");
+    expect(oauthRegisterLimit()).toBe(500);
+    for (const value of ["", "0", "-1", "1.5", "many"]) {
+      vi.stubEnv("PHEAN_OAUTH_REGISTER_LIMIT", value);
+      expect(oauthRegisterLimit()).toBe(5);
+    }
   });
 });

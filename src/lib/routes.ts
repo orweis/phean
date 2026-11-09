@@ -40,7 +40,10 @@ export const routes = {
   /** Workspace settings: the board's stages. Reached from the workspace menu, not the tab rail. */
   settings: (slug: string) => `/w/${slug}/settings`,
   invite: (invitationId: string) => `/invite/${invitationId}`,
-  mcp: () => "/mcp",
+  /** The shared MCP endpoint, or a workspace's own (`""` gives the prefix every workspace's shares). */
+  mcp: (slug?: string) => (slug === undefined ? "/mcp" : `/mcp/w/${slug}`),
+  /** The dialog for connecting an MCP client, on the signed query the OAuth provider sent it. */
+  oauthApprove: (oauthQuery: string) => `/oauth/approve?${oauthQuery}`,
   /** The realtime event stream agents open over a WebSocket. */
   events: () => "/api/events",
 } as const;
@@ -49,6 +52,13 @@ export const routes = {
 export function queryParam(value: string | string[] | undefined): string | undefined {
   const first = Array.isArray(value) ? value[0] : value;
   return first?.trim() || undefined;
+}
+
+/** Next's search params back as a query string, repeated keys included. */
+export function queryStringOf(params: Record<string, string | string[] | undefined>): string {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) for (const item of [value ?? []].flat()) query.append(key, item);
+  return query.toString();
 }
 
 /** Only same-origin relative paths are honored as post-login redirects. */

@@ -2,16 +2,24 @@ import type { AuthInfo, McpServer, ServerContext } from "@modelcontextprotocol/s
 import { createMcpHandler, getPublicOrigin, withMcpAuth } from "mcp-handler";
 import { z } from "zod";
 
+import { AGENT_TOKEN_PREFIX, type AgentAccessLevel } from "@/lib/domain";
+import { routes } from "@/lib/routes";
+
 import packageJson from "../../../package.json" with { type: "json" };
+import { verifyOAuthToken as verifyDeploymentToken, type OAuthTokenVerifier } from "../auth/oauth";
+import { appUrl, mcpResourceTarget, mcpResourceUrl } from "../config";
 import type { Db } from "../db/client";
-import { AGENT_NAME_HEADER, agentContext, authenticateAgentToken, resolveNamedSubagent, type AgentPrincipal } from "../domain/agents";
-import { PROMPTS, SERVER_INSTRUCTIONS } from "./guidance";
+import { agentRole } from "../domain/context";
+import { AGENT_NAME_HEADER, agentContext, authenticateAgentToken, resolveNamedSubagent, resolveOAuthAgent, type AgentPrincipal } from "../domain/agents";
 import { forbidden } from "../domain/errors";
-import { toolError, type PheanTool, type ToolContext } from "./tool";
+import { PROMPTS, SERVER_INSTRUCTIONS } from "./guidance";
+import { toolAllowed, toolError, type PheanTool, type ToolContext } from "./tool";
 import { TOOLS } from "./tools";
 
 export interface PheanMcpDeps {
   getDb: () => Db;
+  /** Defaults to this deployment's provider. */
+  verifyOAuthToken?: OAuthTokenVerifier;
 }
 
 interface PheanAuthExtra {
@@ -42,7 +50,7 @@ async function toolContext(db: Db, call: ToolCallContext, actingAs: string | und
   if (!extra) return null;
   const principal = actingAs ? await resolveNamedSubagent(db, extra.principal, actingAs) : extra.principal;
   if (!principal) throw forbidden(`The sub-agent "${actingAs}" was revoked. Ask a workspace admin, or act under another name.`);
-  return { ...agentContext(db, principal), url: (path) => new URL(path, extra.origin).toString() };
+  return { ...agentContext(db, principal), url: (path) => new URL(path, extra.origin).toString(), accessEndsAt: principal.accessExpiresAt };
 }
 
 function registerTool(server: McpServer, tool: PheanTool, getDb: () => Db): void {
@@ -54,6 +62,8 @@ function registerTool(server: McpServer, tool: PheanTool, getDb: () => Db): void
       try {
         const ctx = await toolContext(getDb(), call, actingAs || undefined);
         if (!ctx) return toolError(new Error("MCP request reached a tool without verified agent credentials"));
+        // The list is the token's level; a sub-agent named by actingAs may hold less, so check the one acting.
+        if (!toolAllowed(tool, ctx.actor)) return toolError(forbidden("Your access level does not allow this tool. Ask a person to reconnect you with more access."));
         return tool.execute(ctx, input);
       } catch (error) {
         return toolError(error);
@@ -62,8 +72,10 @@ function registerTool(server: McpServer, tool: PheanTool, getDb: () => Db): void
   );
 }
 
-export function registerPheanServer(server: McpServer, { getDb }: PheanMcpDeps): void {
-  for (const tool of TOOLS) registerTool(server, tool, getDb);
+/** Registers what an agent of this level may use: `tools/list` shows exactly these. */
+export function registerPheanServer(server: McpServer, { getDb }: PheanMcpDeps, level: AgentAccessLevel): void {
+  const actor = { type: "agent", id: "", name: "", role: agentRole(level) } as const;
+  for (const tool of TOOLS) if (toolAllowed(tool, actor)) registerTool(server, tool, getDb);
   for (const prompt of PROMPTS) {
     server.registerPrompt(prompt.name, { title: prompt.title, description: prompt.description }, () => ({
       description: prompt.description,
@@ -73,18 +85,44 @@ export function registerPheanServer(server: McpServer, { getDb }: PheanMcpDeps):
 }
 
 /**
- * The remote MCP endpoint. Every request must carry `Authorization: Bearer phn_...`;
- * the token alone decides the workspace and the acting agent, never the tool input.
+ * The remote MCP endpoint. Every request must carry `Authorization: Bearer`, with a `phn_` key or
+ * an OAuth access token; the token alone decides the workspace and the acting agent, never the tool input.
  */
 export function createPheanMcpHandler(deps: PheanMcpDeps): (request: Request) => Promise<Response> {
-  const handler = createMcpHandler((server) => registerPheanServer(server, deps), {
-    serverInfo: { name: "phean", version: packageJson.version },
-    instructions: SERVER_INSTRUCTIONS,
-  });
+  const { getDb, verifyOAuthToken = verifyDeploymentToken } = deps;
+  // mcp-handler fixes the tool list when it builds a handler, so each level gets its own, made on first use.
+  const handlers = new Map<AgentAccessLevel, (request: Request) => Promise<Response>>();
+  const handlerFor = (level: AgentAccessLevel) => {
+    let handler = handlers.get(level);
+    if (!handler) {
+      handler = createMcpHandler((server) => registerPheanServer(server, deps, level), {
+        serverInfo: { name: "phean", version: packageJson.version },
+        instructions: SERVER_INSTRUCTIONS,
+      });
+      handlers.set(level, handler);
+    }
+    return handler;
+  };
+  const handler = (request: Request & { auth?: AuthInfo }) => {
+    const principal = (request.auth?.extra as PheanAuthExtra | undefined)?.principal;
+    if (!principal) return Promise.resolve(new Response("Unauthorized", { status: 401 }));
+    return handlerFor(principal.agent.level)(request);
+  };
 
-  const verifyToken = async (request: Request, bearerToken?: string): Promise<AuthInfo | undefined> => {
+  /** The workspace the endpoint's address names, if any; a credential for any other is refused there. */
+  const authenticate = async (bearerToken: string, slug: string | null): Promise<AgentPrincipal | null> => {
+    let principal: AgentPrincipal | null;
+    if (bearerToken.startsWith(AGENT_TOKEN_PREFIX)) principal = await authenticateAgentToken(getDb(), bearerToken);
+    else {
+      const verified = await verifyOAuthToken(bearerToken, mcpResourceUrl(slug ?? undefined));
+      principal = verified && (await resolveOAuthAgent(getDb(), verified.agentId, verified));
+    }
+    return principal && (slug === null || principal.tenant.slug === slug) ? principal : null;
+  };
+
+  const verifierFor = (slug: string | null) => async (request: Request, bearerToken?: string): Promise<AuthInfo | undefined> => {
     if (!bearerToken) return undefined;
-    const token = await authenticateAgentToken(deps.getDb(), bearerToken);
+    const token = await authenticate(bearerToken, slug);
     if (!token) return undefined;
     // A worker sharing its agent's key names itself, by header or (for clients that only take a URL) `?agent=`.
     const named = request.headers.get(AGENT_NAME_HEADER) ?? new URL(request.url).searchParams.get("agent");
@@ -94,5 +132,15 @@ export function createPheanMcpHandler(deps: PheanMcpDeps): (request: Request) =>
     return { token: bearerToken, clientId: principal.agent.id, scopes: [], extra: { ...extra } };
   };
 
-  return withMcpAuth(handler, verifyToken, { required: true });
+  return (request: Request) => {
+    // The path names the endpoint; the configured address, not the request's host, makes it a resource.
+    const target = mcpResourceTarget(`${appUrl()}${new URL(request.url).pathname}`);
+    if (!target) return Promise.resolve(new Response("Not found", { status: 404 }));
+    // resourceUrl keeps the challenge on the real address, whatever X-Forwarded-Host says.
+    return withMcpAuth(handler, verifierFor(target.slug), {
+      required: true,
+      resourceMetadataPath: `/.well-known/oauth-protected-resource${routes.mcp(target.slug ?? undefined)}`,
+      resourceUrl: appUrl(),
+    })(request);
+  };
 }

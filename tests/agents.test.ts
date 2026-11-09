@@ -32,7 +32,7 @@ describe("agent tokens", () => {
     expect(agent.lastSeenAt).toBeNull();
 
     const principal = await authenticateAgentToken(testDb.db, token);
-    expect(principal).toEqual({ agent: { id: agent.id, name: "Runner" }, tenant: owner.tenant });
+    expect(principal).toEqual({ agent: { id: agent.id, name: "Runner", level: "write" }, accessExpiresAt: null, tenant: owner.tenant });
     const [row] = await testDb.db.select().from(agents).where(eq(agents.id, agent.id));
     expect(row?.lastSeenAt).toBeInstanceOf(Date);
 
@@ -41,5 +41,18 @@ describe("agent tokens", () => {
 
     await revokeAgent(owner, { agentId: agent.id });
     expect(await authenticateAgentToken(testDb.db, token)).toBeNull();
+  });
+});
+
+describe("agent access levels", () => {
+  it("stores sub-agents at the lower of their parent's level and write", async () => {
+    const { agent: parent } = await createAgent(owner, { name: "Lead" });
+    await testDb.db.update(agents).set({ accessLevel: "admin" }).where(eq(agents.id, parent.id));
+    const { agent: child } = await createAgent(owner, { name: "Worker", parentAgentId: parent.id });
+    expect(child.accessLevel).toBe("write");
+
+    await testDb.db.update(agents).set({ accessLevel: "read" }).where(eq(agents.id, parent.id));
+    const { agent: reader } = await createAgent(owner, { name: "Peeker", parentAgentId: parent.id });
+    expect(reader.accessLevel).toBe("read");
   });
 });

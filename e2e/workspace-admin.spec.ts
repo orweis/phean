@@ -3,14 +3,15 @@ import { expect, test } from "@playwright/test";
 import { DEMO_USER } from "../scripts/demo-account";
 import { connectAgent } from "../scripts/mcp-agent";
 import { newWorkspace } from "./support/accounts";
-import { asAgent, issueToken } from "./support/agents";
+import { agentRow, approveClient, asAgent, FIXED_KEY_TRIGGER, issueToken } from "./support/agents";
 import { BASE_URL, DEMO_SESSION } from "./support/env";
 import { card, popover } from "./support/locators";
 import { openTab } from "./support/navigation";
 
 /**
- * What an owner does besides reading status: decide on and edit goals, keep shared memory, search,
- * cut off an agent, and bring in a colleague (the seeded demo account, in a browser of its own).
+ * What an owner does besides reading status: connect agents, decide on and edit goals, keep shared
+ * memory, search, cut off an agent, and bring in a colleague (the seeded demo account, in a browser
+ * of its own). One test, because sign-ups are rate limited.
  */
 test("an owner manages goals, memory, search, agents and members", async ({ page, browser }) => {
   test.slow();
@@ -21,13 +22,41 @@ test("an owner manages goals, memory, search, agents and members", async ({ page
   let token = "";
   let goalId = "";
 
-  await test.step("an agent connects and proposes a goal", async () => {
+  await test.step("an owner issues a fixed key from the quiet control", async () => {
     await openTab(page, slug, "Agents");
+    // The page leads with signing in: the keyless snippet is open, the key is behind a quiet control.
+    await page.getByRole("group", { name: "Client" }).getByRole("button", { name: "Claude Code" }).click();
+    await expect(page.getByText(`claude mcp add --transport http phean-${slug} ${BASE_URL}/mcp/w/${slug}`, { exact: true })).toBeVisible();
+    const keys = popover(page, FIXED_KEY_TRIGGER);
+    await expect(keys.getByRole("button", { name: "Issue key" })).toBeHidden();
     token = await issueToken(page, "Night shift");
+    // Today's reveal: the key once, with snippets that carry it.
+    await expect(keys.getByRole("tablist", { name: "MCP client" }).getByRole("tab")).toHaveCount(3);
+    await expect(keys.getByRole("tabpanel")).toContainText(`Bearer ${token}`);
+    await expect(keys.getByText("cannot be shown again")).toBeVisible();
+  });
+
+  await test.step("an agent connects and proposes a goal", async () => {
     goalId = await asAgent(token, async (agent) => {
       const { goal } = await agent.call<{ goal: { id: string } }>("create_goal", { title: "Renew vendor contracts" });
       return goal.id;
     });
+  });
+
+  await test.step("the agents table shows connection type, level and end date", async () => {
+    await approveClient(page, workspace.name, "Laptop agent", "Read", "7 days");
+    await page.goto(`/w/${slug}/agents`);
+    const key = agentRow(page, "Night shift");
+    await expect(key).toContainText("Fixed key");
+    await expect(key).toContainText("Write");
+    await expect(key).toContainText("No end date");
+
+    const signedIn = agentRow(page, "Laptop agent");
+    const end = new Intl.DateTimeFormat("en", { month: "short", day: "numeric", timeZone: "UTC" }).format(new Date(Date.now() + 7 * 24 * 3600 * 1000));
+    await expect(signedIn).toContainText("OAuth sign-in");
+    await expect(signedIn).toContainText("Read");
+    await expect(signedIn).toContainText(`Ends ${end}`);
+    await expect(signedIn.getByRole("button", { name: "Revoke" })).toBeVisible();
   });
 
   await test.step("the owner edits the goal, then approves, abandons and reactivates it", async () => {
