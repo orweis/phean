@@ -39,6 +39,11 @@ export default defineConfig({
       PHEAN_OAUTH_REGISTER_LIMIT: "1000",
       // And sends every dialog through authorize from it.
       PHEAN_OAUTH_AUTHORIZE_LIMIT: "1000",
+      // Placeholder social sign-in apps, so the sign-in page shows its provider buttons; the spec stops at the provider.
+      GITHUB_CLIENT_ID: "phean-e2e-github",
+      GITHUB_CLIENT_SECRET: "phean-e2e-github-secret",
+      GOOGLE_CLIENT_ID: "phean-e2e-google",
+      GOOGLE_CLIENT_SECRET: "phean-e2e-google-secret",
     },
   },
 });

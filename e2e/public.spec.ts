@@ -38,3 +38,21 @@ for (const path of ["/", "/sign-in", "/sign-up"]) {
     await expectAccessible(page);
   });
 }
+
+test("social sign-in hands off to the provider with Phean's callback, and says why when it comes back without a session", async ({ page }) => {
+  // Stop at the provider: the spec checks the hand-off, not GitHub itself.
+  let authorize: URL | null = null;
+  await page.route("https://github.com/**", async (route) => {
+    authorize = new URL(route.request().url());
+    await route.fulfill({ status: 200, body: "GitHub" });
+  });
+  await page.goto("/sign-in");
+  await expect(page.getByRole("button", { name: "Continue with Google" })).toBeVisible();
+  await page.getByRole("button", { name: "Continue with GitHub" }).click();
+  await expect.poll(() => authorize?.pathname).toBe("/login/oauth/authorize");
+  expect(authorize!.searchParams.get("client_id")).toBe("phean-e2e-github");
+  expect(authorize!.searchParams.get("redirect_uri")).toMatch(/\/api\/auth\/callback\/github$/);
+
+  await page.goto("/sign-in?error=access_denied");
+  await expect(page.getByRole("alert").filter({ hasText: "cancelled" })).toHaveText("Sign-in was cancelled at the provider. Try again, or use your email.");
+});
