@@ -5,6 +5,7 @@ import { routes } from "@/lib/routes";
 import { tenantAction } from "@/server/actions";
 import { cancelInvitation, inviteMember, removeMember } from "@/server/auth/workspaces";
 import { archiveAgent, archiveRevokedAgents, createAgent, revokeAgent, unarchiveAgent } from "@/server/domain/agents";
+import { saveDigestSubscription, stopDigestSubscription } from "@/server/domain/digest";
 import { attachDocument, deleteDocument, updateDocument } from "@/server/domain/documents";
 import { createGoal, setGoalStatus, updateGoal } from "@/server/domain/goals";
 import { forget, remember, updateMemory } from "@/server/domain/memory";
@@ -73,3 +74,6 @@ export const inviteMemberAction = tenantAction(inviteMember, {
 });
 export const cancelInvitationAction = tenantAction(cancelInvitation, { success: "Invitation cancelled." });
 export const removeMemberAction = tenantAction(removeMember, { success: "Member removed." });
+
+export const saveDigestAction = tenantAction(saveDigestSubscription);
+export const stopDigestAction = tenantAction(stopDigestSubscription);

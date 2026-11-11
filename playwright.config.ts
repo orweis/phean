@@ -44,6 +44,9 @@ export default defineConfig({
       GITHUB_CLIENT_SECRET: "phean-e2e-github-secret",
       GOOGLE_CLIENT_ID: "phean-e2e-google",
       GOOGLE_CLIENT_SECRET: "phean-e2e-google-secret",
+      // Email is "set up" so the digest's form shows; the hourly send is never called in these tests.
+      RESEND_API_KEY: "phean-e2e-resend-key",
+      PHEAN_EMAIL_FROM: "Phean <digest@phean.test>",
     },
   },
 });

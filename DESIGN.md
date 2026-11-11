@@ -473,6 +473,18 @@ The landing is the one Persuade surface, so the world carries the page: the hill
 
 The hero's working action is the real one: a capsule on the dusk band holding the `claude mcp add` command for this deployment, with its Copy button, under the ember Create a workspace and a quiet Read the docs. Below the band: the sample timetable card riding up over its edge, **One morning on the slope** (`components/landing/sample-morning.tsx`, a synthetic activity log labelled as such, with each line's station dot, who acted, and the decision's option capsules drawn as the Decisions page draws them), six numbered features in a hairline grid, the route in, and a closing dusk band with the map faded behind it and no route.
 
+### Goals page
+
+Every goal as one ruled line in a card: its station mark (the goal map's), its title, its status badge when it is not active, "N late" in late ink, and its flow bar with the percentage, indented under its parent when the parent is listed. A quiet capsule at the row's end ("3 open tasks ▾", `ExpandableRow`) opens a peek beneath it on a `fill` wash: the goal's open tasks, most urgent first, as `TaskLine`s (title into the side peek, stage, facts, no actions), then the counts of the rest and links to the goal and the board. Open, Achieved, Abandoned and All are a segmented control in the header.
+
+### Answered decisions
+
+Settled requests are one line each: a chevron, the kind badge and the question, then a muted line with what was picked (ticked when answered), the task, when, and the delivery state in its ink. A line opens to the full record (outcome, asker, goal, every option offered, the written answer, links, and "Open …" into the task's peek). After the latest eight, the rest fold under one "Show earlier answers".
+
+### Morning digest
+
+A page per workspace, from the overview's ghost **Morning digest** link: the digest's sections as cards in their tones (Waiting on you in ember, Late in crimson, Done plain), each line a link with a muted detail, beside a card that turns the email on at an hour in the person's own time zone. The email itself carries literal colours approximating the light tokens, since mail clients ignore custom properties.
+
 ### Docs site
 
 `/docs` is a Read surface in the ledger's own system: the glass bar with the wordmark and "/ Docs", the sections down the left (the current page in `accent-tint` with an accent bar and `aria-current`), a 72ch reading column at `text-md`, and "On this page" beside it from 1280px. On phones the sections fold into one "All docs pages" disclosure. Pages are Markdown in `content/docs` (frontmatter `title` and `description`, sections from `##`), rendered by `MarkdownView` with `headings="anchored"`, so headings keep their level and take GitHub-style anchors. `tests/docs.test.ts` checks every page is listed, every link and anchor resolves, and every MCP tool is named in the reference.

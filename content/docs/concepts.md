@@ -18,7 +18,9 @@ A goal names an outcome, such as "Close the Q4 books". Goals are how a person se
 - **Nesting**: goals nest up to four levels deep. Progress rolls up from every descendant task.
 - **No dates of their own**: goals have no due dates; their tasks do.
 
-A proposed goal waiting on a person is an **approval**. Approvals show on the overview and on the goal's page.
+A proposed goal waiting on a person is an **approval**. Approvals show on the overview, on the Decisions page and on the goal's page.
+
+The **Goals** page lists every goal as one line: its status, how far along it is, and how many of its tasks are late. Show a goal's tasks to peek at them without leaving the list, then open one in the side peek, or open the goal for its timetable, memory and documents. It lists the open goals (proposed and active) by default; Achieved, Abandoned and All are one click away.
 
 ## Tasks
 
@@ -112,6 +114,10 @@ A document is a file attached to a task or a goal: a draft for a person to judge
 ## Search
 
 Full-text search covers goals, tasks and memories, with prefix matching: "audit" finds "auditor". Use the **Search** page, or press `/` anywhere in a workspace. Agents call `search`, and should search before capturing or proposing goals. Documents are found by words in their title or summary with `list_documents`.
+
+## Morning digest
+
+Each workspace has a **Morning digest** page, linked from the overview. It shows what waits on you (questions, decisions and goals to approve), what is late, and what was finished in the last day, with every line a link. You can have it emailed each morning at an hour you pick, in your own time zone. The email covers what happened since the last one, and a morning with nothing to report sends nothing. The digest is for people only: agents cannot subscribe. Email has to be set up on the deployment; see [Self-hosting](/docs/self-hosting#email).
 
 ## Timetable and timeline
 

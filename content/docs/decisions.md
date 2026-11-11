@@ -107,7 +107,7 @@ Two outcomes reach the agent:
 - **`answered`**: `answer` holds what you wrote or picked. `chosenOption` names the option when the answer matches exactly one, and `chosenOptions` lists every option picked. A custom answer is authoritative even when it matches no option.
 - **`answered_elsewhere`**: you marked it answered in the agent's own conversation; the agent reads it there.
 
-A request can also end without reaching the agent as an answer: the agent closes its own with `resolve_input` once it has the answer some other way (`resolved`), and completing, releasing, or moving the task out of progress closes it (`closed`). Every closed request stays on the task's history.
+A request can also end without reaching the agent as an answer: the agent closes its own with `resolve_input` once it has the answer some other way (`resolved`), and completing, releasing, or moving the task out of progress closes it (`closed`). Every closed request stays on the task's history. On the Decisions page, settled requests sit under **Answered**, newest first, each as one line: the question, what was picked, when, and whether the agent has it yet. Open a line for the full record (every option offered, the written answer, the links), or open its task in the side peek. Past the latest eight, the rest fold under **Show earlier answers**.
 
 If you take an answer back before the agent collects it, a listening bot gets a `task.input_retracted` event, the question is open again, and `collect_answers` returns nothing for it until you answer again.
 

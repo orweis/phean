@@ -21,7 +21,7 @@ const AGENT_WRITE: readonly Action[] = [...CONTRIBUTE, "agent:delegate", "webhoo
 const EXPECTED: Record<Role, readonly Action[]> = {
   owner: ACTIONS,
   admin: ACTIONS,
-  member: ["workspace:read", "goal:write", "goal:decide", "task:write", "memory:write", "document:write", "agent:connect"],
+  member: ["workspace:read", "goal:write", "goal:decide", "task:write", "memory:write", "document:write", "agent:connect", "digest:subscribe"],
   agent_read: ["workspace:read"],
   agent_write: AGENT_WRITE,
   agent_admin: ["workspace:read", "goal:write", "task:write", "memory:write", "document:write", "agent:manage", "agent:delegate", "webhook:manage"],
@@ -55,6 +55,9 @@ describe("policy matrix", () => {
     expect(can(agent("agent_admin"), "agent:issue_key")).toBe(false);
     expect(can(agent("agent_admin"), "member:manage")).toBe(false);
     for (const role of AGENT_ROLES) expect(can(agent(role), "goal:decide")).toBe(false);
+    // The digest is mail to a person: no agent, and no read-only platform admin, subscribes.
+    for (const role of AGENT_ROLES) expect(can(agent(role), "digest:subscribe")).toBe(false);
+    expect(can(person("platform_admin"), "digest:subscribe")).toBe(false);
     expect(can(person("member"), "agent:connect")).toBe(true);
     expect(can(person("member"), "agent:issue_key")).toBe(false);
     expect(can(person("admin"), "agent:issue_key")).toBe(true);

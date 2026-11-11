@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 import { DEMO_SESSION } from "./support/env";
 import { card, lane } from "./support/locators";
+import { openTab } from "./support/navigation";
 
 /** Reads the seeded Globex workspace, which has three weeks of backdated history. Never writes. */
 test.use({ storageState: DEMO_SESSION });
@@ -114,6 +115,32 @@ test("a goal page rolls up its sub-goals and draws its own timetable", async ({ 
   await expect(subGoals.getByRole("link", { name: "Partner onboarding docs" })).toBeVisible();
   await expect(subGoals.getByRole("link", { name: "Billing integration" })).toBeVisible();
   await expect(card(page, "Timetable").locator("li[data-task]")).not.toHaveCount(0);
+});
+
+test("the goals page lists every open goal, and peeks into a goal's tasks", async ({ page }) => {
+  await page.goto("/w/globex");
+  await openTab(page, "globex", "Goals");
+  const goal = (title: string) => page.locator("li[data-goal]").filter({ has: page.getByRole("link", { name: title, exact: true }) });
+  await expect(goal("Launch the partner portal")).toBeVisible();
+  await expect(goal("Renew the office lease")).toContainText("Proposed");
+  await expect(goal("Migrate the CRM")).toHaveCount(0);
+  await expect(goal("Close the Q4 books")).toContainText(/\d+ late/);
+
+  await goal("Close the Q4 books").getByRole("button", { name: /open tasks? in Close the Q4 books$/ }).click();
+  const peek = page.getByRole("list", { name: "Open tasks in Close the Q4 books" });
+  await expect(peek.locator("li[data-task]").first()).toContainText("Chase three overdue invoices");
+  await expect(peek).not.toContainText("Reconcile November card spend");
+  await expect(goal("Close the Q4 books")).toContainText("3 done tasks");
+
+  // A task opens in the side peek, over the goals it was opened from.
+  await peek.getByRole("link", { name: "Accrue December payroll" }).click();
+  await expect(page.getByRole("dialog", { name: "Task" }).getByRole("heading", { name: "Accrue December payroll" })).toBeVisible();
+
+  await page.goto("/w/globex/goals");
+  await page.getByRole("navigation", { name: "Show goals" }).getByRole("link", { name: "Achieved" }).click();
+  await expect(page).toHaveURL("/w/globex/goals?show=achieved");
+  await expect(goal("Migrate the CRM")).toBeVisible();
+  await expect(goal("Launch the partner portal")).toHaveCount(0);
 });
 
 test("the board lanes follow the stations in order", async ({ page }) => {

@@ -1,4 +1,4 @@
-import { Bot, CalendarRange, ListTodo } from "lucide-react";
+import { Bot, CalendarRange, ListTodo, Mail } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
@@ -108,6 +108,10 @@ export default async function DashboardPage({ params }: PageProps<"/w/[slug]">) 
         inlineActions={!connectFirst}
         actions={
           <>
+            <ButtonLink href={routes.digest(slug)} variant="ghost" size="sm">
+              <Mail aria-hidden />
+              Morning digest
+            </ButtonLink>
             <ManualEntry slug={slug} goals={goals} canAddTask={canWrite} canAddGoal={can(ctx.actor, "goal:write")} />
             {connectFirst && (
               <ButtonLink href={routes.agents(slug)} variant="primary">

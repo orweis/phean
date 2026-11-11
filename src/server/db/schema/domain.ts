@@ -317,6 +317,27 @@ export const workspaceSettings = pgTable("workspace_settings", {
 });
 
 /**
+ * A person's morning digest for one workspace: emailed at `hour` in their `timeZone` once a day.
+ * `lastSentAt` is also the claim that stops two cron runs sending the same morning twice.
+ */
+export const digestSubscriptions = pgTable(
+  "digest_subscriptions",
+  {
+    tenantId: tenantId(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    /** 0 to 23, in `timeZone`. */
+    hour: integer("hour").notNull(),
+    /** An IANA zone, such as Europe/Berlin, read from the person's browser when they subscribed. */
+    timeZone: text("time_zone").notNull(),
+    lastSentAt: timestampTz("last_sent_at"),
+    ...timestamps,
+  },
+  (t) => [primaryKey({ columns: [t.tenantId, t.userId] })],
+);
+
+/**
  * Files attached to tasks and goals: drafts, handoff notes, reports, diagrams. The row holds what
  * lists and search need; the bytes live in the blob store under `storageKey`.
  */

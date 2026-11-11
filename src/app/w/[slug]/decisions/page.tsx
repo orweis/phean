@@ -7,13 +7,24 @@ import { PageHeader } from "@/components/page-header";
 import { PendingApprovals } from "@/components/pending-approvals";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/stat";
+import { DELIVERED_OUTCOMES } from "@/lib/agent-sessions";
 import { pluralize } from "@/lib/format";
 import { requireWorkspace } from "@/server/auth/session";
 import { listGoals } from "@/server/domain/goals";
 import { can } from "@/server/domain/policy";
-import { listDecisions } from "@/server/domain/tasks";
+import { listDecisions, type DecisionRecord } from "@/server/domain/tasks";
 
 export const metadata: Metadata = { title: "Decisions" };
+
+/** The answered card in one line: how many were settled, of which kind, and how many their agents have yet to pick up. */
+function answeredSummary(closed: readonly DecisionRecord[]): string {
+  const decided = closed.filter(({ request }) => request.kind === "decision").length;
+  const kinds = [decided && pluralize(decided, "decision"), closed.length - decided && pluralize(closed.length - decided, "question")].filter(Boolean).join(" and ");
+  const delivered = closed.filter(({ request }) => DELIVERED_OUTCOMES.includes(request.outcome));
+  const waiting = delivered.filter(({ request }) => !request.collected).length;
+  const pickup = waiting ? ` ${waiting} not picked up by ${waiting === 1 ? "its agent" : "their agents"} yet.` : delivered.length ? " Every answer has reached its agent." : "";
+  return `${kinds} settled.${pickup}`;
+}
 
 export default async function DecisionsPage({ params }: PageProps<"/w/[slug]/decisions">) {
   const { slug } = await params;
@@ -73,10 +84,13 @@ export default async function DecisionsPage({ params }: PageProps<"/w/[slug]/dec
           </Card>
         )}
         <Card id="answered" className="scroll-mt-32">
-          <CardHeader title="Answered" description="What was decided, newest first, and whether the asking agent has picked it up." />
+          <CardHeader title="Answered" description="What was decided, newest first. Each is one line; open it for the full record, or open its task." />
           <CardBody className="py-1">
             {closed.length ? (
-              <AnsweredDecisions records={closed} slug={slug} />
+              <>
+                <p className="border-b border-rule py-3 text-sm text-ink-2">{answeredSummary(closed)}</p>
+                <AnsweredDecisions records={closed} slug={slug} />
+              </>
             ) : (
               <p className="py-6 text-center text-sm text-muted">No answered questions yet.</p>
             )}

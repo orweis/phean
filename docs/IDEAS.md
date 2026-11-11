@@ -25,7 +25,7 @@ A review of what Phean does as of November 2026, the gaps it showed, and ideas f
 
 ### Small, high leverage
 
-1. **A morning digest.** One message a day per person: what the agents finished overnight, what is late, and what waits on them, each line a link. It builds on `get_status_summary` and the overview's queries, and goes out as email, or as a webhook to a person's own bot so Phean still needs no connectors.
+1. **A morning digest.** *Built: the Morning digest page and its email, sent through Resend when configured; a webhook to a person's own bot is still open.* One message a day per person: what the agents finished overnight, what is late, and what waits on them, each line a link. It builds on `get_status_summary` and the overview's queries, and goes out as email, or as a webhook to a person's own bot so Phean still needs no connectors.
 2. **Decisions with a deadline.** Let `request_input` take a `neededBy` date. The Decisions page would sort by it, turn a missed one red under the Red Line Rule, and let the agent say what it will do by default when the deadline passes ("I'll pick the recommendation on Friday"). That turns a silent block into a visible, bounded wait.
 3. **Answer from the notification.** Signed, single-use links in a digest or a bot's message that answer a decision with one option, so a person can decide from their phone without signing in. Each link is scoped to one request and one option, and expires when the request closes.
 4. **Docs search.** A search box over `content/docs`, using the same Postgres full-text search as the workspace, or a static index built at deploy time.
