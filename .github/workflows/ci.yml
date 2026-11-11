@@ -32,7 +32,18 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm exec playwright install --with-deps chromium
+      # --with-deps fetches system packages (mostly fonts) from Ubuntu's mirrors, which runners
+      # sometimes cannot resolve. Retry, then fall back to the browser alone: the runner image
+      # already carries the libraries Chromium needs.
+      - name: Install Chromium
+        run: |
+          for attempt in 1 2 3; do
+            pnpm exec playwright install --with-deps chromium && exit 0
+            echo "Attempt $attempt to install Chromium with its system packages failed"
+            sleep 15
+          done
+          echo "::warning::Could not install Chromium's system packages; using the runner's own libraries"
+          pnpm exec playwright install chromium
       - run: pnpm test:e2e
       - if: failure()
         uses: actions/upload-artifact@v4
