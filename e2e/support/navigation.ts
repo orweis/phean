@@ -6,6 +6,7 @@ const TABS = {
   Overview: routes.workspace,
   Decisions: routes.decisions,
   Board: routes.board,
+  Goals: routes.goals,
   Timeline: routes.timeline,
   Memory: routes.memory,
   Documents: routes.documents,

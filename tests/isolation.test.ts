@@ -6,6 +6,7 @@ import { agents, tasks } from "@/server/db/schema";
 import { approveAgent, authenticateAgentToken, findRenewableAgent, resolveOAuthAgent, revokeAgent } from "@/server/domain/agents";
 import type { Ctx } from "@/server/domain/context";
 import { listActivity } from "@/server/domain/events";
+import { getDigest } from "@/server/domain/digest";
 import { createGoal, findGoal, listGoals, updateGoal, type Goal } from "@/server/domain/goals";
 import { attachDocument, deleteDocument, getDocument, listDocuments, updateDocument } from "@/server/domain/documents";
 import { countMemoryKinds, forget, recall, remember, type Memory } from "@/server/domain/memory";
@@ -21,6 +22,7 @@ import {
   getTask,
   linkSession,
   listDecisions,
+  listGoalTasks,
   listTasks,
   requestInput,
   retractAnswer,
@@ -77,12 +79,18 @@ describe("tenant isolation", () => {
       await expect(getBoard(ctx, { goalId: acmeGoal.id })).rejects.toMatchObject({ code: "not_found" });
       expect(await listGoals(ctx, {})).toEqual([]);
       expect(await listTasks(ctx, {})).toEqual([]);
+      expect(await listGoalTasks(ctx, {})).toEqual([]);
+      expect(await getDigest(ctx, {})).toMatchObject({ quiet: true, captured: 0 });
       expect(await recall(ctx, {})).toEqual([]);
       expect(Object.values(await countMemoryKinds(ctx, {})).every((count) => count === 0)).toBe(true);
       expect(await search(ctx, { query: "merger" })).toEqual([]);
       expect(await listActivity(ctx, {})).not.toContainEqual(expect.objectContaining({ actorName: "Dana" }));
       expect((await getStatusSummary(ctx, {})).openTasks).toBe(0);
     }
+  });
+
+  it("peeks only into the workspace's own goals' tasks", async () => {
+    expect((await listGoalTasks(acmeOwner, {})).map((task) => task.title)).toEqual(["Draft merger memo"]);
   });
 
   it("keeps questions, decisions, and answers inside their workspace", async () => {

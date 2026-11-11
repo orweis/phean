@@ -96,3 +96,13 @@ export function blobStoreConfig(): { driver: "vercel-blob"; token: string } | { 
   if (process.env.PHEAN_BLOB_DRIVER !== "database" && token) return { driver: "vercel-blob", token };
   return { driver: "database" };
 }
+
+/**
+ * How Phean sends email (the morning digest), through Resend's HTTP API: on when both the key and
+ * the From address are set, off otherwise, and then the digest is read in the app only.
+ */
+export function emailConfig(): { apiKey: string; from: string } | null {
+  const apiKey = process.env.RESEND_API_KEY;
+  const from = process.env.PHEAN_EMAIL_FROM;
+  return apiKey && from ? { apiKey, from } : null;
+}

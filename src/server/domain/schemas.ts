@@ -64,6 +64,9 @@ export const UpdateGoalInput = z.object({
 
 export const SetGoalStatusInput = z.object({ goalId, status: z.enum(GOAL_STATUSES) });
 export const ListGoalsInput = z.object({ status: z.enum(GOAL_STATUSES).optional() });
+
+/** The Goals page's peek: every task filed under a goal that is still on the board. */
+export const ListGoalTasksInput = z.object({});
 export const GoalRefInput = z.object({ goalId });
 
 const APP_SCHEMES = RESUME_URL_SCHEMES.filter((scheme) => !scheme.startsWith("http")).map((scheme) => `${scheme}://`);
@@ -447,3 +450,23 @@ export const WatchInput = z.object({
   entityId: z.string().trim().min(1).describe("The task (t_...), goal (g_...) or memory (m_...) id"),
 });
 export const ListWatchesInput = z.object({ entityType: z.enum(WATCHED_ENTITY_TYPES).optional() });
+
+/** A morning digest: what changed since `since` (a day ago when left out), and what waits now. */
+export const DigestInput = z.object({
+  since: z.iso.datetime({ offset: true }).optional().describe("ISO timestamp the digest looks back to; defaults to 24 hours ago"),
+});
+
+function isTimeZone(zone: string): boolean {
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: zone });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Email the digest each morning at `hour` (0 to 23) in `timeZone`, the IANA zone the person's browser reports. */
+export const SaveDigestInput = z.object({
+  hour: z.coerce.number().int().min(0).max(23),
+  timeZone: z.string().min(1).max(64).refine(isTimeZone, "Unknown time zone."),
+});

@@ -93,6 +93,9 @@ function LaneCell({ swimlane, tasks, fold, stage, ...props }: LaneProps & { swim
   );
 }
 
+/** A lane header's height (rail, title row, padding): the spacer that keeps the split rows below it. */
+const LANE_HEADER_HEIGHT = "h-14";
+
 /** The lane a phone shows: the one asked for, else the first with cards, else the first lane. */
 export function phoneLane(board: Board, asked: string | undefined): string {
   const named = board.columns.find((column) => column.stage.key === asked);
@@ -155,7 +158,11 @@ export function KanbanBoard({ board, slug, canWrite, goals = [], goalId, lane, r
         data-lanes={board.columns.length}
         className={cx(
           "grid gap-4 md:grid-cols-2",
-          many ? "xl:grid-flow-col xl:auto-cols-[minmax(14rem,1fr)] xl:grid-cols-none xl:overflow-x-auto xl:pb-2" : "xl:grid-cols-4",
+          // Past four lanes the board scrolls sideways. A scroller would pin the lane headers to itself
+          // rather than the page, so it takes the screen's height and scrolls both ways, headers on top.
+          many
+            ? "xl:max-h-[calc(100dvh-7.5rem)] xl:grid-flow-col xl:auto-cols-[minmax(14rem,1fr)] xl:grid-cols-none xl:overflow-auto xl:overscroll-contain xl:pb-2"
+            : "xl:grid-cols-4",
         )}
       >
         {board.columns.map(({ stage, tasks }, index) => {
@@ -165,7 +172,8 @@ export function KanbanBoard({ board, slug, canWrite, goals = [], goalId, lane, r
           const props = { slug, canWrite, goals, stage };
           // The two horizontal rows: on a wide screen each stage's rows line up across the board.
           const body = split ? (
-            <div className="flex min-w-0 flex-col gap-3 xl:row-span-2 xl:grid xl:grid-rows-subgrid xl:gap-y-3">
+            // Inside a drop lane the rows are the drop lane's own; read-only, they are the section's, below its header.
+            <div className={cx("flex min-w-0 flex-col gap-3 xl:row-span-2 xl:grid xl:grid-rows-subgrid xl:gap-y-3", !canWrite && "xl:col-start-1 xl:row-start-2")}>
               {SWIMLANES.map((swimlane) => (
                 <LaneCell key={swimlane} swimlane={swimlane} tasks={tasks.filter((task) => swimlaneOf(task) === swimlane)} fold={stage.kind === "done"} {...props} />
               ))}
@@ -181,7 +189,19 @@ export function KanbanBoard({ board, slug, canWrite, goals = [], goalId, lane, r
               data-stage={stage.key}
               className={cx("flex min-w-0 flex-col", split && "xl:row-span-3 xl:grid xl:grid-rows-subgrid xl:gap-y-0", stage.key !== shownOnPhone && "max-md:hidden")}
             >
-              <header className="pb-2.5">
+              {/*
+                The lane's name stays in view while a long People row scrolls past, so the Agents row
+                below still says whose lane it is. A sticky grid item moves only within its own cell, so
+                with the rows split the header spans all three of the lane's rows, pinned to the top,
+                and a spacer holds the first row open at the header's height.
+              */}
+              <header
+                className={cx(
+                  "z-10 bg-paper pb-2.5 md:sticky md:top-[6.75rem]",
+                  many && "xl:top-0",
+                  split && "xl:col-start-1 xl:row-span-3 xl:row-start-1 xl:self-start",
+                )}
+              >
                 <span aria-hidden className={`block h-1 rounded-full ${STATION_STYLE[stage.kind].fill}`} />
                 <div className="mt-2.5 flex h-8 items-center gap-2 px-1">
                   <h2 id={`lane-${stage.key}`} tabIndex={-1} className="min-w-0 scroll-mt-32 truncate text-sm font-bold text-ink outline-none" title={stage.label}>
@@ -223,8 +243,9 @@ export function KanbanBoard({ board, slug, canWrite, goals = [], goalId, lane, r
                   )}
                 </div>
               </header>
+              {split && <div aria-hidden className={cx("hidden xl:col-start-1 xl:row-start-1 xl:block", LANE_HEADER_HEIGHT)} />}
               {canWrite ? (
-                <DropLane stage={stage} slug={slug} className={cx("min-h-24 min-w-0 flex-1", split && "xl:row-span-2 xl:grid xl:grid-rows-subgrid xl:gap-y-3")}>
+                <DropLane stage={stage} slug={slug} className={cx("min-h-24 min-w-0 flex-1", split && "xl:col-start-1 xl:row-span-2 xl:row-start-2 xl:grid xl:grid-rows-subgrid xl:gap-y-3")}>
                   {body}
                 </DropLane>
               ) : (

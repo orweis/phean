@@ -108,6 +108,11 @@ test("an agent waits on a decision and wakes when the person makes it", async ({
   await test.step("the answer stays on the Decisions page, marked as picked up", async () => {
     await page.reload();
     const answered = card(page, "Answered").locator(`[data-task="${task.id}"]`);
+    await expect(card(page, "Answered")).toContainText("2 decisions settled. 1 not picked up by its agent yet.");
+    // Settled requests are one line each; the line says what was picked and that the agent has it.
+    await expect(answered.locator("summary")).toContainText("Okafor LLP");
+    await expect(answered.locator("summary")).toContainText("Auditor scout has it");
+    await answered.locator("summary").click();
     await expect(answered.getByRole("list", { name: "Options offered" })).toContainText("Okafor LLP (chosen)");
     await expect(answered).toContainText(`by ${owner.name}`);
     await expect(answered).toContainText("Auditor scout has it");
@@ -137,6 +142,7 @@ test("an agent waits on a decision and wakes when the person makes it", async ({
     expect(answers.answers).toEqual(expect.arrayContaining([expect.objectContaining({ answer: "Email; Phone", chosenOptions: ["Email", "Phone"] })]));
     await page.reload();
     const answered = card(page, "Answered").locator(`[data-task="${courier.id}"]`).filter({ hasText: CHANNELS });
+    await answered.locator("summary").click();
     const offered = answered.getByRole("list", { name: /^Options offered/ });
     await expect(offered).toContainText("Email (chosen)");
     await expect(offered).toContainText("Phone (chosen)");

@@ -16,6 +16,7 @@ export const ACTIONS = [
   "webhook:manage",
   "member:manage",
   "workflow:manage",
+  "digest:subscribe",
 ] as const;
 export type Action = (typeof ACTIONS)[number];
 
@@ -31,9 +32,10 @@ export const PERMISSIONS: Record<PolicyRole, readonly Action[]> = {
   owner: ACTIONS,
   admin: ACTIONS,
   // Members approve agents they connect, up to Write.
-  member: [...CONTRIBUTE, "goal:decide", "agent:connect"],
+  member: [...CONTRIBUTE, "goal:decide", "agent:connect", "digest:subscribe"],
   // A Read agent only looks. A Write agent registers its own webhook and issues tokens for its own
   // sub-agents; owners and admins can remove any agent's webhook. An Admin agent also manages agents.
+  // The morning digest is mail to a person; no agent subscribes to one.
   agent_read: ["workspace:read"],
   agent_write: [...CONTRIBUTE, "agent:delegate", "webhook:manage"],
   agent_admin: [...CONTRIBUTE, "agent:delegate", "webhook:manage", "agent:manage"],

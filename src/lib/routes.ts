@@ -28,6 +28,8 @@ export const routes = {
   board: (slug: string, filters?: string | { goal?: string; lane?: string; agent?: string }) =>
     withQuery(`/w/${slug}/board`, typeof filters === "string" ? { goal: filters } : filters),
   timeline: (slug: string, filters?: { goal?: string; days?: string }) => withQuery(`/w/${slug}/timeline`, filters),
+  /** Every goal, with a peek into its tasks; `show` picks which (open by default). */
+  goals: (slug: string, show?: string) => withQuery(`/w/${slug}/goals`, { show }),
   goal: (slug: string, goalId: string) => `/w/${slug}/goals/${goalId}`,
   /** A task: a peek over the page it was opened from, or its own page on a refresh or a shared link. */
   task: (slug: string, taskId: string) => `/w/${slug}/tasks/${taskId}`,
@@ -37,6 +39,8 @@ export const routes = {
   /** A document's bytes, served by Phean after it checks access; blobs are never addressed directly. */
   documentFile: (slug: string, documentId: string, download?: boolean) => withQuery(`/w/${slug}/documents/${documentId}/file`, { download: download ? "1" : undefined }),
   search: (slug: string, query?: string) => withQuery(`/w/${slug}/search`, { q: query }),
+  /** A person's morning digest for the workspace, and where they choose when it is emailed. */
+  digest: (slug: string) => `/w/${slug}/digest`,
   agents: (slug: string) => `/w/${slug}/agents`,
   members: (slug: string) => `/w/${slug}/members`,
   /** Workspace settings: the board's stages. Reached from the workspace menu, not the tab rail. */

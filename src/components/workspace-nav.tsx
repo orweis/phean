@@ -1,6 +1,6 @@
 "use client";
 
-import { Bot, Brain, CalendarRange, FileText, KanbanSquare, LayoutDashboard, Scale, Search, Users } from "lucide-react";
+import { Bot, Brain, CalendarRange, FileText, KanbanSquare, LayoutDashboard, Scale, Search, Target, Users } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -21,6 +21,7 @@ const TABS = [
   { label: "Overview", icon: LayoutDashboard, href: routes.workspace, exact: true, count: "waitingOnYou" },
   { label: "Decisions", icon: Scale, href: routes.decisions, count: "decisions" },
   { label: "Board", icon: KanbanSquare, href: routes.board, count: "inbox", quiet: true },
+  { label: "Goals", icon: Target, href: routes.goals },
   { label: "Timeline", icon: CalendarRange, href: routes.timeline },
   { label: "Memory", icon: Brain, href: routes.memory },
   { label: "Documents", icon: FileText, href: routes.documents },

@@ -40,6 +40,7 @@ import {
   CompleteTaskInput,
   DecisionsInput,
   LinkSessionInput,
+  ListGoalTasksInput,
   ListTasksInput,
   NextActionsInput,
   SessionInput,
@@ -793,6 +794,12 @@ export const listTasks = service(ListTasksInput, async (ctx, input): Promise<Tas
   )
     .orderBy(...byUrgency)
     .limit(input.limit);
+});
+
+/** Every task filed under a goal, not dropped and not archived, most urgent first: what the Goals page peeks into. */
+export const listGoalTasks = service(ListGoalTasksInput, async (ctx): Promise<TaskView[]> => {
+  assertCan(ctx, "workspace:read");
+  return selectTaskViews(ctx, and(isNotNull(tasks.goalId), isNull(tasks.archivedAt), sql`${tasks.status} <> 'dropped'`)).orderBy(...byUrgency);
 });
 
 export const suggestNextActions = service(NextActionsInput, async (ctx, { limit }): Promise<TaskView[]> => {

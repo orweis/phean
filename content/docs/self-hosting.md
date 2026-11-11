@@ -38,6 +38,7 @@ Project, Storage, Create Database, **Neon**. Leave Neon Auth off: Phean has its 
 | `PHEAN_PLATFORM_ADMINS` | no | Comma-separated emails with read-only access to every workspace. Only **verified** emails count, which in practice means accounts that signed in with GitHub or Google. |
 | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | no | Enable **Continue with GitHub**. |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | no | Enable **Continue with Google**. |
+| `RESEND_API_KEY`, `PHEAN_EMAIL_FROM` | no | Email the morning digest through Resend. See [Email](#email). |
 
 Leave these unset on a real deployment; they exist for development and the UI tests:
 
@@ -61,6 +62,16 @@ Email and password sign-in always works. GitHub and Google appear on the sign-in
 ## Document storage
 
 Without a Blob store, document bytes are kept in the database, which suits local development and small deployments. To use private Vercel Blob storage, connect a Blob store to the project, which sets `BLOB_READ_WRITE_TOKEN`, and redeploy. Documents saved before the store was connected are still read from the database, so adding a store later strands nothing. Blobs are stored with private access and served only through the app, after its access check.
+
+## Email
+
+Phean sends one kind of email: the morning digest people choose on a workspace's **Morning digest** page. It goes through [Resend](https://resend.com)'s HTTP API, so there is no mail server to run.
+
+1. In Resend, verify the domain you will send from and create an API key with sending access.
+2. Set `RESEND_API_KEY` to the key and `PHEAN_EMAIL_FROM` to the sender, such as `Phean <digest@yourdomain.com>`, on a verified domain.
+3. Redeploy.
+
+Vercel Cron calls `/api/digest` every hour (declared in `vercel.json`, authorized with `CRON_SECRET` like the webhook sweep). Each run emails the digests whose hour it is in their person's time zone, at most once a day each. A morning with nothing waiting, late, finished or captured sends nothing. Without both variables the page still shows the digest, says the deployment does not send email, and the cron run does nothing.
 
 ## 4. Deploy and migrate
 

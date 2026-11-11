@@ -346,6 +346,19 @@ export function TaskRow({ task, slug, canWrite, showGoal = true, goals = [], lea
   );
 }
 
+/** A task as a quiet line for a peek (the Goals page): its title opens the task, then its stage and facts, no actions. */
+export function TaskLine({ task, slug }: { task: TaskView; slug: string }) {
+  return (
+    <li data-task={task.id} className="border-b border-rule py-2.5 last:border-b-0">
+      <TaskTitle task={task} slug={slug} />
+      <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+        <StageBadge task={task} slug={slug} />
+        <TaskMeta task={task} slug={slug} showGoal={false} />
+      </div>
+    </li>
+  );
+}
+
 /** A late task that already sits in the questions card above: one line pointing to its entry. */
 export function TaskPointer({ task, href, children }: { task: TaskView; href: string; children: ReactNode }) {
   return (
