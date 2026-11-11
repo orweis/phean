@@ -165,6 +165,19 @@ test("the board lanes follow the stations in order", async ({ page }) => {
   await expect(agents("done").getByText("Show fewer")).toBeVisible();
 });
 
+for (const width of [1440, 1024]) {
+  test(`at ${width}px, a lane's name stays on screen while its People row scrolls past to Agents`, async ({ page }) => {
+    // A short window, so In progress's Agents row starts well below its header.
+    await page.setViewportSize({ width, height: 480 });
+    await page.goto("/w/globex/board");
+    const lane = page.locator('[data-stage="in_progress"]');
+    const agents = lane.locator('[data-swimlane="agents"]');
+    await agents.scrollIntoViewIfNeeded();
+    await expect(agents).toBeInViewport();
+    await expect(lane.getByRole("heading", { level: 2, name: "In progress" })).toBeInViewport({ ratio: 1 });
+  });
+}
+
 test("the People and Agents rows can be switched off, and the choice is remembered", async ({ page }) => {
   await page.goto("/w/globex/board");
   const rows = page.getByRole("group", { name: "Board rows" });
