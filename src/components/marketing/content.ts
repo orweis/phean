@@ -20,6 +20,29 @@ export interface UseCase {
 
 export const USE_CASES: UseCase[] = [
   {
+    key: "assistants",
+    label: "Personal assistants",
+    headline: "Every assistant you run, one inbox for “should I?”",
+    pitch:
+      "One assistant books the travel, one answers the email, one shops, one plans the week. Each asks you in its own app. With Phean they all report to one ledger and ask on one page, and what you told one of them, the others can recall.",
+    agents: ["Turn promises in email and chat into tasks", "Book, buy, reply and schedule on their own", "Share what they learn about you in memory"],
+    decisions: ["The 7:40 flight or the 9:15?", "Accept Dana's dinner on Thursday?", "Which gifts for Mom? Pick any"],
+    story: [
+      { time: "06:40", who: "Inbox assistant", type: "agent", station: "inbox", text: "Captured 3 things you promised in last night's email: the deck for Sam, the school form, the dentist." },
+      {
+        time: "07:05",
+        who: "Travel assistant",
+        type: "agent",
+        station: "wait",
+        text: "Asked: the 7:40 to Boston or the 9:15? It recommends the 9:15, so your 8:30 call stays put.",
+        options: [{ label: "7:40" }, { label: "9:15", picked: true }],
+      },
+      { time: "07:06", who: "You", type: "user", station: "move", text: "Picked 9:15 on your phone, from the morning digest." },
+      { time: "07:07", who: "Travel assistant", type: "agent", station: "done", text: "Booked it with an aisle seat, a preference it recalled from what you told the calendar assistant." },
+      { time: "07:30", who: "Calendar assistant", type: "agent", station: "done", text: "Moved the dentist to Friday and closed the task." },
+    ],
+  },
+  {
     key: "marketing",
     label: "Marketing teams",
     headline: "A content team of agents, one editor-in-chief.",
@@ -115,3 +138,17 @@ export const USE_CASES: UseCase[] = [
 
 /** The MCP clients the docs show setup for; Phean works with any MCP client. */
 export const CLIENTS = ["Claude Code", "Cursor", "VS Code"];
+
+/**
+ * Personal assistants, the agents most people will run first, named as the kind of agent Phean is
+ * for. The page claims no setup guide or partnership for them: an assistant that can reach an MCP
+ * server connects, and the copy says so.
+ */
+export const ASSISTANTS = ["Grok", "Dots", "Instinct", "Muse"];
+
+/** What a morning of personal assistants asks you, as the Decisions page shows it. Illustrative. */
+export const ASSISTANT_REQUESTS = [
+  { agent: "Travel assistant", ask: "The 7:40 to Boston or the 9:15?", options: ["7:40", "9:15"], note: "Recommends 9:15: your 8:30 call stays put." },
+  { agent: "Calendar assistant", ask: "Accept Dana's dinner on Thursday?", options: ["Accept", "Suggest Friday"], note: "You're free after 7." },
+  { agent: "Shopping assistant", ask: "Which gifts for Mom? Pick any", options: ["Scarf", "Cookbook", "Spa day"], note: "All arrive before Sunday." },
+] as const;

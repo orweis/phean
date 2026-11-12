@@ -670,6 +670,37 @@
     overflow: hidden;
   }
 
+  /*
+   * A light behind the hero's picture of the product: every brand hue in a turning ring, blurred to a
+   * glow, so the picture reads as lit from behind. It turns only where motion is welcome.
+   */
+  [data-glow] {
+    --glow: 0.5;
+    isolation: isolate;
+
+    &::before {
+      content: "";
+      position: absolute;
+      inset: -1.5rem;
+      z-index: -1;
+      border-radius: 2.5rem;
+      background: conic-gradient(
+        from var(--glow-angle, 0deg),
+        var(--color-accent),
+        var(--color-signal),
+        var(--color-inbox),
+        var(--color-arrive),
+        var(--color-accent)
+      );
+      filter: blur(56px);
+      opacity: var(--glow);
+    }
+
+    @variant dark {
+      --glow: 0.42;
+    }
+  }
+
   /* The marketing display type: big, tight, optical-sized. */
   .display {
     font-family: var(--font-display);
@@ -737,6 +768,73 @@
     animation: demo-packet 3.2s var(--ease-out) infinite;
     animation-delay: calc(var(--beat, 0) * 3.2s);
   }
+
+  /*
+   * The name, drawn (components/marketing/boulder-hill.tsx): the crew climbs for half the loop, holds
+   * at the top while the call is made, and fades as the next boulder waits below. Without motion the
+   * scene rests on the call made, which is every element's own unanimated state.
+   */
+  [data-hill] {
+    --hill: 13s;
+  }
+
+  [data-hill] [data-crew] {
+    animation: hill-crew var(--hill) linear infinite;
+  }
+
+  [data-hill] [data-roll] {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: hill-roll var(--hill) linear infinite;
+  }
+
+  [data-hill] [data-next] {
+    animation: hill-next var(--hill) linear infinite;
+  }
+
+  [data-hill] [data-done] {
+    animation: hill-done var(--hill) var(--ease-out) infinite;
+  }
+
+  [data-hill] [data-hill-card] {
+    animation: hill-card var(--hill) var(--ease-out) infinite;
+  }
+
+  [data-hill] [data-hill-pick] {
+    animation: hill-pick var(--hill) ease infinite;
+  }
+
+  [data-hill] [data-bob] {
+    animation: hill-bob 0.7s ease-in-out infinite alternate;
+  }
+
+  [data-hill] [data-leg] {
+    transform-box: fill-box;
+    transform-origin: 50% 0;
+    animation: hill-leg 0.7s ease-in-out infinite alternate;
+  }
+
+  [data-hill] [data-leg="back"] {
+    animation-direction: alternate-reverse;
+  }
+
+  [data-hill] [data-blink] {
+    animation: demo-pulse 2.4s ease-in-out infinite;
+  }
+
+  [data-hill] [data-star] {
+    animation: hill-twinkle 5s ease-in-out infinite;
+  }
+
+  /* The names of the agents Phean works with, drifting past; the list is doubled so the loop is seamless. */
+  [data-marquee] {
+    animation: marquee 40s linear infinite;
+  }
+
+  /* The light that turns around the hero's picture of the product. */
+  [data-glow]::before {
+    animation: glow-turn 9s linear infinite;
+  }
 }
 
 @keyframes mesh-drift {
@@ -746,8 +844,146 @@
 }
 
 /* "Pause motion" on the site (WCAG 2.2.2): everything that loops stops where it is. */
-[data-paused] :is([data-demo] *, [data-drift], [data-drift]::before) {
+[data-paused] :is([data-demo] *, [data-hill] *, [data-marquee], [data-glow]::before, [data-drift], [data-drift]::before) {
   animation-play-state: paused !important;
+}
+
+@keyframes hill-crew {
+  0% {
+    opacity: 0;
+    transform: translateX(-550px);
+    animation-timing-function: cubic-bezier(0.3, 0, 0.6, 1);
+  }
+  4% {
+    opacity: 1;
+  }
+  52%,
+  82% {
+    opacity: 1;
+    transform: none;
+  }
+  90%,
+  100% {
+    opacity: 0;
+    transform: none;
+  }
+}
+
+/* 550 units up the slope on a boulder of radius 58 is 9.5 radians: the marks turn as far as it rolls. */
+@keyframes hill-roll {
+  0% {
+    transform: rotate(-543deg);
+    animation-timing-function: cubic-bezier(0.3, 0, 0.6, 1);
+  }
+  52%,
+  100% {
+    transform: none;
+  }
+}
+
+@keyframes hill-next {
+  0%,
+  5% {
+    opacity: 1;
+  }
+  8%,
+  84% {
+    opacity: 0;
+    transform: translateX(-40px);
+  }
+  94%,
+  100% {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes hill-card {
+  0%,
+  52% {
+    opacity: 0;
+    transform: translateY(0.75rem) scale(0.96);
+  }
+  57%,
+  84% {
+    opacity: 1;
+    transform: none;
+  }
+  90%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes hill-pick {
+  0%,
+  66% {
+    background-color: var(--color-fill);
+    color: var(--color-ink-2);
+    box-shadow: none;
+  }
+  67%,
+  100% {
+    background-color: var(--color-accent-tint);
+    color: var(--color-accent-ink);
+    box-shadow: inset 0 0 0 2px var(--color-accent);
+  }
+}
+
+@keyframes hill-done {
+  0%,
+  68% {
+    opacity: 0;
+    stroke-width: 18;
+  }
+  72%,
+  84% {
+    opacity: 1;
+    stroke-width: 5;
+  }
+  90%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes hill-bob {
+  to {
+    transform: translateY(-2px);
+  }
+}
+
+@keyframes hill-leg {
+  from {
+    transform: rotate(16deg);
+  }
+  to {
+    transform: rotate(-16deg);
+  }
+}
+
+@keyframes hill-twinkle {
+  50% {
+    opacity: 0.25;
+  }
+}
+
+@keyframes marquee {
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@property --glow-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+@keyframes glow-turn {
+  to {
+    --glow-angle: 360deg;
+  }
 }
 
 @keyframes rise {

@@ -11,7 +11,7 @@ test("the landing page leads with the value, shows the product at work, and the 
 
   // Use cases are tabs: arrow keys move between them and show each team's sample morning.
   const tabs = page.getByRole("tablist", { name: "Who runs a fleet of agents" });
-  await tabs.getByRole("tab", { name: "Marketing teams" }).focus();
+  await tabs.getByRole("tab", { name: "Marketing teams" }).click();
   await page.keyboard.press("ArrowRight");
   await expect(tabs.getByRole("tab", { name: "Software factories" })).toHaveAttribute("aria-selected", "true");
   await expect(page.getByRole("tabpanel")).toContainText("Coding agents in parallel");
@@ -19,7 +19,19 @@ test("the landing page leads with the value, shows the product at work, and the 
   await page.keyboard.press("End");
   await expect(tabs.getByRole("tab", { name: "Founders & chiefs of staff" })).toBeFocused();
   await page.keyboard.press("Home");
-  await expect(tabs.getByRole("tab", { name: "Marketing teams" })).toHaveAttribute("aria-selected", "true");
+  await expect(tabs.getByRole("tab", { name: "Personal assistants" })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("list", { name: "A sample morning for personal assistants" })).toContainText("aisle seat");
+
+  // The name, explained, and drawn: agents roll the boulder up the hill and stop for the person's call.
+  const name = page.getByRole("region", { name: "Why Phean? Because the work is Sisyphean." });
+  await expect(name).toContainText("short for Sisyphean");
+  await expect(name.getByRole("figure")).toContainText("three AI agents rolling a boulder up a hill");
+  await expect(name.getByRole("heading", { level: 3 })).toHaveText(["Agents push", "You make the call", "The next one is waiting"]);
+
+  // Personal assistants, named, with their requests on one page.
+  const assistants = page.getByRole("region", { name: "Built for personal assistants." });
+  await expect(assistants).toContainText("Grok, Dots, Instinct, Muse");
+  await expect(assistants.getByRole("list", { name: "Your assistants are asking" }).getByRole("listitem").filter({ has: page.getByRole("list", { name: "Options" }) })).toHaveCount(3);
 
   // The real timetable, drawn from sample data.
   const line = page.getByRole("region", { name: "Every task on one line." });
@@ -35,7 +47,7 @@ test("the landing page's animations can be paused and played again", async ({ pa
   await page.goto("/");
   const toggle = page.getByRole("button", { name: "Pause the animations" });
   const playing = () =>
-    page.evaluate(() => [...document.querySelectorAll("[data-demo] *")].filter((element) => getComputedStyle(element).animationName !== "none" && getComputedStyle(element).animationPlayState === "running").length);
+    page.evaluate(() => [...document.querySelectorAll("[data-demo] *, [data-hill] *, [data-marquee]")].filter((element) => getComputedStyle(element).animationName !== "none" && getComputedStyle(element).animationPlayState === "running").length);
   expect(await playing()).toBeGreaterThan(0);
   await toggle.click();
   await expect(page.getByRole("button", { name: "Play the animations" })).toHaveAttribute("aria-pressed", "true");
@@ -49,7 +61,7 @@ test("the landing page keeps still for people who ask for less motion", async ({
   const page = await context.newPage();
   await page.goto("/");
   const animated = await page.evaluate(() =>
-    [...document.querySelectorAll("[data-demo] *, [data-rise], [data-drift]")].filter((element) => getComputedStyle(element).animationName !== "none").length,
+    [...document.querySelectorAll("[data-demo] *, [data-hill] *, [data-marquee], [data-rise], [data-drift]")].filter((element) => getComputedStyle(element).animationName !== "none").length,
   );
   expect(animated).toBe(0);
   await context.close();
