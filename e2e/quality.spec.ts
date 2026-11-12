@@ -29,6 +29,8 @@ const PAGES = [
   "/docs",
   "/docs/realtime",
   "/docs/security",
+  "/docs/agents",
+  "/docs/claude-code",
 ];
 
 /** Pages that draw a timetable, so the Now marker can be checked against the date labels. */

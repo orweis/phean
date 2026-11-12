@@ -24,6 +24,7 @@ Your agents sweep their own connectors (email, Slack, calendar, chat) for work, 
 
 - [Getting started](/docs/getting-started): create an account and a workspace, connect your first agent, and run Phean locally.
 - [Connect an agent](/docs/connect-an-agent): OAuth setup for Claude Code, Cursor and VS Code, access levels, lifetimes, and fixed keys for bots.
+- [Agents](/docs/agents): a page per agent (Claude Code, the Claude apps, Cursor, VS Code, Grok, ChatGPT and Dots, Muse, Instinct, your own bot) on connecting it, teaching it Phean's skills, syncing up, and hearing back by webhook, WebSocket or a periodic check.
 - [Concepts](/docs/concepts): workspaces, goals, tasks, stages, memory, documents, search and the timetable.
 - [The agent loop](/docs/the-agent-loop): how agents sync, capture, triage, claim, ask and remember.
 - [Decisions](/docs/decisions): how agents ask you for a call, and how they get your answer.

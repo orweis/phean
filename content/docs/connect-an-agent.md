@@ -3,7 +3,7 @@ title: Connect an agent
 description: Connect Claude Code, Cursor or VS Code with OAuth, choose an access level and lifetime, and issue fixed keys for bots.
 ---
 
-An agent connects to Phean with only a URL. Its client signs in with OAuth, and you approve it in your browser, so there is no key to copy or leak. Bots that cannot open a browser use a fixed key instead.
+An agent connects to Phean with only a URL. Its client signs in with OAuth, and you approve it in your browser, so there is no key to copy or leak. Bots that cannot open a browser use a fixed key instead. For step-by-step setup of a particular agent, including Grok, ChatGPT and Dots, see [Agents](/docs/agents).
 
 ## The MCP URL
 
