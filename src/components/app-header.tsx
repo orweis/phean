@@ -10,6 +10,7 @@ import { AppearancePicker } from "./appearance-picker";
 import { CloseMenusOnNavigate } from "./close-menus-on-navigate";
 import { KeyboardShortcuts, ShortcutsButton } from "./keyboard-shortcuts";
 import { Logo } from "./logo";
+import { HeaderSearch } from "./search-form";
 import { SignOutButton } from "./sign-out-button";
 import { Avatar } from "./ui/avatar";
 import { Popover } from "./ui/popover";
@@ -109,7 +110,13 @@ export function AppHeader({ user, workspace, children }: AppHeaderProps) {
             <WorkspaceSwitcher current={workspace.current} workspaces={workspace.all} />
           </>
         )}
-        <div className="ml-auto">
+        {workspace && (
+          // Search with suggestions from every page of the workspace; phones use the Search tab.
+          <div className="ml-auto hidden w-72 md:block">
+            <HeaderSearch slug={workspace.current.slug} />
+          </div>
+        )}
+        <div className={workspace ? "max-md:ml-auto" : "ml-auto"}>
           <AccountMenu user={user} />
         </div>
       </div>

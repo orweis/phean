@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, gte, inArray, isNotNull, isNull, max, ne, or, sql, type Column, type SQL } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, inArray, isNotNull, isNull, lte, max, ne, or, sql, type Column, type SQL } from "drizzle-orm";
 
 import {
   GOAL_STATUSES,
@@ -22,7 +22,7 @@ import { listActivity, type Activity } from "./events";
 import { allGoalsWithProgress, ancestorChain, type GoalWithProgress } from "./goals";
 import { recall, type Memory } from "./memory";
 import { assertCan } from "./policy";
-import { BoardInput, Empty, GoalRefInput, GoalScopeInput, JourneysInput } from "./schemas";
+import { BoardInput, BrowseTasksInput, Empty, GoalRefInput, GoalScopeInput, JourneysInput } from "./schemas";
 import { service } from "./service";
 import { byUrgency, isAwaitingInput, isDueWithinWeek, isOpenTask, isOverdue, selectTaskViews, type TaskView } from "./tasks";
 import { loadWorkflow } from "./workflow";
@@ -231,6 +231,37 @@ export const getBoard = service(BoardInput, async (ctx, { goalId, doneLimit, hel
   }
   return { columns: columns.filter((column) => !column.stage.hidden || column.tasks.length > 0) };
 });
+
+/**
+ * Tasks for the Tasks page's other layouts, most urgent first: open ones by default, every one but
+ * dropped (`all`), or one status. Archived tasks stay off, as on the board. The same goal scope and
+ * holder filter as the board, so switching layouts never changes which tasks are meant.
+ */
+export const browseTasks = service(BrowseTasksInput, async (ctx, { goalId, heldBy, status, dueFrom, dueTo, undated, limit }): Promise<BrowsedTasks> => {
+  assertCan(ctx, "workspace:read");
+  const scope = await goalScope(ctx, goalId);
+  const which = status === "open" ? isOpenTask : status === "all" ? ne(tasks.status, "dropped") : eq(tasks.status, status);
+  const where = and(
+    which,
+    isNull(tasks.archivedAt),
+    scope,
+    heldBy ? eq(tasks.claimedByAgentId, heldBy) : undefined,
+    dueFrom ? gte(tasks.dueDate, dueFrom) : undefined,
+    dueTo ? lte(tasks.dueDate, dueTo) : undefined,
+    undated ? isNull(tasks.dueDate) : undefined,
+  );
+  const [rows, [counted]] = await Promise.all([
+    selectTaskViews(ctx, where).orderBy(...byUrgency).limit(limit),
+    ctx.db.select({ total: count() }).from(tasks).where(and(inTenant(ctx, tasks), where)),
+  ]);
+  return { tasks: rows, total: counted?.total ?? rows.length };
+});
+
+/** A page of tasks and how many match in all, so a layout can say when it shows only some. */
+export interface BrowsedTasks {
+  tasks: TaskView[];
+  total: number;
+}
 
 /** Tasks with due dates, soonest first, for timeline views. */
 export const getTimeline = service(GoalScopeInput, async (ctx, { goalId }): Promise<TaskView[]> => {

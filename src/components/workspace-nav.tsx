@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 import { cx } from "@/lib/cx";
-import { routes } from "@/lib/routes";
+import { WORKSPACE_PAGES, type WorkspacePageKey } from "@/lib/workspace-pages";
 
 /** Counts shown on the tab rail, so the extent of what waits is visible from every page. */
 export interface NavCounts {
@@ -17,18 +17,21 @@ export interface NavCounts {
   inbox: number;
 }
 
-const TABS = [
-  { label: "Overview", icon: LayoutDashboard, href: routes.workspace, exact: true, count: "waitingOnYou" },
-  { label: "Decisions", icon: Scale, href: routes.decisions, count: "decisions" },
-  { label: "Board", icon: KanbanSquare, href: routes.board, count: "inbox", quiet: true },
-  { label: "Goals", icon: Target, href: routes.goals },
-  { label: "Timeline", icon: CalendarRange, href: routes.timeline },
-  { label: "Memory", icon: Brain, href: routes.memory },
-  { label: "Documents", icon: FileText, href: routes.documents },
-  { label: "Search", icon: Search, href: routes.search },
-  { label: "Agents", icon: Bot, href: routes.agents },
-  { label: "Members", icon: Users, href: routes.members },
-] as const;
+/** The rail's icon and count for each workspace page; the pages themselves are `WORKSPACE_PAGES`. */
+const TAB_EXTRAS: Record<WorkspacePageKey, { icon: typeof Bot; count?: keyof NavCounts; quiet?: boolean }> = {
+  overview: { icon: LayoutDashboard, count: "waitingOnYou" },
+  decisions: { icon: Scale, count: "decisions" },
+  tasks: { icon: KanbanSquare, count: "inbox", quiet: true },
+  goals: { icon: Target },
+  timeline: { icon: CalendarRange },
+  memory: { icon: Brain },
+  documents: { icon: FileText },
+  search: { icon: Search },
+  agents: { icon: Bot },
+  members: { icon: Users },
+};
+
+const TABS = WORKSPACE_PAGES.map((page) => ({ ...page, ...TAB_EXTRAS[page.key] }));
 
 const COUNT_LABELS: Record<keyof NavCounts, string> = {
   waitingOnYou: "waiting on you",
@@ -59,7 +62,7 @@ export function WorkspaceNav({ slug, counts }: { slug: string; counts: NavCounts
         const target = href(slug);
         const here = "exact" in tab ? pathname === target : pathname.startsWith(target);
         const active = heading ? heading === target : here;
-        const count = "count" in tab ? counts[tab.count] : 0;
+        const count = tab.count ? counts[tab.count] : 0;
         return (
           <Link
             key={label}
@@ -75,12 +78,12 @@ export function WorkspaceNav({ slug, counts }: { slug: string; counts: NavCounts
           >
             <Icon className="size-4" aria-hidden />
             {label}
-            {count > 0 && "count" in tab && (
+            {count > 0 && tab.count && (
               <span
                 className={cx(
                   "min-w-4.5 rounded-full px-1.5 text-center text-xs leading-4.5 font-bold",
-                  "quiet" in tab ? "bg-fill text-ink-2" : "bg-signal text-on-signal",
-                  "quiet" in tab && active && "bg-panel",
+                  tab.quiet ? "bg-fill text-ink-2" : "bg-signal text-on-signal",
+                  tab.quiet && active && "bg-panel",
                 )}
               >
                 {count}

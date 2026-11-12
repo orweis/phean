@@ -213,7 +213,7 @@ export default async function DashboardPage({ params }: PageProps<"/w/[slug]">) 
               description="Most urgent first: priority, then due date, then age."
               action={
                 <ButtonLink href={routes.board(slug)} size="sm" variant="ghost">
-                  Open board
+                  Open tasks
                 </ButtonLink>
               }
             />

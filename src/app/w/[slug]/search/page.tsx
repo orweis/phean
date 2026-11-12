@@ -77,7 +77,7 @@ export default async function SearchPage({ params, searchParams }: PageProps<"/w
     <>
       <PageHeader title="Search" description="Full-text search across goals, tasks, and memory, ranked by relevance." />
       <div className="mb-6">
-        <SearchForm action={routes.search(slug)} defaultValue={q} placeholder="Search goals, tasks, and memory…" autoFocus={!q} />
+        <SearchForm action={routes.search(slug)} defaultValue={q} placeholder="Search goals, tasks, and memory…" autoFocus={!q} suggestFor={slug} />
       </div>
 
       {result && !result.ok && <p className="text-sm text-late-ink">{result.state.message}</p>}

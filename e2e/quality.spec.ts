@@ -10,6 +10,9 @@ const PAGES = [
   "/w/globex",
   "/w/globex/decisions",
   "/w/globex/board",
+  "/w/globex/board?view=table",
+  "/w/globex/board?view=calendar",
+  "/w/globex/board?view=map",
   "/w/globex/goals",
   "/w/globex/goals?show=all",
   "/w/globex/digest",
@@ -188,8 +191,8 @@ test.describe("signed in", () => {
 
   test("a section's description folds behind (?), shown on hover or a click and closed with Escape", async ({ page }) => {
     await page.goto("/w/globex/board");
-    const about = page.getByRole("button", { name: "About Board" });
-    const tip = page.getByRole("tooltip").filter({ hasText: "Every task by status" });
+    const about = page.getByRole("button", { name: "About Tasks" });
+    const tip = page.getByRole("tooltip").filter({ hasText: "Every task by stage" });
     await expect(tip).not.toBeInViewport();
     await about.hover();
     await expect(tip).toBeVisible();
@@ -205,7 +208,7 @@ test.describe("signed in", () => {
     await page.goto("/w/globex");
     const rail = page.getByRole("navigation", { name: "Workspace" });
     const countOf = async (tab: RegExp) => Number(((await rail.getByRole("link", { name: tab }).locator("span").first().textContent()) ?? "0").replace(/\D.*$/, "") || 0);
-    const expected = (await countOf(/^Decisions/)) + (await countOf(/^Board/));
+    const expected = (await countOf(/^Decisions/)) + (await countOf(/^Tasks/));
     expect(expected).toBeGreaterThan(0);
     // Every icon link carries the badge: browsers pick among them by size and type, not order.
     const icons = page.locator('head link[rel~="icon"]');

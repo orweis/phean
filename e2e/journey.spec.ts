@@ -88,13 +88,13 @@ test("an owner and an agent run a workspace end to end", async ({ page }) => {
     await expect(card(page, "Next actions").locator(`[data-task="${tasks.claimed.id}"]`)).toContainText("Inbox sweeper");
     await expect(card(page, "On the line").locator(`[data-task="${tasks.late.id}"]`)).toContainText(/Late, due/);
     await expect(card(page, "Agents")).toContainText("Inbox sweeper");
-    await expect(page.getByRole("region", { name: "Today on the line" }).getByRole("img", { name: /Open work by status/ })).toHaveAccessibleName(
-      "Open work by status: 2 inbox, 1 in progress",
+    await expect(page.getByRole("region", { name: "Today on the line" }).getByRole("list", { name: "Open work by status" })).toHaveText(
+      /Inbox 2.*In progress 1/,
     );
   });
 
   await test.step("move a task across the board", async () => {
-    await openTab(page, workspace.slug, "Board");
+    await openTab(page, workspace.slug, "Tasks");
     const task = (status: Parameters<typeof lane>[1]) => lane(page, status).locator(`[data-task="${tasks.unfiled.id}"]`);
 
     await task("inbox").getByRole("button", { name: "Accept" }).click();
@@ -147,7 +147,7 @@ test("an owner and an agent run a workspace end to end", async ({ page }) => {
     await page.getByRole("region", { name: "Close the quarter" }).getByRole("link", { name: "Close the quarter" }).click();
     await expect(page).toHaveURL(`/w/${workspace.slug}/goals/${goalId}`);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Close the quarter");
-    await expect(page.getByRole("img", { name: /^Tasks by status/ })).toHaveAccessibleName("Tasks by status: 1 inbox, 1 in progress");
+    await expect(page.getByRole("list", { name: "Tasks by status" })).toHaveText(/Inbox 1.*In progress 1/);
     await expect(card(page, "Tasks").locator("li[data-task]")).toHaveCount(2);
   });
 

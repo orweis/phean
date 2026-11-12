@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { STATUS_FILTERS } from "@/lib/task-views";
 import { isResumeUrl, LINK_KINDS, MAX_LINKS, REQUEST_KINDS, RESUME_URL_SCHEMES } from "@/lib/agent-sessions";
 import {
   AGENT_ACCESS_LEVELS,
@@ -253,6 +254,16 @@ export const BoardInput = GoalScopeInput.extend({
   doneLimit: limit(100, 20),
   heldBy: z.string().trim().min(1).optional().describe("Only the open tasks this agent holds (agent id)"),
 });
+/** The Tasks page's table, calendar and map: tasks in a goal's subtree, held by an agent, of a status, due in a range. */
+export const BrowseTasksInput = GoalScopeInput.extend({
+  heldBy: z.string().trim().min(1).optional(),
+  status: z.enum(STATUS_FILTERS).default("open"),
+  dueFrom: isoDate.optional(),
+  dueTo: isoDate.optional(),
+  /** Only tasks with no due date: what the calendar cannot place. */
+  undated: z.boolean().default(false),
+  limit: limit(500, 300),
+});
 export const JourneysInput = GoalScopeInput.extend({
   days: z
     .literal(TIMELINE_WINDOWS)
@@ -344,6 +355,9 @@ export const SearchInput = z.object({
   kinds: z.array(z.enum(SEARCH_KINDS)).min(1).optional(),
   limit: limit(50, 20),
 });
+
+/** What search suggests as a person types: a few of each kind of match, and places to go. */
+export const SuggestInput = z.object({ query: z.string().trim().min(1).max(LIMITS.query) });
 
 export const ActivityInput = z.object({
   since: z.iso

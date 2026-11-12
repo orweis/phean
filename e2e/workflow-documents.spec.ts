@@ -26,7 +26,7 @@ test("stages are set in Settings, and documents carry the work between agents an
     await menu.click();
     await expect(page.getByRole("link", { name: "Settings for Hooli" })).toHaveAttribute("href", `/w/${slug}/settings`);
     await menu.click();
-    await openTab(page, slug, "Board");
+    await openTab(page, slug, "Tasks");
     await page.getByRole("link", { name: "Edit lanes" }).click();
     await expect(page).toHaveURL(`/w/${slug}/settings`);
 
@@ -57,7 +57,7 @@ test("stages are set in Settings, and documents carry the work between agents an
   );
 
   await test.step("the board shows the stages as lanes, and the card its document", async () => {
-    await openTab(page, slug, "Board");
+    await openTab(page, slug, "Tasks");
     await expect(page.locator("section[data-stage] h2")).toHaveText(["Inbox", "Ready", "In progress", "Review", "Done"]);
     const card = lane(page, "todo").locator(`[data-task="${task.id}"]`);
     await expect(card.getByRole("list", { name: "Documents" })).toContainText("Launch post draft");

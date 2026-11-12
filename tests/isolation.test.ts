@@ -11,8 +11,8 @@ import { createGoal, findGoal, listGoals, updateGoal, type Goal } from "@/server
 import { attachDocument, deleteDocument, getDocument, listDocuments, updateDocument } from "@/server/domain/documents";
 import { countMemoryKinds, forget, recall, remember, type Memory } from "@/server/domain/memory";
 import { getWorkflow, saveWorkflow } from "@/server/domain/workflow";
-import { getBoard, getGoalDetail, getStatusSummary } from "@/server/domain/overview";
-import { search } from "@/server/domain/search";
+import { browseTasks, getBoard, getGoalDetail, getStatusSummary } from "@/server/domain/overview";
+import { search, suggest } from "@/server/domain/search";
 import {
   answerInput,
   assignTasksToGoal,
@@ -80,6 +80,9 @@ describe("tenant isolation", () => {
       expect(await listGoals(ctx, {})).toEqual([]);
       expect(await listTasks(ctx, {})).toEqual([]);
       expect(await listGoalTasks(ctx, {})).toEqual([]);
+      expect(await browseTasks(ctx, { status: "all" })).toEqual({ tasks: [], total: 0 });
+      await expect(browseTasks(ctx, { goalId: acmeGoal.id })).rejects.toMatchObject({ code: "not_found" });
+      expect((await suggest(ctx, { query: "merger" })).filter((suggestion) => suggestion.group !== "page")).toEqual([]);
       expect(await getDigest(ctx, {})).toMatchObject({ quiet: true, captured: 0 });
       expect(await recall(ctx, {})).toEqual([]);
       expect(Object.values(await countMemoryKinds(ctx, {})).every((count) => count === 0)).toBe(true);

@@ -5,7 +5,7 @@ import { routes } from "../../src/lib/routes";
 const TABS = {
   Overview: routes.workspace,
   Decisions: routes.decisions,
-  Board: routes.board,
+  Tasks: routes.board,
   Goals: routes.goals,
   Timeline: routes.timeline,
   Memory: routes.memory,

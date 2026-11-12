@@ -71,6 +71,8 @@ test("social sign-in hands off to the provider with Phean's callback, and says w
   await expect.poll(() => authorize?.pathname).toBe("/login/oauth/authorize");
   expect(authorize!.searchParams.get("client_id")).toBe("phean-e2e-github");
   expect(authorize!.searchParams.get("redirect_uri")).toMatch(/\/api\/auth\/callback\/github$/);
+  // Let the hand-off land before leaving, or it interrupts the next navigation.
+  await page.waitForURL(/^https:\/\/github\.com\//);
 
   await page.goto("/sign-in?error=access_denied");
   await expect(page.getByRole("alert").filter({ hasText: "cancelled" })).toHaveText("Sign-in was cancelled at the provider. Try again, or use your email.");
