@@ -132,6 +132,7 @@ export default async function GoalPage({ params }: PageProps<"/w/[slug]/goals/[i
           caption={goal.childCount > 0 ? `This goal and ${pluralize(subGoals.length, "sub-goal")}` : undefined}
           figure={`${percent(goal.progress)} done`}
           counts={goal.rollup}
+          hrefFor={(status) => routes.tasksByStatus(slug, status, goal.id)}
         />
         <Stat label="Open" value={goal.rollup.open} hint={`of ${pluralize(goal.rollup.total, "task")}`} />
         <Stat label="Late" value={late} tone={late ? "danger" : undefined} hint="past due, still open" />

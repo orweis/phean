@@ -30,7 +30,7 @@ const GROUPS = [
     ],
   },
   {
-    title: "Board",
+    title: "Tasks board",
     keys: [{ keys: ["Tab"], what: "In a lane's header: skip to the next lane" }],
   },
 ] as const;

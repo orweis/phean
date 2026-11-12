@@ -79,7 +79,7 @@ test("a person picks up an agent's question where the agent left off", async ({ 
   });
 
   await test.step("board cards show the question and every way back into the session", async () => {
-    await openTab(page, slug, "Board");
+    await openTab(page, slug, "Tasks");
     const claimed = lane(page, "in_progress").locator(`[data-task="${renewal.id}"]`);
     await expect(claimed).toContainText("Deal desk asks: Globex wants 10% off the renewal.");
     const source = claimed.getByRole("link", { name: "From email (opens in a new tab)" });

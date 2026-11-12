@@ -106,7 +106,7 @@ test("an owner manages goals, memory, search, agents and members", async ({ page
 
   await test.step("search finds the goal and the memory, and links to them", async () => {
     await openTab(page, slug, "Search");
-    await page.getByRole("searchbox", { name: "Search" }).fill("vendor");
+    await page.getByRole("combobox", { name: "Search", exact: true }).fill("vendor");
     await page.keyboard.press("Enter");
     await expect(page).toHaveURL(`/w/${slug}/search?q=vendor`);
     await expect(card(page, "Memories")).toContainText("Vendor contracts renew");

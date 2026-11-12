@@ -9,10 +9,24 @@ export function prefixTsQuery(text: string): string | null {
   return terms.length > 0 ? terms.map((term) => `${term}:*`).join(" & ") : null;
 }
 
-export function matchesTsQuery(column: AnyColumn, tsQuery: string): SQL {
-  return sql`${column} @@ to_tsquery('english', ${tsQuery})`;
+/**
+ * How a query's words are read. `english` stems them and drops stopwords, right for whole words.
+ * A prefix still being typed is neither: "in" is a stopword, yet "inv" should find "invoices", and
+ * "invoice" is longer than the stored stem "invoic". `prefix` reads the words both ways, as written
+ * (`simple`) and stemmed (`english`), and matches either.
+ */
+export type TsConfig = "english" | "prefix";
+
+export function matchesTsQuery(column: AnyColumn, tsQuery: string, config: TsConfig = "english"): SQL {
+  return config === "prefix"
+    ? sql`(${column} @@ to_tsquery('english', ${tsQuery}) or ${column} @@ to_tsquery('simple', ${tsQuery}))`
+    : sql`${column} @@ to_tsquery('english', ${tsQuery})`;
 }
 
-export function tsRank(column: AnyColumn, tsQuery: string): SQL<number> {
-  return sql`ts_rank(${column}, to_tsquery('english', ${tsQuery}))`.mapWith(Number);
+export function tsRank(column: AnyColumn, tsQuery: string, config: TsConfig = "english"): SQL<number> {
+  return (
+    config === "prefix"
+      ? sql`greatest(ts_rank(${column}, to_tsquery('english', ${tsQuery})), ts_rank(${column}, to_tsquery('simple', ${tsQuery})))`
+      : sql`ts_rank(${column}, to_tsquery('english', ${tsQuery}))`
+  ).mapWith(Number);
 }

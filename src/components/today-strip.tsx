@@ -11,7 +11,13 @@ export function TodayStrip({ stats, slug }: { stats: WorkspaceStats; slug: strin
   return (
     <section aria-label="Today on the line">
       <StatStrip className="grid-cols-2 sm:grid-cols-4 lg:grid-cols-[minmax(0,2.2fr)_repeat(4,minmax(0,1fr))]">
-        <FlowStat label="Open work by status" figure={pluralize(stats.openTasks, "task")} counts={stats.tasksByStatus} stations={OPEN_TASK_STATUSES} />
+        <FlowStat
+          label="Open work by status"
+          figure={pluralize(stats.openTasks, "task")}
+          counts={stats.tasksByStatus}
+          stations={OPEN_TASK_STATUSES}
+          hrefFor={(status) => routes.tasksByStatus(slug, status)}
+        />
         <Stat label="Late" value={stats.overdue} tone={stats.overdue ? "danger" : undefined} hint="past due, still open" href={stats.overdue ? "#late" : undefined} />
         <Stat label="Due this week" value={stats.dueThisWeek} hint="next 7 days" href={routes.timeline(slug)} />
         <Stat

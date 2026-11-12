@@ -102,6 +102,11 @@ describe("the morning digest", () => {
 });
 
 describe("sending the digest", () => {
+  // A run sends every due digest in the database, so each test starts with none but its own.
+  beforeEach(async () => {
+    await testDb.db.delete(digestSubscriptions);
+  });
+
   it("emails each digest once, at its hour in its person's time zone", async () => {
     await busyMorning();
     const now = new Date();

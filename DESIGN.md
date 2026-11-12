@@ -396,7 +396,7 @@ Controls are capsules: buttons, tabs, badges, count chips, segmented controls an
 ### Chips
 
 - **Style:** badges are 20px capsules, a tint of their tone with the tone's ink. Every status, priority, role and memory kind renders through its `{ label, tone }` table in `src/lib/domain.ts`.
-- **Counts:** the tab rail's counts for what needs a person (Overview, Decisions) are ember capsules with dark numerals; the Board's inbox count is a neutral capsule (`fill`, `ink-2`), so ember keeps its meaning.
+- **Counts:** the tab rail's counts for what needs a person (Overview, Decisions) are ember capsules with dark numerals; the Tasks tab's inbox count is a neutral capsule (`fill`, `ink-2`), so ember keeps its meaning.
 - **Filters:** the memory kinds are capsules, violet-tinted when selected and filled grey otherwise, each with its count.
 - **Lane counts:** a neutral capsule beside the lane's name; a folded lane reads "5 of 13".
 - **Who acted:** an agent is a squared tile with a bot, a person a round disc, both neutral; a task's holder is meta text, "Held by Finance clerk", never a violet badge, since violet is a state.
@@ -421,7 +421,7 @@ A grey capsule well with capsule segments; the selected one is raised (white wit
 
 ### Navigation
 
-The glass header holds the boulder wordmark, a `/`, the workspace switcher (a capsule that opens a glass menu), and the account menu: a ghost capsule with the person's initial on a violet disc and their name (the initial alone on phones), which opens a glass popover with their name and email, the appearance picker, and Sign out. Below them, the tab rail (Overview, Board, Timeline, Memory, Search, Agents, Members) is a row of capsules: muted until hovered, which fills them grey; the active tab is a violet-tinted capsule with semibold violet text. Inline text links underline on hover and thicken the underline while pressed (the `link` utility).
+The glass header holds the boulder wordmark, a `/`, the workspace switcher (a capsule that opens a glass menu), the search box (from 768px; phones use the Search tab), and the account menu: a ghost capsule with the person's initial on a violet disc and their name (the initial alone on phones), which opens a glass popover with their name and email, the appearance picker, and Sign out. Below them, the tab rail (Overview, Decisions, Tasks, Goals, Timeline, Memory, Documents, Search, Agents, Members, from `WORKSPACE_PAGES` in `lib/workspace-pages.ts`) is a row of capsules: muted until hovered, which fills them grey; the active tab is a violet-tinted capsule with semibold violet text. Inline text links underline on hover and thicken the underline while pressed (the `link` utility).
 
 ### Menus, popovers and sheets
 
@@ -430,6 +430,21 @@ Glass floats with a 16px corner that grow in from their anchor (220ms, from 97% 
 ### Status region
 
 One polite `role="status"` region per workspace, a glass float at the bottom centre of the screen. Actions say what they did there, naming the object, with Undo when the reverse exists; a notice stays about six seconds, longer while it is hovered or holds focus, and Undo is reachable with Tab. The background refresh speaks there too, only when something new waits on the person, and at most once a minute.
+
+### Tasks layouts
+
+The Tasks page draws the same tasks four ways, chosen in a segmented control of links with icons (Board, Table, Calendar, Map), each layout its own URL (`?view=`), with the Goal and Status filters (`ToolbarSelect` capsules, through the shared `QueryFilter`) beside it and carried from layout to layout.
+- **Table**: a card holding a full-width table, the first column pinned on phones (`PINNED_CELL`). Headings are links that sort (`aria-sort` and a small arrow on the leading one); empty cells read "None" or "No one" in muted text; the due date reads as everywhere else (`InlineDue`, crimson when late).
+- **Calendar**: a month as a ruled table, Monday first, days outside the month on a `fill` wash, today ringed in late crimson (the Red Line Rule's now), each task a station-coloured dot and its title, late ones in late ink, three a day before "N more". Phones get a list of the days with tasks instead of the grid.
+- **Map**: a left-to-right tree on a card under the station key, goals as panel boxes with the goal map's status marks (and their status in words unless active), tasks as panel boxes with their station dot, titles on up to two lines, "Decision for you" in wait ink and "Late" in late ink, joined by `edge` curves; it scrolls inside its card, a screen tall at most. The boxes are a nested list, so the hierarchy is read aloud, and the curves are decorative; below 640px the same list is an indented outline.
+
+Across the table, calendar and map, a task's station dot names its status for screen readers (`StationDot`, with an `edge` ring so the pale stations hold 3:1), what waits on a person keeps its ember mark, and the task open in the side peek is marked selected (`TaskPeekLink`: `aria-current`, an accent outline or bar).
+
+A status bar's legend (`FlowLegend` with `hrefFor`) turns each status into a link to its tasks as a table, and its segments into the same links for the pointer; the bar then hides itself from assistive tech, since the legend says the same.
+
+### Search suggestions
+
+The header's search and the Search page's box are one combobox (`SearchForm` with `suggestFor`): a pill input, and under it a `glass-float` list grouped under small muted headings (Go to, Show tasks, Goals, Tasks, Documents, Memory), each option a label with muted detail at its right (a page found by another word names the word), the highlighted one on `accent-tint` with an accent bar at its left edge, and a last row, ruled off, that searches for the words. Arrow keys move, Enter opens, Escape closes then clears; the count is announced politely.
 
 ### Board stages and Settings
 

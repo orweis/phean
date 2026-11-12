@@ -186,7 +186,7 @@ export async function StageBadge({ task, slug }: { task: TaskView; slug: string 
 }
 
 /** "Nov 2 · 2 days late", the due date as compact rows show it, inline with the title. */
-function InlineDue({ dueDate, late }: { dueDate: string; late: boolean }) {
+export function InlineDue({ dueDate, late }: { dueDate: string; late: boolean }) {
   return (
     <span className={cx("text-xs whitespace-nowrap", late ? "font-semibold text-late-ink" : "text-muted")}>
       {formatDueDate(dueDate)} · {relativeDue(dueDate)}

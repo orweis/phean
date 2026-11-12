@@ -1,3 +1,5 @@
+import type { TaskQuery } from "./task-views";
+
 type Query = Record<string, string | undefined>;
 
 /** Appends the defined, non-empty query values to a path. */
@@ -25,8 +27,11 @@ export const routes = {
   decision: (slug: string, taskId: string) => `/w/${slug}/decisions#task-${taskId}`,
   /** The goals waiting on a person's approval, on the Decisions page. */
   approvals: (slug: string) => `/w/${slug}/decisions#approvals`,
-  board: (slug: string, filters?: string | { goal?: string; lane?: string; agent?: string }) =>
+  /** The Tasks page: the board by default, or another layout (`view`) with the same filters. */
+  board: (slug: string, filters?: string | TaskQuery) =>
     withQuery(`/w/${slug}/board`, typeof filters === "string" ? { goal: filters } : filters),
+  /** The tasks of one status as a table, within a goal when given: where the status bars' segments lead. */
+  tasksByStatus: (slug: string, status: string, goal?: string) => routes.board(slug, { view: "table", status, goal }),
   timeline: (slug: string, filters?: { goal?: string; days?: string }) => withQuery(`/w/${slug}/timeline`, filters),
   /** Every goal, with a peek into its tasks; `show` picks which (open by default). */
   goals: (slug: string, show?: string) => withQuery(`/w/${slug}/goals`, { show }),
@@ -38,6 +43,8 @@ export const routes = {
   document: (slug: string, documentId: string, mode?: "edit") => withQuery(`/w/${slug}/documents/${documentId}`, { mode }),
   /** A document's bytes, served by Phean after it checks access; blobs are never addressed directly. */
   documentFile: (slug: string, documentId: string, download?: boolean) => withQuery(`/w/${slug}/documents/${documentId}/file`, { download: download ? "1" : undefined }),
+  /** Search's suggestions as a person types, as JSON. */
+  suggest: (slug: string, query: string) => withQuery(`/w/${slug}/suggest`, { q: query }),
   search: (slug: string, query?: string) => withQuery(`/w/${slug}/search`, { q: query }),
   /** A person's morning digest for the workspace, and where they choose when it is emailed. */
   digest: (slug: string) => `/w/${slug}/digest`,

@@ -37,7 +37,8 @@ In the web app:
 
 - The **Overview** (`/w/<slug>`) shows a status sentence, open work by station, questions waiting on you, goals awaiting your approval, late tasks, the most pressing tracks of the timetable, and recent activity.
 - **Decisions** lists every question and decision your agents asked you.
-- The **Board** shows tasks by stage.
+- **Tasks** shows every task as a **Board** of stages, a sortable **Table**, a **Calendar** of due dates, or a **Map** of goals, tasks and subtasks. Each status in the overview's "Open work by status" strip opens its tasks there.
+- The search box in the header suggests pages, task filters, goals, tasks and documents as you type.
 
 Workspace pages refresh every 15 seconds while they are open, so you see agents work without reloading. Goals an agent proposes wait for you: approve them on the goal's page or from the overview.
 

@@ -150,7 +150,7 @@ test("an agent waits on a decision and wakes when the person makes it", async ({
   });
 
   await test.step("the board shows the task's links, edits it, and moves it by drag and drop", async () => {
-    await openTab(page, slug, "Board");
+    await openTab(page, slug, "Tasks");
     const todo = lane(page, "todo").locator(`[data-task="${task.id}"]`);
     await expect(todo.getByRole("link", { name: /^Quotes email/ })).toHaveAttribute("href", MAIL);
 
@@ -197,7 +197,7 @@ test("an agent waits on a decision and wakes when the person makes it", async ({
   });
 
   await test.step("finished work is archived off the board, and brought back from its page", async () => {
-    await openTab(page, slug, "Board");
+    await openTab(page, slug, "Tasks");
     const done = lane(page, "done").locator(`[data-task="${task.id}"]`);
     const more = done.locator("details").filter({ has: page.locator('summary[aria-label="More actions for Engage Okafor LLP for the Q3 audit"]') });
     await more.locator("summary").click();
@@ -209,7 +209,7 @@ test("an agent waits on a decision and wakes when the person makes it", async ({
     await expect(page.getByText(/^Archived /)).toBeVisible();
     await page.getByRole("button", { name: "Unarchive" }).click();
     await expect(page.locator("[data-status-region]")).toContainText("Put “Engage Okafor LLP for the Q3 audit” back on the board");
-    await openTab(page, slug, "Board");
+    await openTab(page, slug, "Tasks");
     await expect(lane(page, "done").locator(`[data-task="${task.id}"]`)).toBeVisible();
   });
 });

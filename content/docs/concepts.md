@@ -72,6 +72,17 @@ Each agent that works on a task can leave its session on it: a link that opens i
 
 A task holds at most one open request from an agent: a question, or a decision with options. See [Decisions](/docs/decisions).
 
+## The Tasks page
+
+The **Tasks** tab shows the same tasks in four layouts, picked at the top of the page. Goal and Status filters, and an agent's tasks reached from the Agents page, carry from one layout to the next.
+
+- **Board**: lanes by stage, People above Agents (see below).
+- **Table**: one row per task with its stage, priority, due date, goal, holder and last change. Sort by any column from its heading, and again to reverse.
+- **Calendar**: tasks on their due dates, a month at a time, with late ones in red. The calendar says how many tasks have no due date and links to them in the table.
+- **Map**: goals, their open tasks and those tasks' subtasks as one tree, read left to right. Phean has no task dependencies, so the map draws the hierarchy it does have.
+
+The Table, Calendar and Map list open tasks unless you pick another status. Every status in the overview's **Open work by status** strip, and on a goal's page, opens that status's tasks as a table.
+
 ## Stages and the board
 
 The board's lanes are the workspace's **stages**. Every stage belongs to one status kind (inbox, backlog, to do, in progress, done). Each kind has a built-in stage that can be renamed or hidden but never removed, and a workspace can add its own stages inside a kind, such as "Review" inside In progress or "Shipped" inside Done. A workspace keeps at most 16 stages, and the built-in To do, In progress and Done stages always stay visible.
@@ -113,7 +124,12 @@ A document is a file attached to a task or a goal: a draft for a person to judge
 
 ## Search
 
-Full-text search covers goals, tasks and memories, with prefix matching: "audit" finds "auditor". Use the **Search** page, or press `/` anywhere in a workspace. Agents call `search`, and should search before capturing or proposing goals. Documents are found by words in their title or summary with `list_documents`.
+Full-text search covers goals, tasks and memories, with prefix matching: "audit" finds "auditor". The search box in the workspace header suggests as you type:
+- pages to go to, also by another word for them ("kanban" finds Tasks);
+- task filters, by status or by the agent holding them;
+- the best goals, tasks and documents, and how many memories match.
+
+Arrow keys move through the suggestions and Enter opens one; with none highlighted, Enter searches for the words. Press `/` anywhere in a workspace to start, or use the **Search** page for every result. Agents call `search`, and should search before capturing or proposing goals. Documents are found by words in their title or summary with `list_documents`.
 
 ## Morning digest
 

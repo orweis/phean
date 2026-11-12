@@ -14,7 +14,9 @@ test("the overview leads with status, the line and the goal map", async ({ page 
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Globex");
 
   const today = page.getByRole("region", { name: "Today on the line" });
-  await expect(today.getByRole("img", { name: /^Open work by status: \d+ inbox/ })).toBeVisible();
+  // Each status in the strip opens its tasks as a table.
+  const statuses = today.getByRole("list", { name: "Open work by status" });
+  await expect(statuses.getByRole("link", { name: /^Inbox \d+\W+open them as a table$/ })).toBeVisible();
 
   const line = card(page, "On the line");
   await expect(line).toContainText(/The 8 most pressing of \d+ open tasks/);
@@ -110,7 +112,7 @@ test("a goal page rolls up its sub-goals and draws its own timetable", async ({ 
   await card(page, "Goal map").getByRole("link", { name: "Launch the partner portal" }).click();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Launch the partner portal");
 
-  await expect(page.getByRole("img", { name: /^Tasks by status:.*done/ })).toBeVisible();
+  await expect(page.getByRole("list", { name: "Tasks by status" }).getByRole("link", { name: /^Done \d+/ })).toBeVisible();
   const subGoals = card(page, "Sub-goals");
   await expect(subGoals.getByRole("link", { name: "Partner onboarding docs" })).toBeVisible();
   await expect(subGoals.getByRole("link", { name: "Billing integration" })).toBeVisible();
@@ -141,6 +143,105 @@ test("the goals page lists every open goal, and peeks into a goal's tasks", asyn
   await expect(page).toHaveURL("/w/globex/goals?show=achieved");
   await expect(goal("Migrate the CRM")).toBeVisible();
   await expect(goal("Launch the partner portal")).toHaveCount(0);
+});
+
+test("a status in the overview's strip opens its tasks, which switch between board, table, calendar and map", async ({ page }) => {
+  await page.goto("/w/globex");
+  await page.getByRole("region", { name: "Today on the line" }).getByRole("link", { name: /^In progress \d+/ }).click();
+  await expect(page).toHaveURL("/w/globex/board?view=table&status=in_progress");
+  await expect(page.getByRole("heading", { level: 1, name: "Tasks" })).toBeVisible();
+  const layouts = page.getByRole("navigation", { name: "Task layout" });
+  await expect(layouts.getByRole("link", { name: "Table" })).toHaveAttribute("aria-current", "page");
+  const table = page.getByRole("table", { name: /^Tasks, sorted by due/ });
+  await expect(table.locator("tbody tr")).not.toHaveCount(0);
+  await expect(table.locator("tbody")).toContainText("In progress");
+  await expect(table.locator("tbody")).not.toContainText("To do");
+
+  // A column heading sorts by it; urgent work leads by priority.
+  await table.getByRole("link", { name: "Priority" }).click();
+  await expect(page).toHaveURL(/sort=priority&dir=asc/);
+  await expect(page.getByRole("columnheader", { name: "Priority" })).toHaveAttribute("aria-sort", "ascending");
+  const urgent = page.locator("tbody tr").first();
+  await expect(urgent).toContainText("Chase three overdue invoices");
+  // What waits on a person stays marked in every layout, as on the board.
+  await expect(urgent.getByRole("link", { name: "Decision for you" })).toBeVisible();
+  // The row whose task is open in the side peek is marked as the selected one.
+  await urgent.getByRole("link", { name: "Chase three overdue invoices" }).click();
+  await expect(page.getByRole("dialog", { name: "Task" })).toBeVisible();
+  await expect(urgent.getByRole("link", { name: "Chase three overdue invoices" })).toHaveAttribute("aria-current", "true");
+  await page.keyboard.press("Escape");
+
+  // The status filter carries to the other layouts; the sort stays with the table.
+  await layouts.getByRole("link", { name: "Calendar" }).click();
+  await expect(page).toHaveURL("/w/globex/board?status=in_progress&view=calendar");
+  const calendar = page.getByRole("table", { name: /^Tasks due in / });
+  await expect(calendar.locator('[aria-current="date"]')).toHaveCount(1);
+  // Each task names its status in words, not only by its dot's colour.
+  await expect(calendar.getByText("In progress:").first()).toBeAttached();
+  const month = await page.getByRole("heading", { level: 2 }).first().textContent();
+  await page.getByRole("link", { name: "Next month" }).click();
+  await expect(page.getByRole("heading", { level: 2 }).first()).not.toHaveText(month!);
+
+  await layouts.getByRole("link", { name: "Map" }).click();
+  await expect(page).toHaveURL("/w/globex/board?status=in_progress&view=map");
+  const map = page.getByRole("region", { name: "Map of goals and tasks" });
+  await expect(map.getByRole("link", { name: "Close the Q4 books" })).toBeVisible();
+  await expect(map.getByRole("link", { name: /^In progress: Chase three overdue invoices.*Decision for you.*Late$/ })).toBeVisible();
+  await map.getByRole("link", { name: "Chase three overdue invoices" }).click();
+  await expect(page.getByRole("dialog", { name: "Task" }).getByRole("heading", { name: "Chase three overdue invoices" })).toBeVisible();
+});
+
+test("search in the header suggests places, filters and matches as you type, by keyboard or mouse", async ({ page }) => {
+  await page.goto("/w/globex/goals");
+  // `/` focuses the header's search on a page without a search box of its own.
+  const box = page.getByRole("combobox", { name: "Search the workspace" });
+  // The shortcut listens once the page has hydrated, so press until it does.
+  await expect(async () => {
+    await page.keyboard.press("/");
+    await expect(box).toBeFocused({ timeout: 500 });
+  }).toPass();
+
+  await box.fill("invoice");
+  const list = page.getByRole("listbox", { name: /^Suggestions for / });
+  const match = list.getByRole("group", { name: "Tasks" }).getByRole("option", { name: /^Chase three overdue invoices/ });
+  await expect(match).toBeVisible();
+  await expect(list.getByRole("option", { name: "Search for “invoice”" })).toBeVisible();
+  await expect(box).toHaveAttribute("aria-expanded", "true");
+
+  // Escape closes the list and keeps the words; the mouse opens a match in the side peek.
+  await box.press("Escape");
+  await expect(box).toHaveAttribute("aria-expanded", "false");
+  await expect(box).toHaveValue("invoice");
+  await box.press("ArrowDown");
+  await match.click();
+  await expect(page.getByRole("dialog", { name: "Task" }).getByRole("heading", { name: "Chase three overdue invoices" })).toBeVisible();
+
+  // Another word for a page finds it; arrow keys and Enter go there.
+  await page.goto("/w/globex");
+  await box.fill("kanban");
+  // A page found by another word for it says which.
+  await expect(list.getByRole("option").first()).toHaveText("Taskskanban");
+  await box.press("ArrowDown");
+  await expect(list.getByRole("option").first()).toHaveAttribute("aria-selected", "true");
+  await box.press("Enter");
+  await expect(page).toHaveURL("/w/globex/board");
+
+  // A status filters the tasks; Enter with nothing highlighted searches for the words.
+  await box.fill("in progress");
+  await expect(list.getByRole("option", { name: "In progress tasks" })).toBeVisible();
+  await box.press("Enter");
+  await expect(page).toHaveURL("/w/globex/search?q=in+progress");
+});
+
+test("the calendar counts the tasks it cannot place, and the table lists just those", async ({ page }) => {
+  await page.goto("/w/globex/board?view=calendar");
+  await page.getByRole("link", { name: "See them in the table" }).click();
+  await expect(page).toHaveURL("/w/globex/board?view=table&due=none");
+  await expect(page.getByText("Showing tasks with no due date.")).toBeVisible();
+  await expect(page.locator("tbody tr")).not.toHaveCount(0);
+  for (const due of await page.locator("tbody tr td:nth-child(4)").allTextContents()) expect(due).toBe("None");
+  await page.getByRole("link", { name: "Show every task" }).click();
+  await expect(page).toHaveURL("/w/globex/board?view=table");
 });
 
 test("the board lanes follow the stations in order", async ({ page }) => {
