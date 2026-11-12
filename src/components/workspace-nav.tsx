@@ -3,8 +3,9 @@
 import { Bot, Brain, CalendarRange, FileText, KanbanSquare, LayoutDashboard, Scale, Search, Target, Users } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 
+import { useChipRail } from "@/components/ui/chip-rail";
 import { cx } from "@/lib/cx";
 import { WORKSPACE_PAGES, type WorkspacePageKey } from "@/lib/workspace-pages";
 
@@ -50,14 +51,10 @@ export function WorkspaceNav({ slug, counts }: { slug: string; counts: NavCounts
   const rail = useRef<HTMLElement>(null);
   const heading = clicked && clicked.from === pathname ? clicked.to : null;
 
-  useEffect(() => {
-    const current = rail.current?.querySelector<HTMLElement>("[aria-current=page]");
-    if (!current || !rail.current || rail.current.scrollWidth <= rail.current.clientWidth) return;
-    current.scrollIntoView({ inline: "center", block: "nearest" });
-  }, [pathname]);
+  useChipRail(rail, heading ?? pathname);
 
   return (
-    <nav ref={rail} aria-label="Workspace" className="relative -mx-1 flex gap-0.5 overflow-x-auto max-sm:pr-10 max-sm:mask-r-from-[calc(100%-2.5rem)]">
+    <nav ref={rail} aria-label="Workspace" className="chip-rail relative -mx-1 flex gap-0.5">
       {TABS.map(({ label, icon: Icon, href, ...tab }) => {
         const target = href(slug);
         const here = "exact" in tab ? pathname === target : pathname.startsWith(target);

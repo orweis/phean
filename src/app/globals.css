@@ -304,6 +304,34 @@
   }
 }
 
+/*
+ * A sideways rail of chips (the tab rail, the phone's lane picker, the layout switcher): it scrolls
+ * with a finger or the keyboard and draws no scrollbar, and fades at an edge while more lies beyond
+ * it (`data-more`, set by `useChipRail`), so the edge says there is more rather than a bar.
+ */
+@utility chip-rail {
+  --rail-fade: 2.25rem;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+
+  &[data-more="right"] {
+    mask-image: linear-gradient(to left, transparent, #000 var(--rail-fade));
+  }
+
+  &[data-more="left"] {
+    mask-image: linear-gradient(to right, transparent, #000 var(--rail-fade));
+  }
+
+  &[data-more="left right"] {
+    mask-image: linear-gradient(to right, transparent, #000 var(--rail-fade), #000 calc(100% - var(--rail-fade)), transparent);
+  }
+}
+
 /* The dusk band: a sky that darkens upward from the horizon, so the ember stays the boulder's alone. */
 @utility dusk {
   background-color: var(--color-dusk);
@@ -397,8 +425,15 @@
   html {
     /* The glass header is sticky: focused items and anchors stop below it, never under it. */
     scroll-padding-top: 7.5rem;
-    scrollbar-color: var(--color-faint) transparent;
     -webkit-tap-highlight-color: transparent;
+
+    /*
+     * Quiet scrollbars where there is a mouse. Touch screens keep their own overlay indicators, which
+     * only show while scrolling: a scrollbar colour there forces a bar that stays drawn.
+     */
+    @media (pointer: fine) {
+      scrollbar-color: var(--color-faint) transparent;
+    }
   }
 
   html,
