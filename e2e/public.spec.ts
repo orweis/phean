@@ -80,6 +80,13 @@ test("the docs are one click from the landing page, and walk page to page", asyn
   await expect(page.locator('nav[aria-label="Docs"] [aria-current="page"]').first()).toHaveText("Getting started");
 
 
+  // Each agent has its own page under Agents, from connecting it to hearing back.
+  await page.goto("/docs/agents");
+  await expect(page.getByRole("heading", { level: 1, name: "Agents" })).toBeVisible();
+  await page.getByRole("table").getByRole("link", { name: "Grok" }).click();
+  await expect(page).toHaveURL("/docs/grok");
+  for (const section of ["Connect in the Grok app", "Teach it Phean", "Sync up", "Hear back"]) await expect(page.getByRole("heading", { level: 2, name: section })).toBeVisible();
+
   // Agents read the same docs as Markdown.
   const llms = await (await page.request.get("/llms.txt")).text();
   expect(llms).toMatch(/^# Phean/);

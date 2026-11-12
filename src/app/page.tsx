@@ -54,6 +54,7 @@ const ASSISTANT_POINTS = [
 const DOCS = [
   { title: "Getting started", slug: "getting-started" },
   { title: "Connect an agent", slug: "connect-an-agent" },
+  { title: "Agents", slug: "agents" },
   { title: "Decisions", slug: "decisions" },
   { title: "Webhooks", slug: "webhooks" },
   { title: "Realtime events", slug: "realtime" },
