@@ -89,12 +89,12 @@
   --color-station-inbox: var(--color-inbox);
   /* Parked work: a grey quieter than to do's lavender, since nothing is planned for it yet. */
   --color-station-backlog: oklch(84% 0.015 280);
-  --color-station-todo: oklch(80% 0.06 300);
+  --color-station-todo: oklch(72% 0.13 322);
   --color-station-progress: oklch(55% 0.19 292);
   --color-station-done: oklch(62% 0.13 158);
   /* Darker cuts of the waiting stations for thin timetable lines, at 3:1 on a card. */
   --color-line-inbox: oklch(60% 0.12 235);
-  --color-line-todo: oklch(60% 0.07 298);
+  --color-line-todo: oklch(56% 0.15 322);
   --color-line-backlog: oklch(62% 0.03 280);
 
   --color-focus: oklch(54% 0.2 292);
@@ -393,11 +393,11 @@
       --color-arrive-tint: oklch(28% 0.05 160);
 
       --color-station-backlog: oklch(46% 0.02 285);
-      --color-station-todo: oklch(58% 0.06 298);
+      --color-station-todo: oklch(74% 0.12 322);
       --color-station-progress: oklch(65% 0.17 292);
       --color-station-done: oklch(68% 0.13 158);
       --color-line-inbox: oklch(68% 0.11 232);
-      --color-line-todo: oklch(64% 0.06 298);
+      --color-line-todo: oklch(72% 0.12 322);
       --color-line-backlog: oklch(66% 0.03 280);
 
       --color-focus: oklch(72% 0.15 294);

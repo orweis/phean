@@ -36,11 +36,11 @@ colors:
   arrive-ink: "oklch(44% 0.1 158)"
   arrive-tint: "oklch(95.6% 0.032 160)"
   station-backlog: "oklch(84% 0.015 280)"
-  station-todo: "oklch(80% 0.06 300)"
+  station-todo: "oklch(72% 0.13 322)"
   station-progress: "oklch(55% 0.19 292)"
   station-done: "oklch(62% 0.13 158)"
   line-inbox: "oklch(60% 0.12 235)"
-  line-todo: "oklch(60% 0.07 298)"
+  line-todo: "oklch(56% 0.15 322)"
   line-backlog: "oklch(62% 0.03 280)"
   focus: "oklch(54% 0.2 292)"
   dusk: "oklch(27% 0.09 292)"
@@ -84,10 +84,10 @@ colors:
   dark-arrive-ink: "oklch(79% 0.12 158)"
   dark-arrive-tint: "oklch(28% 0.05 160)"
   dark-station-backlog: "oklch(46% 0.02 285)"
-  dark-station-todo: "oklch(58% 0.06 298)"
+  dark-station-todo: "oklch(74% 0.12 322)"
   dark-station-progress: "oklch(65% 0.17 292)"
   dark-station-done: "oklch(68% 0.13 158)"
-  dark-line-todo: "oklch(64% 0.06 298)"
+  dark-line-todo: "oklch(72% 0.12 322)"
   dark-line-backlog: "oklch(66% 0.03 280)"
   dark-focus: "oklch(72% 0.15 294)"
   dark-hill: "oklch(63% 0.17 292)"
@@ -289,7 +289,7 @@ A cool lavender ground under a violet brand, with one ember signal and four stat
 - **Inbox sky** (`inbox`, `inbox-ink`, `inbox-tint`): what just arrived and is still to triage: the inbox station, its line and its badge. A cool sky blue, so it never reads as waiting on a person, which is ember's alone.
 - **Moving** (`move`, `move-ink`, `move-tint`): in-progress work, active goals and agent claims. It is the violet, by reference, so moving work and the brand are one hue.
 - **Arrived green** (`arrive`, `arrive-ink`, `arrive-tint`): done tasks, achieved goals, active agents.
-- **The five stations**: inbox is sky (`station-inbox`), backlog is a quiet grey (`station-backlog`), to do is lavender (`station-todo`), in progress is violet (`station-progress`), and done is green (`station-done`). Thin timetable lines use the darker cuts `line-inbox`, `line-backlog` and `line-todo`, which keep 3:1 against a card; backlog's line is dotted, since nothing is planned for it yet. A workspace's own stages take the colour of their kind: a "Review" stage inside In progress is violet.
+- **The five stations**: inbox is sky (`station-inbox`), backlog is a quiet grey (`station-backlog`), to do is orchid (`station-todo`), a pink-violet set well apart from backlog's grey in hue, chroma and lightness, and lighter than in progress so the two never merge, in progress is violet (`station-progress`), and done is green (`station-done`). Thin timetable lines use the darker cuts `line-inbox`, `line-backlog` and `line-todo`, which keep 3:1 against a card; backlog's line is dotted, since nothing is planned for it yet. A workspace's own stages take the colour of their kind: a "Review" stage inside In progress is violet.
 
 ### Neutral
 
