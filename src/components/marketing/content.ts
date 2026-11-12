@@ -68,7 +68,7 @@ export const USE_CASES: UseCase[] = [
   {
     key: "operations",
     label: "Finance & operations",
-    headline: "The back office runs itself. The judgment calls don't.",
+    headline: "Agents reconcile and chase; people approve what moves money.",
     pitch:
       "Agents reconcile, chase and file. When money moves or a vendor is chosen, they stop and ask, with the numbers and their recommendation in the request, and every answer stays on the record.",
     agents: ["Sweep the inbox for invoices and requests", "Reconcile and chase what is late", "Keep shared memory of vendors and policies"],
@@ -98,7 +98,7 @@ export const USE_CASES: UseCase[] = [
     decisions: ["Approve the proposed goal “Hire a support lead”", "Which three candidates get interviews? Pick any", "Renew the office lease or move?"],
     story: [
       { time: "06:55", who: "Inbox sweeper", type: "agent", station: "inbox", text: "Captured 4 commitments from overnight email, with due dates." },
-      { time: "07:00", who: "Phean", type: "agent", station: "wait", text: "Morning digest: 3 things waiting on you, 1 late, 6 done overnight." },
+      { time: "07:00", who: "You", type: "user", station: "wait", text: "Read the morning digest email: 3 things waiting on you, 1 late, 6 done overnight." },
       { time: "07:40", who: "You", type: "user", station: "move", text: "Approved the goal “Hire a support lead” proposed by the planner." },
       {
         time: "08:05",
@@ -114,4 +114,4 @@ export const USE_CASES: UseCase[] = [
 ];
 
 /** The MCP clients the docs show setup for; Phean works with any MCP client. */
-export const CLIENTS = ["Claude Code", "Cursor", "VS Code", "any MCP client"];
+export const CLIENTS = ["Claude Code", "Cursor", "VS Code"];

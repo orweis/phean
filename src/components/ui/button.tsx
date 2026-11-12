@@ -5,7 +5,7 @@ import type { ComponentProps, ReactNode } from "react";
 import { cx } from "@/lib/cx";
 
 export type ButtonVariant = "primary" | "tinted" | "secondary" | "ghost" | "danger" | "dusk" | "signal";
-export type ButtonSize = "sm" | "md" | "menu";
+export type ButtonSize = "sm" | "md" | "lg" | "menu";
 
 const VARIANTS: Record<ButtonVariant, string> = {
   /** The prominent action of a view; keep it to one or two per screen. */
@@ -17,7 +17,7 @@ const VARIANTS: Record<ButtonVariant, string> = {
   danger: "bg-late-tint text-late-ink hover:bg-late/20 active:bg-late/25",
   /** For quiet controls on a dusk band. */
   dusk: "text-dusk-muted hover:bg-dusk-2 hover:text-dusk-ink active:bg-dusk-2",
-  /** The one call to action on a dusk band: the ember of the boulder. */
+  /** The one call to action on a dusk band: the ember of the logo's boulder. */
   signal: "bg-signal text-on-signal hover:bg-signal-2 active:bg-signal-2",
 };
 
@@ -25,6 +25,8 @@ const VARIANTS: Record<ButtonVariant, string> = {
 const SIZES: Record<ButtonSize, string> = {
   sm: "relative h-8 justify-center gap-1.5 rounded-full px-3 text-xs after:absolute after:inset-x-0 after:-inset-y-1.5 [&_svg]:size-3.5",
   md: "h-9 justify-center gap-2 rounded-full px-4 text-sm [&_svg]:size-4",
+  /** The marketing site's calls to action, 48px tall. */
+  lg: "h-12 justify-center gap-2 rounded-full px-6 text-md [&_svg]:size-4",
   /** A row of a menu panel: full width, its label at the start, 36px tall. */
   menu: "h-9 w-full justify-start gap-2 rounded-md px-2.5 text-sm [&_svg]:size-4 [&_svg]:text-muted",
 };

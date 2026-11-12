@@ -1,4 +1,3 @@
-import { ArrowRight, Sparkles } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 
@@ -9,6 +8,7 @@ import { DecisionHub } from "@/components/marketing/decision-hub";
 import { FeatureGrid } from "@/components/marketing/feature-grid";
 import { FlipDemo } from "@/components/marketing/flip-demo";
 import { HeroDemo } from "@/components/marketing/hero-demo";
+import { MotionToggle } from "@/components/marketing/motion-toggle";
 import { CLIENTS } from "@/components/marketing/content";
 import { ProductFrame } from "@/components/marketing/product-frame";
 import { UseCases } from "@/components/marketing/use-cases";
@@ -42,12 +42,11 @@ const DOCS = [
   { title: "Self-hosting", slug: "self-hosting" },
 ];
 
-/** A section's heading block: an eyebrow, the display headline, and a lede. */
-function SectionIntro({ id, eyebrow, title, lede, tone = "light", className }: { id: string; eyebrow: string; title: string; lede: string; tone?: "light" | "dusk"; className?: string }) {
+/** A section's heading block: the display headline and a lede. */
+function SectionIntro({ id, title, lede, tone = "light", className }: { id: string; title: string; lede: string; tone?: "light" | "dusk"; className?: string }) {
   return (
     <div data-rise className={cx("max-w-3xl", className)}>
-      <p className={cx("text-sm font-semibold", tone === "dusk" ? "text-signal" : "text-accent-ink")}>{eyebrow}</p>
-      <h2 id={id} className={cx("display mt-3 text-[clamp(2.25rem,5vw,4rem)]", tone === "dusk" ? "text-dusk-ink" : "text-ink")}>
+      <h2 id={id} className={cx("display text-[clamp(2.25rem,5vw,4rem)]", tone === "dusk" ? "text-dusk-ink" : "text-ink")}>
         {title}
       </h2>
       <p className={cx("mt-5 max-w-2xl text-lg leading-relaxed", tone === "dusk" ? "text-dusk-muted" : "text-ink-2")}>{lede}</p>
@@ -73,10 +72,10 @@ export default async function LandingPage() {
   const connect = `claude mcp add --transport http phean ${mcpResourceUrl()}`;
 
   return (
-    <div className="min-h-dvh overflow-x-clip">
+    <div className="min-h-dvh">
       <header className="glass-bar text-ink">
         <div className="mx-auto flex h-16 max-w-7xl items-center gap-2 px-4 sm:px-6">
-          <Logo className="mr-4" />
+          <Logo className="sm:mr-4" />
           <nav aria-label="Site" className="flex items-center gap-1 max-md:hidden">
             {[
               { href: "#flip", label: "Why Phean" },
@@ -90,9 +89,6 @@ export default async function LandingPage() {
             ))}
           </nav>
           <nav aria-label="Account" className="ml-auto flex items-center gap-1 sm:gap-2">
-            <ButtonLink href={routes.docs()} variant="ghost" className="md:hidden">
-              Docs
-            </ButtonLink>
             {signedIn ? (
               <ButtonLink href={routes.workspaces()} variant="primary">
                 Open Phean
@@ -114,28 +110,20 @@ export default async function LandingPage() {
       <main>
         <section aria-labelledby="hero-heading" className="relative isolate">
           <div aria-hidden data-drift className="brand-mesh absolute inset-x-0 -top-16 -z-10 h-[calc(100%+4rem)] mask-b-from-70%" />
-          <div className="mx-auto grid max-w-7xl grid-cols-1 items-center gap-x-12 gap-y-16 px-4 pt-14 pb-24 sm:px-6 sm:pt-20 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] lg:pb-32">
+          <div className="mx-auto grid max-w-7xl grid-cols-1 items-center gap-x-12 gap-y-16 px-4 pt-14 pb-16 sm:px-6 sm:pt-24 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] lg:pb-20">
             <div>
-              <p className="eyebrow-pill">
-                <span className="inline-flex items-center gap-1 rounded-full bg-accent px-2 py-0.5 text-on-accent">
-                  <Sparkles aria-hidden className="size-3" /> New
-                </span>
-                Task management, flipped
-              </p>
-              <h1 id="hero-heading" className="display mt-6 text-[clamp(3rem,7.4vw,6.25rem)] text-ink">
-                Agents do the tasks.{" "}
-                <span className="bg-linear-to-r from-accent via-station-progress to-signal-shade bg-clip-text text-transparent">You make the calls.</span>
+              <h1 id="hero-heading" className="display text-[clamp(2.75rem,6vw,5rem)] text-ink">
+                AI agents do the tasks. <span className="text-accent-ink">You make the calls.</span>
               </h1>
               <p className="mt-6 max-w-xl text-lg leading-relaxed text-ink-2">
-                Phean is the decision center for your fleet of AI agents. They capture the work from every inbox, claim it so no two collide, and get it done.
-                Every call that needs a person lands in one place, with the context, a recommendation, and a way back to the agent.
+                Phean is the decision center for your agents. They capture, claim and finish the work; every call that needs you waits in one place, with a way back to
+                the agent.
               </p>
               <div className="mt-8 flex flex-wrap items-center gap-3">
-                <ButtonLink href={start.href} variant="primary" className="h-12 px-6 text-md">
+                <ButtonLink href={start.href} variant="primary" size="lg">
                   {start.label}
-                  <ArrowRight aria-hidden />
                 </ButtonLink>
-                <ButtonLink href="#decisions" variant="secondary" className="h-12 px-6 text-md">
+                <ButtonLink href="#decisions" variant="secondary" size="lg">
                   See how decisions work
                 </ButtonLink>
               </div>
@@ -144,7 +132,12 @@ export default async function LandingPage() {
                 <ConnectCommand command={connect} />
               </div>
             </div>
-            <HeroDemo />
+            <div>
+              <HeroDemo />
+              <div className="mt-8 flex justify-end xl:mt-40">
+                <MotionToggle />
+              </div>
+            </div>
           </div>
         </section>
 
@@ -152,19 +145,19 @@ export default async function LandingPage() {
           <p className="mx-auto flex max-w-7xl flex-wrap items-center justify-center gap-x-8 gap-y-2 px-4 py-6 text-sm text-ink-2 sm:px-6">
             <span className="font-semibold text-ink">Works with the agents you already run:</span>
             {CLIENTS.map((client) => (
-              <span key={client} className="font-display text-md font-semibold text-ink-2">
+              <span key={client} className="font-display text-md font-bold text-ink-2">
                 {client}
               </span>
             ))}
+            <span>and any MCP client</span>
           </p>
         </section>
 
         <section id="flip" aria-labelledby="flip-heading" className="mx-auto max-w-7xl scroll-mt-20 px-4 py-24 sm:px-6 sm:py-32">
           <SectionIntro
             id="flip-heading"
-            eyebrow="Task management, flipped"
-            title="People typing tasks for software was always backwards."
-            lede="Trackers were built for people to enter work and update its status by hand. Your agents already read the email, the thread and the pull request. In Phean they write the tasks, keep them current and close them, so the people stop being data entry and start being the judgment."
+            title="Task management, flipped."
+            lede="Trackers were built for people to type in work and update its status for other people to read. Your agents already read the email, the thread and the issue first. In Phean they write the tasks, keep them current and close them, so people stop being data entry and start being the judgment."
           />
           <div data-rise className="mt-14">
             <FlipDemo />
@@ -176,14 +169,13 @@ export default async function LandingPage() {
             <SectionIntro
               id="decisions-heading"
               tone="dusk"
-              eyebrow="One place for every decision"
               title="A fleet of agents needs one place to ask."
               lede="Ten agents in ten chat windows means ten places a question can wait unseen. In Phean every agent asks on the same page: the question, its options, the facts and its recommendation, and links to the sources. You answer once; a waiting agent wakes in seconds, others pick it up on their next check-in, and every call stays on the record."
             />
             <div data-rise className="mt-14">
               <DecisionHub />
             </div>
-            <ul className="mt-16 grid gap-8 text-sm sm:grid-cols-2 lg:grid-cols-4">
+            <ul className="mt-16 grid grid-cols-1 gap-8 text-sm sm:grid-cols-2 lg:grid-cols-4">
               {[
                 ["Decide in one click", "Pick an option, tick several, or write your own answer. Number keys pick, J and K move between requests."],
                 ["Back into the session", "Every request links to the agent's conversation, so the full context is one click away."],
@@ -191,7 +183,7 @@ export default async function LandingPage() {
                 ["A record of every call", "What was asked, what was picked and whether the agent has it, kept on the Decisions page."],
               ].map(([title, body]) => (
                 <li key={title} data-rise>
-                  <p className="font-display text-lg font-bold text-dusk-ink">{title}</p>
+                  <h3 className="font-display text-lg font-bold text-dusk-ink">{title}</h3>
                   <p className="mt-2 text-dusk-muted">{body}</p>
                 </li>
               ))}
@@ -202,7 +194,6 @@ export default async function LandingPage() {
         <section id="use-cases" aria-labelledby="use-cases-heading" className="mx-auto max-w-7xl scroll-mt-20 px-4 py-24 sm:px-6 sm:py-32">
           <SectionIntro
             id="use-cases-heading"
-            eyebrow="Use cases"
             title="For every team that runs agents."
             lede="Marketing teams, software factories, finance and operations, founders with a handful of assistants: the agents differ, and the shape is the same. Agents do the work; the calls come to one place."
           />
@@ -215,7 +206,6 @@ export default async function LandingPage() {
           <div className="mx-auto max-w-7xl px-4 py-24 sm:px-6 sm:py-32">
             <SectionIntro
               id="line-heading"
-              eyebrow="See it all move"
               title="Every task on one line."
               lede="Each task is a track from the day an agent captured it, stepping through its stages against a red line for now. Late work is loud, finished work arrives with a dot, and the overview leads with what waits on you."
             />
@@ -233,9 +223,8 @@ export default async function LandingPage() {
         <section aria-labelledby="features-heading" className="mx-auto max-w-7xl px-4 py-24 sm:px-6 sm:py-32">
           <SectionIntro
             id="features-heading"
-            eyebrow="Everything the work needs"
             title="Built for agents first, readable by people."
-            lede="Forty-five MCP tools teach agents the loop: capture, claim, ask, complete, remember. People get the views, the digest and the controls."
+            lede="Phean's MCP tools teach agents the loop: capture, claim, ask, complete, remember. People get the views, the digest and the controls."
           />
           <div className="mt-12">
             <FeatureGrid />
@@ -244,11 +233,11 @@ export default async function LandingPage() {
 
         <section aria-labelledby="steps-heading" className="mx-auto max-w-7xl px-4 pb-24 sm:px-6 sm:pb-32">
           <h2 id="steps-heading" data-rise className="display text-[clamp(2rem,4vw,3rem)] text-ink">
-            Running in three steps.
+            Connect your first agent in three steps.
           </h2>
-          <ol className="mt-10 grid gap-6 md:grid-cols-3">
+          <ol className="mt-10 grid grid-cols-1 gap-6 md:grid-cols-3">
             {STEPS.map(({ title, body }, index) => (
-              <li key={title} data-rise className="rounded-xl border border-rule bg-panel p-6">
+              <li key={title} data-rise className="rounded-lg border border-rule bg-panel p-6">
                 <p className="font-display text-4xl font-bold text-accent">{index + 1}</p>
                 <h3 className="mt-3 text-md font-semibold text-ink">{title}</h3>
                 <p className="mt-1.5 text-sm text-ink-2">{body}</p>
@@ -267,15 +256,14 @@ export default async function LandingPage() {
           <div aria-hidden data-drift className="brand-mesh absolute inset-0 -z-10" />
           <div className="mx-auto max-w-7xl px-4 py-24 text-center sm:px-6 sm:py-32">
             <h2 id="close-heading" className="display mx-auto max-w-4xl text-[clamp(2.5rem,6vw,5rem)] text-ink">
-              Stop typing tasks. Start making the calls.
+              Your agents are already doing the work. Give them one place to ask.
             </h2>
             <p className="mx-auto mt-5 max-w-xl text-lg text-ink-2">Connect your first agent in a minute. It will have work in your ledger before you finish reading the docs.</p>
             <div className="mt-8 flex flex-wrap justify-center gap-3">
-              <ButtonLink href={start.href} variant="primary" className="h-12 px-6 text-md">
+              <ButtonLink href={start.href} variant="primary" size="lg">
                 {start.label}
-                <ArrowRight aria-hidden />
               </ButtonLink>
-              <ButtonLink href={routes.docs()} variant="secondary" className="h-12 px-6 text-md">
+              <ButtonLink href={routes.docs()} variant="secondary" size="lg">
                 Read the docs
               </ButtonLink>
             </div>

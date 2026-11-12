@@ -49,8 +49,11 @@ export function DecisionHub() {
       </svg>
 
       <div className="product-frame">
-        <div className="flex items-center justify-between border-b border-rule bg-wait-tint px-4 py-3">
-          <p className="text-sm font-semibold text-ink">Decisions</p>
+        <div className="flex items-center justify-between gap-3 border-b border-rule bg-wait-tint px-4 py-3">
+          <p className="text-sm font-semibold text-ink">
+            Decisions
+            <span className="block text-xs font-normal text-wait-ink">{"Each with its options, the agent's context and recommendation, and its session"}</span>
+          </p>
           <span className="rounded-full bg-signal px-2 text-xs leading-5 font-bold text-on-signal">
             4<span className="sr-only"> waiting on you</span>
           </span>
@@ -65,7 +68,7 @@ export function DecisionHub() {
                 </Badge>
                 <span className="text-sm font-semibold text-ink">{ask}</span>
               </p>
-              <p className="mt-1 text-xs text-muted">{agent} · options, context and a recommendation · resume its session</p>
+              <p className="mt-1 text-xs text-muted">{agent}</p>
             </li>
           ))}
         </ul>

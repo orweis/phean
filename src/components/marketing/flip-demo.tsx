@@ -1,27 +1,23 @@
 import { ArrowRight, GitPullRequest, Mail, MessageSquare } from "lucide-react";
-import type { CSSProperties } from "react";
-
 import { StationDot } from "@/components/task-marks";
 import { ActorAvatar } from "@/components/ui/avatar";
 
-const beat = (value: number) => ({ "--beat": value }) as CSSProperties;
-
 const CAPTURED = [
-  { icon: Mail, source: "Email", who: "Mail clerk", text: "Follow up with Northwind about the renewal", status: "inbox", at: 0.05 },
-  { icon: MessageSquare, source: "Slack", who: "Slack scout", text: "Draft the launch post from #marketing", status: "inbox", at: 0.14 },
-  { icon: GitPullRequest, source: "GitHub", who: "Triage agent", text: "Fix the flaky export test", status: "in_progress", at: 0.23 },
-  { icon: Mail, source: "Email", who: "Mail clerk", text: "Send W-9s to two new vendors", status: "done", at: 0.32 },
+  { icon: Mail, source: "an email", who: "Mail clerk", text: "Follow up with Northwind about the renewal", status: "inbox" },
+  { icon: MessageSquare, source: "a Slack thread", who: "Slack scout", text: "Draft the launch post from #marketing", status: "inbox" },
+  { icon: GitPullRequest, source: "an issue", who: "Triage agent", text: "Fix the flaky export test", status: "in_progress" },
+  { icon: Mail, source: "an email", who: "Mail clerk", text: "Send W-9s to two new vendors", status: "done" },
 ] as const;
 
 /**
  * Task management, flipped: on the left the old ritual (a person typing a task into a form for other
- * people), on the right the same work arriving from email, Slack and GitHub by itself, captured,
- * claimed and closed by agents. The new side loops (`data-demo`); both sides are sample pictures.
+ * people), on the right the same work arriving from email, Slack and issues by itself, captured,
+ * claimed and closed by agents. Its lines rise in once as they scroll into view; both sides are sample pictures.
  */
 export function FlipDemo() {
   return (
-    <div data-demo className="grid grid-cols-1 items-stretch gap-5 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
-      <figure className="rounded-xl border border-dashed border-edge bg-fill/60 p-5">
+    <div className="grid grid-cols-1 items-stretch gap-5 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
+      <figure className="rounded-lg border border-dashed border-edge bg-fill/60 p-5">
         <figcaption className="text-xs font-semibold text-muted">Before: you, typing</figcaption>
         <div aria-hidden className="mt-4 space-y-3 opacity-80 grayscale">
           {[
@@ -47,8 +43,8 @@ export function FlipDemo() {
       <figure className="product-frame p-5">
         <figcaption className="text-xs font-semibold text-accent-ink">Now: your agents, on their own</figcaption>
         <ul className="mt-4 space-y-3">
-          {CAPTURED.map(({ icon: Icon, source, who, text, status, at }) => (
-            <li key={text} data-arrive style={beat(at)} className="flex items-start gap-3 rounded-md border border-rule bg-panel p-3">
+          {CAPTURED.map(({ icon: Icon, source, who, text, status }) => (
+            <li key={text} data-rise className="flex items-start gap-3 border-b border-rule pb-3 last:border-b-0 last:pb-0">
               <ActorAvatar type="agent" />
               <div className="min-w-0 text-xs">
                 <p className="font-semibold text-ink">{text}</p>

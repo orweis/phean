@@ -1,5 +1,6 @@
 import { Check } from "lucide-react";
 
+import { STATION_STYLE } from "@/components/charts/stations";
 import { ActorAvatar } from "@/components/ui/avatar";
 import { cx } from "@/lib/cx";
 
@@ -15,12 +16,12 @@ export interface ActivityEntry {
   options?: { label: string; picked?: boolean }[];
 }
 
-/** The station hues of the ledger, so each line reads the way it would on the board; the words carry it too. */
+/** Each line's hue from the system (the stations, and the wait tone for what waits on a person); the words carry it too. */
 const DOT: Record<ActivityStation, { fill: string; label: string }> = {
-  inbox: { fill: "bg-station-inbox", label: "Captured" },
-  wait: { fill: "bg-signal", label: "Waiting on a person" },
-  move: { fill: "bg-station-progress", label: "In motion" },
-  done: { fill: "bg-station-done", label: "Done" },
+  inbox: { fill: STATION_STYLE.inbox.fill, label: "Captured" },
+  wait: { fill: "bg-wait", label: "Waiting on a person" },
+  move: { fill: STATION_STYLE.in_progress.fill, label: "In motion" },
+  done: { fill: STATION_STYLE.done.fill, label: "Done" },
 };
 
 /**

@@ -18,7 +18,6 @@
 /* Hallmark · reworded "agentId", "invitationId", "memberId", "memoryId" and "taskId" · one-click actions still post each id, as hidden inputs that ActionButton renders from its fields prop */
 @import "tailwindcss";
 @import "@fontsource-variable/inter/opsz.css";
-@import "@fontsource-variable/bricolage-grotesque/opsz.css";
 
 /*
  * Dark is the person's choice (data-appearance on <html>, from the appearance cookie), or the device's
@@ -125,7 +124,7 @@
   --font-rounded: var(--font-sans);
   --font-mono: ui-monospace, "SF Mono", "SFMono-Regular", Menlo, monospace;
   /* Headlines: page titles in the app, and the marketing site's display type. A grotesque with optical sizes, so it tightens large. */
-  --font-display: "Bricolage Grotesque Variable", var(--font-sans);
+  --font-display: var(--font-bricolage), "Inter Variable", ui-sans-serif, sans-serif;
 
   --text-2xs: 0.6875rem;
   --text-2xs--line-height: 1rem;
@@ -144,7 +143,7 @@
 
   --tracking-title: -0.016em;
   --tracking-display: -0.028em;
-  --tracking-hero: -0.045em;
+  --tracking-hero: -0.035em;
 
   --radius-xs: 4px;
   --radius-sm: 6px;
@@ -633,16 +632,34 @@
  * and sections rise into view. Everything here is visible and still without motion.
  */
 @layer components {
-  /* Every brand hue at once, softly: the violet of work in motion, the ember of what waits on you, the sky of what just arrived, the green of what is done. */
+  /*
+   * Every brand hue at once, softly: the violet of work in motion, the ember of what waits on you,
+   * the sky of what just arrived, the green of what is done. The fields live on an oversized
+   * ::before, so drifting them is a transform, never a repaint; in dark they are fainter, so they
+   * read as colour in the night rather than glows.
+   */
   .brand-mesh {
+    --mesh: 1;
+    position: relative;
+    overflow: hidden;
     background-color: var(--color-paper);
-    background-image:
-      radial-gradient(38% 52% at 12% 18%, color-mix(in oklch, var(--color-accent) 34%, transparent), transparent 70%),
-      radial-gradient(34% 46% at 88% 12%, color-mix(in oklch, var(--color-signal) 40%, transparent), transparent 70%),
-      radial-gradient(36% 48% at 72% 78%, color-mix(in oklch, var(--color-inbox) 32%, transparent), transparent 70%),
-      radial-gradient(30% 40% at 24% 86%, color-mix(in oklch, var(--color-arrive) 22%, transparent), transparent 70%);
-    background-size: 140% 140%;
-    background-position: 50% 50%;
+
+    &::before {
+      content: "";
+      position: absolute;
+      inset: -20%;
+      z-index: -1;
+      opacity: var(--mesh);
+      background-image:
+        radial-gradient(30% 42% at 22% 28%, color-mix(in oklch, var(--color-accent) 34%, transparent), transparent 70%),
+        radial-gradient(28% 38% at 78% 24%, color-mix(in oklch, var(--color-signal) 40%, transparent), transparent 70%),
+        radial-gradient(30% 40% at 66% 74%, color-mix(in oklch, var(--color-inbox) 32%, transparent), transparent 70%),
+        radial-gradient(24% 34% at 30% 78%, color-mix(in oklch, var(--color-arrive) 22%, transparent), transparent 70%);
+    }
+
+    @variant dark {
+      --mesh: 0.45;
+    }
   }
 
   /* A held-up picture of the app: a panel, rounded a step more than a card, on the lift shadow. */
@@ -658,26 +675,14 @@
     font-family: var(--font-display);
     font-weight: 700;
     letter-spacing: var(--tracking-hero);
-    line-height: 0.98;
+    line-height: 1.02;
     text-wrap: balance;
   }
 
-  .eyebrow-pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    border-radius: 9999px;
-    background-color: color-mix(in oklch, var(--color-panel) 80%, transparent);
-    box-shadow: inset 0 0 0 1px var(--color-rule);
-    padding: 0.3rem 0.85rem 0.3rem 0.35rem;
-    font-size: var(--text-xs);
-    font-weight: 600;
-    color: var(--color-ink-2);
-  }
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .brand-mesh[data-drift] {
+  .brand-mesh[data-drift]::before {
     animation: mesh-drift 22s ease-in-out infinite alternate;
   }
 
@@ -698,9 +703,9 @@
     --cycle: 14s;
   }
 
-  [data-demo] [data-arrive] {
-    animation: demo-arrive var(--cycle) var(--ease-out) infinite;
-    animation-delay: calc(var(--beat, 0) * var(--cycle) - var(--cycle));
+  /* A line that arrives when the agent hears the answer, just after the toast says it was sent. */
+  [data-demo] [data-heard] {
+    animation: demo-heard var(--cycle) var(--ease-out) infinite;
   }
 
   [data-demo] [data-pick] {
@@ -736,8 +741,13 @@
 
 @keyframes mesh-drift {
   to {
-    background-position: 30% 70%;
+    transform: translate(6%, -4%) rotate(4deg);
   }
+}
+
+/* "Pause motion" on the site (WCAG 2.2.2): everything that loops stops where it is. */
+[data-paused] :is([data-demo] *, [data-drift], [data-drift]::before) {
+  animation-play-state: paused !important;
 }
 
 @keyframes rise {
@@ -747,15 +757,14 @@
   }
 }
 
-/* A line of activity slides in at its beat and stays for the rest of the cycle. */
-@keyframes demo-arrive {
+@keyframes demo-heard {
   0%,
-  4% {
+  44% {
     opacity: 0;
     transform: translateY(0.75rem);
   }
-  9%,
-  92% {
+  50%,
+  94% {
     opacity: 1;
     transform: none;
   }

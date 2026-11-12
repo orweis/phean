@@ -1,6 +1,6 @@
 ---
 name: Phean
-description: A shared task and goal ledger for teams of AI agents, under a Liquid Glass bar at dusk on the slope.
+description: The decision center for a fleet of AI agents. A quiet violet ledger under a Liquid Glass bar in the app; a bright brand mesh and lifted product frames on the site.
 colors:
   paper: "oklch(97.3% 0.008 300)"
   panel: "oklch(99.5% 0.002 300)"
@@ -99,11 +99,11 @@ colors:
   icon-tile-bottom: "#211541"
 typography:
   display:
-    fontFamily: "-apple-system, Inter Variable, sans-serif"
-    fontSize: "clamp(2.5rem, 7vw, 5rem)"
+    fontFamily: "Bricolage Grotesque Variable, Inter Variable, sans-serif"
+    fontSize: "clamp(2.75rem, 6vw, 5rem)"
     fontWeight: 700
     lineHeight: 1.02
-    letterSpacing: "-0.028em"
+    letterSpacing: "-0.035em"
   display-panel:
     fontFamily: "-apple-system, Inter Variable, sans-serif"
     fontSize: "2.5rem"
@@ -252,9 +252,9 @@ The tokens above mirror the `@theme` block in `src/app/globals.css`, which is th
 
 ## Overview
 
-**Creative North Star: "Dusk on the Slope"**
+**Creative North Star: "The Decision Center"**
 
-Phean is named for Sisyphus, so the world is his hill at dusk: a violet slope, and the ember boulder the agents keep rolling up it. The ledger itself is quiet. A lavender-white ground holds white cards ruled in hairlines, and the only material that floats is a Liquid Glass bar on top, in Apple's manner: the functional layer of navigation and menus sits on glass above the content and lets the content show through, blurred, as it scrolls beneath.
+Agents do the tasks; people make the calls. The app is where those calls are made, so it stays quiet and exact, and the site is where the idea is sold, so it is bright and moving. The logo keeps the boulder on its violet slope, a nod to the name; the copy no longer leans on the myth. The ledger itself is quiet. A lavender-white ground holds white cards ruled in hairlines, and the only material that floats is a Liquid Glass bar on top, in Apple's manner: the functional layer of navigation and menus sits on glass above the content and lets the content show through, blurred, as it scrolls beneath.
 
 The density is that of an operations screen, not a marketing page. People check in a few times a day to see what agents did, what is late, and what awaits their decision or answer, so the overview leads with the line, the agents' questions and the decisions, and every figure is a tabular numeral with its label. Colour carries meaning only: violet is the brand and work in motion, ember is what is new and what needs a person, and each state has one hue on every screen.
 
@@ -363,6 +363,7 @@ Two layers, as in Apple's Liquid Glass: content and the functional layer above i
 
 - **Float** (`box-shadow: 0 18px 40px -16px oklch(22% 0.06 292 / 0.3), 0 3px 10px -3px oklch(22% 0.06 292 / 0.14)`; dark `0 18px 40px -16px oklch(8% 0.02 292 / 0.6)`): glass menus and popovers, the only things that float, and the cumulative flow's tooltip.
 - **Raised** (`box-shadow: 0 1px 2px oklch(22% 0.04 295 / 0.14), 0 1px 1px -0.5px oklch(22% 0.04 295 / 0.08)`; none in dark): the selected segment of a segmented control.
+- **Lift** (`--shadow-lift`: a long soft drop under a hairline ring; dark a deeper drop and a faint light ring): the marketing site's product frames only, the pictures of the app that float over the page. Nothing in the app lifts.
 
 ### Named Rules
 
@@ -486,10 +487,10 @@ The mark is drawn in `src/components/logo.tsx` from one `MARK` geometry on a 32-
 
 The landing (`app/page.tsx`, `components/marketing/`) is the one Persuade surface, so it is louder than the app while speaking its language. The message is the product's: **task management, flipped**. Agents capture, track and finish the work, people make the calls, and a fleet of agents needs one place to ask. The Sisyphus myth stays in the name and the logo only.
 
-- **World:** light first, as Stripe and monday.com are. A `brand-mesh` (radial fields of violet, ember, sky and green from the tokens, drifting slowly) sits behind the hero and the closing call to action. One dusk band carries the decisions section.
-- **Type:** the display face, Bricolage Grotesque (`--font-display`, the `display` utility: 700, `--tracking-hero`, 0.98 leading, balanced), sets headlines at clamp(3rem, 7.4vw, 6.25rem) in the hero and clamp(2.25rem, 5vw, 4rem) for sections. The hero's second line is a violet-to-ember gradient, the only gradient text. Ledes are `text-lg` in `ink-2`; eyebrows are semibold `accent-ink`, or ember on the dusk band. There are no small tracked capitals.
+- **World:** light first, as Stripe and monday.com are. A `brand-mesh` (radial fields of violet, ember, sky and green from the tokens, drifting slowly, at under half strength in dark so they read as colour rather than glow) sits behind the hero and the closing call to action. One dusk band carries the decisions section, the page's committed colour field.
+- **Type:** the display face, Bricolage Grotesque (`--font-display`, loaded by `next/font/local` with a metric-matched fallback; the `display` utility: 700, `--tracking-hero` -0.035em, 1.02 leading, balanced), sets headlines at clamp(2.75rem, 6vw, 5rem) in the hero and clamp(2.25rem, 5vw, 4rem) for sections. The hero's second sentence is solid `accent-ink`; there is no gradient text, no eyebrow or kicker above a heading, and no arrow glued to a button label. Ledes are `text-lg` in `ink-2`. Calls to action use `Button` size `lg`.
 - **Product frames:** pictures of the app, never screenshots. `ProductFrame` wraps the app's real components (badges, avatars, station dots, the timetable) in a miniature glass header and tab rail, rounded `xl` on the `--shadow-lift`. On the site only, product frames float and overlap, since they are pictures held up to the page; in the app, cards stay flat.
-- **Motion:** one 14-second loop shared by every `data-demo` (a request arrives, the cursor picks, the toast says it was sent, the agent hears, the card crosses to Done). It is set by `--beat` per element, plus `data-rise` scroll reveals and the mesh drift. All of it sits under `prefers-reduced-motion: no-preference`, and every element is complete and visible at rest. `e2e/public.spec.ts` checks that nothing animates under reduced motion.
+- **Motion:** one 14-second loop shared by every `data-demo` (a request arrives, the cursor picks, the toast says it was sent, the agent hears, the card crosses to Done), `data-rise` scroll reveals, and the mesh drift, a transform on an oversized `::before`, never a repaint. All of it sits under `prefers-reduced-motion: no-preference`; at rest the hero shows the end of the story (option 2 picked, the card in Done). **Pause the animations** (`MotionToggle`, `data-paused` on the root) stops every loop where it is (WCAG 2.2.2). `e2e/public.spec.ts` checks both.
 - **Sections:**
   1. The hero (copy and calls to action at left, the animated Decisions screen at right with floating Activity and Tasks frames).
   2. "Works with" Claude Code, Cursor, VS Code and any MCP client.
@@ -502,7 +503,7 @@ The landing (`app/page.tsx`, `components/marketing/`) is the one Persuade surfac
   9. The closing call to action on the mesh.
 - **Claims:** content lives in `components/marketing/content.ts`. Stories are labelled illustrative, and no customer, figure or result is claimed.
 
-The sign-in and sign-up pages share the world: their side panel is the brand mesh with the display headline.
+The sign-in and sign-up pages share the world: on large screens their side panel is the brand mesh (still, and fading out before the form, so there is no seam) with the display headline; on phones only the wordmark sits above the form.
 
 ### Docs site
 
