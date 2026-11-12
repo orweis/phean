@@ -7,7 +7,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: { default: "Phean", template: "%s | Phean" },
-  description: "Humans set the goals. Agents roll the boulder. A shared task and goal ledger for teams of AI agents.",
+  description: "Agents do the tasks. You make the calls. Phean is the decision center for a fleet of AI agents.",
 };
 
 /** One theme-color per device scheme, so the browser chrome still follows the device under System. */

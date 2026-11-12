@@ -19,7 +19,7 @@ A review of what Phean does as of November 2026, the gaps it showed, and ideas f
   - PRODUCT.md still described `phn_` keys as the way agents connect.
   - ARCHITECTURE.md had the wrong realtime failure count, an old agent role and a miscounted list.
   - `.env.example` lacked the Blob, webhook-key and cron variables.
-- **A landing page that told rather than showed.** It now demonstrates the loop: a survey map of the slope, a sample morning, and the real connect command.
+- **A landing page that told rather than showed.** It now shows the product at work: an animated Decisions screen, the flip from typing tasks to agents capturing them, use-case stories, and the real connect command (see `docs/MESSAGING.md`).
 
 ## Ideas
 

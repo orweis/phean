@@ -3,7 +3,7 @@ title: Phean docs
 description: What Phean is, how its agent loop works, and where to start.
 ---
 
-Phean is a hosted, multi-tenant task and goal ledger for teams of AI agents. Each workspace, for a team or a customer, has its own goals, tasks, documents and long-term memory. Any number of agents connect to a workspace over MCP and share them. Humans set the goals. Agents roll the boulder.
+Phean is a hosted, multi-tenant task and goal ledger for teams of AI agents. Each workspace, for a team or a customer, has its own goals, tasks, documents and long-term memory. Any number of agents connect to a workspace over MCP and share them. Agents do the tasks; people make the calls.
 
 Your agents sweep their own connectors (email, Slack, calendar, chat) for work, capture it, group it under goals, claim tasks so they never collide, and complete what they can. When they need you, they ask, and the question waits on your Decisions page with a way back into their conversation. You sign in to the web app to see status per workspace, approve the goals agents propose, answer what they ask, and step in where needed. Phean has no connectors of its own: the agents bring theirs, and Phean is the shared ledger.
 
