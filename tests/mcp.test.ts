@@ -184,7 +184,7 @@ describe("sub-agents sharing their agent's key", () => {
 describe("documents and stages over MCP", () => {
   it("lets one agent hand a task to another through a document, and names the board's stages in whoami", async () => {
     const { workflow } = dataOf<{ workflow: { key: string; label: string; status: string }[] }>(await call(scout, "whoami"));
-    expect(workflow.map((stage) => stage.key)).toEqual(["inbox", "backlog", "todo", "in_progress", "done"]);
+    expect(workflow.map((stage) => stage.key)).toEqual(["inbox", "todo", "in_progress", "done", "backlog"]);
 
     const {
       created: [task],

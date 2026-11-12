@@ -2,9 +2,10 @@
  * A workspace's workflow: the stages (board lanes) tasks move through. Every stage belongs to one
  * of the built-in kinds (inbox, backlog, to do, in progress, done), which charts, lateness, claims
  * and agents understand; a workspace renames or hides the built-in stage of each kind and adds its
- * own stages in between ("Review" inside In progress, "Shipped" inside Done). Client-safe.
+ * own stages in between ("Review" inside In progress, "Shipped" inside Done). Stages run in
+ * `LANE_ORDER`, so Backlog sits to the right of Done. Client-safe.
  */
-import { isOneOf, LIMITS, STATIONS, TASK_STATUS_META, type Station, type TaskStatus } from "./domain";
+import { isOneOf, LANE_ORDER, LIMITS, STATIONS, TASK_STATUS_META, type Station, type TaskStatus } from "./domain";
 
 export interface Stage {
   /** Stable id: a built-in stage's key is its kind; an added stage's is a slug of its first name. */
@@ -28,11 +29,12 @@ export const STAGE_KEY_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$/;
 
 export const isBuiltIn = (stage: Pick<Stage, "key" | "kind">) => stage.key === stage.kind;
 
-export const DEFAULT_WORKFLOW: Workflow = STATIONS.map((kind) => ({ key: kind, label: TASK_STATUS_META[kind].label, kind, hidden: false }));
+export const DEFAULT_WORKFLOW: Workflow = LANE_ORDER.map((kind) => ({ key: kind, label: TASK_STATUS_META[kind].label, kind, hidden: false }));
 
-/** Stages in flow order: by kind, keeping the workspace's own order within each kind. */
+/** Stages in lane order (`LANE_ORDER`): by kind, keeping the workspace's own order within each kind. */
 export function inFlowOrder(stages: readonly Stage[]): Stage[] {
-  return stages.map((stage, index) => ({ stage, index })).sort((a, b) => STATIONS.indexOf(a.stage.kind) - STATIONS.indexOf(b.stage.kind) || a.index - b.index).map(({ stage }) => stage);
+  const rank = (stage: Stage) => LANE_ORDER.indexOf(stage.kind);
+  return stages.map((stage, index) => ({ stage, index })).sort((a, b) => rank(a.stage) - rank(b.stage) || a.index - b.index).map(({ stage }) => stage);
 }
 
 /**

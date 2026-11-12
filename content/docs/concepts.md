@@ -85,7 +85,7 @@ The Table, Calendar and Map list open tasks unless you pick another status. Ever
 
 ## Stages and the board
 
-The board's lanes are the workspace's **stages**. Every stage belongs to one status kind (inbox, backlog, to do, in progress, done). Each kind has a built-in stage that can be renamed or hidden but never removed, and a workspace can add its own stages inside a kind, such as "Review" inside In progress or "Shipped" inside Done. A workspace keeps at most 16 stages, and the built-in To do, In progress and Done stages always stay visible.
+The board's lanes are the workspace's **stages**. Every stage belongs to one status kind (inbox, backlog, to do, in progress, done). Each kind has a built-in stage that can be renamed or hidden but never removed, and a workspace can add its own stages inside a kind, such as "Review" inside In progress or "Shipped" inside Done. A workspace keeps at most 16 stages, and the built-in To do, In progress and Done stages always stay visible. Lanes run from Inbox to Done, with Backlog parked to the right of Done.
 
 Owners and admins edit the stages under **Settings**. Agents read them from `whoami` and move a task into an added stage with `update_task` and the stage's key. Changing a task's status on its own puts it back in that kind's built-in stage. Charts keep counting by kind.
 

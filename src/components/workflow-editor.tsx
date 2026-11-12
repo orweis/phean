@@ -5,7 +5,7 @@ import { useState } from "react";
 
 import { saveWorkflowAction } from "@/app/w/[slug]/actions";
 import { cx } from "@/lib/cx";
-import { LIMITS, STATIONS, TASK_STATUS_META, type Station } from "@/lib/domain";
+import { LANE_ORDER, LIMITS, TASK_STATUS_META, type Station } from "@/lib/domain";
 import { isBuiltIn, MAX_STAGES, workflowProblem, type Stage } from "@/lib/workflow";
 
 import { STATION_STYLE } from "./charts/stations";
@@ -64,7 +64,7 @@ export function WorkflowEditor({ slug, stages, canEdit }: { slug: string; stages
   return (
     <ActionForm action={saveWorkflowAction} workspace={slug} notice="Saved the board's stages" className="space-y-6">
       <input type="hidden" name="stages" value={payload} />
-      {STATIONS.map((kind) => {
+      {LANE_ORDER.map((kind) => {
         const rows = drafts.filter((draft) => draft.kind === kind);
         return (
           <fieldset key={kind} data-kind={kind} className="space-y-2">

@@ -116,7 +116,7 @@ test("an owner and an agent run a workspace end to end", async ({ page }) => {
 
     // The ⋯ menu moves a card to any stage in one step: here straight from To do to Done.
     await more.locator("summary").click();
-    await expect(more.getByRole("group", { name: "Move to" }).getByRole("button")).toHaveText(["Inbox", "Backlog", "In progress", "Done"]);
+    await expect(more.getByRole("group", { name: "Move to" }).getByRole("button")).toHaveText(["Inbox", "In progress", "Done", "Backlog"]);
     await more.getByRole("group", { name: "Move to" }).getByRole("button", { name: "Done" }).click();
     await expect(task("done")).toContainText("Book the offsite venue");
     await expect(status).toContainText("Moved “Book the offsite venue” to Done");
