@@ -1,6 +1,6 @@
 ---
 name: Phean
-description: A shared task and goal ledger for teams of AI agents, under a Liquid Glass bar at dusk on the slope.
+description: The decision center for a fleet of AI agents. A quiet violet ledger under a Liquid Glass bar in the app; a bright brand mesh and lifted product frames on the site.
 colors:
   paper: "oklch(97.3% 0.008 300)"
   panel: "oklch(99.5% 0.002 300)"
@@ -99,11 +99,11 @@ colors:
   icon-tile-bottom: "#211541"
 typography:
   display:
-    fontFamily: "-apple-system, Inter Variable, sans-serif"
-    fontSize: "clamp(2.5rem, 7vw, 5rem)"
+    fontFamily: "Bricolage Grotesque Variable, Inter Variable, sans-serif"
+    fontSize: "clamp(2.75rem, 6vw, 5rem)"
     fontWeight: 700
     lineHeight: 1.02
-    letterSpacing: "-0.028em"
+    letterSpacing: "-0.035em"
   display-panel:
     fontFamily: "-apple-system, Inter Variable, sans-serif"
     fontSize: "2.5rem"
@@ -252,9 +252,9 @@ The tokens above mirror the `@theme` block in `src/app/globals.css`, which is th
 
 ## Overview
 
-**Creative North Star: "Dusk on the Slope"**
+**Creative North Star: "The Decision Center"**
 
-Phean is named for Sisyphus, so the world is his hill at dusk: a violet slope, and the ember boulder the agents keep rolling up it. The ledger itself is quiet. A lavender-white ground holds white cards ruled in hairlines, and the only material that floats is a Liquid Glass bar on top, in Apple's manner: the functional layer of navigation and menus sits on glass above the content and lets the content show through, blurred, as it scrolls beneath.
+Agents do the tasks; people make the calls. The app is where those calls are made, so it stays quiet and exact, and the site is where the idea is sold, so it is bright and moving. The logo keeps the boulder on its violet slope, a nod to the name; the copy no longer leans on the myth. The ledger itself is quiet. A lavender-white ground holds white cards ruled in hairlines, and the only material that floats is a Liquid Glass bar on top, in Apple's manner: the functional layer of navigation and menus sits on glass above the content and lets the content show through, blurred, as it scrolls beneath.
 
 The density is that of an operations screen, not a marketing page. People check in a few times a day to see what agents did, what is late, and what awaits their decision or answer, so the overview leads with the line, the agents' questions and the decisions, and every figure is a tabular numeral with its label. Colour carries meaning only: violet is the brand and work in motion, ember is what is new and what needs a person, and each state has one hue on every screen.
 
@@ -275,12 +275,12 @@ A cool lavender ground under a violet brand, with one ember signal and four stat
 
 ### Primary
 
-- **Slope violet** (`accent`, oklch(50% 0.2 292) · dark oklch(55% 0.19 292)): the primary button, the active tab's capsule (as `accent-tint` with `accent-ink`), the selected workspace's check, the route line on the landing, focus rings (`focus`), and the in-progress station. `accent-2` is its hover. Text on it is `on-accent` (6.5:1 in light, 5.2:1 in dark); violet text on the ground is `accent-ink`.
+- **Slope violet** (`accent`, oklch(50% 0.2 292) · dark oklch(55% 0.19 292)): the primary button, the active tab's capsule (as `accent-tint` with `accent-ink`), the selected workspace's check, the hero's gradient headline, focus rings (`focus`), and the in-progress station. `accent-2` is its hover. Text on it is `on-accent` (6.5:1 in light, 5.2:1 in dark); violet text on the ground is `accent-ink`.
 - **The hill** (`hill`): the slope in the logo. It is the accent in light and a lighter cut, oklch(63% 0.17 292), in dark and on any dusk band (`dusk-hill`), so the mark holds on a dark ground.
 
 ### Secondary
 
-- **Boulder ember** (`signal`, oklch(73% 0.165 50) · dark oklch(76% 0.15 52)): the boulder in the logo, the tab rail's counts of what needs a person, everything waiting on a person (as `wait`), the last station on the landing route, and the one call to action on a dusk band. Labels on it are `on-signal`. `signal-shade` is the boulder's shaded side; `signal-ink` is ember text, used only in the accent badge on `signal-tint`.
+- **Boulder ember** (`signal`, oklch(73% 0.165 50) · dark oklch(76% 0.15 52)): the boulder in the logo, the tab rail's counts of what needs a person, everything waiting on a person (as `wait`), the travelling requests in the marketing site's decisions band, and the one call to action on a dusk band. Labels on it are `on-signal`. `signal-shade` is the boulder's shaded side; `signal-ink` is ember text, used only in the accent badge on `signal-tint`.
 
 ### Tertiary
 
@@ -299,7 +299,7 @@ A cool lavender ground under a violet brand, with one ember signal and four stat
 - **Raised** (`raised`): the selected segment of a segmented control; white in light, a lifted violet-grey in dark.
 - **Hairline** (`rule`) and **Edge** (`edge`): dividers and card borders; `edge` outlines form controls.
 - **Ink** (`ink`), **Ink 2** (`ink-2`), **Muted** (`muted`), **Faint** (`faint`): text from titles down to empty-state icons.
-- **Dusk** (`dusk`, `dusk-2`, `dusk-ink`, `dusk-muted`): the deep violet band behind the landing hero and the sign-in story, and code blocks. The `dusk` utility is a sky that lightens from `dusk` at the top to `dusk-2` at the horizon, with no glow: on a dusk band the ember belongs to the boulder and the one call to action.
+- **Dusk** (`dusk`, `dusk-2`, `dusk-ink`, `dusk-muted`): the marketing site's decisions band, and code blocks. The `dusk` utility is a sky that lightens from `dusk` at the top to `dusk-2` at the horizon, with no glow: on a dusk band the ember belongs to the boulder and the one call to action.
 
 ### Dark appearance
 
@@ -330,7 +330,7 @@ Every token above is redefined under the custom `dark` variant, which holds when
 
 ### Hierarchy
 
-- **Display** (700, clamp(2.5rem, 7vw, 5rem), 1.02, -0.028em): the landing headline only; the closing band's statement takes a smaller cut (clamp(2rem, 5vw, 3.5rem)), and the landing's section titles clamp(1.75rem, 3.4vw, 2.5rem).
+- **Display** (Bricolage Grotesque, 700, `--tracking-hero`): the marketing site's headlines (see Marketing site). Every page title in the app (`h1`) also takes the display face, at its own size and `--tracking-title`, so the app and the site read as one.
 - **Display panel** (700, 2.5rem, 1.08, -0.028em): the dusk panel's statement beside sign-in and sign-up, on large screens.
 - **Headline** (700, 1.75rem, 2.15rem, -0.016em): the page title, one per screen. The auth, invitation, error and not-found pages use 1.375rem.
 - **Title** (600, 1rem, 1.55rem): card and section titles.
@@ -363,6 +363,7 @@ Two layers, as in Apple's Liquid Glass: content and the functional layer above i
 
 - **Float** (`box-shadow: 0 18px 40px -16px oklch(22% 0.06 292 / 0.3), 0 3px 10px -3px oklch(22% 0.06 292 / 0.14)`; dark `0 18px 40px -16px oklch(8% 0.02 292 / 0.6)`): glass menus and popovers, the only things that float, and the cumulative flow's tooltip.
 - **Raised** (`box-shadow: 0 1px 2px oklch(22% 0.04 295 / 0.14), 0 1px 1px -0.5px oklch(22% 0.04 295 / 0.08)`; none in dark): the selected segment of a segmented control.
+- **Lift** (`--shadow-lift`: a long soft drop under a hairline ring; dark a deeper drop and a faint light ring): the marketing site's product frames only, the pictures of the app that float over the page. Nothing in the app lifts.
 
 ### Named Rules
 
@@ -387,7 +388,7 @@ Controls are capsules: buttons, tabs, badges, count chips, segmented controls an
 - **Menu rows:** a full-width ghost row inside a `⋯` menu (`Button` size `menu`), icon first, for the rare moves of a task (Release, Drop) or a request (Answered in the conversation). The `⋯` trigger is a ghost capsule that is always visible and is named "More actions for …".
 
 **The Undo or Confirm Rule.** Frequent, reversible actions run at once and offer Undo: Drop, Done, Reopen, lane moves and answers say what they did in the status region ("Dropped “Read the thread”" · Undo), and Undo runs the reverse transition that already exists. Rare actions with consequences ask first: Revoke, Forget, Abandon, Remove, Mark answered, and Mark achieved while tasks are still open. If everything asked, people would learn to click through.
-- **Signal:** ember with dark text, used once per dusk band, as the landing hero's call to action.
+- **Signal:** ember with dark text, used at most once per dusk band.
 - **Dusk:** quiet text controls on a dusk band, lifting to `dusk-2` on hover.
 - **Focus:** a 2px violet outline offset 2px; on a dusk band the ring turns ember.
 
@@ -482,23 +483,27 @@ Everything that leaves Phean goes through `OutsideLink` and ends with an up-righ
 
 The mark is drawn in `src/components/logo.tsx` from one `MARK` geometry on a 32-unit square: a concave hill rising from the bottom left to the top right edge, and a boulder (a circle of radius 6.4 at 12.65, 19.17) resting on the slope partway up. The boulder is ember, lit from the upper left (`signal`) with a crescent of shade on its downhill side (`signal-shade`). The wordmark sets "Phean" beside it in 700 at title tracking. The favicon (`src/app/icon.svg`) and the Apple touch icon (`src/app/apple-icon.tsx`) put the same mark on a dusk tile, a gradient from `dark-dusk-2` (`#3b296b`) to `icon-tile-bottom` (`#211541`), with the dark-appearance hill and boulder colours and the slope carried past the tile's edges. The favicon adds a faint white rim (30% opacity, 1.2 units) so the tile keeps its square on dark tab strips, where the dusk ground would otherwise melt into the chrome. Inside a workspace, `components/favicon-badge.tsx` redraws the favicon so the boulder carries a count, the way mail apps show unread mail: a larger boulder in the icon's own ember, lit from the upper left, drawn where the original rests and covering it, so there is one boulder, with the rim drawn again over it, with dark figures counting decisions, approvals and inbox tasks (the tab rail's Decisions and Board counts). Past 99 it stretches into a pebble reading "99+", and at zero the plain mark returns. It is drawn into the page's own icon links, because browsers pick icons by size and type, so an added PNG would lose to the SVG.
 
-### Landing: the survey map (signature)
+### Marketing site (signature)
 
-The landing is the one Persuade surface, so the world carries the page: the hill at dusk drawn as a survey map. `components/landing/slope-map.tsx` lays a contour map over the dusk band (a white-line mask, `public/landing/slope.svg`, generated by `scripts/art/slope.py` and painted in `dusk-hill`, so it keeps the tokens; lines brighten toward the summit, every fifth one heavier), and over it, in the same 1600 by 900 coordinates and the same crop (cover, anchored right), the route the agents climb: a dotted `dusk-ink` line of switchbacks through the board's own stations (Captured in inbox sky, Triaged in to-do lavender, Claimed in violet, Waiting on you in ember, Done in green) to a green flag, "Goal achieved". Waypoint names are set like a trail map's, 600 weight with a dusk halo. The logo's boulder sits on the route at Claimed; where scroll-driven animation exists and motion is welcome, scrolling the first 80vh rolls it up toward Done (CSS `offset-path` on the route, never rotating, so its light stays upper left). A scrim of dusk keeps the copy legible where the map runs under it; below 768px only the contours remain, behind the copy. The map is decorative (`aria-hidden`), with a written description beside it for screen readers. Re-run the script to change the ground; it writes the mask and `slope-route.ts` together, so the route never leaves its terrain.
+The landing (`app/page.tsx`, `components/marketing/`) is the one Persuade surface, so it is louder than the app while speaking its language. The message is the product's: **task management, flipped**. Agents capture, track and finish the work, people make the calls, and a fleet of agents needs one place to ask. The Sisyphus myth stays in the name and the logo only.
 
-The hero's working action is the real one: a capsule on the dusk band holding the `claude mcp add` command for this deployment, with its Copy button, under the ember Create a workspace and a quiet Read the docs. Below the band: the sample timetable card riding up over its edge, **One morning on the slope** (`components/landing/sample-morning.tsx`, a synthetic activity log labelled as such, with each line's station dot, who acted, and the decision's option capsules drawn as the Decisions page draws them), six numbered features in a hairline grid, the route in, and a closing dusk band with the map faded behind it and no route.
+- **World:** light first, as Stripe and monday.com are. A `brand-mesh` (radial fields of violet, ember, sky and green from the tokens, drifting slowly, at under half strength in dark so they read as colour rather than glow) sits behind the hero and the closing call to action. One dusk band carries the decisions section, the page's committed colour field.
+- **Type:** the display face, Bricolage Grotesque (`--font-display`, loaded by `next/font/local` with a metric-matched fallback; the `display` utility: 700, `--tracking-hero` -0.035em, 1.02 leading, balanced), sets headlines at clamp(2.75rem, 6vw, 5rem) in the hero and clamp(2.25rem, 5vw, 4rem) for sections. The hero's second sentence is solid `accent-ink`; there is no gradient text, no eyebrow or kicker above a heading, and no arrow glued to a button label. Ledes are `text-lg` in `ink-2`. Calls to action use `Button` size `lg`.
+- **Product frames:** pictures of the app, never screenshots. `ProductFrame` wraps the app's real components (badges, avatars, station dots, the timetable) in a miniature glass header and tab rail, rounded `xl` on the `--shadow-lift`. On the site only, product frames float and overlap, since they are pictures held up to the page; in the app, cards stay flat.
+- **Motion:** one 14-second loop shared by every `data-demo` (a request arrives, the cursor picks, the toast says it was sent, the agent hears, the card crosses to Done), `data-rise` scroll reveals, and the mesh drift, a transform on an oversized `::before`, never a repaint. All of it sits under `prefers-reduced-motion: no-preference`; at rest the hero shows the end of the story (option 2 picked, the card in Done). **Pause the animations** (`MotionToggle`, `data-paused` on the root) stops every loop where it is (WCAG 2.2.2). `e2e/public.spec.ts` checks both.
+- **Sections:**
+  1. The hero (copy and calls to action at left, the animated Decisions screen at right with floating Activity and Tasks frames).
+  2. "Works with" Claude Code, Cursor, VS Code and any MCP client.
+  3. The flip (a person typing into a form, beside agents capturing from email, Slack and GitHub).
+  4. Decisions on the dusk band (four agents' requests flowing into one inbox, with four proofs).
+  5. Use cases as ARIA tabs (marketing teams, software factories, finance and operations, founders), each with what agents run, what reaches you, and a sample morning (`ActivityLog`, labelled illustrative).
+  6. The real timetable in a frame.
+  7. A bento feature grid.
+  8. Three numbered steps.
+  9. The closing call to action on the mesh.
+- **Claims:** content lives in `components/marketing/content.ts`. Stories are labelled illustrative, and no customer, figure or result is claimed.
 
-### Goals page
-
-Every goal as one ruled line in a card: its station mark (the goal map's), its title, its status badge when it is not active, "N late" in late ink, and its flow bar with the percentage, indented under its parent when the parent is listed. A quiet capsule at the row's end ("3 open tasks ▾", `ExpandableRow`) opens a peek beneath it on a `fill` wash: the goal's open tasks, most urgent first, as `TaskLine`s (title into the side peek, stage, facts, no actions), then the counts of the rest and links to the goal and the board. Open, Achieved, Abandoned and All are a segmented control in the header.
-
-### Answered decisions
-
-Settled requests are one line each: a chevron, the kind badge and the question, then a muted line with what was picked (ticked when answered), the task, when, and the delivery state in its ink. A line opens to the full record (outcome, asker, goal, every option offered, the written answer, links, and "Open …" into the task's peek). After the latest eight, the rest fold under one "Show earlier answers".
-
-### Morning digest
-
-A page per workspace, from the overview's ghost **Morning digest** link: the digest's sections as cards in their tones (Waiting on you in ember, Late in crimson, Done plain), each line a link with a muted detail, beside a card that turns the email on at an hour in the person's own time zone. The email itself carries literal colours approximating the light tokens, since mail clients ignore custom properties.
+The sign-in and sign-up pages share the world: on large screens their side panel is the brand mesh (still, and fading out before the form, so there is no seam) with the display headline; on phones only the wordmark sits above the form.
 
 ### Docs site
 

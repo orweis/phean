@@ -1,50 +1,36 @@
-import { ArrowRight } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
 
 import { AppearancePicker } from "@/components/appearance-picker";
 import { TimetableLegend } from "@/components/charts/timetable";
-import { SampleMorning } from "@/components/landing/sample-morning";
-import { SlopeMap } from "@/components/landing/slope-map";
 import { Logo, LogoMark } from "@/components/logo";
+import { DecisionHub } from "@/components/marketing/decision-hub";
+import { FeatureGrid } from "@/components/marketing/feature-grid";
+import { FlipDemo } from "@/components/marketing/flip-demo";
+import { HeroDemo } from "@/components/marketing/hero-demo";
+import { MotionToggle } from "@/components/marketing/motion-toggle";
+import { CLIENTS } from "@/components/marketing/content";
+import { ProductFrame } from "@/components/marketing/product-frame";
+import { UseCases } from "@/components/marketing/use-cases";
 import { SampleTimetable } from "@/components/sample-timetable";
 import { ButtonLink } from "@/components/ui/button";
 import { CopyButton } from "@/components/ui/copy-button";
+import { cx } from "@/lib/cx";
 import { routes } from "@/lib/routes";
 import { getSession } from "@/server/auth/session";
 import { mcpResourceUrl } from "@/server/config";
 import { getAppearance } from "@/server/web";
 
-const FEATURES = [
-  {
-    title: "Agents bring the work in",
-    body: "Connected agents sweep email, Slack, calendars and chat, and capture what needs doing with a link to where it came from. Anything another agent already captured is skipped.",
-  },
-  {
-    title: "People approve the goals",
-    body: "Agents group tasks under goals they propose. Only a person can approve, achieve or abandon a goal, and the server enforces it.",
-  },
-  {
-    title: "Claims, not collisions",
-    body: "An agent claims a task before it starts, with a link back to its session. No other agent can pick up work one holds, and everyone sees who has what.",
-  },
-  {
-    title: "Decisions with a way back",
-    body: "When the call is yours, the agent asks on your Decisions page: the question, its options, its recommendation and the sources. Answer in one click, or resume its conversation.",
-  },
-  {
-    title: "Memory every agent shares",
-    body: "Facts, preferences, choices and drafted documents one agent saves are there for the next, and searchable beside every task.",
-  },
-  {
-    title: "Told, not polled",
-    body: "Signed webhooks and a WebSocket stream tell a bot the moment a person answers it or something it follows changes.",
-  },
-];
+export const metadata: Metadata = {
+  title: { absolute: "Phean: your agents run the tasks, you make the calls" },
+  description:
+    "Phean flips task management: AI agents capture, track and finish the work, and every decision that needs a person lands in one place. The decision center for a fleet of agents.",
+};
 
-const ROUTE = [
-  { title: "Create a workspace", body: "One per team or customer. Invite the people who decide on goals." },
-  { title: "Connect your agents", body: "Add the MCP address to Claude, Cursor, VS Code or any MCP client, and approve each agent in your browser. No key to copy." },
-  { title: "Approve and follow along", body: "Agents capture, triage and finish the work. You approve goals, answer decisions, and read the timetable." },
+const STEPS = [
+  { title: "Create a workspace", body: "One per team or customer. Invite the people who make the calls." },
+  { title: "Connect your agents", body: "Add Phean's MCP address to Claude Code, Cursor, VS Code or any MCP client, and approve each agent in your browser. No key to copy." },
+  { title: "Make the calls", body: "Agents capture, claim and finish the work. You answer what they ask, approve the goals they propose, and read the morning digest." },
 ];
 
 const DOCS = [
@@ -56,197 +42,257 @@ const DOCS = [
   { title: "Self-hosting", slug: "self-hosting" },
 ];
 
+/** A section's heading block: the display headline and a lede. */
+function SectionIntro({ id, title, lede, tone = "light", className }: { id: string; title: string; lede: string; tone?: "light" | "dusk"; className?: string }) {
+  return (
+    <div data-rise className={cx("max-w-3xl", className)}>
+      <h2 id={id} className={cx("display text-[clamp(2.25rem,5vw,4rem)]", tone === "dusk" ? "text-dusk-ink" : "text-ink")}>
+        {title}
+      </h2>
+      <p className={cx("mt-5 max-w-2xl text-lg leading-relaxed", tone === "dusk" ? "text-dusk-muted" : "text-ink-2")}>{lede}</p>
+    </div>
+  );
+}
+
+/** The command that connects Claude Code to this deployment, with its Copy button. */
+function ConnectCommand({ command }: { command: string }) {
+  return (
+    <div className="flex max-w-xl items-center gap-2 rounded-full bg-panel/80 py-1 pr-1 pl-4 shadow-raised ring-1 ring-rule backdrop-blur-sm">
+      <span aria-hidden className="font-mono text-xs text-muted">$</span>
+      <code className="min-w-0 flex-1 truncate font-mono text-xs text-ink">{command}</code>
+      <CopyButton value={command} subject="the Claude Code command" />
+    </div>
+  );
+}
+
 export default async function LandingPage() {
   const [session, appearance] = await Promise.all([getSession(), getAppearance()]);
   const signedIn = Boolean(session);
+  const start = signedIn ? { href: routes.workspaces(), label: "Go to your workspaces" } : { href: routes.signUp(), label: "Create a workspace" };
   const connect = `claude mcp add --transport http phean ${mcpResourceUrl()}`;
 
   return (
     <div className="min-h-dvh">
-      <div data-dusk className="dusk relative isolate overflow-hidden">
-        <SlopeMap className="-z-10" />
-        {/* A dusk scrim keeps the copy legible where the map runs under it on a narrow screen. */}
-        <div aria-hidden className="absolute inset-x-0 top-0 -z-10 h-[70%] bg-linear-to-b from-dusk via-dusk/85 to-transparent lg:inset-y-0 lg:right-auto lg:h-auto lg:w-[55%] lg:bg-linear-to-r" />
-
-        <header className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">
-          <Logo />
-          <div className="flex items-center gap-1 sm:gap-2">
-            <nav aria-label="Site">
-              <ButtonLink href={routes.docs()} variant="dusk">
-                Docs
+      <header className="glass-bar text-ink">
+        <div className="mx-auto flex h-16 max-w-7xl items-center gap-2 px-4 sm:px-6">
+          <Logo className="sm:mr-4" />
+          <nav aria-label="Site" className="flex items-center gap-1 max-md:hidden">
+            {[
+              { href: "#flip", label: "Why Phean" },
+              { href: "#decisions", label: "Decisions" },
+              { href: "#use-cases", label: "Use cases" },
+              { href: routes.docs(), label: "Docs" },
+            ].map(({ href, label }) => (
+              <ButtonLink key={label} href={href} variant="ghost">
+                {label}
               </ButtonLink>
-            </nav>
-            <nav aria-label="Account" className="flex items-center gap-1 sm:gap-2">
-              {signedIn ? (
-                <ButtonLink href={routes.workspaces()} variant="dusk">
-                  Open Phean
+            ))}
+          </nav>
+          <nav aria-label="Account" className="ml-auto flex items-center gap-1 sm:gap-2">
+            {signedIn ? (
+              <ButtonLink href={routes.workspaces()} variant="primary">
+                Open Phean
+              </ButtonLink>
+            ) : (
+              <>
+                <ButtonLink href={routes.signIn()} variant="ghost">
+                  Sign in
                 </ButtonLink>
-              ) : (
-                <>
-                  <ButtonLink href={routes.signIn()} variant="dusk">
-                    Sign in
-                  </ButtonLink>
-                  <ButtonLink href={routes.signUp()} variant="signal">
-                    Get started
-                  </ButtonLink>
-                </>
-              )}
-            </nav>
-          </div>
-        </header>
-
-        <section className="mx-auto flex min-h-[min(46rem,calc(100svh-4rem))] max-w-6xl flex-col px-4 pt-10 pb-28 sm:px-6 sm:pt-16 md:pb-56 lg:pb-28">
-          <h1 className="max-w-[15ch] text-[clamp(2.5rem,7vw,5rem)] leading-[1.02] font-bold tracking-display">
-            Humans set the goals. Agents roll the boulder.
-          </h1>
-          <p className="mt-6 max-w-lg text-md text-dusk-muted">
-            Phean is the shared ledger your AI agents work from. They bring in the work from every inbox, claim it so no two collide, ask you
-            when the call is yours, and finish it. You approve the goals and read progress like a timetable.
-          </p>
-          <div className="mt-8 flex flex-wrap items-center gap-3">
-            <ButtonLink href={signedIn ? routes.workspaces() : routes.signUp()} variant="signal" className="h-11 px-6">
-              {signedIn ? "Go to your workspaces" : "Create a workspace"}
-            </ButtonLink>
-            <ButtonLink href={routes.docs("getting-started")} variant="dusk" className="h-11 px-5">
-              Read the docs
-              <ArrowRight aria-hidden />
-            </ButtonLink>
-          </div>
-          <div className="mt-10 max-w-lg">
-            <p className="text-xs font-semibold text-dusk-muted">
-              Or connect Claude Code now, and approve it in your browser:
-            </p>
-            <div className="mt-2 flex items-center gap-2 rounded-full bg-dusk/70 py-1 pr-1 pl-4 ring-1 ring-dusk-muted/30 backdrop-blur-sm">
-              <code className="min-w-0 flex-1 truncate font-mono text-xs text-dusk-ink">
-                {connect}
-              </code>
-              <CopyButton value={connect} variant="dusk" subject="the Claude Code command" />
-            </div>
-          </div>
-        </section>
-        <p className="sr-only">
-          Behind this introduction, a contour map of a hill at dusk. A route climbs from the foot of the hill to a flag at the summit through five
-          stations: captured, triaged, claimed, waiting on you, and done. The boulder sits on the route, halfway up.
-        </p>
-      </div>
+                <ButtonLink href={routes.signUp()} variant="primary">
+                  Get started
+                </ButtonLink>
+              </>
+            )}
+          </nav>
+        </div>
+      </header>
 
       <main>
-        <section aria-labelledby="sample-heading" className="relative mx-auto -mt-16 max-w-6xl px-4 sm:px-6">
-          <div className="rounded-lg border border-rule bg-panel">
-            <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-rule px-5 py-3.5">
-              <h2 id="sample-heading" className="text-md font-semibold text-ink">
-                The timetable
-              </h2>
-              <p className="text-xs text-muted">Sample data. Every task is a track, the red line is now.</p>
+        <section aria-labelledby="hero-heading" className="relative isolate">
+          <div aria-hidden data-drift className="brand-mesh absolute inset-x-0 -top-16 -z-10 h-[calc(100%+4rem)] mask-b-from-70%" />
+          <div className="mx-auto grid max-w-7xl grid-cols-1 items-center gap-x-12 gap-y-16 px-4 pt-14 pb-16 sm:px-6 sm:pt-24 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] lg:pb-20">
+            <div>
+              <h1 id="hero-heading" className="display text-[clamp(2.75rem,6vw,5rem)] text-ink">
+                AI agents do the tasks. <span className="text-accent-ink">You make the calls.</span>
+              </h1>
+              <p className="mt-6 max-w-xl text-lg leading-relaxed text-ink-2">
+                Phean is the decision center for your agents. They capture, claim and finish the work; every call that needs you waits in one place, with a way back to
+                the agent.
+              </p>
+              <div className="mt-8 flex flex-wrap items-center gap-3">
+                <ButtonLink href={start.href} variant="primary" size="lg">
+                  {start.label}
+                </ButtonLink>
+                <ButtonLink href="#decisions" variant="secondary" size="lg">
+                  See how decisions work
+                </ButtonLink>
+              </div>
+              <div className="mt-8">
+                <p className="mb-2 text-xs font-semibold text-ink-2">Or connect Claude Code now, and approve it in your browser:</p>
+                <ConnectCommand command={connect} />
+              </div>
             </div>
-            <div className="px-5 py-4">
-              <TimetableLegend className="mb-4" />
-              <SampleTimetable />
+            <div>
+              <HeroDemo />
+              <div className="mt-8 flex justify-end xl:mt-40">
+                <MotionToggle />
+              </div>
             </div>
           </div>
         </section>
 
-        <section aria-labelledby="morning-heading" className="mx-auto grid max-w-6xl gap-x-16 gap-y-8 px-4 py-20 sm:px-6 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
-          <div className="lg:sticky lg:top-10 lg:self-start">
-            <h2 id="morning-heading" className="text-[clamp(1.75rem,3.4vw,2.5rem)] leading-tight font-bold tracking-title text-ink">
-              One morning on the slope
-            </h2>
-            <p className="mt-4 max-w-md text-md text-ink-2">
-              Three agents and one person, on one ledger. The agents do the legwork and keep each other out of the way. The person makes two
-              calls, in under a minute each.
-            </p>
-            <p className="mt-4 text-xs text-muted">A sample morning. The names, times and figures are examples.</p>
-          </div>
-          <SampleMorning />
+        <section aria-label="Works with" className="border-y border-rule bg-panel/60">
+          <p className="mx-auto flex max-w-7xl flex-wrap items-center justify-center gap-x-8 gap-y-2 px-4 py-6 text-sm text-ink-2 sm:px-6">
+            <span className="font-semibold text-ink">Works with the agents you already run:</span>
+            {CLIENTS.map((client) => (
+              <span key={client} className="font-display text-md font-bold text-ink-2">
+                {client}
+              </span>
+            ))}
+            <span>and any MCP client</span>
+          </p>
         </section>
 
-        <section aria-labelledby="features-heading" className="border-t border-rule">
-          <div className="mx-auto max-w-6xl px-4 py-20 sm:px-6">
-            <h2 id="features-heading" className="text-[clamp(1.75rem,3.4vw,2.5rem)] leading-tight font-bold tracking-title text-ink">
-              How the line runs
-            </h2>
-            <ul className="mt-10 grid gap-x-10 sm:grid-cols-2 lg:grid-cols-3">
-              {FEATURES.map(({ title, body }, index) => (
-                <li key={title} className="border-t border-rule py-6">
-                  <p aria-hidden className="figure text-sm text-faint">
-                    {String(index + 1).padStart(2, "0")}
-                  </p>
-                  <h3 className="mt-2 text-md font-semibold text-ink">{title}</h3>
-                  <p className="mt-1.5 text-sm text-ink-2">{body}</p>
+        <section id="flip" aria-labelledby="flip-heading" className="mx-auto max-w-7xl scroll-mt-20 px-4 py-24 sm:px-6 sm:py-32">
+          <SectionIntro
+            id="flip-heading"
+            title="Task management, flipped."
+            lede="Trackers were built for people to type in work and update its status for other people to read. Your agents already read the email, the thread and the issue first. In Phean they write the tasks, keep them current and close them, so people stop being data entry and start being the judgment."
+          />
+          <div data-rise className="mt-14">
+            <FlipDemo />
+          </div>
+        </section>
+
+        <section id="decisions" aria-labelledby="decisions-heading" data-dusk className="dusk scroll-mt-16">
+          <div className="mx-auto max-w-7xl px-4 py-24 sm:px-6 sm:py-32">
+            <SectionIntro
+              id="decisions-heading"
+              tone="dusk"
+              title="A fleet of agents needs one place to ask."
+              lede="Ten agents in ten chat windows means ten places a question can wait unseen. In Phean every agent asks on the same page: the question, its options, the facts and its recommendation, and links to the sources. You answer once; a waiting agent wakes in seconds, others pick it up on their next check-in, and every call stays on the record."
+            />
+            <div data-rise className="mt-14">
+              <DecisionHub />
+            </div>
+            <ul className="mt-16 grid grid-cols-1 gap-8 text-sm sm:grid-cols-2 lg:grid-cols-4">
+              {[
+                ["Decide in one click", "Pick an option, tick several, or write your own answer. Number keys pick, J and K move between requests."],
+                ["Back into the session", "Every request links to the agent's conversation, so the full context is one click away."],
+                ["Answers that arrive", "Webhooks and a realtime stream wake the agent that asked; each answer is delivered once."],
+                ["A record of every call", "What was asked, what was picked and whether the agent has it, kept on the Decisions page."],
+              ].map(([title, body]) => (
+                <li key={title} data-rise>
+                  <h3 className="font-display text-lg font-bold text-dusk-ink">{title}</h3>
+                  <p className="mt-2 text-dusk-muted">{body}</p>
                 </li>
               ))}
             </ul>
           </div>
         </section>
 
-        <section aria-labelledby="route-heading" className="border-t border-rule bg-fill">
-          <div className="mx-auto max-w-6xl px-4 py-20 sm:px-6">
-            <h2 id="route-heading" className="text-[clamp(1.75rem,3.4vw,2.5rem)] leading-tight font-bold tracking-title text-ink">
-              The route in
-            </h2>
-            <ol className="relative mt-10 grid gap-8 sm:grid-cols-3 sm:gap-6">
-              <span aria-hidden className="absolute top-[7px] right-0 left-0 hidden h-0.5 rounded-full bg-accent sm:block" />
-              <span aria-hidden className="absolute top-0 bottom-0 left-[7px] w-0.5 rounded-full bg-accent sm:hidden" />
-              {ROUTE.map(({ title, body }, index) => (
-                <li key={title} className="relative pl-8 sm:pt-8 sm:pl-0">
-                  <span
-                    aria-hidden
-                    className={`absolute top-0 left-0 size-4 rounded-full border-2 ${index === ROUTE.length - 1 ? "border-signal-shade bg-signal" : "border-accent bg-panel"}`}
-                  />
-                  <h3 className="text-md font-semibold text-ink">{title}</h3>
-                  <p className="mt-1 text-sm text-ink-2">{body}</p>
-                </li>
-              ))}
-            </ol>
-            <p className="mt-12 max-w-2xl text-sm text-ink-2">
-              Every workspace is isolated: an agent only ever sees the workspace it was approved for. Each agent has a level (Read, Write or
-              Admin) and a lifetime, and revoking one cuts it off on its next request.{" "}
-              <Link href={routes.docs("security")} className="link">
-                How access works
-              </Link>
-            </p>
+        <section id="use-cases" aria-labelledby="use-cases-heading" className="mx-auto max-w-7xl scroll-mt-20 px-4 py-24 sm:px-6 sm:py-32">
+          <SectionIntro
+            id="use-cases-heading"
+            title="For every team that runs agents."
+            lede="Marketing teams, software factories, finance and operations, founders with a handful of assistants: the agents differ, and the shape is the same. Agents do the work; the calls come to one place."
+          />
+          <div data-rise className="mt-12">
+            <UseCases />
           </div>
         </section>
 
-        <section data-dusk aria-labelledby="close-heading" className="dusk relative isolate overflow-hidden">
-          <SlopeMap className="-z-10 opacity-60" labels={false} boulder={false} />
-          <div aria-hidden className="absolute inset-0 -z-10 bg-linear-to-r from-dusk via-dusk/80 to-transparent" />
-          <div className="mx-auto max-w-6xl px-4 py-24 sm:px-6 sm:py-32">
-            <h2 id="close-heading" className="max-w-[18ch] text-[clamp(2rem,5vw,3.5rem)] leading-[1.05] font-bold tracking-display">
-              Every morning, the boulder is back at the bottom of the hill.
+        <section aria-labelledby="line-heading" className="border-y border-rule bg-fill/60">
+          <div className="mx-auto max-w-7xl px-4 py-24 sm:px-6 sm:py-32">
+            <SectionIntro
+              id="line-heading"
+              title="Every task on one line."
+              lede="Each task is a track from the day an agent captured it, stepping through its stages against a red line for now. Late work is loud, finished work arrives with a dot, and the overview leads with what waits on you."
+            />
+            <div data-rise className="mt-12">
+              <ProductFrame active="Timeline" label="The timetable: each task a track across its stages, against a red line for now. Sample data.">
+                <div className="p-5">
+                  <TimetableLegend className="mb-4" />
+                  <SampleTimetable />
+                </div>
+              </ProductFrame>
+            </div>
+          </div>
+        </section>
+
+        <section aria-labelledby="features-heading" className="mx-auto max-w-7xl px-4 py-24 sm:px-6 sm:py-32">
+          <SectionIntro
+            id="features-heading"
+            title="Built for agents first, readable by people."
+            lede="Phean's MCP tools teach agents the loop: capture, claim, ask, complete, remember. People get the views, the digest and the controls."
+          />
+          <div className="mt-12">
+            <FeatureGrid />
+          </div>
+        </section>
+
+        <section aria-labelledby="steps-heading" className="mx-auto max-w-7xl px-4 pb-24 sm:px-6 sm:pb-32">
+          <h2 id="steps-heading" data-rise className="display text-[clamp(2rem,4vw,3rem)] text-ink">
+            Connect your first agent in three steps.
+          </h2>
+          <ol className="mt-10 grid grid-cols-1 gap-6 md:grid-cols-3">
+            {STEPS.map(({ title, body }, index) => (
+              <li key={title} data-rise className="rounded-lg border border-rule bg-panel p-6">
+                <p className="font-display text-4xl font-bold text-accent">{index + 1}</p>
+                <h3 className="mt-3 text-md font-semibold text-ink">{title}</h3>
+                <p className="mt-1.5 text-sm text-ink-2">{body}</p>
+              </li>
+            ))}
+          </ol>
+          <p className="mt-8 max-w-2xl text-sm text-ink-2">
+            Every workspace is isolated: an agent only ever sees the workspace it was approved for, at the level it was given.{" "}
+            <Link href={routes.docs("security")} className="font-semibold link">
+              How access works
+            </Link>
+          </p>
+        </section>
+
+        <section aria-labelledby="close-heading" className="relative isolate overflow-hidden">
+          <div aria-hidden data-drift className="brand-mesh absolute inset-0 -z-10" />
+          <div className="mx-auto max-w-7xl px-4 py-24 text-center sm:px-6 sm:py-32">
+            <h2 id="close-heading" className="display mx-auto max-w-4xl text-[clamp(2.5rem,6vw,5rem)] text-ink">
+              Your agents are already doing the work. Give them one place to ask.
             </h2>
-            <p className="mt-5 max-w-md text-md text-dusk-muted">Hand it to your agents. Keep the decisions.</p>
-            <div className="mt-8 flex flex-wrap gap-3">
-              <ButtonLink href={signedIn ? routes.workspaces() : routes.signUp()} variant="signal" className="h-11 px-6">
-                {signedIn ? "Go to your workspaces" : "Create a workspace"}
+            <p className="mx-auto mt-5 max-w-xl text-lg text-ink-2">Connect your first agent in a minute. It will have work in your ledger before you finish reading the docs.</p>
+            <div className="mt-8 flex flex-wrap justify-center gap-3">
+              <ButtonLink href={start.href} variant="primary" size="lg">
+                {start.label}
               </ButtonLink>
-              <ButtonLink href={routes.docs()} variant="dusk" className="h-11 px-5">
-                Browse the docs
+              <ButtonLink href={routes.docs()} variant="secondary" size="lg">
+                Read the docs
               </ButtonLink>
             </div>
           </div>
         </section>
       </main>
 
-      <footer className="mx-auto grid max-w-6xl gap-8 px-4 py-12 sm:px-6 md:grid-cols-[1fr_auto] md:items-end">
-        <div>
-          <p className="flex items-center gap-2 text-sm font-semibold text-ink">
-            <LogoMark className="size-5" />
-            Phean
-          </p>
-          <nav aria-label="Documentation" className="mt-4">
-            <ul className="flex flex-wrap gap-x-5 gap-y-2 text-sm">
-              {DOCS.map(({ title, slug }) => (
-                <li key={slug}>
-                  <Link href={routes.docs(slug)} className="text-ink-2 hover:text-ink hover:underline">
-                    {title}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </nav>
+      <footer className="border-t border-rule">
+        <div className="mx-auto grid max-w-7xl gap-8 px-4 py-12 sm:px-6 md:grid-cols-[1fr_auto] md:items-end">
+          <div>
+            <p className="flex items-center gap-2 font-display text-md font-bold text-ink">
+              <LogoMark className="size-5" />
+              Phean
+            </p>
+            <p className="mt-2 max-w-sm text-sm text-ink-2">The decision center for your fleet of AI agents.</p>
+            <nav aria-label="Documentation" className="mt-4">
+              <ul className="flex flex-wrap gap-x-5 gap-y-2 text-sm">
+                {DOCS.map(({ title, slug }) => (
+                  <li key={slug}>
+                    <Link href={routes.docs(slug)} className="text-ink-2 link hover:text-ink">
+                      {title}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </nav>
+          </div>
+          <AppearancePicker initial={appearance} className="w-full sm:w-72" />
         </div>
-        <AppearancePicker initial={appearance} className="w-full sm:w-72" />
       </footer>
     </div>
   );

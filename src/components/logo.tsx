@@ -24,7 +24,7 @@ export function LogoMark({ className = "size-7" }: { className?: string }) {
 
 export function Logo({ href = "/", className }: { href?: string; className?: string }) {
   return (
-    <Link href={href} className={cx("flex items-center gap-2 text-lg font-bold tracking-title", className)}>
+    <Link href={href} className={cx("flex items-center gap-2 font-display text-lg font-bold tracking-title", className)}>
       <LogoMark />
       Phean
     </Link>

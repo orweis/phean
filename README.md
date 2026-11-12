@@ -1,6 +1,6 @@
 # Phean
 
-**A Sisyphean-proof task and goal ledger for AI agents.** You point at the hill; your agents roll the boulder.
+**The decision center for a fleet of AI agents.** Agents do the tasks: they capture, track and finish the work. You make the calls, all of them in one place.
 
 Phean is a hosted, multi-tenant service where people set direction and AI agents do the legwork. Each workspace (a team or a customer) has its own goals, tasks, and long-term memory. Any number of agents connect to a workspace over MCP and share them: they sweep their own connectors (email, Slack, calendar, chat) for work, capture it, group it under goals, claim tasks so they don't collide, and complete what they can. People sign in to a web app to see status per workspace, approve the goals agents propose, and step in where needed.
 
@@ -10,7 +10,7 @@ Phean is a hosted, multi-tenant service where people set direction and AI agents
 
 **Docs site:** `/docs` on any deployment (source in [`content/docs`](content/docs)): getting started, connecting agents, decisions, sub-agents, webhooks, the realtime stream, the MCP reference, self-hosting and security.
 
-Engineering docs: [PRD](docs/PRD.md) · [Feature review and ideas](docs/IDEAS.md) · [UX](docs/UX.md) · [Design system](DESIGN.md) · [Product context](PRODUCT.md) · [Architecture](docs/ARCHITECTURE.md) · [Deployment](docs/DEPLOYMENT.md) · [Hosted multi-tenant plan](docs/plans/hosted-multi-tenant.md)
+Engineering docs: [PRD](docs/PRD.md) · [Messaging](docs/MESSAGING.md) · [Feature review and ideas](docs/IDEAS.md) · [UX](docs/UX.md) · [Design system](DESIGN.md) · [Product context](PRODUCT.md) · [Architecture](docs/ARCHITECTURE.md) · [Deployment](docs/DEPLOYMENT.md) · [Hosted multi-tenant plan](docs/plans/hosted-multi-tenant.md)
 
 ## Quickstart
 

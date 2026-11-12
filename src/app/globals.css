@@ -1,6 +1,6 @@
 /* Hallmark · shape: app screen · genre: modern-minimal · theme: custom (by request) · redesign: restyle
- * idea: "dusk on the slope: a violet hill, and the ember boulder the agents keep rolling up it" · vibe: "Apple-calm Liquid Glass over a lavender ledger, one ember glow"
- * paper: oklch(97.3% 0.008 300) · accent: oklch(50% 0.2 292) · signal: oklch(73% 0.165 50) · display: SF Pro (system, by request) · body: SF Pro, with Inter Variable where SF is absent
+ * idea: "task management, flipped: agents do the tasks, people make the calls, in one decision center" · vibe: "Apple-calm Liquid Glass over a lavender ledger in the app; a Stripe-bright brand mesh and lifted product frames on the site"
+ * paper: oklch(97.3% 0.008 300) · accent: oklch(50% 0.2 292) · signal: oklch(73% 0.165 50) · display: Bricolage Grotesque (page titles, the site's headlines) · body: SF Pro, with Inter Variable where SF is absent
  * nav: Liquid Glass header with a capsule tab rail · signature: the timetable, every task a track on one time axis · states: loading, empty, error, full
  * axes: light+dark/neo-grotesk/violet-ember · posture: committed tinted ground under a glass functional layer, full palette for the four stations · modes: light+dark · contrast: pass · v3.0.0 */
 /* Hallmark · pre-emit critique: P4 H4 E4 S5 R4 V5 · weakest: E, many screens share one system; every surface goes through the same primitives and tokens */
@@ -8,7 +8,7 @@
 /* Hallmark · reworded "How it works" to "The route in" · the three steps are drawn as stations on one line, so the heading names the route */
 /* Hallmark · dropped <NewGoalForm slug={slug} goals={goals} /> · the overview renders one ghost Add manually popover in the header, which holds both the task and the goal form, because agents do most of the capturing */
 /* Hallmark · reworded "<RememberForm slug={slug} goals={goals} goalId={goal.id} />" and "<NewGoalForm slug={slug} goals={goals} parentGoalId={goal.id} />" · both goal-page popovers stay with the same forms; only their triggers became ghost buttons, so manual entry stays quieter than the agents' work */
-/* Hallmark · waive 80 · the landing's survey map is drawn from the product's own world · a generated contour mask (scripts/art/slope.py) painted in the hill's violet, with the board's stations on the route and the logo's boulder on it */
+/* Hallmark · waive 80 · the landing's hero is the product itself · a drawing of the Decisions page built from the app's own components, animated on one loop, over the brand mesh */
 /* Hallmark · dismissed 41 · here every hue's -ink token is its text colour on light surfaces, as with late-ink and arrive-ink; the label on the violet fill is on-accent, at 6.5:1 in light and 5.2:1 in dark */
 /* Hallmark · waive 49b · a real phrase that cannot shorten, two lines at most · an activity line links the sentence that names the goal, and on a 320px phone the goal title wraps with it */
 /* Hallmark · dismissed F25 · on phones the first column is pinned, so each agent or workspace stays named while its figures and the revoke action scroll beside it inside the card */
@@ -123,6 +123,8 @@
   --font-sans: "Inter Variable", ui-sans-serif, sans-serif;
   --font-rounded: var(--font-sans);
   --font-mono: ui-monospace, "SF Mono", "SFMono-Regular", Menlo, monospace;
+  /* Headlines: page titles in the app, and the marketing site's display type. A grotesque with optical sizes, so it tightens large. */
+  --font-display: var(--font-bricolage), "Inter Variable", ui-sans-serif, sans-serif;
 
   --text-2xs: 0.6875rem;
   --text-2xs--line-height: 1rem;
@@ -141,6 +143,7 @@
 
   --tracking-title: -0.016em;
   --tracking-display: -0.028em;
+  --tracking-hero: -0.035em;
 
   --radius-xs: 4px;
   --radius-sm: 6px;
@@ -150,6 +153,8 @@
 
   --shadow-float: 0 18px 40px -16px oklch(22% 0.06 292 / 0.3), 0 3px 10px -3px oklch(22% 0.06 292 / 0.14);
   --shadow-raised: 0 1px 2px oklch(22% 0.04 295 / 0.14), 0 1px 1px -0.5px oklch(22% 0.04 295 / 0.08);
+  /* The marketing site's product frames: a picture of the app held up off the page. */
+  --shadow-lift: 0 40px 80px -32px oklch(22% 0.08 292 / 0.38), 0 12px 24px -12px oklch(22% 0.06 292 / 0.18), 0 0 0 1px oklch(22% 0.04 295 / 0.06);
 
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --dur-micro: 120ms;
@@ -385,6 +390,7 @@
 
       --shadow-float: 0 18px 40px -16px oklch(8% 0.02 292 / 0.6);
       --shadow-raised: none;
+      --shadow-lift: 0 40px 80px -32px oklch(4% 0.02 292 / 0.75), 0 0 0 1px oklch(95% 0.01 300 / 0.08);
     }
   }
 
@@ -425,7 +431,9 @@
     text-wrap: balance;
   }
 
+  /* Page titles take the display face, as the marketing site's headlines do, so the app and the site read as one. */
   h1 {
+    font-family: var(--font-display);
     letter-spacing: var(--tracking-title);
   }
 
@@ -618,47 +626,256 @@
   }
 }
 
-/* The landing's survey map of the slope (components/landing/slope-map.tsx). */
+/*
+ * The marketing site (app/page.tsx, components/marketing). It is the one Persuade surface, so it may
+ * move and float where the app never does: product frames lift off the page, the brand mesh drifts,
+ * and sections rise into view. Everything here is visible and still without motion.
+ */
 @layer components {
-  /* The contour lines are a mask, generated by scripts/art/slope.py, painted in the hill's violet. */
-  .slope-contours {
-    background-color: var(--color-dusk-hill);
-    mask: url("/landing/slope.svg") right center / cover no-repeat;
-  }
+  /*
+   * Every brand hue at once, softly: the violet of work in motion, the ember of what waits on you,
+   * the sky of what just arrived, the green of what is done. The fields live on an oversized
+   * ::before, so drifting them is a transform, never a repaint; in dark they are fainter, so they
+   * read as colour in the night rather than glows.
+   */
+  .brand-mesh {
+    --mesh: 1;
+    position: relative;
+    overflow: hidden;
+    background-color: var(--color-paper);
 
-  /* Waypoint names, set like a trail map's: a dusk halo keeps them legible over the lines. */
-  .slope-label {
-    font-size: 17px;
-    font-weight: 600;
-    paint-order: stroke;
-    stroke-width: 6px;
-    stroke-linejoin: round;
-  }
+    &::before {
+      content: "";
+      position: absolute;
+      inset: -20%;
+      z-index: -1;
+      opacity: var(--mesh);
+      background-image:
+        radial-gradient(30% 42% at 22% 28%, color-mix(in oklch, var(--color-accent) 34%, transparent), transparent 70%),
+        radial-gradient(28% 38% at 78% 24%, color-mix(in oklch, var(--color-signal) 40%, transparent), transparent 70%),
+        radial-gradient(30% 40% at 66% 74%, color-mix(in oklch, var(--color-inbox) 32%, transparent), transparent 70%),
+        radial-gradient(24% 34% at 30% 78%, color-mix(in oklch, var(--color-arrive) 22%, transparent), transparent 70%);
+    }
 
-  /* The boulder sits halfway up, at Claimed, and does not turn with the path. */
-  .slope-boulder {
-    offset-rotate: 0deg;
-    offset-distance: 49%;
-  }
-
-  /* Where scroll-driven animation exists and motion is welcome, scrolling the hero rolls it up toward the summit. */
-  @supports (animation-timeline: scroll()) {
-    @media (prefers-reduced-motion: no-preference) {
-      .slope-boulder {
-        animation: slope-roll linear both;
-        animation-timeline: scroll(root);
-        animation-range: 0 80vh;
-      }
+    @variant dark {
+      --mesh: 0.45;
     }
   }
 
-  @keyframes slope-roll {
-    from {
-      offset-distance: 40%;
+  /* A held-up picture of the app: a panel, rounded a step more than a card, on the lift shadow. */
+  .product-frame {
+    border-radius: var(--radius-xl);
+    background-color: var(--color-panel);
+    box-shadow: var(--shadow-lift);
+    overflow: hidden;
+  }
+
+  /* The marketing display type: big, tight, optical-sized. */
+  .display {
+    font-family: var(--font-display);
+    font-weight: 700;
+    letter-spacing: var(--tracking-hero);
+    line-height: 1.02;
+    text-wrap: balance;
+  }
+
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .brand-mesh[data-drift]::before {
+    animation: mesh-drift 22s ease-in-out infinite alternate;
+  }
+
+  /* Sections rise into view as they scroll in, where the browser can tie motion to scrolling. */
+  @supports (animation-timeline: view()) {
+    [data-rise] {
+      animation: rise linear both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 40%;
     }
-    to {
-      offset-distance: 87%;
-    }
+  }
+
+  /*
+   * The product demos loop on one shared cycle, so their beats line up: a request arrives, the person
+   * picks, the agent hears, the card moves on. Each element names its beat with `--beat` (0 to 1).
+   */
+  [data-demo] {
+    --cycle: 14s;
+  }
+
+  /* A line that arrives when the agent hears the answer, just after the toast says it was sent. */
+  [data-demo] [data-heard] {
+    animation: demo-heard var(--cycle) var(--ease-out) infinite;
+  }
+
+  [data-demo] [data-pick] {
+    animation: demo-pick var(--cycle) ease infinite;
+  }
+
+  [data-demo] [data-cursor] {
+    animation: demo-cursor var(--cycle) var(--ease-out) infinite;
+  }
+
+  [data-demo] [data-toast] {
+    animation: demo-toast var(--cycle) var(--ease-out) infinite;
+  }
+
+  [data-demo] [data-travel] {
+    animation: demo-travel var(--cycle) var(--ease-out) infinite;
+  }
+
+  [data-demo] [data-pulse] {
+    animation: demo-pulse 2s ease-in-out infinite;
+  }
+
+  [data-demo] [data-flow] {
+    stroke-dasharray: 4 8;
+    animation: demo-flow 1.2s linear infinite;
+  }
+
+  [data-demo] [data-packet] {
+    animation: demo-packet 3.2s var(--ease-out) infinite;
+    animation-delay: calc(var(--beat, 0) * 3.2s);
+  }
+}
+
+@keyframes mesh-drift {
+  to {
+    transform: translate(6%, -4%) rotate(4deg);
+  }
+}
+
+/* "Pause motion" on the site (WCAG 2.2.2): everything that loops stops where it is. */
+[data-paused] :is([data-demo] *, [data-drift], [data-drift]::before) {
+  animation-play-state: paused !important;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(2.5rem);
+  }
+}
+
+@keyframes demo-heard {
+  0%,
+  44% {
+    opacity: 0;
+    transform: translateY(0.75rem);
+  }
+  50%,
+  94% {
+    opacity: 1;
+    transform: none;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* The person's pick: the chosen option rings at the moment the cursor clicks. */
+@keyframes demo-pick {
+  0%,
+  30% {
+    box-shadow: none;
+  }
+  33%,
+  92% {
+    box-shadow: inset 0 0 0 2px var(--color-accent);
+    background-color: var(--color-accent-tint);
+    color: var(--color-accent-ink);
+  }
+  100% {
+    box-shadow: none;
+  }
+}
+
+@keyframes demo-cursor {
+  0%,
+  12% {
+    opacity: 0;
+    transform: translate(6rem, 5rem);
+  }
+  18% {
+    opacity: 1;
+  }
+  30% {
+    transform: none;
+  }
+  32% {
+    transform: scale(0.85);
+  }
+  34%,
+  44% {
+    opacity: 1;
+    transform: none;
+  }
+  52%,
+  100% {
+    opacity: 0;
+    transform: translate(1rem, 2rem);
+  }
+}
+
+@keyframes demo-toast {
+  0%,
+  36% {
+    opacity: 0;
+    transform: translateY(0.75rem) scale(0.97);
+  }
+  40%,
+  70% {
+    opacity: 1;
+    transform: none;
+  }
+  76%,
+  100% {
+    opacity: 0;
+  }
+}
+
+/* A card crossing the board: from In progress to Done once the answer arrives. */
+@keyframes demo-travel {
+  0%,
+  46% {
+    transform: none;
+  }
+  56%,
+  92% {
+    transform: translateX(calc(100% + 0.75rem));
+  }
+  100% {
+    transform: none;
+  }
+}
+
+@keyframes demo-pulse {
+  50% {
+    opacity: 0.4;
+  }
+}
+
+@keyframes demo-flow {
+  to {
+    stroke-dashoffset: -12;
+  }
+}
+
+/* A request travelling from an agent to the decisions inbox. */
+@keyframes demo-packet {
+  0% {
+    offset-distance: 0%;
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    offset-distance: 100%;
+    opacity: 0;
   }
 }
 

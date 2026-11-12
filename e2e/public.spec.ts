@@ -2,19 +2,57 @@ import { expect, test } from "@playwright/test";
 
 import { expectAccessible } from "./support/checks";
 
-test("the landing page shows a sample timetable and the way in", async ({ page }) => {
+test("the landing page leads with the value, shows the product at work, and the way in", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("AI agents do the tasks. You make the calls.");
+  // The animated pictures of the product say what they show to a screen reader.
+  await expect(page.getByRole("figure").filter({ hasText: /copywriter agent asks which subject line goes out/i })).toBeAttached();
+  await expect(page.getByRole("list", { name: "Waiting on you" }).getByRole("listitem")).toHaveCount(4);
 
-  const sample = page.getByRole("region", { name: "The timetable" });
-  await expect(sample.getByRole("region", { name: "Close the quarter" })).toBeVisible();
-  await expect(sample.locator("li[data-task]")).not.toHaveCount(0);
-  await expect(sample.locator("[data-segment=in_progress]").first()).toBeVisible();
-  await expect(sample.locator("[data-now]")).toContainText("Now");
+  // Use cases are tabs: arrow keys move between them and show each team's sample morning.
+  const tabs = page.getByRole("tablist", { name: "Who runs a fleet of agents" });
+  await tabs.getByRole("tab", { name: "Marketing teams" }).focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(tabs.getByRole("tab", { name: "Software factories" })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("tabpanel")).toContainText("Coding agents in parallel");
+  await expect(page.getByRole("list", { name: "A sample morning for software factories" })).toContainText("cursor or offset pagination");
+  await page.keyboard.press("End");
+  await expect(tabs.getByRole("tab", { name: "Founders & chiefs of staff" })).toBeFocused();
+  await page.keyboard.press("Home");
+  await expect(tabs.getByRole("tab", { name: "Marketing teams" })).toHaveAttribute("aria-selected", "true");
+
+  // The real timetable, drawn from sample data.
+  const line = page.getByRole("region", { name: "Every task on one line." });
+  await expect(line.locator("li[data-task]")).not.toHaveCount(0);
+  await expect(line.locator("[data-now]")).toContainText("Now");
 
   await page.getByRole("navigation", { name: "Account" }).getByRole("link", { name: "Get started" }).click();
   await expect(page).toHaveURL("/sign-up");
   await expect(page.getByRole("button", { name: "Create account" })).toBeVisible();
+});
+
+test("the landing page's animations can be paused and played again", async ({ page }) => {
+  await page.goto("/");
+  const toggle = page.getByRole("button", { name: "Pause the animations" });
+  const playing = () =>
+    page.evaluate(() => [...document.querySelectorAll("[data-demo] *")].filter((element) => getComputedStyle(element).animationName !== "none" && getComputedStyle(element).animationPlayState === "running").length);
+  expect(await playing()).toBeGreaterThan(0);
+  await toggle.click();
+  await expect(page.getByRole("button", { name: "Play the animations" })).toHaveAttribute("aria-pressed", "true");
+  expect(await playing()).toBe(0);
+  await page.getByRole("button", { name: "Play the animations" }).click();
+  expect(await playing()).toBeGreaterThan(0);
+});
+
+test("the landing page keeps still for people who ask for less motion", async ({ browser }) => {
+  const context = await browser.newContext({ reducedMotion: "reduce" });
+  const page = await context.newPage();
+  await page.goto("/");
+  const animated = await page.evaluate(() =>
+    [...document.querySelectorAll("[data-demo] *, [data-rise], [data-drift]")].filter((element) => getComputedStyle(element).animationName !== "none").length,
+  );
+  expect(animated).toBe(0);
+  await context.close();
 });
 
 test("the docs are one click from the landing page, and walk page to page", async ({ page }) => {
