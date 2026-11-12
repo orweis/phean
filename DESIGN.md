@@ -254,7 +254,7 @@ The tokens above mirror the `@theme` block in `src/app/globals.css`, which is th
 
 **Creative North Star: "The Decision Center"**
 
-Agents do the tasks; people make the calls. The app is where those calls are made, so it stays quiet and exact, and the site is where the idea is sold, so it is bright and moving. The logo keeps the boulder on its violet slope, a nod to the name; the copy no longer leans on the myth. The ledger itself is quiet. A lavender-white ground holds white cards ruled in hairlines, and the only material that floats is a Liquid Glass bar on top, in Apple's manner: the functional layer of navigation and menus sits on glass above the content and lets the content show through, blurred, as it scrolls beneath.
+Agents do the tasks; people make the calls. The app is where those calls are made, so it stays quiet and exact, and the site is where the idea is sold, so it is bright and moving. The logo keeps the boulder on its violet slope. The marketing site explains the name once, in a drawing of agents rolling the boulder up the hill. The ledger itself is quiet. A lavender-white ground holds white cards ruled in hairlines, and the only material that floats is a Liquid Glass bar on top, in Apple's manner: the functional layer of navigation and menus sits on glass above the content and lets the content show through, blurred, as it scrolls beneath.
 
 The density is that of an operations screen, not a marketing page. People check in a few times a day to see what agents did, what is late, and what awaits their decision or answer, so the overview leads with the line, the agents' questions and the decisions, and every figure is a tabular numeral with its label. Colour carries meaning only: violet is the brand and work in motion, ember is what is new and what needs a person, and each state has one hue on every screen.
 
@@ -485,23 +485,25 @@ The mark is drawn in `src/components/logo.tsx` from one `MARK` geometry on a 32-
 
 ### Marketing site (signature)
 
-The landing (`app/page.tsx`, `components/marketing/`) is the one Persuade surface, so it is louder than the app while speaking its language. The message is the product's: **task management, flipped**. Agents capture, track and finish the work, people make the calls, and a fleet of agents needs one place to ask. The Sisyphus myth stays in the name and the logo only.
+The landing (`app/page.tsx`, `components/marketing/`) is the one Persuade surface, so it is louder than the app while speaking its language. The message is the product's: **task management, flipped**. Agents capture, track and finish the work, people make the calls, and a fleet of agents needs one place to ask. The name is explained once, in its own section: Phean is short for *Sisyphean*, and the boulder that rolls back every morning is now the agents' to push. Personal assistants are named as the agents Phean helps most.
 
-- **World:** light first, as Stripe and monday.com are. A `brand-mesh` (radial fields of violet, ember, sky and green from the tokens, drifting slowly, at under half strength in dark so they read as colour rather than glow) sits behind the hero and the closing call to action. One dusk band carries the decisions section, the page's committed colour field.
-- **Type:** the display face, Bricolage Grotesque (`--font-display`, loaded by `next/font/local` with a metric-matched fallback; the `display` utility: 700, `--tracking-hero` -0.035em, 1.02 leading, balanced), sets headlines at clamp(2.75rem, 6vw, 5rem) in the hero and clamp(2.25rem, 5vw, 4rem) for sections. The hero's second sentence is solid `accent-ink`; there is no gradient text, no eyebrow or kicker above a heading, and no arrow glued to a button label. Ledes are `text-lg` in `ink-2`. Calls to action use `Button` size `lg`.
+- **World:** light first, as Stripe and monday.com are. A `brand-mesh` (radial fields of violet, ember, sky and green from the tokens, drifting slowly, at under half strength in dark so they read as colour rather than glow) sits behind the hero and the closing call to action. Two dusk bands carry the name and the decisions, the page's committed colour fields. A turning conic glow (`data-glow`, the brand hues blurred, fainter in dark) lights the hero's picture of the product from behind.
+- **Type:** the display face, Bricolage Grotesque (`--font-display`, loaded by `next/font/local` with a metric-matched fallback; the `display` utility: 700, `--tracking-hero` -0.035em, 1.02 leading, balanced), sets headlines at clamp(3rem, 6.6vw, 5.75rem) in the hero and clamp(2.25rem, 5vw, 4rem) for sections. The hero's second sentence is solid `accent-ink`; there is no gradient text, no eyebrow or kicker above a heading, and no arrow glued to a button label. Ledes are `text-lg` in `ink-2`. Calls to action use `Button` size `lg`.
 - **Product frames:** pictures of the app, never screenshots. `ProductFrame` wraps the app's real components (badges, avatars, station dots, the timetable) in a miniature glass header and tab rail, rounded `xl` on the `--shadow-lift`. On the site only, product frames float and overlap, since they are pictures held up to the page; in the app, cards stay flat.
-- **Motion:** one 14-second loop shared by every `data-demo` (a request arrives, the cursor picks, the toast says it was sent, the agent hears, the card crosses to Done), `data-rise` scroll reveals, and the mesh drift, a transform on an oversized `::before`, never a repaint. All of it sits under `prefers-reduced-motion: no-preference`; at rest the hero shows the end of the story (option 2 picked, the card in Done). **Pause the animations** (`MotionToggle`, `data-paused` on the root) stops every loop where it is (WCAG 2.2.2). `e2e/public.spec.ts` checks both.
+- **Motion:** one 14-second loop shared by every `data-demo` (a request arrives, the cursor picks, the toast says it was sent, the agent hears, the card crosses to Done), the hill's 13-second loop (`data-hill`: the crew climbs, holds while the call is made, and fades as the next boulder waits; at rest it shows the call made), the marquee of agent names (`data-marquee`, wrapped and still under reduced motion), the hero's glow, `data-rise` scroll reveals, and the mesh drift, a transform on an oversized `::before`, never a repaint. All of it sits under `prefers-reduced-motion: no-preference`; at rest the hero shows the end of the story (option 2 picked, the card in Done). **Pause the animations** (`MotionToggle`, `data-paused` on the root) stops every loop where it is (WCAG 2.2.2). `e2e/public.spec.ts` checks both.
 - **Sections:**
   1. The hero (copy and calls to action at left, the animated Decisions screen at right with floating Activity and Tasks frames).
-  2. "Works with" Claude Code, Cursor, VS Code and any MCP client.
-  3. The flip (a person typing into a form, beside agents capturing from email, Slack and GitHub).
-  4. Decisions on the dusk band (four agents' requests flowing into one inbox, with four proofs).
-  5. Use cases as ARIA tabs (marketing teams, software factories, finance and operations, founders), each with what agents run, what reaches you, and a sample morning (`ActivityLog`, labelled illustrative).
-  6. The real timetable in a frame.
-  7. A bento feature grid.
-  8. Three numbered steps.
-  9. The closing call to action on the mesh.
-- **Claims:** content lives in `components/marketing/content.ts`. Stories are labelled illustrative, and no customer, figure or result is claimed.
+  2. "Made for the agents you already run": a marquee of coding agents (Claude Code, Cursor, VS Code) and personal assistants (Grok, Dots, Instinct, Muse), with the honest line that any agent that reaches an MCP server connects.
+  3. The name on a dusk band: why Phean (short for *Sisyphean*), `BoulderHill` (three agents in the station hues rolling the ember boulder up a full-bleed violet hill to a person with a phone, the call card floating above), three numbered beats, and the Camus line.
+  4. The flip (a person typing into a form, beside agents capturing from email, Slack and GitHub).
+  5. Personal assistants on the mesh: four points and `AssistantInbox`, a phone of their requests and a shared memory, labelled illustrative, with a trademark line.
+  6. Decisions on the second dusk band (four agents' requests flowing into one inbox, with four proofs).
+  7. Use cases as ARIA tabs (personal assistants, marketing teams, software factories, finance and operations, founders), each with what agents run, what reaches you, and a sample morning (`ActivityLog`, labelled illustrative).
+  8. The real timetable in a frame.
+  9. A bento feature grid.
+  10. Three numbered steps.
+  11. The closing call to action on the mesh.
+- **Claims:** content lives in `components/marketing/content.ts`. Stories are labelled illustrative, and no customer, figure or result is claimed. Assistants are named as a kind of agent, with no setup guide, integration or partnership claimed.
 
 The sign-in and sign-up pages share the world: on large screens their side panel is the brand mesh (still, and fading out before the form, so there is no seam) with the display headline; on phones only the wordmark sits above the form.
 

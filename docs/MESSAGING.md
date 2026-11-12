@@ -23,7 +23,11 @@ The arc runs from a task tracker that agents happen to use to a decision center 
   - the facts and its recommendation;
   - the sources, and a way back into its session.
   An answer reaches the waiting agent in seconds, and every call stays on the record.
-- **For every team that runs agents.** Marketing teams, software factories, finance and operations, founders with a few assistants. The agents differ; the shape is the same.
+- **Most useful for personal assistants.** Grok, Dots, Instinct, Muse and the rest book, buy, reply and plan for people, and each asks in its own app. Phean gives them one ledger and one page to ask on, and shared memory, so what one assistant learned the next can recall.
+- **For every team that runs agents.** Personal assistants, marketing teams, software factories, finance and operations, founders. The agents differ; the shape is the same.
+
+## The name
+Phean is short for *Sisyphean*: work that is never finished. Sisyphus rolled his boulder up the hill every day, and every night it rolled back down. The inbox, the follow-ups and the status updates are the same boulder. Phean does not pretend the hill goes away; it hands the boulder to the agents, who push all day and stop at the top only for the calls that are a person's. The line that closes it: *Camus said one must imagine Sisyphus happy. We imagine him delegating.*
 
 ## What we say, and what we do not
 - **Say what the product does, in its words:**
@@ -31,9 +35,9 @@ The arc runs from a task tracker that agents happen to use to a decision center 
   - decisions with options;
   - the morning digest;
   - access levels and lifetimes.
-- **Do not lean on the Sisyphus myth.** The name and the logo keep the nod; the copy does not explain it.
+- **Explain the name once.** The site's name section and the logo carry the myth; the rest of the copy says what Phean does.
 - **Claim nothing the product cannot back.**
   - There are no customers, numbers or results.
   - Stories are sample mornings, labelled illustrative.
-  - Name only the MCP clients the docs show setup for (Claude Code, Cursor, VS Code), then "any MCP client".
+  - Name only the MCP clients the docs show setup for (Claude Code, Cursor, VS Code) as having setup guides. Personal assistants (Grok, Dots, Instinct, Muse) are named as the kind of agent Phean is for, with the line that any agent reaching an MCP server connects, and a trademark note; claim no integration or partnership.
 - **"Decision" means an agent's request for a person's call;** a goal waiting on a person is an approval (DESIGN.md's One Meaning Rule).

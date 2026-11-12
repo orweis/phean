@@ -21,7 +21,7 @@ const PICKED_AT_REST = "motion-reduce:bg-accent-tint motion-reduce:text-accent-i
  */
 export function HeroDemo() {
   return (
-    <div data-demo className="relative mx-auto w-full max-w-2xl lg:max-w-none">
+    <div data-demo data-glow className="relative mx-auto w-full max-w-2xl lg:max-w-none">
       <ProductFrame
         active="Decisions"
         counts={{ Decisions: 2 }}

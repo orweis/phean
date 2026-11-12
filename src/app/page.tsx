@@ -4,12 +4,14 @@ import Link from "next/link";
 import { AppearancePicker } from "@/components/appearance-picker";
 import { TimetableLegend } from "@/components/charts/timetable";
 import { Logo, LogoMark } from "@/components/logo";
+import { AssistantInbox } from "@/components/marketing/assistant-inbox";
+import { BoulderHill } from "@/components/marketing/boulder-hill";
 import { DecisionHub } from "@/components/marketing/decision-hub";
 import { FeatureGrid } from "@/components/marketing/feature-grid";
 import { FlipDemo } from "@/components/marketing/flip-demo";
 import { HeroDemo } from "@/components/marketing/hero-demo";
 import { MotionToggle } from "@/components/marketing/motion-toggle";
-import { CLIENTS } from "@/components/marketing/content";
+import { ASSISTANTS, CLIENTS } from "@/components/marketing/content";
 import { ProductFrame } from "@/components/marketing/product-frame";
 import { UseCases } from "@/components/marketing/use-cases";
 import { SampleTimetable } from "@/components/sample-timetable";
@@ -24,7 +26,7 @@ import { getAppearance } from "@/server/web";
 export const metadata: Metadata = {
   title: { absolute: "Phean: your agents run the tasks, you make the calls" },
   description:
-    "Phean flips task management: AI agents capture, track and finish the work, and every decision that needs a person lands in one place. The decision center for a fleet of agents.",
+    "Phean flips task management: AI agents and personal assistants capture, track and finish the work, and every decision that needs a person lands in one place. The decision center for a fleet of agents.",
 };
 
 const STEPS = [
@@ -32,6 +34,22 @@ const STEPS = [
   { title: "Connect your agents", body: "Add Phean's MCP address to Claude Code, Cursor, VS Code or any MCP client, and approve each agent in your browser. No key to copy." },
   { title: "Make the calls", body: "Agents capture, claim and finish the work. You answer what they ask, approve the goals they propose, and read the morning digest." },
 ];
+
+/** The agents the strip names: the coding clients the docs set up, and the personal assistants Phean is most useful to. */
+const AGENTS = [...CLIENTS.map((name) => ({ name, kind: "Coding agent" })), ...ASSISTANTS.map((name) => ({ name, kind: "Personal assistant" }))];
+
+const BEATS = [
+  ["Agents push", "They capture the work from email, chat and issues, claim it so no two collide, and roll it uphill all day without tiring."],
+  ["You make the call", "At the top they stop and ask: one question, its options, the facts and their recommendation. You answer in a tap."],
+  ["The next one is waiting", "The work comes back every morning; it always will. That is fine now, because it is not you pushing."],
+] as const;
+
+const ASSISTANT_POINTS = [
+  ["One inbox for every “should I?”", "Flights, invitations, purchases and replies wait on one page, each with its options and a recommendation. Answer from your phone."],
+  ["Told once, known by all", "Shared memory means the seat you prefer, told to one assistant, is recalled by the next. They check before they ask you again."],
+  ["Errands that wait for your say", "When an errand needs you (a price, a reply in your name), the assistant asks on the page and carries on the moment you answer."],
+  ["Their night, in one digest", "The morning digest says what your assistants finished overnight, what is late, and what waits on you today."],
+] as const;
 
 const DOCS = [
   { title: "Getting started", slug: "getting-started" },
@@ -76,9 +94,10 @@ export default async function LandingPage() {
       <header className="glass-bar text-ink">
         <div className="mx-auto flex h-16 max-w-7xl items-center gap-2 px-4 sm:px-6">
           <Logo className="sm:mr-4" />
-          <nav aria-label="Site" className="flex items-center gap-1 max-md:hidden">
+          <nav aria-label="Site" className="flex items-center gap-1 max-lg:hidden">
             {[
-              { href: "#flip", label: "Why Phean" },
+              { href: "#name", label: "The name" },
+              { href: "#assistants", label: "Assistants" },
               { href: "#decisions", label: "Decisions" },
               { href: "#use-cases", label: "Use cases" },
               { href: routes.docs(), label: "Docs" },
@@ -112,12 +131,12 @@ export default async function LandingPage() {
           <div aria-hidden data-drift className="brand-mesh absolute inset-x-0 -top-16 -z-10 h-[calc(100%+4rem)] mask-b-from-70%" />
           <div className="mx-auto grid max-w-7xl grid-cols-1 items-center gap-x-12 gap-y-16 px-4 pt-14 pb-16 sm:px-6 sm:pt-24 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] lg:pb-20">
             <div>
-              <h1 id="hero-heading" className="display text-[clamp(2.75rem,6vw,5rem)] text-ink">
+              <h1 id="hero-heading" className="display text-[clamp(3rem,6.6vw,5.75rem)] text-ink">
                 AI agents do the tasks. <span className="text-accent-ink">You make the calls.</span>
               </h1>
               <p className="mt-6 max-w-xl text-lg leading-relaxed text-ink-2">
-                Phean is the decision center for your agents. They capture, claim and finish the work; every call that needs you waits in one place, with a way back to
-                the agent.
+                Phean is the decision center for your AI agents and personal assistants. They capture, claim and finish the work; every call that needs you waits in
+                one place, with a way back to the agent.
               </p>
               <div className="mt-8 flex flex-wrap items-center gap-3">
                 <ButtonLink href={start.href} variant="primary" size="lg">
@@ -141,16 +160,51 @@ export default async function LandingPage() {
           </div>
         </section>
 
-        <section aria-label="Works with" className="border-y border-rule bg-panel/60">
-          <p className="mx-auto flex max-w-7xl flex-wrap items-center justify-center gap-x-8 gap-y-2 px-4 py-6 text-sm text-ink-2 sm:px-6">
-            <span className="font-semibold text-ink">Works with the agents you already run:</span>
-            {CLIENTS.map((client) => (
-              <span key={client} className="font-display text-md font-bold text-ink-2">
-                {client}
-              </span>
-            ))}
-            <span>and any MCP client</span>
+        <section aria-labelledby="works-heading" className="border-y border-rule bg-panel/60 py-7">
+          <h2 id="works-heading" className="px-4 text-center text-sm font-semibold text-ink">
+            Made for the agents you already run
+          </h2>
+          <div className="mt-4 overflow-hidden mask-x-from-85% mask-x-to-100%">
+            <ul data-marquee className="flex w-max items-center gap-x-14 px-7 motion-reduce:w-auto motion-reduce:flex-wrap motion-reduce:justify-center motion-reduce:gap-y-3">
+              {[...AGENTS, ...AGENTS].map(({ name, kind }, index) => (
+                <li key={`${name}-${index}`} aria-hidden={index >= AGENTS.length || undefined} className={cx("flex items-baseline gap-2", index >= AGENTS.length && "motion-reduce:hidden")}>
+                  <span className="font-display text-xl font-bold text-ink">{name}</span>
+                  <span className="text-xs text-muted">{kind}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+          <p className="mx-auto mt-4 max-w-2xl px-4 text-center text-xs text-muted">
+            Phean speaks MCP: any agent or assistant that can reach an MCP server connects, approved in your browser. The setup guides cover {CLIENTS.join(", ")}.
           </p>
+        </section>
+
+        <section id="name" aria-labelledby="name-heading" data-dusk className="dusk scroll-mt-16 overflow-hidden">
+          <div className="mx-auto max-w-7xl px-4 pt-24 sm:px-6 sm:pt-32">
+            <SectionIntro
+              id="name-heading"
+              tone="dusk"
+              title="Why Phean? Because the work is Sisyphean."
+              lede="Phean is short for Sisyphean: work that is never finished. Sisyphus rolled his boulder up the hill every day, and every night it rolled back down. The inbox, the follow-ups and the status updates are the same boulder. Phean does not pretend the hill goes away. It hands the boulder to your agents, who push all day and stop at the top only for the calls that are yours."
+            />
+          </div>
+          <div className="mx-auto mt-6 max-w-[1680px] sm:-mt-16">
+            <BoulderHill />
+          </div>
+          <div className="mx-auto max-w-7xl px-4 pb-24 sm:px-6 sm:pb-32">
+            <ol className="grid grid-cols-1 gap-8 text-sm sm:grid-cols-3">
+              {BEATS.map(([title, body], index) => (
+                <li key={title} data-rise>
+                  <p className="font-display text-sm font-bold text-signal">{`0${index + 1}`}</p>
+                  <h3 className="mt-1 font-display text-xl font-bold text-dusk-ink">{title}</h3>
+                  <p className="mt-2 text-dusk-muted">{body}</p>
+                </li>
+              ))}
+            </ol>
+            <p data-rise className="display mx-auto mt-20 max-w-3xl text-center text-[clamp(1.75rem,3.6vw,2.75rem)] text-dusk-ink">
+              Camus said one must imagine Sisyphus happy. <span className="text-signal">We imagine him delegating.</span>
+            </p>
+          </div>
         </section>
 
         <section id="flip" aria-labelledby="flip-heading" className="mx-auto max-w-7xl scroll-mt-20 px-4 py-24 sm:px-6 sm:py-32">
@@ -161,6 +215,31 @@ export default async function LandingPage() {
           />
           <div data-rise className="mt-14">
             <FlipDemo />
+          </div>
+        </section>
+
+        <section id="assistants" aria-labelledby="assistants-heading" className="relative isolate scroll-mt-16 overflow-hidden">
+          <div aria-hidden data-drift className="brand-mesh absolute inset-0 -z-10" />
+          <div className="mx-auto grid max-w-7xl grid-cols-1 items-center gap-x-16 gap-y-14 px-4 py-24 sm:px-6 sm:py-32 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
+            <div>
+              <SectionIntro
+                id="assistants-heading"
+                title="Built for personal assistants."
+                lede={`${ASSISTANTS.join(", ")}: the assistants that book, buy, reply and plan for you are the agents most people will run first, and where Phean helps most. Each is good at its errand, and each asks you in its own app. Phean gives them one ledger to report to and one page to ask on.`}
+              />
+              <ul className="mt-10 grid grid-cols-1 gap-x-8 gap-y-7 sm:grid-cols-2">
+                {ASSISTANT_POINTS.map(([title, body]) => (
+                  <li key={title} data-rise>
+                    <h3 className="font-display text-lg font-bold text-ink">{title}</h3>
+                    <p className="mt-1.5 text-sm text-ink-2">{body}</p>
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-8 max-w-xl text-xs text-muted">Assistant names are their makers&apos; trademarks, named for the kind of agent Phean serves; no partnership is implied.</p>
+            </div>
+            <div data-rise>
+              <AssistantInbox />
+            </div>
           </div>
         </section>
 
@@ -195,7 +274,7 @@ export default async function LandingPage() {
           <SectionIntro
             id="use-cases-heading"
             title="For every team that runs agents."
-            lede="Marketing teams, software factories, finance and operations, founders with a handful of assistants: the agents differ, and the shape is the same. Agents do the work; the calls come to one place."
+            lede="Personal assistants, marketing teams, software factories, finance and operations, founders: the agents differ, and the shape is the same. Agents do the work; the calls come to one place."
           />
           <div data-rise className="mt-12">
             <UseCases />
