@@ -14,6 +14,7 @@ import { STATION_STYLE } from "./charts/stations";
 import type { GoalOption } from "./goal-options";
 import { TaskCard } from "./task-card";
 import { ActionButton } from "./ui/action-button";
+import { ChipRail } from "./ui/chip-rail";
 import { segment, SEGMENTED } from "./ui/segmented";
 
 /** Finished cards shown before the rest fold away, so Done does not outrun the open lanes. */
@@ -104,11 +105,12 @@ export function phoneLane(board: Board, asked: string | undefined): string {
 
 /**
  * On phones the lanes would stack thousands of pixels deep, so a sticky picker shows one lane at
- * a time, held in the URL so a refresh keeps it. Each card's ⋯ menu moves it to any stage.
+ * a time, held in the URL so a refresh keeps it, with the chosen lane's chip scrolled to the middle
+ * of the picker. Each card's ⋯ menu moves it to any stage.
  */
 function LanePicker({ board, slug, goalId, shown }: { board: Board; slug: string; goalId?: string; shown: string }) {
   return (
-    <nav aria-label="Lane" className="sticky top-[6.75rem] z-20 -mx-1 mb-4 overflow-x-auto px-1 py-1 md:hidden">
+    <ChipRail label="Lane" selected={shown} className="sticky top-[6.75rem] z-20 -mx-1 mb-4 px-1 py-1 md:hidden">
       <div className={cx(SEGMENTED, "w-max min-w-full")}>
         {board.columns.map(({ stage, tasks }) => (
           <Link
@@ -123,7 +125,7 @@ function LanePicker({ board, slug, goalId, shown }: { board: Board; slug: string
           </Link>
         ))}
       </div>
-    </nav>
+    </ChipRail>
   );
 }
 

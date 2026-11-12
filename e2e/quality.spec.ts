@@ -333,6 +333,26 @@ test.describe("signed in", () => {
       await expect(picker.getByRole("link", { name: /^Done/ })).toHaveAttribute("aria-current", "page");
     });
 
+    test("the lane picker scrolls the chosen lane's chip into view, and fades where more lanes lie", async ({ page }) => {
+      await page.goto("/w/globex/board?lane=backlog");
+      const picker = page.getByRole("navigation", { name: "Lane" });
+      const chosen = picker.getByRole("link", { name: /^Backlog/ });
+      await expect(chosen).toHaveAttribute("aria-current", "page");
+      // The last lane's chip sits wholly inside the picker, with the earlier lanes faded off to the left.
+      await expect.poll(async () => {
+        const [rail, chip] = await Promise.all([picker.boundingBox(), chosen.boundingBox()]);
+        return chip!.x >= rail!.x && chip!.x + chip!.width <= rail!.x + rail!.width;
+      }).toBe(true);
+      await expect(picker).toHaveAttribute("data-more", "left");
+      // Picking the first lane brings its chip back, and the fade moves to the right.
+      await picker.getByRole("link", { name: /^Inbox/ }).click();
+      await expect(page).toHaveURL(/lane=inbox/);
+      await expect(picker.getByRole("link", { name: /^Inbox/ })).toBeInViewport({ ratio: 1 });
+      await expect(picker).toHaveAttribute("data-more", "right");
+      // Chip rails draw no scrollbar.
+      expect(await picker.evaluate((rail) => getComputedStyle(rail).scrollbarWidth)).toBe("none");
+    });
+
     test("an agent's question opens its answer inline, under the question", async ({ page }) => {
       await page.goto("/w/globex/decisions");
       const entry = page.locator("[data-entry]").first();

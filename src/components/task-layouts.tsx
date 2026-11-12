@@ -5,6 +5,7 @@ import { cx } from "@/lib/cx";
 import { routes } from "@/lib/routes";
 import { carriedFilters, TASK_LAYOUT_META, TASK_LAYOUTS, type TaskLayout, type TaskQuery } from "@/lib/task-views";
 
+import { ChipRail } from "./ui/chip-rail";
 import { segment, SEGMENTED } from "./ui/segmented";
 
 const ICONS: Record<TaskLayout, typeof KanbanSquare> = { board: KanbanSquare, table: Table2, calendar: CalendarDays, map: Network };
@@ -16,7 +17,7 @@ const ICONS: Record<TaskLayout, typeof KanbanSquare> = { board: KanbanSquare, ta
 export function TaskLayoutSwitcher({ slug, layout, query }: { slug: string; layout: TaskLayout; query: TaskQuery }) {
   const kept = carriedFilters(query);
   return (
-    <nav aria-label="Task layout" className={cx(SEGMENTED, "w-fit max-w-full overflow-x-auto")}>
+    <ChipRail label="Task layout" selected={layout} className={cx(SEGMENTED, "w-fit max-w-full")}>
       {TASK_LAYOUTS.map((key) => {
         const Icon = ICONS[key];
         return (
@@ -32,6 +33,6 @@ export function TaskLayoutSwitcher({ slug, layout, query }: { slug: string; layo
           </Link>
         );
       })}
-    </nav>
+    </ChipRail>
   );
 }
