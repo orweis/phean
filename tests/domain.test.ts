@@ -871,7 +871,7 @@ const newTodo = async (title: string) => (await captureTasks(human, { tasks: [{ 
 describe("workflow stages", () => {
   it("starts with the built-in stages, Backlog included, and renames, hides and adds stages within a kind", async () => {
     const { getWorkflow, saveWorkflow } = await import("@/server/domain/workflow");
-    expect((await getWorkflow(human, {})).map((stage) => stage.key)).toEqual(["inbox", "backlog", "todo", "in_progress", "done"]);
+    expect((await getWorkflow(human, {})).map((stage) => stage.key)).toEqual(["inbox", "todo", "in_progress", "done", "backlog"]);
 
     const saved = await saveWorkflow(human, {
       stages: [
@@ -885,11 +885,11 @@ describe("workflow stages", () => {
     });
     expect(saved.map((stage) => [stage.key, stage.label, stage.kind, stage.hidden])).toEqual([
       ["inbox", "Inbox", "inbox", false],
-      ["backlog", "Someday", "backlog", true],
       ["todo", "Ready", "todo", false],
       ["in_progress", "Doing", "in_progress", false],
       ["in-review", "In review", "in_progress", false],
       ["done", "Done", "done", false],
+      ["backlog", "Someday", "backlog", true],
     ]);
     // A kind keeps its built-in stage, and work always has somewhere visible to go.
     await expect(saveWorkflow(human, { stages: saved.filter((stage) => stage.key !== "todo") })).rejects.toMatchObject({ code: "invalid" });

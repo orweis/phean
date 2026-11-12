@@ -43,7 +43,7 @@ test("stages are set in Settings, and documents carry the work between agents an
   const task = await test.step("an agent sees the stages, captures a task and attaches its draft", async () =>
     asAgent(token, async (agent) => {
       const { workflow } = await agent.call<{ workflow: { key: string; label: string }[] }>("whoami");
-      expect(workflow.map((stage) => stage.label)).toEqual(["Inbox", "Backlog", "Ready", "In progress", "Review", "Done"]);
+      expect(workflow.map((stage) => stage.label)).toEqual(["Inbox", "Ready", "In progress", "Review", "Done", "Backlog"]);
       const { created } = await agent.call<{ created: Task[] }>("capture_tasks", { tasks: [{ title: "Write the launch post", status: "todo" }] });
       const [captured] = created as [Task];
       await agent.call("attach_document", {

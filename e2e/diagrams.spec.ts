@@ -244,10 +244,10 @@ test("the calendar counts the tasks it cannot place, and the table lists just th
   await expect(page).toHaveURL("/w/globex/board?view=table");
 });
 
-test("the board lanes follow the stations in order", async ({ page }) => {
+test("the board lanes run from Inbox to Done, with Backlog parked after Done", async ({ page }) => {
   await page.goto("/w/globex/board");
   const lanes = page.locator("section[aria-labelledby^=lane-] h2");
-  await expect(lanes).toHaveText(["Inbox", "Backlog", "To do", "In progress", "Done"]);
+  await expect(lanes).toHaveText(["Inbox", "To do", "In progress", "Done", "Backlog"]);
   await expect(lane(page, "backlog")).toContainText("Evaluate a second payroll provider");
   await expect(lane(page, "in_progress")).toContainText("Chase three overdue invoices");
 

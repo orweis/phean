@@ -25,6 +25,13 @@ export type TaskStatus = (typeof TASK_STATUSES)[number];
 export const OPEN_TASK_STATUSES = ["inbox", "backlog", "todo", "in_progress"] as const satisfies readonly TaskStatus[];
 /** The stations a task passes through, in board and chart order; "dropped" is an end, not a station. */
 export const STATIONS = ["inbox", "backlog", "todo", "in_progress", "done"] as const satisfies readonly TaskStatus[];
+
+/**
+ * The board's lanes, left to right: the flow from new to finished, with Backlog parked to the right
+ * of Done, out of the way of work in motion. The workflow (lanes, move menus, the table's Stage sort,
+ * the lane editor) follows it; the charts keep `STATIONS`, the order a task travels.
+ */
+export const LANE_ORDER = ["inbox", "todo", "in_progress", "done", "backlog"] as const satisfies readonly (typeof STATIONS)[number][];
 export type Station = (typeof STATIONS)[number];
 
 export const GOAL_STATUSES = ["proposed", "active", "achieved", "abandoned"] as const;
