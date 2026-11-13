@@ -72,8 +72,22 @@ async function parentFor(ctx: Ctx, parentAgentId: string): Promise<Agent> {
   return parent;
 }
 
+/** A sub-agent's name names one agent: `actingAs` resolves it, so two live sub-agents of a parent may not share it. */
+async function assertSubagentNameFree(ctx: Ctx, parent: Agent, name: string): Promise<void> {
+  const [taken] = await ctx.db
+    .select({ id: agents.id })
+    .from(agents)
+    .where(and(inTenant(ctx, agents), eq(agents.parentAgentId, parent.id), sameName(name), isNull(agents.revokedAt)))
+    .limit(1);
+  if (taken) throw conflict(`"${parent.name}" already has a sub-agent named "${name}" (${taken.id}). Act as it with actingAs "${name}", or choose another name.`);
+}
+
+/** Agent names compare as people read them: case and runs of spaces do not matter. */
+const sameName = (name: string) => sql`lower(${agents.name}) = lower(${name})`;
+
 async function issue(ctx: Ctx, values: { name: string; parent?: Agent; purpose?: string }): Promise<{ agent: Agent; token: string }> {
   const { token, tokenHash, tokenPrefix } = generateAgentToken();
+  if (values.parent) await assertSubagentNameFree(ctx, values.parent, values.name);
   return inTransaction(ctx, async (tx) => {
     const [agent] = await tx.db
       .insert(agents)
@@ -485,6 +499,17 @@ export async function resolveNamedSubagent(db: Db, principal: AgentPrincipal, ra
   if (!name) return principal;
   const [parent] = await db.select(agentColumns).from(agents).where(eq(agents.id, principal.agent.id));
   if (!parent || parent.parentAgentId || name.toLowerCase() === parent.name.toLowerCase()) return principal;
+
+  // The parent's sub-agent of this name, however it was made: detected here before, or issued its
+  // own token (create_subagent, or a person's key). A live one wins, the oldest first; when every
+  // one of that name was revoked, the name stays refused.
+  const named = await db
+    .select(agentColumns)
+    .from(agents)
+    .where(and(eq(agents.tenantId, principal.tenant.id), eq(agents.parentAgentId, parent.id), sameName(name)))
+    .orderBy(sql`${agents.revokedAt} is not null`, asc(agents.createdAt))
+    .limit(1);
+  if (named[0]) return resolvePrincipal(db, eq(agents.id, named[0].id));
 
   const key = sharedKey(parent.id, name);
   const find = () => db.select(agentColumns).from(agents).where(and(eq(agents.tenantId, principal.tenant.id), eq(agents.tokenHash, key)));
