@@ -8,7 +8,8 @@ export interface TableTask {
   priority: Priority;
   dueDate: string | null;
   goalTitle: string | null;
-  claimedByName: string | null;
+  /** Who is working on it now: the agent that claimed it, or the person who took it. */
+  operatorName: string | null;
   updatedAt: Date | string;
 }
 
@@ -22,7 +23,7 @@ export const TABLE_COLUMN_LABELS: Record<TableColumn, string> = {
   priority: "Priority",
   due: "Due",
   goal: "Goal",
-  holder: "Held by",
+  holder: "Operator",
   updated: "Updated",
 };
 
@@ -77,7 +78,7 @@ export function sortTasks<T extends TableTask>(tasks: readonly T[], sort: TableS
       case "goal":
         return task.goalTitle;
       case "holder":
-        return task.claimedByName;
+        return task.operatorName;
       case "updated":
         return new Date(task.updatedAt).getTime();
     }

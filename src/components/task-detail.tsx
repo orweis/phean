@@ -2,13 +2,15 @@ import { Archive, ArchiveRestore, Bot, CornerDownRight, History } from "lucide-r
 import Link from "next/link";
 
 import { unarchiveTaskAction } from "@/app/w/[slug]/actions";
-import { PRIORITY_META } from "@/lib/domain";
+import { isOpenTaskStatus, PRIORITY_META } from "@/lib/domain";
 import { timeAgo } from "@/lib/format";
 import { routes } from "@/lib/routes";
 import { requireWorkspace } from "@/server/auth/session";
+import { listAgents } from "@/server/domain/agents";
 import { listGoals } from "@/server/domain/goals";
 import { can } from "@/server/domain/policy";
 import { getTask } from "@/server/domain/tasks";
+import { listMembers } from "@/server/domain/tenants";
 import { orNotFound } from "@/server/web";
 
 import { ActivityFeed } from "./activity-feed";
@@ -17,7 +19,8 @@ import { AnsweredDecisions } from "./answered-decisions";
 import { MarkdownView } from "./documents/markdown-view";
 import { DocumentChips } from "./documents/document-chips";
 import { OpenQuestions } from "./open-questions";
-import { StageBadge, TaskActionRow, TaskMeta } from "./task-card";
+import { HandOffPopover } from "./hand-off-form";
+import { HandoverNote, StageBadge, TaskActionRow, TaskMeta } from "./task-card";
 import { ActionButton } from "./ui/action-button";
 import { Badge, MetaBadge } from "./ui/badge";
 
@@ -40,8 +43,18 @@ function Section({ title, children, count }: { title: string; count?: number; ch
  */
 export async function TaskDetail({ slug, taskId, headingLevel = 1 }: { slug: string; taskId: string; headingLevel?: 1 | 2 }) {
   const { ctx } = await requireWorkspace(slug);
-  const [{ task, parent, subtasks, activity }, goals] = await Promise.all([orNotFound(getTask(ctx, { taskId })), listGoals(ctx, {})]);
+  const [{ task, parent, subtasks, activity }, goals, agents, members] = await Promise.all([
+    orNotFound(getTask(ctx, { taskId })),
+    listGoals(ctx, {}),
+    listAgents(ctx, {}),
+    listMembers(ctx, {}),
+  ]);
   const canWrite = can(ctx.actor, "task:write");
+  // Who the task can be handed to: live agents, and the people here other than you.
+  const targets = {
+    agents: agents.filter((agent) => agent.live).map(({ id, name }) => ({ id, name })),
+    people: members.filter((person) => person.userId !== ctx.actor.id).map(({ userId, name }) => ({ userId, name })),
+  };
   const Heading = headingLevel === 1 ? "h1" : "h2";
   const answered = task.inputAnswers.map((request) => ({ task, request }));
 
@@ -89,7 +102,13 @@ export async function TaskDetail({ slug, taskId, headingLevel = 1 }: { slug: str
         <p className="text-xs text-muted">
           Captured by {task.createdByName} {timeAgo(task.createdAt)} · updated {timeAgo(task.updatedAt)}
         </p>
+        <HandoverNote task={task} />
         <TaskActionRow task={task} slug={slug} canWrite={canWrite} goals={goals} className="pt-1" />
+        {canWrite && isOpenTaskStatus(task.status) && (
+          <div className="flex">
+            <HandOffPopover task={task} slug={slug} targets={targets} />
+          </div>
+        )}
       </header>
 
       {task.inputRequest && (

@@ -33,6 +33,8 @@ You work in a Phean workspace over MCP (the "phean" tools).
   (or call get_activity and list_tasks with claimed "mine", then collect_answers).
 - Capture work you find with capture_tasks, with a source and a stable source_ref.
 - Claim a task before you start it, complete it with a short note, release what you cannot finish.
+- To pass a task on, call hand_off_task (to an agent, a person, or anyone) with a note on where it
+  stands. Check list_tasks with claimed "handed_to_me" for work handed to you, and claim it to pick it up.
 - When you need a decision or a fact only I have, call request_input with a clear question,
   options, your recommendation and a link back to this conversation. Do not only ask in chat.
 - Then wait with wait_for_answers, or carry on and call collect_answers later. Act on every answer.

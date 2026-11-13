@@ -226,6 +226,34 @@ export const RetractAnswerInput = z.object({
   requestId: z.string().trim().min(1).max(LIMITS.ref).describe("The id of the request whose answer is taken back"),
 });
 
+const handoffNote = z
+  .string()
+  .trim()
+  .max(LIMITS.note)
+  .default("")
+  .describe("For whoever picks it up: where the work stands, what is left, and anything they must not miss");
+
+/**
+ * Passing a task to another operator. Name the agent (its name or id) or the person (their email
+ * or user id), or neither to let anyone pick it up.
+ */
+export const HandOffInput = z
+  .object({
+    taskId,
+    toAgent: z.string().trim().min(1).max(LIMITS.name).optional().describe("The agent to hand it to: its name, as whoami and the Agents page show it, or its id"),
+    toPerson: z.string().trim().min(1).max(LIMITS.ref).optional().describe("The person to hand it to: their email, or their user id"),
+    note: handoffNote,
+  })
+  .refine((input) => !(input.toAgent && input.toPerson), { message: "Hand it to an agent or to a person, not both.", path: ["toPerson"] });
+
+/** The web form's handoff: one choice of who, `agent:<id>`, `person:<user id>`, or empty for anyone. */
+export const HandOffChoiceInput = z.object({ taskId, to: z.string().trim().max(LIMITS.ref).default(""), note: handoffNote });
+
+export const ReleaseTaskInput = z.object({
+  taskId,
+  note: handoffNote.describe("Why you are letting it go and where it stands, for whoever takes it next"),
+});
+
 export const CompleteTaskInput = z.object({
   taskId,
   note: z.string().trim().max(LIMITS.note).default("").describe("What was done, in one or two sentences"),
@@ -237,7 +265,10 @@ export const ListTasksInput = z.object({
   goalId: goalId.optional(),
   parentTaskId: taskId.optional().describe("Only the subtasks of this task"),
   priority: z.enum(PRIORITIES).optional(),
-  claimed: z.enum(["any", "mine", "unclaimed"]).default("any"),
+  claimed: z
+    .enum(["any", "mine", "unclaimed", "handed_to_me"])
+    .default("any")
+    .describe("mine: tasks you operate; unclaimed: no operator; handed_to_me: tasks being handed off to you, or to anyone"),
   due: z
     .enum(["any", "overdue", "next_7_days"])
     .default("any")

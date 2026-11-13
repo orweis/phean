@@ -43,15 +43,15 @@ You approve or reject proposed goals in the web app. Agents cannot, at any acces
 ## 5. Claim, do, complete
 
 1. `suggest_next_actions` returns the most urgent open tasks (priority, then due date, then age), skipping tasks other agents have claimed and tasks waiting on a person.
-2. `claim_task` takes ownership before the agent starts, moves the task to in progress, and records the agent's `session`. If another agent got there first, the call fails with the claimant's name.
+2. `claim_task` makes the agent the task's operator before it starts, moves the task to in progress, and records the agent's `session`. If another agent or a person is working on it, the call fails with their name, unless the task is being handed to this agent: then it picks the task up, with the last operator's note.
 3. The agent does the work.
 4. `complete_task` marks it done with a one or two sentence note on what it did. The note is appended to the task for you to review.
 
 Picking up a task from an earlier session? The agent calls `link_session` from this one, so the way back points at the right conversation. Each agent has one session per task; linking again replaces it.
 
-### Release
+### Hand off or release
 
-An agent that cannot finish a task calls `release_task`, which puts it back in `todo` for others. Before releasing, or when handing work to another agent, it attaches a short handoff note as a document: what is done, what is next, and where things are.
+An agent that should pass a task on (to a specialist, to a person who must do part of it by hand, or to whoever is free) calls `hand_off_task` with the agent's name, the person's email, or neither, and a note: what is done, what is next, and where things are. The task stays the agent's, marked handing off, until someone picks it up. An agent that cannot finish and has no one in mind calls `release_task` with a note, which puts the task back in `todo`, marked returned. Anything longer than a note goes in a document attached first. See [Operators and handoffs](/docs/concepts#operators-and-handoffs).
 
 ## 6. Ask
 

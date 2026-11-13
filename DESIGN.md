@@ -400,7 +400,7 @@ Controls are capsules: buttons, tabs, badges, count chips, segmented controls an
 - **Counts:** the tab rail's counts for what needs a person (Overview, Decisions) are ember capsules with dark numerals; the Tasks tab's inbox count is a neutral capsule (`fill`, `ink-2`), so ember keeps its meaning.
 - **Filters:** the memory kinds are capsules, violet-tinted when selected and filled grey otherwise, each with its count.
 - **Lane counts:** a neutral capsule beside the lane's name; a folded lane reads "5 of 13".
-- **Who acted:** an agent is a squared tile with a bot, a person a round disc, both neutral; a task's holder is meta text, "Held by Finance clerk", never a violet badge, since violet is a state.
+- **Who acted:** an agent is a squared tile with a bot, a person a round disc, both neutral; a task's operator is meta text with a bot or person glyph, "Operator: Finance clerk", never a violet badge, since violet is a state. A handover under way is a badge with a handshake, in `DELEGATION_META`'s tones: handing off is sky (new to whoever picks it up), picking up is the violet of work in motion, returned is neutral; never ember, which stays for what waits on a person's answer. The handoff note sits under the title on the task's page as a quiet figure.
 
 ### Cards / Containers
 

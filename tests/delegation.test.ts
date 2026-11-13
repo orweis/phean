@@ -1,0 +1,180 @@
+import { beforeAll, beforeEach, describe, expect, it } from "vitest";
+
+import type { Ctx } from "@/server/domain/context";
+import { listActivity } from "@/server/domain/events";
+import { getBoard } from "@/server/domain/overview";
+import {
+  addTask,
+  cancelHandOff,
+  claimTask,
+  completeTask,
+  getTask,
+  handOffTask,
+  linkSession,
+  listTasks,
+  releaseTask,
+  requestInput,
+  suggestNextActions,
+  takeTask,
+  updateTask,
+  type Task,
+} from "@/server/domain/tasks";
+import { reasonsFor } from "@/server/webhooks/routing";
+
+import { addMember, asUser, createTestDb, seedUser, seedWorkspace, type TestDb, type TestUser, type Workspace } from "./support/db";
+
+let testDb: TestDb;
+let ws: Workspace;
+let human: Ctx;
+let scout: Ctx;
+let closer: Ctx;
+let lee: TestUser;
+let leeCtx: Ctx;
+let task: Task;
+
+beforeAll(async () => {
+  testDb = await createTestDb();
+});
+
+beforeEach(async () => {
+  ws = await seedWorkspace(testDb.db);
+  ({ human } = ws);
+  scout = ws.scout.ctx;
+  closer = ws.closer.ctx;
+  lee = await seedUser(testDb.db, "Lee");
+  await addMember(testDb.db, ws.tenant, lee, "member");
+  leeCtx = asUser(testDb.db, ws.tenant, lee, "member");
+  const { created } = await addTask(human, { title: "Draft the launch post", status: "todo" });
+  task = created[0]!;
+});
+
+const view = async (ctx: Ctx, taskId = task.id) => (await getTask(ctx, { taskId })).task;
+
+describe("operators", () => {
+  it("names the agent that claimed a task, or the person who took it, as its operator", async () => {
+    await claimTask(scout, { taskId: task.id });
+    expect(await view(human)).toMatchObject({ operatorType: "agent", operatorName: "Scout", delegation: null });
+
+    await takeTask(leeCtx, { taskId: task.id });
+    expect(await view(human)).toMatchObject({ operatorType: "user", operatorName: "Lee", claimedByAgentId: null, operatorUserId: lee.id, status: "in_progress" });
+  });
+
+  it("keeps agents off a task a person is working on, as off another agent's claim", async () => {
+    await takeTask(leeCtx, { taskId: task.id });
+    await expect(claimTask(scout, { taskId: task.id })).rejects.toMatchObject({ code: "conflict", message: expect.stringContaining("being worked on by Lee") });
+    await expect(completeTask(scout, { taskId: task.id })).rejects.toMatchObject({ code: "conflict" });
+    await expect(updateTask(scout, { taskId: task.id, status: "todo" })).rejects.toMatchObject({ code: "conflict" });
+    // The person working on it, and any other person, may still move it.
+    await completeTask(leeCtx, { taskId: task.id, note: "Posted" });
+    expect(await view(human)).toMatchObject({ status: "done", operatorType: null, delegation: null });
+  });
+
+  it("only lets agents claim and only lets people take", async () => {
+    await expect(takeTask(scout, { taskId: task.id })).rejects.toMatchObject({ code: "invalid" });
+    await expect(claimTask(human, { taskId: task.id })).rejects.toMatchObject({ code: "invalid" });
+  });
+
+  it("lists a person's own work with claimed mine, and splits it into the People row", async () => {
+    await takeTask(leeCtx, { taskId: task.id });
+    expect((await listTasks(leeCtx, { claimed: "mine" })).map((row) => row.id)).toEqual([task.id]);
+    expect(await listTasks(human, { claimed: "mine" })).toEqual([]);
+    expect(await listTasks(human, { claimed: "unclaimed" })).toEqual([]);
+    const board = await getBoard(human, {});
+    const lane = board.columns.find((column) => column.stage.key === "in_progress")!;
+    expect(lane.tasks.map((row) => [row.id, row.operatorName])).toEqual([[task.id, "Lee"]]);
+  });
+});
+
+describe("handing off", () => {
+  it("passes a task to a named agent, which picks it up with the note, and its first step ends the pick-up", async () => {
+    await claimTask(scout, { taskId: task.id });
+    await handOffTask(scout, { taskId: task.id, toAgent: "closer", note: "Outline is in the doc; needs the pricing section." });
+    // Still Scout's until Closer takes it, so it is never orphaned.
+    expect(await view(human)).toMatchObject({ operatorName: "Scout", delegation: "handing_off", delegateToName: "Closer", delegationNote: "Outline is in the doc; needs the pricing section." });
+    expect((await listTasks(closer, { claimed: "handed_to_me" })).map((row) => row.id)).toEqual([task.id]);
+    expect((await suggestNextActions(closer, {}))[0]?.id).toBe(task.id);
+
+    const picked = await claimTask(closer, { taskId: task.id });
+    expect(picked).toMatchObject({ claimedByAgentId: ws.closer.agentId, delegation: "picking_up", delegateToAgentId: null, delegationNote: "Outline is in the doc; needs the pricing section." });
+    expect(await listTasks(closer, { claimed: "handed_to_me" })).toEqual([]);
+
+    await linkSession(closer, { taskId: task.id, session: { sessionId: "s-2" } });
+    expect(await view(human)).toMatchObject({ operatorName: "Closer", delegation: null, delegationNote: "" });
+
+    const actions = (await listActivity(human, {})).map((event) => event.action);
+    expect(actions).toEqual(expect.arrayContaining(["task.handed_off", "task.picked_up"]));
+  });
+
+  it("refuses a named handoff to anyone else, and lets anyone pick up an open one", async () => {
+    await claimTask(scout, { taskId: task.id });
+    await handOffTask(scout, { taskId: task.id, toPerson: lee.email });
+    await expect(claimTask(closer, { taskId: task.id })).rejects.toMatchObject({ code: "conflict", message: expect.stringContaining("handed off to Lee") });
+    expect((await listTasks(leeCtx, { claimed: "handed_to_me" })).map((row) => row.id)).toEqual([task.id]);
+
+    await handOffTask(scout, { taskId: task.id, note: "Whoever is free" });
+    await claimTask(closer, { taskId: task.id });
+    expect(await view(human)).toMatchObject({ operatorName: "Closer", delegation: "picking_up" });
+  });
+
+  it("lets a person hand an unworked task to an agent, and take one handed to them", async () => {
+    await handOffTask(human, { taskId: task.id, toAgent: ws.scout.agentId, note: "Please draft it" });
+    expect(await view(human)).toMatchObject({ operatorType: null, delegation: "handing_off", delegateToName: "Scout" });
+    await claimTask(scout, { taskId: task.id });
+
+    await handOffTask(scout, { taskId: task.id, toPerson: lee.id, note: "Needs your sign-off on tone" });
+    const taken = await takeTask(leeCtx, { taskId: task.id });
+    expect(taken).toMatchObject({ operatorUserId: lee.id, claimedByAgentId: null, delegation: "picking_up" });
+    // A person's update counts as their first step too.
+    await updateTask(leeCtx, { taskId: task.id, priority: "high" });
+    expect(await view(human)).toMatchObject({ delegation: null });
+  });
+
+  it("refuses handing to yourself, to someone already on it, to strangers, and handing off another's work", async () => {
+    await claimTask(scout, { taskId: task.id });
+    await expect(handOffTask(scout, { taskId: task.id, toAgent: "Scout" })).rejects.toMatchObject({ code: "invalid" });
+    await expect(handOffTask(human, { taskId: task.id, toAgent: "Scout" })).rejects.toMatchObject({ code: "invalid", message: expect.stringContaining("already working") });
+    await expect(handOffTask(scout, { taskId: task.id, toAgent: "Nobody" })).rejects.toMatchObject({ code: "not_found" });
+    await expect(handOffTask(scout, { taskId: task.id, toPerson: "stranger@example.com" })).rejects.toMatchObject({ code: "not_found" });
+    await expect(handOffTask(closer, { taskId: task.id })).rejects.toMatchObject({ code: "conflict" });
+  });
+
+  it("calls a handoff off, leaving the task with its operator", async () => {
+    await claimTask(scout, { taskId: task.id });
+    await handOffTask(scout, { taskId: task.id, toAgent: "Closer" });
+    await expect(cancelHandOff(closer, { taskId: task.id })).rejects.toMatchObject({ code: "conflict" });
+    await cancelHandOff(scout, { taskId: task.id });
+    expect(await view(human)).toMatchObject({ operatorName: "Scout", delegation: null, delegateToAgentId: null });
+    await expect(claimTask(closer, { taskId: task.id })).rejects.toMatchObject({ code: "conflict" });
+  });
+
+  it("tells the named agent at once, whatever it watches", () => {
+    const event = { id: 1, action: "task.handed_off", entityType: "task", entityId: task.id, data: { toAgentId: ws.closer.agentId } };
+    const listener = { agentId: ws.closer.agentId, topics: ["tasks"] as const, scope: "related" as const };
+    expect(reasonsFor(event, listener, new Set(), ws.scout.agentId)).toEqual(["handed_to_you"]);
+    expect(reasonsFor(event, { ...listener, agentId: ws.scout.agentId }, new Set(), null)).toEqual([]);
+  });
+});
+
+describe("returning and taking over", () => {
+  it("returns a released task with its note, and the next operator picks it up", async () => {
+    await claimTask(scout, { taskId: task.id });
+    await releaseTask(scout, { taskId: task.id, note: "Blocked on legal; the draft is attached." });
+    expect(await view(human)).toMatchObject({ status: "todo", operatorType: null, delegation: "returned", delegationNote: "Blocked on legal; the draft is attached." });
+    await claimTask(closer, { taskId: task.id });
+    expect(await view(human)).toMatchObject({ operatorName: "Closer", delegation: "picking_up", delegationNote: "Blocked on legal; the draft is attached." });
+  });
+
+  it("lets a person step in for an agent, closing the agent's open question", async () => {
+    await claimTask(scout, { taskId: task.id });
+    await requestInput(scout, { taskId: task.id, question: "Which tone?", kind: "decision", options: ["Warm", "Crisp"] });
+    await takeTask(human, { taskId: task.id });
+    expect(await view(human)).toMatchObject({ operatorName: "Dana", delegation: "picking_up", inputRequest: null });
+  });
+
+  it("clears the operator and any handover when a task is finished or moved out of progress", async () => {
+    await claimTask(scout, { taskId: task.id });
+    await handOffTask(scout, { taskId: task.id, toAgent: "Closer" });
+    await updateTask(human, { taskId: task.id, status: "dropped" });
+    expect(await view(human)).toMatchObject({ operatorType: null, delegation: null, delegateToAgentId: null });
+  });
+});

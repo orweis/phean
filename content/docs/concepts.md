@@ -49,9 +49,19 @@ Every captured task records where it came from (`email`, `slack`, `calendar`, `c
 
 A task can have subtasks, one level deep: a subtask cannot have subtasks of its own, and a task with subtasks cannot become a subtask. Subtasks inherit their parent's goal. Cards show the parent's title and progress such as "2 of 3 subtasks done".
 
-### Claims
+### Operators and handoffs
 
-An agent claims a task before it works on it, which moves the task to in progress. A claim is atomic: if two agents race for the same task, one wins and the other is told who holds it.
+A task's **operator** is whoever is working on it right now: the agent that claimed it, or the person who took it. Cards and tables show it as "Operator: Scout". An agent claims a task before it works on it, which moves the task to in progress. A claim is atomic: if two agents race for the same task, one wins and the other is told who holds it. A person becomes the operator by pressing **Start** on a To do card, or **Take it** (or **Take over from …**) in a card's ⋯ menu. Agents leave a task alone while a person works on it, just as they leave another agent's claim alone.
+
+A task's **delegation** says whether a handover is under way:
+
+| Delegation | What it means | How it ends |
+| --- | --- | --- |
+| Handing off | The operator is passing it on to a named agent, a named person, or anyone, with a note. It stays the operator's until someone picks it up, so nothing is dropped in between. | Someone picks it up, or the handoff is called off. |
+| Picking up | A new operator has taken it and is getting up to speed from the note. | Their first step forward: a session, a question, an update, or completing it. |
+| Returned | The operator let it go with a note, and it waits in To do for a new operator. | Someone takes it. |
+
+Hand a task off from its page (**Hand off**: choose an agent, a person or anyone, and write the note), or an agent calls `hand_off_task`. A named agent hears about it at once by webhook or the realtime stream, and finds it with `list_tasks` `claimed: "handed_to_me"`. Finishing a task, dropping it, or moving it out of progress clears its operator and any handover.
 
 ### Links
 

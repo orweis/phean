@@ -44,7 +44,7 @@ Goals are how a person sees the work: a goal map, progress per outcome, a timeli
 A document is a file attached to a task or goal: markdown (with \`\`\`mermaid diagrams), text, JSON, CSV, YAML, a Mermaid diagram, a PDF or an image. People read and edit it in Phean; agents read it with get_document.
 - When you prepare something for a person to judge (a draft email, a proposal, a plan, an analysis), attach it with attach_document on the task, then point to it: put the returned url in the links of the task or of your request_input (kind "doc", title "Draft offer"), so the decision and the draft sit together.
 - When there is no link to give (the material is in your context, not at a URL), attach it as a document rather than pasting a wall of text into a description or a question.
-- Handing work to another agent, or pausing it: attach a short handoff note (what is done, what is next, where things are) before you release_task. Picking a task up: read its documents (get_task lists them, get_document reads one) first.
+- Handing work on, or pausing it: put the short version (what is done, what is next, where things are) in hand_off_task's or release_task's note, and attach anything longer as a document first. Picking a task up: read its delegationNote and its documents (get_task lists them, get_document reads one) first.
 - Edit with update_document and pass expectedVersion, so you never overwrite a person's newer edit. Agents change only their own documents or ones a person wrote; attach your own version otherwise.
 - Never put secrets, tokens or passwords in a document.
 
@@ -56,6 +56,13 @@ You act at a level, and you see only the tools it allows: a person picked it whe
 
 ## Memory that changed
 When a memory you saved is wrong or stale, fix it with update_memory instead of saving a near-duplicate. For a memory someone else saved, remember the correction and say what it replaces.
+
+## Operators and handoffs
+A task's operator is whoever is working on it right now: an agent that claimed it, or a person who took it. Its delegation says whether a handover is under way.
+- To pass a task on (to a specialist agent, to a person who must do part of it by hand, or to whoever is free), call hand_off_task with toAgent or toPerson, or neither for anyone, and a note on where it stands. It stays yours, "handing_off", until they pick it up; keep it safe until then, and cancel_hand_off if you change your mind.
+- Work handed to you: list_tasks with claimed="handed_to_me" (suggest_next_actions puts it first; a webhook hears handed_to_you). claim_task picks it up ("picking_up"): read the note and the documents, then go on; your first step forward ends the pick-up.
+- Cannot finish and no one in mind? release_task with a note: the task returns to "todo", marked "returned", for the next operator.
+- A person working on a task is its operator too: leave it alone as you would another agent's claim, or ask them to hand it to you.
 
 ## Stages
 The board's lanes are the workspace's stages, listed by whoami. Each belongs to a status kind (inbox, backlog, todo, in_progress, done). Setting status moves a task to that kind's own stage; to put it in one of the workspace's own stages ("Review", inside in_progress), pass update_task stage with the stage's key.
@@ -90,7 +97,7 @@ Tasks are shared, so fix them when you learn more instead of capturing duplicate
 
 ## Rules
 - Goals you create start as "proposed". Only a human can approve, complete, or abandon a goal, in the Phean web app. Share the review link that create_goal returns; never claim a goal is approved.
-- Claim before working. If a task is claimed by another agent, leave it alone and pick another one.
+- Claim before working. If another agent or a person is working on a task, leave it alone and pick another one, unless it is being handed to you.
 - Never leave a task silently stalled on the human: ask with request_input, so the question and the way back to you show on their Decisions page.
 - Session links are for humans to click: only pass links that open your own conversation, message, or app.
 - Search before capturing or creating goals, so the workspace does not fill with duplicates.
@@ -109,7 +116,7 @@ export const PROMPTS = [
     text: `Sync up with this Phean workspace before doing anything else:
 1. Call whoami.
 2. Call get_activity (limit 30). Summarize what changed and who did it, grouping repetitive events.
-3. Call list_tasks with claimed="mine". For each task you hold, say whether you will continue it now or release it. For the ones you continue, call link_session so humans can reach you in this session.
+3. Call list_tasks with claimed="mine". For each task you hold, say whether you will continue it now, hand it off, or release it. For the ones you continue, call link_session so humans can reach you in this session. Then call list_tasks with claimed="handed_to_me" and say which handoffs you will pick up.
 4. Call collect_answers and act on every answer the human gave you. For questions of yours still open that you no longer need, call resolve_input.
 5. Call get_status_summary and mention pending approvals, questions waiting on the human, and overdue tasks, if any.
 6. Finish with the single most useful next step.`,

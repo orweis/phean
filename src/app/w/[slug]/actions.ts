@@ -11,7 +11,20 @@ import { createGoal, setGoalStatus, updateGoal } from "@/server/domain/goals";
 import { forget, remember, updateMemory } from "@/server/domain/memory";
 import { deleteWebhook } from "@/server/domain/webhooks";
 import { saveWorkflow } from "@/server/domain/workflow";
-import { addTask, answerInput, archiveDoneTasks, archiveTask, completeTask, releaseTask, retractAnswer, unarchiveTask, updateTask } from "@/server/domain/tasks";
+import {
+  addTask,
+  answerInput,
+  archiveDoneTasks,
+  archiveTask,
+  cancelHandOff,
+  completeTask,
+  handOffTaskByChoice,
+  releaseTask,
+  retractAnswer,
+  takeTask,
+  unarchiveTask,
+  updateTask,
+} from "@/server/domain/tasks";
 
 // Goals
 export const createGoalAction = tenantAction(createGoal, {
@@ -29,6 +42,9 @@ export const addTaskAction = tenantAction(addTask, {
 export const updateTaskAction = tenantAction(updateTask, { success: "Saved." });
 export const completeTaskAction = tenantAction(completeTask, { success: "Done." });
 export const releaseTaskAction = tenantAction(releaseTask, { success: "Released." });
+export const takeTaskAction = tenantAction(takeTask, { success: "It's yours." });
+export const handOffTaskAction = tenantAction(handOffTaskByChoice, { success: "Handing off." });
+export const cancelHandOffAction = tenantAction(cancelHandOff, { success: "Handoff called off." });
 export const archiveTaskAction = tenantAction(archiveTask, { success: "Archived." });
 export const unarchiveTaskAction = tenantAction(unarchiveTask, { success: "Back on the board." });
 export const archiveDoneTasksAction = tenantAction(archiveDoneTasks, {

@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNotNull, isNull, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, or, sql, type SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import type { z } from "zod";
 
@@ -22,7 +22,8 @@ import { truncate } from "@/lib/format";
 
 import { patchOf, publicColumns } from "../db/columns";
 import { newId } from "../db/ids";
-import { agents, goals, tasks, type TaskRow } from "../db/schema";
+import { agents, goals, member, tasks, user, type TaskRow } from "../db/schema";
+import { liveAgent } from "./agent-liveness";
 import { createdByFields, inTenant, inTransaction, tenantRow, type Ctx } from "./context";
 import { conflict, invalid, notFound } from "./errors";
 import { recordEvent, recordEvents, taskActivity, type Activity } from "./events";
@@ -39,10 +40,13 @@ import {
   CollectAnswersInput,
   CompleteTaskInput,
   DecisionsInput,
+  HandOffChoiceInput,
+  HandOffInput,
   LinkSessionInput,
   ListGoalTasksInput,
   ListTasksInput,
   NextActionsInput,
+  ReleaseTaskInput,
   SessionInput,
   TaskDraft,
   TaskRefInput,
@@ -60,6 +64,11 @@ export type Task = Omit<TaskRow, "tenantId" | "search">;
 export type TaskView = Task & {
   goalTitle: string | null;
   claimedByName: string | null;
+  /** Who is working on it right now: an agent (its claim) or a person, or null. */
+  operatorType: "agent" | "user" | null;
+  operatorName: string | null;
+  /** Who a handoff is meant for, when it names someone. */
+  delegateToName: string | null;
   parentTitle: string | null;
   subtaskCount: number;
   subtasksDone: number;
@@ -85,6 +94,31 @@ function agentOnly(ctx: Ctx, instead: string): string {
   return me;
 }
 
+/** The acting person's id, for operations only people perform; `instead` tells an agent what it does. */
+function userOnly(ctx: Ctx, instead: string): string {
+  if (ctx.actor.type !== "user") throw invalid(instead);
+  return ctx.actor.id;
+}
+
+/** Whether the acting agent or person is the task's operator. */
+const operates = (ctx: Ctx, task: Pick<Task, "claimedByAgentId" | "operatorUserId">) =>
+  ctx.actor.type === "agent" ? task.claimedByAgentId === ctx.actor.id : task.operatorUserId === ctx.actor.id;
+
+/** No one working on it. */
+const NO_OPERATOR = { claimedByAgentId: null, operatorUserId: null, claimedAt: null } as const;
+/** No handover under way. */
+const NO_DELEGATION = { delegation: null, delegateToAgentId: null, delegateToUserId: null, delegationNote: "", delegatedAt: null } as const;
+
+/** A new operator's first step forward (a session, a question, an update) ends their pick-up. */
+const settledBy = (ctx: Ctx, task: Task) => (task.delegation === "picking_up" && operates(ctx, task) ? NO_DELEGATION : {});
+
+/** Tasks being handed to the actor by name, or to anyone, that they do not already operate. */
+function handedTo(ctx: Ctx): SQL {
+  const named = ctx.actor.type === "agent" ? eq(tasks.delegateToAgentId, ctx.actor.id) : eq(tasks.delegateToUserId, ctx.actor.id);
+  const theirs = ctx.actor.type === "agent" ? sql`${tasks.claimedByAgentId} is distinct from ${ctx.actor.id}` : sql`${tasks.operatorUserId} is distinct from ${ctx.actor.id}`;
+  return and(eq(tasks.delegation, "handing_off"), or(named, and(isNull(tasks.delegateToAgentId), isNull(tasks.delegateToUserId))), theirs)!;
+}
+
 export const isOpenTask = inArray(tasks.status, [...OPEN_TASK_STATUSES]);
 export const isOverdue = and(isOpenTask, sql`${tasks.dueDate} < current_date`)!;
 export const isDueWithinWeek = and(
@@ -94,6 +128,9 @@ export const isDueWithinWeek = and(
 export const isAwaitingInput = and(isOpenTask, isNotNull(tasks.inputRequest))!;
 
 const parentTask = alias(tasks, "parent_task");
+const operatorUser = alias(user, "operator_user");
+const delegateAgent = alias(agents, "delegate_agent");
+const delegateUser = alias(user, "delegate_user");
 
 const subtaskTally = (filter: SQL) =>
   sql<number>`(select count(*)::int from tasks as sub where sub.tenant_id = ${tasks.tenantId} and sub.parent_task_id = ${tasks.id} and ${filter})`;
@@ -105,6 +142,9 @@ export function selectTaskViews(ctx: Ctx, where?: SQL) {
       ...taskColumns,
       goalTitle: goals.title,
       claimedByName: agents.name,
+      operatorType: sql<"agent" | "user" | null>`case when ${tasks.claimedByAgentId} is not null then 'agent' when ${tasks.operatorUserId} is not null then 'user' end`,
+      operatorName: sql<string | null>`coalesce(${agents.name}, ${operatorUser.name})`,
+      delegateToName: sql<string | null>`coalesce(${delegateAgent.name}, ${delegateUser.name})`,
       parentTitle: parentTask.title,
       // Dropped subtasks are not part of the work any more.
       subtaskCount: subtaskTally(sql`sub.status <> 'dropped'`),
@@ -116,6 +156,9 @@ export function selectTaskViews(ctx: Ctx, where?: SQL) {
     .from(tasks)
     .leftJoin(goals, and(eq(goals.tenantId, tasks.tenantId), eq(goals.id, tasks.goalId)))
     .leftJoin(agents, and(eq(agents.tenantId, tasks.tenantId), eq(agents.id, tasks.claimedByAgentId)))
+    .leftJoin(operatorUser, eq(operatorUser.id, tasks.operatorUserId))
+    .leftJoin(delegateAgent, and(eq(delegateAgent.tenantId, tasks.tenantId), eq(delegateAgent.id, tasks.delegateToAgentId)))
+    .leftJoin(delegateUser, eq(delegateUser.id, tasks.delegateToUserId))
     .leftJoin(parentTask, and(eq(parentTask.tenantId, tasks.tenantId), eq(parentTask.id, tasks.parentTaskId)))
     .where(and(inTenant(ctx, tasks), where));
 }
@@ -222,17 +265,31 @@ const closeOpenRequest = () => ({ inputRequest: null, inputAnswers: archiveOpenR
 /** What the activity log keeps of a session: enough to find the conversation again. */
 const sessionData = ({ app, url, sessionId }: AgentSession) => ({ app, url, sessionId });
 
-/** Agents must not change work another agent has claimed; humans may always step in. */
+/** The name of whoever works on a task, for messages. */
+async function operatorName(ctx: Ctx, task: Pick<Task, "claimedByAgentId" | "operatorUserId">): Promise<string> {
+  if (task.claimedByAgentId) {
+    const [row] = await ctx.db.select({ name: agents.name }).from(agents).where(and(inTenant(ctx, agents), eq(agents.id, task.claimedByAgentId)));
+    return row?.name ?? "another agent";
+  }
+  if (task.operatorUserId) {
+    const [row] = await ctx.db.select({ name: user.name }).from(user).where(eq(user.id, task.operatorUserId));
+    return row?.name ?? "someone";
+  }
+  return "no one";
+}
+
+/**
+ * Agents must not change work another operator (an agent's claim, or a person working on it) holds;
+ * people may always step in.
+ */
 async function assertNotClaimedByOther(ctx: Ctx, task: Task): Promise<void> {
   const me = agentIdOf(ctx);
-  if (!me || !task.claimedByAgentId || task.claimedByAgentId === me) return;
-  const [claimant] = await ctx.db
-    .select({ name: agents.name })
-    .from(agents)
-    .where(eq(agents.id, task.claimedByAgentId));
+  if (!me || operates(ctx, task) || (!task.claimedByAgentId && !task.operatorUserId)) return;
+  const who = await operatorName(ctx, task);
   throw conflict(
-    `"${task.title}" is claimed by ${claimant?.name ?? "another agent"}. ` +
-      "Pick another task, or ask a human to release it.",
+    task.claimedByAgentId
+      ? `"${task.title}" is claimed by ${who}. Pick another task, or ask a human to release it.`
+      : `"${task.title}" is being worked on by ${who}. Pick another task, or ask them to hand it off to you.`,
   );
 }
 
@@ -346,9 +403,12 @@ export const updateTask = service(UpdateTaskInput, async (ctx, input): Promise<T
     patch.completedAt = statusChange === "done" ? new Date() : null;
     // Archiving files finished work away; work that moves again is back on the board.
     patch.archivedAt = null;
-    // A claim only means "an agent is working on it right now"; its open question goes with it.
-    if (statusChange !== "in_progress") Object.assign(patch, { claimedByAgentId: null, claimedAt: null, ...closeOpenRequest() });
+    // An operator only means "working on it right now"; their open question goes with them.
+    if (statusChange !== "in_progress") Object.assign(patch, { ...NO_OPERATOR, ...closeOpenRequest() });
+    // Finished work has no handover left, and a pick-up ends with any move.
+    if (statusChange === "done" || statusChange === "dropped" || current.delegation === "picking_up") Object.assign(patch, NO_DELEGATION);
   }
+  Object.assign(patch, settledBy(ctx, current));
 
   return inTransaction(ctx, async (tx) => {
     const [task] = await tx.db
@@ -376,49 +436,182 @@ export const updateTask = service(UpdateTaskInput, async (ctx, input): Promise<T
 
 export const claimTask = service(ClaimTaskInput, async (ctx, { taskId, session }): Promise<Task> => {
   assertCan(ctx, "task:write");
-  const me = agentOnly(ctx, "Only agents claim tasks. Humans can move a task to In progress instead.");
+  const me = agentOnly(ctx, "Only agents claim tasks. People take a task from its menu instead.");
   const linked = session && sessionOf(ctx, session);
 
   return inTransaction(ctx, async (tx) => {
-    // One conditional UPDATE: concurrent claims cannot both succeed.
-    const [claimed] = await tx.db
+    // The row stays locked until the claim commits, so concurrent claims cannot both succeed.
+    const current = await findTask(tx, taskId, { lock: true });
+    if (!isOpenTaskStatus(current.status)) {
+      throw conflict(`"${current.title}" is already ${TASK_STATUS_META[current.status].label.toLowerCase()}.`);
+    }
+    const mine = current.claimedByAgentId === me;
+    const offered = current.delegation === "handing_off" && !mine;
+    const forMe = offered && (current.delegateToAgentId === me || (!current.delegateToAgentId && !current.delegateToUserId));
+    if (offered && !forMe) {
+      const [target] = await selectTaskViews(tx, eq(tasks.id, taskId));
+      throw conflict(`"${current.title}" is being handed off to ${target?.delegateToName ?? "someone else"}. Pick another task.`);
+    }
+    // A task handed to this agent is its to take, whoever holds it until then.
+    if (!forMe) await assertNotClaimedByOther(tx, current);
+    const pickingUp = forMe || current.delegation === "returned";
+
+    const [task] = await tx.db
       .update(tasks)
-      // A task already in one of the workspace's in-progress stages ("Review") stays in it.
-      .set({ claimedByAgentId: me, claimedAt: new Date(), status: "in_progress", stage: sql`case when ${tasks.status} = 'in_progress' then ${tasks.stage} else null end` })
-      .where(
-        and(
-          inTenant(tx, tasks),
-          eq(tasks.id, taskId),
-          isOpenTask,
-          or(isNull(tasks.claimedByAgentId), eq(tasks.claimedByAgentId, me)),
-        ),
-      )
+      .set({
+        claimedByAgentId: me,
+        operatorUserId: null,
+        claimedAt: mine ? current.claimedAt : new Date(),
+        status: "in_progress",
+        // A task already in one of the workspace's in-progress stages ("Review") stays in it.
+        stage: current.status === "in_progress" ? current.stage : null,
+        ...(linked && { agentSessions: withSession(current.agentSessions, linked) }),
+        ...(pickingUp && { delegation: "picking_up" as const, delegateToAgentId: null, delegateToUserId: null, delegatedAt: new Date() }),
+      })
+      .where(tenantRow(tx, tasks, taskId))
       .returning(taskColumns);
 
-    if (!claimed) {
-      const current = await findTask(tx, taskId);
-      if (!isOpenTaskStatus(current.status)) {
-        throw conflict(`"${current.title}" is already ${TASK_STATUS_META[current.status].label.toLowerCase()}.`);
-      }
-      await assertNotClaimedByOther(tx, current);
-      throw conflict(`Could not claim "${current.title}".`);
-    }
-
-    // The claim's UPDATE holds the row, so the sessions read back are current.
-    const [task] = linked
-      ? await tx.db
-          .update(tasks)
-          .set({ agentSessions: withSession(claimed.agentSessions, linked) })
-          .where(tenantRow(tx, tasks, taskId))
-          .returning(taskColumns)
-      : [claimed];
-
     await recordEvent(tx, {
-      action: "task.claimed",
+      action: pickingUp ? "task.picked_up" : "task.claimed",
       entityType: "task",
       entityId: taskId,
-      summary: `claimed "${claimed.title}"`,
-      data: { goalId: claimed.goalId, ...(linked && { session: sessionData(linked) }) },
+      summary: pickingUp ? `picked up "${current.title}"` : `claimed "${current.title}"`,
+      data: {
+        goalId: current.goalId,
+        ...(pickingUp && { fromAgentId: current.claimedByAgentId, fromUserId: current.operatorUserId }),
+        ...(linked && { session: sessionData(linked) }),
+      },
+    });
+    return task!;
+  });
+});
+
+/** A person takes a task on as its operator: starting it, picking up a handoff, or stepping in for an agent. */
+export const takeTask = service(TaskRefInput, async (ctx, { taskId }): Promise<Task> => {
+  assertCan(ctx, "task:write");
+  const me = userOnly(ctx, "Agents take a task with claim_task.");
+
+  return inTransaction(ctx, async (tx) => {
+    const current = await findTask(tx, taskId, { lock: true });
+    if (!isOpenTaskStatus(current.status)) {
+      throw conflict(`"${current.title}" is already ${TASK_STATUS_META[current.status].label.toLowerCase()}.`);
+    }
+    const mine = current.operatorUserId === me;
+    if (mine && current.status === "in_progress" && current.delegation !== "handing_off") return current;
+    // Taking over from someone, or taking a handoff, starts with getting up to speed.
+    const pickingUp = !mine && (current.delegation === "handing_off" || current.delegation === "returned" || Boolean(current.claimedByAgentId || current.operatorUserId));
+
+    const [task] = await tx.db
+      .update(tasks)
+      .set({
+        claimedByAgentId: null,
+        operatorUserId: me,
+        claimedAt: mine ? current.claimedAt : new Date(),
+        status: "in_progress",
+        stage: current.status === "in_progress" ? current.stage : null,
+        // An agent stepped away from has no one left to act on its question.
+        ...(current.claimedByAgentId && closeOpenRequest()),
+        ...(pickingUp ? { delegation: "picking_up" as const, delegateToAgentId: null, delegateToUserId: null, delegatedAt: new Date() } : NO_DELEGATION),
+      })
+      .where(tenantRow(tx, tasks, taskId))
+      .returning(taskColumns);
+
+    await recordEvent(tx, {
+      action: pickingUp ? "task.picked_up" : "task.claimed",
+      entityType: "task",
+      entityId: taskId,
+      summary: pickingUp ? `picked up "${current.title}"` : `started "${current.title}"`,
+      data: { goalId: current.goalId, ...(pickingUp && { fromAgentId: current.claimedByAgentId, fromUserId: current.operatorUserId }) },
+    });
+    return task!;
+  });
+});
+
+/** Who a handoff is for, found in this workspace: a live agent by id or name, or a member by user id or email. */
+async function handoffTarget(ctx: Ctx, toAgent?: string, toPerson?: string): Promise<{ agentId: string | null; userId: string | null; name: string } | null> {
+  if (toAgent) {
+    const [agent] = await ctx.db
+      .select({ id: agents.id, name: agents.name })
+      .from(agents)
+      .where(and(inTenant(ctx, agents), or(eq(agents.id, toAgent), sql`lower(${agents.name}) = lower(${toAgent})`), liveAgent()))
+      .orderBy(desc(agents.createdAt))
+      .limit(1);
+    if (!agent) throw notFound("connected agent named or with id", toAgent);
+    return { agentId: agent.id, userId: null, name: agent.name };
+  }
+  if (toPerson) {
+    const [person] = await ctx.db
+      .select({ id: user.id, name: user.name })
+      .from(member)
+      .innerJoin(user, eq(user.id, member.userId))
+      .where(and(eq(member.organizationId, ctx.tenant.id), or(eq(user.id, toPerson), sql`lower(${user.email}) = lower(${toPerson})`)))
+      .limit(1);
+    if (!person) throw notFound("member with email or user id", toPerson);
+    return { agentId: null, userId: person.id, name: person.name };
+  }
+  return null;
+}
+
+/**
+ * Hands a task on: to a named agent or person, or to anyone. It stays with its operator until
+ * someone picks it up. Its operator may hand it off, and so may a person or, for a task no one
+ * works on, any agent that may write.
+ */
+export const handOffTask = service(HandOffInput, async (ctx, { taskId, toAgent, toPerson, note }): Promise<Task> => {
+  assertCan(ctx, "task:write");
+
+  return inTransaction(ctx, async (tx) => {
+    const current = await findTask(tx, taskId, { lock: true });
+    if (!isOpenTaskStatus(current.status)) {
+      throw conflict(`"${current.title}" is already ${TASK_STATUS_META[current.status].label.toLowerCase()}. Capture a new task for follow-up work.`);
+    }
+    await assertNotClaimedByOther(tx, current);
+    const target = await handoffTarget(tx, toAgent, toPerson);
+    if (target && (target.agentId ?? target.userId) === ctx.actor.id) throw invalid("You cannot hand a task to yourself.");
+    if (target && ((target.agentId && target.agentId === current.claimedByAgentId) || (target.userId && target.userId === current.operatorUserId))) {
+      throw invalid(`${target.name} is already working on "${current.title}".`);
+    }
+
+    const [task] = await tx.db
+      .update(tasks)
+      .set({ delegation: "handing_off", delegateToAgentId: target?.agentId ?? null, delegateToUserId: target?.userId ?? null, delegationNote: note, delegatedAt: new Date() })
+      .where(tenantRow(tx, tasks, taskId))
+      .returning(taskColumns);
+    await recordEvent(tx, {
+      action: "task.handed_off",
+      entityType: "task",
+      entityId: taskId,
+      summary: `is handing off "${current.title}" to ${target?.name ?? "anyone"}`,
+      data: { goalId: current.goalId, toAgentId: target?.agentId ?? null, toUserId: target?.userId ?? null, toName: target?.name ?? null, ...(note && { note }) },
+    });
+    return task!;
+  });
+});
+
+/** The same handoff from the web form, where one choice names an agent, a person, or anyone. */
+export const handOffTaskByChoice = service(HandOffChoiceInput, (ctx, { to, ...rest }) =>
+  handOffTask(ctx, {
+    ...rest,
+    ...(to.startsWith("agent:") && { toAgent: to.slice("agent:".length) }),
+    ...(to.startsWith("person:") && { toPerson: to.slice("person:".length) }),
+  }),
+);
+
+/** Calls a handoff off: the task stays with its operator, or with no one. */
+export const cancelHandOff = service(TaskRefInput, async (ctx, { taskId }): Promise<Task> => {
+  assertCan(ctx, "task:write");
+
+  return inTransaction(ctx, async (tx) => {
+    const current = await findTask(tx, taskId, { lock: true });
+    if (current.delegation !== "handing_off") return current;
+    await assertNotClaimedByOther(tx, current);
+    const [task] = await tx.db.update(tasks).set(NO_DELEGATION).where(tenantRow(tx, tasks, taskId)).returning(taskColumns);
+    await recordEvent(tx, {
+      action: "task.handoff_cancelled",
+      entityType: "task",
+      entityId: taskId,
+      summary: `called off the handoff of "${current.title}"`,
+      data: { goalId: current.goalId },
     });
     return task!;
   });
@@ -435,7 +628,7 @@ export const linkSession = service(LinkSessionInput, async (ctx, { taskId, sessi
     await assertNotClaimedByOther(tx, current);
     const [task] = await tx.db
       .update(tasks)
-      .set({ agentSessions: withSession(current.agentSessions, next) })
+      .set({ agentSessions: withSession(current.agentSessions, next), ...settledBy(tx, current) })
       .where(tenantRow(tx, tasks, taskId))
       .returning(taskColumns);
     // Refreshing the brief or the message is routine; only a new place to resume is news.
@@ -495,7 +688,7 @@ export const requestInput = service(AskInput, async (ctx, { taskId, question, ki
     const inputAnswers = open ? withAnswer(current.inputAnswers, closed(open, { outcome: "resolved" })) : current.inputAnswers;
     const [task] = await tx.db
       .update(tasks)
-      .set({ inputRequest, inputAnswers, ...(next && { agentSessions: withSession(current.agentSessions, next) }) })
+      .set({ inputRequest, inputAnswers, ...(next && { agentSessions: withSession(current.agentSessions, next) }), ...settledBy(tx, current) })
       .where(tenantRow(tx, tasks, taskId))
       .returning(taskColumns);
     await recordEvent(tx, {
@@ -681,21 +874,25 @@ export const archiveDoneTasks = service(Empty, async (ctx): Promise<{ archived: 
   });
 });
 
-export const releaseTask = service(TaskRefInput, async (ctx, { taskId }): Promise<Task> => {
+/** The operator lets a task go, with a note for whoever takes it next; it waits, returned, for a new operator. */
+export const releaseTask = service(ReleaseTaskInput, async (ctx, { taskId, note }): Promise<Task> => {
   assertCan(ctx, "task:write");
   const current = await findTask(ctx, taskId);
-  if (!current.claimedByAgentId) return current;
+  if (!current.claimedByAgentId && !current.operatorUserId) return current;
   await assertNotClaimedByOther(ctx, current);
 
   return inTransaction(ctx, async (tx) => {
     const [task] = await tx.db
       .update(tasks)
       .set({
-        claimedByAgentId: null,
-        claimedAt: null,
+        ...NO_OPERATOR,
         ...closeOpenRequest(),
         status: current.status === "in_progress" ? "todo" : current.status,
         stage: current.status === "in_progress" ? null : current.stage,
+        ...NO_DELEGATION,
+        delegation: "returned",
+        delegationNote: note,
+        delegatedAt: new Date(),
       })
       .where(tenantRow(tx, tasks, taskId))
       .returning(taskColumns);
@@ -704,7 +901,7 @@ export const releaseTask = service(TaskRefInput, async (ctx, { taskId }): Promis
       entityType: "task",
       entityId: taskId,
       summary: `released "${current.title}"`,
-      data: { goalId: current.goalId },
+      data: { goalId: current.goalId, fromAgentId: current.claimedByAgentId, fromUserId: current.operatorUserId, ...(note && { note }) },
     });
     return task!;
   });
@@ -723,7 +920,7 @@ export const completeTask = service(CompleteTaskInput, async (ctx, { taskId, not
   return inTransaction(ctx, async (tx) => {
     const [task] = await tx.db
       .update(tasks)
-      .set({ status: "done", stage: null, completedAt: new Date(), claimedByAgentId: null, claimedAt: null, ...closeOpenRequest(), description })
+      .set({ status: "done", stage: null, completedAt: new Date(), ...NO_OPERATOR, ...NO_DELEGATION, ...closeOpenRequest(), description })
       .where(tenantRow(tx, tasks, taskId))
       .returning(taskColumns);
     await recordEvent(tx, {
@@ -772,11 +969,11 @@ export const assignTasksToGoal = service(AssignTasksInput, async (ctx, { taskIds
 
 export const listTasks = service(ListTasksInput, async (ctx, input): Promise<TaskView[]> => {
   assertCan(ctx, "workspace:read");
-  const me = agentIdOf(ctx);
   const claimed = {
     any: undefined,
-    mine: me ? eq(tasks.claimedByAgentId, me) : sql`false`,
-    unclaimed: isNull(tasks.claimedByAgentId),
+    mine: ctx.actor.type === "agent" ? eq(tasks.claimedByAgentId, ctx.actor.id) : eq(tasks.operatorUserId, ctx.actor.id),
+    unclaimed: and(isNull(tasks.claimedByAgentId), isNull(tasks.operatorUserId)),
+    handed_to_me: handedTo(ctx),
   }[input.claimed];
   const due = { any: undefined, overdue: isOverdue, next_7_days: isDueWithinWeek }[input.due];
 
@@ -809,11 +1006,18 @@ export const suggestNextActions = service(NextActionsInput, async (ctx, { limit 
     ctx,
     and(
       inArray(tasks.status, ["todo", "in_progress"]),
-      // Agents should not be steered toward work another agent holds, or work waiting on a person.
-      me ? and(or(isNull(tasks.claimedByAgentId), eq(tasks.claimedByAgentId, me)), isNull(tasks.inputRequest)) : undefined,
+      // Agents should not be steered toward work another operator holds, or work waiting on a person,
+      // unless it is being handed to them.
+      me
+        ? and(
+            isNull(tasks.inputRequest),
+            or(and(isNull(tasks.claimedByAgentId), isNull(tasks.operatorUserId), sql`${tasks.delegation} is distinct from 'handing_off'`), eq(tasks.claimedByAgentId, me), handedTo(ctx)),
+          )
+        : undefined,
     ),
   )
-    .orderBy(...byUrgency)
+    // Work handed to the agent comes first: someone is waiting for it to be picked up.
+    .orderBy(...(me ? [sql`case when ${handedTo(ctx)} then 0 else 1 end`] : []), ...byUrgency)
     .limit(limit);
 });
 

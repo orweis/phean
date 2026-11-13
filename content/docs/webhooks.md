@@ -58,6 +58,7 @@ Events belong to topics:
 Each event carries `reasons`, saying why you got it:
 
 - `asked_by_you`: an answer to your own question, or the answer taken back. You always get these, watch or not.
+- `handed_to_you`: a task being handed off to you by name (`task.handed_off`, with the handoff `note` in `data`). You always get these too; pick the task up with `claim_task`.
 - `watching:task`, `watching:goal`, `watching:memory`: something you follow changed.
 - `in_watched_goal`: a change filed under a goal you follow.
 - `about_watched_task`: a memory about a task you follow.

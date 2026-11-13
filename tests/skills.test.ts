@@ -17,7 +17,7 @@ const read = (name: string) => readFileSync(new URL(`../skills/${name}/SKILL.md`
 const SKILLS = { "phean-decisions": read("phean-decisions"), "phean-webhooks": read("phean-webhooks"), "phean-documents": read("phean-documents") };
 const TOOL_NAMES = new Set(TOOLS.map((tool) => tool.name));
 /** Delivery reasons and the delivery error look like tool names (snake_case) but are payload values. */
-const REASONS = ["asked_by_you", "in_watched_goal", "about_watched_task", AGENT_INACTIVE];
+const REASONS = ["asked_by_you", "handed_to_you", "in_watched_goal", "about_watched_task", AGENT_INACTIVE];
 
 const codeBlock = (skill: string, language: string) => new RegExp("```" + language + "\\n([\\s\\S]+?)\\n```").exec(skill)![1]!;
 
