@@ -34,6 +34,19 @@ export const STATIONS = ["inbox", "backlog", "todo", "in_progress", "done"] as c
 export const LANE_ORDER = ["inbox", "todo", "in_progress", "done", "backlog"] as const satisfies readonly (typeof STATIONS)[number][];
 export type Station = (typeof STATIONS)[number];
 
+/**
+ * Where a task stands between operators. A task's operator is whoever is working on it right now (an
+ * agent's claim, or a person); delegation is the handover around them:
+ * - `handing_off`: the operator is passing it on, to a named agent or person, or to anyone. It stays
+ *   theirs until someone picks it up, so it is never orphaned.
+ * - `picking_up`: a new operator has taken it over and is getting up to speed from the handoff note.
+ *   Their first step forward (a session, a question, an update, completing it) ends it.
+ * - `returned`: the operator let go of it with a note; it waits for a new operator.
+ * No delegation (null) is the steady state.
+ */
+export const DELEGATION_STATES = ["handing_off", "picking_up", "returned"] as const;
+export type DelegationState = (typeof DELEGATION_STATES)[number];
+
 export const GOAL_STATUSES = ["proposed", "active", "achieved", "abandoned"] as const;
 export type GoalStatus = (typeof GOAL_STATUSES)[number];
 
@@ -167,6 +180,12 @@ export const TASK_STATUS_META: Record<TaskStatus, EnumMeta> = {
   in_progress: { label: "In progress", tone: "info" },
   done: { label: "Done", tone: "success" },
   dropped: { label: "Dropped", tone: "neutral" },
+};
+
+export const DELEGATION_META: Record<DelegationState, EnumMeta> = {
+  handing_off: { label: "Handing off", tone: "fresh" },
+  picking_up: { label: "Picking up", tone: "info" },
+  returned: { label: "Returned", tone: "neutral" },
 };
 
 export const GOAL_STATUS_META: Record<GoalStatus, EnumMeta> = {

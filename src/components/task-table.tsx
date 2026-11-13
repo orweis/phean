@@ -12,7 +12,7 @@ import type { TaskView } from "@/server/domain/tasks";
 
 import { WaitingBadge } from "./agent-sessions";
 import { GoalLink } from "./goal-link";
-import { InlineDue, StageBadge } from "./task-card";
+import { DelegationBadge, InlineDue, StageBadge } from "./task-card";
 import { TaskPeekLink } from "./task-marks";
 import { MetaBadge } from "./ui/badge";
 import { PINNED_CELL, TH } from "./ui/table";
@@ -98,7 +98,12 @@ export function TaskTable({ tasks, slug, sort, query, workflow }: { tasks: reado
               <td className="max-w-56 px-3 py-2.5 text-xs">
                 {task.goalId && task.goalTitle ? <GoalLink slug={slug} goalId={task.goalId} title={task.goalTitle} /> : <span className="text-muted">None</span>}
               </td>
-              <td className="px-3 py-2.5 text-xs whitespace-nowrap text-ink-2">{task.claimedByName ?? <span className="text-muted">No one</span>}</td>
+              <td className="px-3 py-2.5 text-xs whitespace-nowrap text-ink-2">
+                <span className="inline-flex flex-wrap items-center gap-1.5">
+                  {task.operatorName ?? <span className="text-muted">No one</span>}
+                  <DelegationBadge task={task} />
+                </span>
+              </td>
               <td className="py-2.5 pr-5 pl-3 text-xs whitespace-nowrap text-muted">{timeAgo(task.updatedAt)}</td>
             </tr>
           ))}

@@ -1,14 +1,23 @@
-import { Archive, ArrowRight, Bot, CalendarClock, Check, CornerDownRight, Ellipsis, ListChecks, Trash2, Unlock } from "lucide-react";
+import { Archive, ArrowRight, Bot, CalendarClock, Check, CircleX, CornerDownRight, Ellipsis, Handshake, ListChecks, Trash2, Unlock, User, UserCheck } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
-import { archiveTaskAction, completeTaskAction, releaseTaskAction, unarchiveTaskAction, updateTaskAction } from "@/app/w/[slug]/actions";
+import {
+  archiveTaskAction,
+  cancelHandOffAction,
+  completeTaskAction,
+  releaseTaskAction,
+  takeTaskAction,
+  unarchiveTaskAction,
+  updateTaskAction,
+} from "@/app/w/[slug]/actions";
 import { webUrl } from "@/lib/agent-sessions";
 import { cx } from "@/lib/cx";
-import { isLate, isOpenTaskStatus, PRIORITY_META, SOURCE_META, TASK_STATUS_META, type TaskStatus } from "@/lib/domain";
+import { DELEGATION_META, isLate, isOpenTaskStatus, PRIORITY_META, SOURCE_META, TASK_STATUS_META, type TaskStatus } from "@/lib/domain";
 import { formatDueDate, relativeDue, truncate } from "@/lib/format";
 import { routes } from "@/lib/routes";
 import { stageLabel, stageOf, visibleStages, type Workflow } from "@/lib/workflow";
+import { requireWorkspace } from "@/server/auth/session";
 import type { TaskView } from "@/server/domain/tasks";
 import { workspaceWorkflow } from "@/server/web";
 
@@ -51,6 +60,14 @@ async function NextStep({ task, slug }: { task: TaskView; slug: string }) {
   const taskId = task.id;
   const workflow = await workspaceWorkflow(slug);
   const back = moveBack(task, workflow, `${quoted(task)} is back in ${stageLabel(workflow, task)}.`);
+  // Starting a task makes the person who starts it its operator.
+  if (task.status === "todo") {
+    return (
+      <ActionButton action={takeTaskAction} workspace={slug} fields={{ taskId }} notice={next.notice(quoted(task))} undo={back} size="sm" variant="tinted">
+        {next.label}
+      </ActionButton>
+    );
+  }
   return next.status === "done" ? (
     <ActionButton
       action={completeTaskAction}
@@ -88,6 +105,9 @@ async function NextStep({ task, slug }: { task: TaskView; slug: string }) {
  */
 async function MoreActions({ task, slug }: { task: TaskView; slug: string }) {
   const taskId = task.id;
+  const { ctx } = await requireWorkspace(slug);
+  const mine = task.operatorUserId === ctx.actor.id;
+  const canTake = isOpenTaskStatus(task.status) && !mine;
   const canDrop = isOpenTaskStatus(task.status);
   const canArchive = !canDrop && !task.archivedAt;
   const workflow = await workspaceWorkflow(slug);
@@ -115,19 +135,31 @@ async function MoreActions({ task, slug }: { task: TaskView; slug: string }) {
           </ActionButton>
         ))}
       </div>
-      {(task.claimedByName || canDrop || canArchive) && <div className="my-1 border-t border-rule" />}
-      {task.claimedByName && (
+      {(canTake || task.operatorName || canDrop || canArchive) && <div className="my-1 border-t border-rule" />}
+      {canTake && (
+        <ActionButton action={takeTaskAction} workspace={slug} fields={{ taskId }} notice={`You're working on ${quoted(task)}`} closeOnSuccess size="menu" variant="ghost">
+          <UserCheck aria-hidden />
+          {task.operatorName ? `Take over from ${task.operatorName}` : "Take it"}
+        </ActionButton>
+      )}
+      {task.delegation === "handing_off" && (
+        <ActionButton action={cancelHandOffAction} workspace={slug} fields={{ taskId }} notice={`Called off the handoff of ${quoted(task)}`} closeOnSuccess size="menu" variant="ghost">
+          <CircleX aria-hidden />
+          Call off the handoff
+        </ActionButton>
+      )}
+      {task.operatorName && (
         <ActionButton
           action={releaseTaskAction}
           workspace={slug}
           fields={{ taskId }}
-          notice={`Released ${quoted(task)} from ${task.claimedByName}`}
+          notice={mine ? `You stopped working on ${quoted(task)}` : `Released ${quoted(task)} from ${task.operatorName}`}
           closeOnSuccess
           size="menu"
           variant="ghost"
         >
           <Unlock aria-hidden />
-          Release from {task.claimedByName}
+          {mine ? "Stop working on it" : `Release from ${task.operatorName}`}
         </ActionButton>
       )}
       {canDrop && (
@@ -220,13 +252,37 @@ export function TaskMeta({ task, slug, showGoal, showDue = true }: { task: TaskV
         </span>
       )}
       {task.source !== "manual" && <SourceLabel task={task} />}
-      {task.claimedByName && (
+      {task.operatorName && (
         <span className="inline-flex items-center gap-1">
-          <Bot className="size-3" aria-hidden />
-          Held by {task.claimedByName}
+          {task.operatorType === "user" ? <User className="size-3" aria-hidden /> : <Bot className="size-3" aria-hidden />}
+          Operator: {task.operatorName}
         </span>
       )}
+      <DelegationBadge task={task} />
     </div>
+  );
+}
+
+/** "Handing off to Closer", "Picking up", "Returned": a handover under way, in words and in its tone. */
+export function DelegationBadge({ task }: { task: Pick<TaskView, "delegation" | "delegateToName"> }) {
+  if (!task.delegation) return null;
+  const { label, tone } = DELEGATION_META[task.delegation];
+  return (
+    <Badge tone={tone}>
+      <Handshake aria-hidden />
+      {task.delegation === "handing_off" ? `${label} to ${task.delegateToName ?? "anyone"}` : label}
+    </Badge>
+  );
+}
+
+/** The last operator's note for whoever takes the task next, while a handover is under way. */
+export function HandoverNote({ task }: { task: Pick<TaskView, "delegation" | "delegationNote" | "delegatedAt"> }) {
+  if (!task.delegation || !task.delegationNote) return null;
+  return (
+    <figure className="rounded-md border border-rule bg-fill/60 px-3 py-2 text-sm">
+      <figcaption className="text-xs font-semibold text-ink-2">{task.delegation === "returned" ? "Note left when it was released" : "Handoff note"}</figcaption>
+      <blockquote className="mt-1 whitespace-pre-wrap text-ink">{task.delegationNote}</blockquote>
+    </figure>
   );
 }
 

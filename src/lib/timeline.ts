@@ -112,6 +112,7 @@ function statusAfter(current: TaskStatus, event: TaskEventLike): TaskStatus {
     case "task.assigned":
       return current === "inbox" ? "todo" : current;
     case "task.claimed":
+    case "task.picked_up":
       return "in_progress";
     case "task.released":
       return current === "in_progress" ? "todo" : current;

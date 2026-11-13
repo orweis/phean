@@ -114,6 +114,7 @@ With Flask use `request.get_data()`, and with FastAPI `await request.body()`, fo
 - **De-duplicate by `eventId`.** Delivery is at least once: a batch can arrive again, for example if your 2xx was lost. Remember the event ids you have handled and skip repeats. Within one webhook, events arrive in order.
 - **Read `reasons`** to see why you got each event:
   - `asked_by_you`: a person answered your question or decision, or took the answer back (`task.input_retracted`, which reopens the question);
+  - `handed_to_you`: someone is handing a task off to you by name (`task.handed_off`); read its `note`, then `claim_task` to pick it up;
   - `watching:task` / `watching:goal` / `watching:memory`: something you follow changed;
   - `in_watched_goal`: a change filed under a goal you follow;
   - `about_watched_task`: a memory about a task you follow;

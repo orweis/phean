@@ -12,16 +12,19 @@ export const SWIMLANE_META: Record<Swimlane, { label: string; hint: string }> = 
 interface Placeable {
   inputRequest: InputRequest | null;
   claimedByAgentId: string | null;
+  operatorUserId: string | null;
+  delegateToUserId: string | null;
   createdByType: "user" | "agent";
 }
 
 /**
- * Which lane a task rides in. A task an agent is waiting on a person for is people's work, whoever
- * holds it; otherwise an agent holding it, or an agent having captured it, makes it agents' work;
- * the rest (captured by a person, held by no agent) is people's.
+ * Which lane a task rides in. A task an agent is waiting on a person for, a person is working on,
+ * or one being handed to a person is people's work; otherwise an agent operating it, or an agent
+ * having captured it, makes it agents' work; the rest (captured by a person, with no operator) is
+ * people's.
  */
 export function swimlaneOf(task: Placeable): Swimlane {
-  if (task.inputRequest) return "people";
+  if (task.inputRequest || task.operatorUserId || task.delegateToUserId) return "people";
   if (task.claimedByAgentId) return "agents";
   return task.createdByType === "agent" ? "agents" : "people";
 }

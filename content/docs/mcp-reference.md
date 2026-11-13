@@ -41,7 +41,7 @@ Markers below: **read-only** tools never change workspace state; **destructive**
 | Tool | Description |
 | --- | --- |
 | `capture_tasks` | Record up to 100 tasks in one call, de-duplicated by `source` and `sourceRef`; skipped items come back in `duplicates`. |
-| `list_tasks` | Read-only. Tasks filtered by status, goal, parent, priority, claim (`mine`, `unclaimed`) or due date, most urgent first. |
+| `list_tasks` | Read-only. Tasks filtered by status, goal, parent, priority, operator (`claimed`: `mine`, `unclaimed`, `handed_to_me`) or due date, most urgent first. Each carries its operator and delegation. |
 | `get_task` | Read-only. One task with its links, sessions, documents, open and answered requests, parent, subtasks and recent activity. |
 | `update_task` | Change only the fields you pass: title, description, status or stage, priority, due date, goal, tags, source, `sourceRef`, parent, links. |
 | `assign_tasks_to_goal` | File several tasks under one goal; inbox tasks become `todo`. |
@@ -50,11 +50,13 @@ Markers below: **read-only** tools never change workspace state; **destructive**
 
 | Tool | Description |
 | --- | --- |
-| `claim_task` | Take a task before working on it, with your `session`; moves it to in progress. Fails with the claimant's name if another agent holds it. |
+| `claim_task` | Become a task's operator before working on it, with your `session`; moves it to in progress. Fails with the operator's name if another agent or a person works on it, unless it is being handed to you: then you pick it up (`picking_up`). |
 | `link_session` | Attach this session to a task so a person can resume with you. One per agent; linking again replaces yours. |
-| `release_task` | Give up a claim you cannot finish; the task goes back to `todo`. |
+| `hand_off_task` | Pass a task on to an agent (`toAgent`), a person (`toPerson`, their email) or anyone, with a `note`. It stays yours, `handing_off`, until someone picks it up; a named agent hears `handed_to_you`. |
+| `cancel_hand_off` | Call off a handoff no one has picked up yet. |
+| `release_task` | Let go of a task you cannot finish, with a `note`; it goes back to `todo`, marked `returned`, for the next operator. |
 | `complete_task` | Mark a task done with a short note; closes any open request of yours on it. |
-| `suggest_next_actions` | Read-only. The most urgent open tasks, skipping ones other agents claimed. |
+| `suggest_next_actions` | Read-only. The most urgent open tasks, work handed to you first, skipping ones another operator holds. |
 | `get_activity` | Read-only. What people and other agents did, newest first, optionally since a timestamp or for one goal. |
 
 ## Hand-offs to people

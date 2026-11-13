@@ -324,9 +324,12 @@ describe("the favicon badge", () => {
 describe("the board's swimlanes", () => {
   const request = { id: "q_1", kind: "question", question: "?", context: "", options: [], links: [], agentId: "ag_1", agentName: "Scout", askedAt: "2026-11-07T00:00:00Z" } as const;
   it("puts work waiting on a person with people, and work agents hold or captured with agents", () => {
-    expect(swimlaneOf({ inputRequest: { ...request, options: [], links: [] }, claimedByAgentId: "ag_1", createdByType: "agent" })).toBe("people");
-    expect(swimlaneOf({ inputRequest: null, claimedByAgentId: "ag_1", createdByType: "user" })).toBe("agents");
-    expect(swimlaneOf({ inputRequest: null, claimedByAgentId: null, createdByType: "agent" })).toBe("agents");
-    expect(swimlaneOf({ inputRequest: null, claimedByAgentId: null, createdByType: "user" })).toBe("people");
+    expect(swimlaneOf({ inputRequest: { ...request, options: [], links: [] }, claimedByAgentId: "ag_1", operatorUserId: null, delegateToUserId: null, createdByType: "agent" })).toBe("people");
+    expect(swimlaneOf({ inputRequest: null, claimedByAgentId: "ag_1", operatorUserId: null, delegateToUserId: null, createdByType: "user" })).toBe("agents");
+    expect(swimlaneOf({ inputRequest: null, claimedByAgentId: null, operatorUserId: null, delegateToUserId: null, createdByType: "agent" })).toBe("agents");
+    expect(swimlaneOf({ inputRequest: null, claimedByAgentId: null, operatorUserId: null, delegateToUserId: null, createdByType: "user" })).toBe("people");
+    // A person working on it, or a handoff to a person, is people's work whoever captured it.
+    expect(swimlaneOf({ inputRequest: null, claimedByAgentId: null, operatorUserId: "u_1", delegateToUserId: null, createdByType: "agent" })).toBe("people");
+    expect(swimlaneOf({ inputRequest: null, claimedByAgentId: "ag_1", operatorUserId: null, delegateToUserId: "u_1", createdByType: "agent" })).toBe("people");
   });
 });

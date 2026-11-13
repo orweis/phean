@@ -26,6 +26,9 @@ const DECISION_ACTIONS = new Set(["task.input_answered", "task.input_retracted",
 /** Events about an agent's own question, delivered to it whatever it watches. */
 const ANSWER_ACTIONS = new Set(["task.input_answered", "task.input_retracted"]);
 
+/** A task being handed to an agent by name, delivered to it whatever it watches. */
+const HANDOFF_ACTION = "task.handed_off";
+
 /** Which topics an event belongs to; an agent gets it if its webhook subscribes to any of them. */
 export function topicsOf(action: string): WebhookTopic[] {
   const topics: WebhookTopic[] = [];
@@ -97,6 +100,7 @@ export function reasonsFor(event: RoutedEvent, listener: Listener, watching: Rea
   if (!topics.some((topic) => listener.topics.includes(topic))) return [];
   const reasons = new Set<string>();
   if (ANSWER_ACTIONS.has(event.action) && event.data.agentId === listener.agentId) reasons.add("asked_by_you");
+  if (event.action === HANDOFF_ACTION && event.data.toAgentId === listener.agentId) reasons.add("handed_to_you");
   for (const key of concerns(event)) if (watching.has(`${key.type}|${key.id}`)) reasons.add(key.reason);
   if (reasons.size === 0 && listener.scope === "all") reasons.add("workspace");
   return [...reasons];

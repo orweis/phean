@@ -13,7 +13,7 @@ const task = (title: string, fields: Partial<TableTask> = {}): TableTask => ({
   priority: "medium",
   dueDate: null,
   goalTitle: null,
-  claimedByName: null,
+  operatorName: null,
   updatedAt: "2026-11-01T00:00:00Z",
   ...fields,
 });

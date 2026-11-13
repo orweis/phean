@@ -90,7 +90,7 @@ describe("MCP surface", () => {
   it("advertises every tool with annotations, plus prompts and instructions", async () => {
     const { tools } = await scout.listTools();
     expect(tools.map((tool) => tool.name).sort()).toEqual(TOOLS.filter((tool) => !tool.adminOnly).map((tool) => tool.name).sort());
-    expect(tools).toHaveLength(42);
+    expect(tools).toHaveLength(44);
     const byName = new Map(tools.map((tool) => [tool.name, tool]));
     expect(byName.get("list_tasks")?.annotations?.readOnlyHint).toBe(true);
     expect(byName.get("forget")?.annotations?.destructiveHint).toBe(true);
@@ -485,6 +485,8 @@ describe("tools by access level", () => {
     collect_answers: {},
     resolve_input: { taskId: "t_x" },
     release_task: { taskId: "t_x" },
+    hand_off_task: { taskId: "t_x", toAgent: "Builder" },
+    cancel_hand_off: { taskId: "t_x" },
     complete_task: { taskId: "t_x" },
     remember: { content: "A fact" },
     update_memory: { memoryId: "m_x", content: "A fact" },

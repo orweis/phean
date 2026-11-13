@@ -14,11 +14,13 @@ import { AskInput, Empty, GoalRefInput, VisualizeInput } from "../domain/schemas
 import { search } from "../domain/search";
 import {
   assignTasksToGoal,
+  cancelHandOff,
   captureTasks,
   claimTask,
   collectAnswers,
   completeTask,
   getTask,
+  handOffTask,
   linkSession,
   listTasks,
   releaseTask,
@@ -133,7 +135,8 @@ export const TOOLS: readonly PheanTool[] = [
   serviceTool({
     name: "list_tasks",
     title: "List tasks",
-    description: "Tasks filtered by status, goal, parent task (its subtasks), priority, claim (mine, unclaimed), or due date, most urgent first. Each includes its goal title, who has claimed it, its parent's title, and its subtask progress.",
+    description:
+      "Tasks filtered by status, goal, parent task (its subtasks), priority, operator (claimed: mine, unclaimed, or handed_to_me for work being handed off to you or to anyone), or due date, most urgent first. Each includes its goal title, its operator (operatorType and operatorName: the agent or person working on it now), its delegation (handing_off, picking_up or returned, with delegateToName and delegationNote), its parent's title, and its subtask progress.",
     readOnly: true,
     service: listTasks,
     key: "tasks",
@@ -166,7 +169,7 @@ export const TOOLS: readonly PheanTool[] = [
     name: "claim_task",
     title: "Claim task",
     description:
-      "Take ownership of a task before working on it, so other agents leave it alone. Moves it to 'in_progress'. Pass 'session' (as in link_session) so humans can resume the work with you. Fails with the claimant's name if another agent got there first.",
+      "Become the task's operator before working on it, so others leave it alone. Moves it to 'in_progress'. Pass 'session' (as in link_session) so humans can resume the work with you. Fails with the operator's name if another agent or a person is working on it, unless it is being handed off to you (or to anyone): then you pick it up, its delegation reads 'picking_up', and delegationNote holds the last operator's handoff note. Read it, and the task's documents, before you start; your first step (a session, a question, an update) ends the pick-up.",
     service: claimTask,
     key: "task",
   }),
@@ -216,8 +219,24 @@ export const TOOLS: readonly PheanTool[] = [
   serviceTool({
     name: "release_task",
     title: "Release task",
-    description: "Give up your claim on a task you cannot finish; it goes back to 'todo' for others.",
+    description:
+      "Let go of a task you operate and cannot finish, with a note on where it stands. It goes back to 'todo', marked 'returned', and your note waits for whoever takes it next. To pass it to someone in particular, use hand_off_task instead.",
     service: releaseTask,
+    key: "task",
+  }),
+  serviceTool({
+    name: "hand_off_task",
+    title: "Hand off task",
+    description:
+      "Pass a task you operate (or one no one is working on) to someone else: another agent (toAgent: its name or id), a person (toPerson: their email), or anyone (neither). Write a note for them: where the work stands, what is left, what they must not miss. The task stays yours, marked 'handing_off', until they pick it up with claim_task (a person takes it in Phean); a named agent hears about it at once by webhook or the realtime stream (reason handed_to_you). Handing off again changes who it is for; cancel_hand_off keeps it.",
+    service: handOffTask,
+    key: "task",
+  }),
+  serviceTool({
+    name: "cancel_hand_off",
+    title: "Cancel hand-off",
+    description: "Call off a handoff that no one has picked up yet; the task stays with you (or with no one, if no one was working on it).",
+    service: cancelHandOff,
     key: "task",
   }),
   serviceTool({
@@ -231,7 +250,8 @@ export const TOOLS: readonly PheanTool[] = [
   serviceTool({
     name: "suggest_next_actions",
     title: "Suggest next actions",
-    description: "The most urgent open tasks (priority, then due date, then age), skipping tasks claimed by other agents. The answer to 'what should I do next?'.",
+    description:
+      "The most urgent open tasks (priority, then due date, then age), with tasks being handed off to you first, skipping tasks another agent or a person is working on. The answer to 'what should I do next?'.",
     readOnly: true,
     service: suggestNextActions,
     key: "tasks",

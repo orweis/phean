@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import {
   bigint,
   boolean,
+  check,
   customType,
   date,
   foreignKey,
@@ -22,6 +23,7 @@ import { DOCUMENT_FORMATS } from "../../../lib/documents";
 import {
   ACTOR_TYPES,
   AGENT_ACCESS_LEVELS,
+  DELEGATION_STATES,
   GOAL_STATUSES,
   MEMORY_KINDS,
   PRIORITIES,
@@ -38,6 +40,7 @@ export const goalStatusEnum = pgEnum("goal_status", GOAL_STATUSES);
 export const priorityEnum = pgEnum("priority", PRIORITIES);
 export const sourceEnum = pgEnum("task_source", SOURCES);
 export const memoryKindEnum = pgEnum("memory_kind", MEMORY_KINDS);
+export const delegationEnum = pgEnum("task_delegation", DELEGATION_STATES);
 export const agentAuthKindEnum = pgEnum("agent_auth_kind", ["key", "oauth"]);
 export const agentAccessLevelEnum = pgEnum("agent_access_level", AGENT_ACCESS_LEVELS);
 export const actorTypeEnum = pgEnum("actor_type", ACTOR_TYPES);
@@ -178,8 +181,21 @@ export const tasks = pgTable(
       .array()
       .notNull()
       .default(sql`'{}'::text[]`),
+    /** The agent working on it right now: its claim. A task has one operator at most, this or `operatorUserId`. */
     claimedByAgentId: text("claimed_by_agent_id"),
+    /** The person working on it right now, when its operator is a person rather than an agent. */
+    operatorUserId: text("operator_user_id").references(() => user.id, { onDelete: "set null" }),
+    /** When its current operator took it on. */
     claimedAt: timestampTz("claimed_at"),
+    /** The handover around the operator, if one is under way (`DELEGATION_STATES`). */
+    delegation: delegationEnum("delegation"),
+    /** Who a handoff is meant for: an agent, a person, or neither (anyone may pick it up). */
+    delegateToAgentId: text("delegate_to_agent_id"),
+    delegateToUserId: text("delegate_to_user_id").references(() => user.id, { onDelete: "set null" }),
+    /** What the last operator said when handing it off or letting it go, for whoever picks it up. */
+    delegationNote: text("delegation_note").notNull().default(""),
+    /** When the delegation last changed. */
+    delegatedAt: timestampTz("delegated_at"),
     completedAt: timestampTz("completed_at"),
     /** Set when a finished (done or dropped) task is filed away, off the board; reopening it clears it. */
     archivedAt: timestampTz("archived_at"),
@@ -221,6 +237,14 @@ export const tasks = pgTable(
       columns: [t.tenantId, t.claimedByAgentId],
       foreignColumns: [agents.tenantId, agents.id],
     }),
+    foreignKey({
+      name: "tasks_delegate_to_agent_fk",
+      columns: [t.tenantId, t.delegateToAgentId],
+      foreignColumns: [agents.tenantId, agents.id],
+    }),
+    // One operator at most: an agent's claim or a person, never both.
+    check("tasks_one_operator_ck", sql`num_nonnulls(${t.claimedByAgentId}, ${t.operatorUserId}) <= 1`),
+    check("tasks_one_delegate_ck", sql`num_nonnulls(${t.delegateToAgentId}, ${t.delegateToUserId}) <= 1`),
     // Several agents scanning the same inbox must not capture the same item twice.
     uniqueIndex("tasks_source_ref_uq")
       .on(t.tenantId, t.source, t.sourceRef)

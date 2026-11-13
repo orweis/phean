@@ -176,6 +176,21 @@ describe("tenant isolation", () => {
     expect((await getTask(acmeOwner, { taskId: acmeTask.id })).task.archivedAt).toBeNull();
   });
 
+  it("hands off, takes and releases only inside the workspace, and never to another workspace's agent or person", async () => {
+    const { handOffTask, takeTask, releaseTask, cancelHandOff } = await import("@/server/domain/tasks");
+    // Another workspace's people and agents cannot touch the task.
+    await expect(handOffTask(globexOwner, { taskId: acmeTask.id })).rejects.toMatchObject({ code: "not_found" });
+    await expect(takeTask(globexOwner, { taskId: acmeTask.id })).rejects.toMatchObject({ code: "not_found" });
+    await expect(releaseTask(globexAgent, { taskId: acmeTask.id })).rejects.toMatchObject({ code: "not_found" });
+    await expect(cancelHandOff(globexAgent, { taskId: acmeTask.id })).rejects.toMatchObject({ code: "not_found" });
+    // Nor can the task be handed to them, by id or by name.
+    await expect(handOffTask(acmeOwner, { taskId: acmeTask.id, toAgent: globex.scout.agentId })).rejects.toMatchObject({ code: "not_found" });
+    await expect(handOffTask(acmeOwner, { taskId: acmeTask.id, toPerson: globexOwner.actor.id })).rejects.toMatchObject({ code: "not_found" });
+    const handed = await handOffTask(acmeOwner, { taskId: acmeTask.id, toAgent: "Scout" });
+    expect(handed.delegateToAgentId).toBe(acme.scout.agentId);
+    expect(await listTasks(globexAgent, { claimed: "handed_to_me" })).toEqual([]);
+  });
+
   it("streams only the agent's own workspace's events over the realtime socket", async () => {
     const { runEventStream } = await import("@/server/realtime/stream");
     const sent: string[] = [];
