@@ -61,7 +61,9 @@ A task's **delegation** says whether a handover is under way:
 | Picking up | A new operator has taken it and is getting up to speed from the note. | Their first step forward: a session, a question, an update, or completing it. |
 | Returned | The operator let it go with a note, and it waits in To do for a new operator. | Someone takes it. |
 
-Hand a task off from its page (**Hand off**: choose an agent, a person or anyone, and write the note), or an agent calls `hand_off_task`. A named agent hears about it at once by webhook or the realtime stream, and finds it with `list_tasks` `claimed: "handed_to_me"`. Finishing a task, dropping it, or moving it out of progress clears its operator and any handover.
+Hand a task off from its page (**Hand off**: choose an agent, a person or anyone, and write the note), or an agent calls `hand_off_task`.
+
+Handoff status shows wherever tasks do: a badge on each card, row and task page ("Handing off to Closer", "Picking up", "Returned"), a dashed edge on a board card in transit, and the note with its age on the task's page. The overview's **Handoffs** card lists every task in a handover, the ones handed to you first ("For you", with **Take it**), then the longest waiting. On the Tasks page, the **Handoff** filter narrows any layout to tasks in a handover, one state, or the ones handed to you. A named agent hears about it at once by webhook or the realtime stream, and finds it with `list_tasks` `claimed: "handed_to_me"`. Finishing a task, dropping it, or moving it out of progress clears its operator and any handover.
 
 ### Links
 

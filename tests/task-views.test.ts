@@ -4,7 +4,7 @@ import { byDueDay, gridRange, monthGrid, parseMonth } from "@/lib/calendar";
 import { routes } from "@/lib/routes";
 import { layoutMap } from "@/lib/task-map";
 import { nextSort, parseTableSort, sortTasks, type TableTask } from "@/lib/task-table";
-import { carriedFilters, parseStatusFilter, parseTaskLayout } from "@/lib/task-views";
+import { carriedFilters, parseHandoffFilter, parseStatusFilter, parseTaskLayout } from "@/lib/task-views";
 
 const task = (title: string, fields: Partial<TableTask> = {}): TableTask => ({
   title,
@@ -26,13 +26,18 @@ describe("task layouts and filters", () => {
     expect(parseStatusFilter("in_progress")).toBe("in_progress");
     expect(parseStatusFilter("all")).toBe("all");
     expect(parseStatusFilter("started")).toBe("open");
+    expect(parseHandoffFilter("to_me")).toBe("to_me");
+    expect(parseHandoffFilter("handing_off")).toBe("handing_off");
+    expect(parseHandoffFilter("anyone")).toBe("all");
+    expect(parseHandoffFilter(undefined)).toBe("all");
   });
 
   it("carries goal, agent and status between layouts, and drops what belongs to one", () => {
-    expect(carriedFilters({ goal: "g1", agent: "a1", status: "todo", sort: "due", dir: "asc", month: "2026-11", lane: "done" })).toEqual({
+    expect(carriedFilters({ goal: "g1", agent: "a1", status: "todo", handoff: "to_me", sort: "due", dir: "asc", month: "2026-11", lane: "done" })).toStrictEqual({
       goal: "g1",
       agent: "a1",
       status: "todo",
+      handoff: "to_me",
     });
     expect(routes.board("acme", { view: "table", status: "inbox", goal: undefined })).toBe("/w/acme/board?view=table&status=inbox");
   });

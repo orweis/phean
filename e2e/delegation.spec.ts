@@ -69,11 +69,27 @@ test("a person starts a task, hands it to an agent with a note, and the agent pi
     await expect(page.getByText("Picking up", { exact: true })).toBeVisible();
   });
 
-  await test.step("the person takes it back from the menu", async () => {
+  await test.step("the board shows the handoff with a dashed edge, and the Handoff filter finds it", async () => {
+    await asAgent(token, (agent) => agent.call("hand_off_task", { taskId: task.id, toPerson: owner.email, note: "Drafted; needs your sign-off on the wording." }));
     await page.goto(`/w/${slug}/board`);
-    const more = taskCard().locator("details").filter({ has: page.locator('summary[aria-label="More actions for Write the changelog"]') });
-    await more.locator("summary").click();
-    await more.getByRole("button", { name: "Take over from Writer" }).click();
-    await expect(taskCard()).toContainText(`Operator: ${owner.name}`);
+    await expect(taskCard()).toContainText(`Handing off to ${owner.name}`);
+    await expect(taskCard()).toHaveCSS("border-top-style", "dashed");
+    await page.goto(`/w/${slug}/board?view=table&handoff=to_me`);
+    await expect(page.getByRole("combobox", { name: "Filter by handoff" })).toHaveValue("to_me");
+    await expect(page.locator("tbody tr")).toHaveCount(1);
+    await expect(page.locator("tbody tr")).toContainText("Write the changelog");
+  });
+
+  await test.step("the overview lists it for the person, who takes it from there", async () => {
+    await page.goto(`/w/${slug}`);
+    const handoffs = page.getByRole("list", { name: "Handoffs" });
+    const entry = handoffs.getByRole("listitem").filter({ hasText: "Write the changelog" });
+    await expect(entry).toContainText("For you");
+    await expect(entry).toContainText("Drafted; needs your sign-off on the wording.");
+    await entry.getByRole("button", { name: "Take it" }).click();
+    await expect(page.locator("[data-status-region]")).toContainText("You're working on “Write the changelog”");
+    await page.goto(`/w/${slug}/tasks/${task.id}`);
+    await expect(page.getByText(`Operator: ${owner.name}`)).toBeVisible();
+    await expect(page.getByText("Picking up", { exact: true })).toBeVisible();
   });
 });
