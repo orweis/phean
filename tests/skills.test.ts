@@ -8,16 +8,24 @@ import { describe, expect, it } from "vitest";
 
 import { LINK_KINDS, REQUEST_KINDS } from "@/lib/agent-sessions";
 import { DOCUMENT_FORMATS } from "@/lib/documents";
-import { AskInput, AttachDocumentInput, MAX_WAIT_SECONDS, RegisterWebhookInput, WaitForAnswersInput } from "@/server/domain/schemas";
+import { DELEGATION_STATES } from "@/lib/domain";
+import { AskInput, AttachDocumentInput, HandOffInput, ListTasksInput, MAX_WAIT_SECONDS, RegisterWebhookInput, WaitForAnswersInput } from "@/server/domain/schemas";
 import { TOOLS } from "@/server/mcp/tools";
 import { AGENT_INACTIVE, backoffSeconds, MAX_CONSECUTIVE_FAILURES, REQUEST_TIMEOUT_MS } from "@/server/webhooks/dispatch";
 import { SIGNATURE_HEADER, signPayload, verifySignature } from "@/server/webhooks/signing";
 
 const read = (name: string) => readFileSync(new URL(`../skills/${name}/SKILL.md`, import.meta.url), "utf8");
-const SKILLS = { "phean-decisions": read("phean-decisions"), "phean-webhooks": read("phean-webhooks"), "phean-documents": read("phean-documents") };
+const SKILLS = {
+  "phean-decisions": read("phean-decisions"),
+  "phean-webhooks": read("phean-webhooks"),
+  "phean-documents": read("phean-documents"),
+  "phean-handoffs": read("phean-handoffs"),
+};
 const TOOL_NAMES = new Set(TOOLS.map((tool) => tool.name));
 /** Delivery reasons and the delivery error look like tool names (snake_case) but are payload values. */
 const REASONS = ["asked_by_you", "handed_to_you", "in_watched_goal", "about_watched_task", AGENT_INACTIVE];
+/** Field values that also look like tool names: the delegation states and the handed_to_me filter. */
+const VALUES = [...REASONS, ...DELEGATION_STATES, "handed_to_me"];
 
 const codeBlock = (skill: string, language: string) => new RegExp("```" + language + "\\n([\\s\\S]+?)\\n```").exec(skill)![1]!;
 
@@ -30,7 +38,7 @@ describe.each(Object.entries(SKILLS))("the %s skill", (name, skill) => {
 
   it("names only tools the server has", () => {
     // Inline code that looks like a tool name (snake_case with an underscore).
-    const named = [...skill.matchAll(/`([a-z]+(?:_[a-z]+)+)`/g)].map((match) => match[1]!).filter((value) => !REASONS.includes(value));
+    const named = [...skill.matchAll(/`([a-z]+(?:_[a-z]+)+)`/g)].map((match) => match[1]!).filter((value) => !VALUES.includes(value));
     expect(named.length).toBeGreaterThan(3);
     expect(named.filter((value) => !TOOL_NAMES.has(value))).toEqual([]);
   });
@@ -49,6 +57,23 @@ describe("the phean-decisions skill", () => {
   it("carries an example request the server would accept", () => {
     const example = JSON.parse(codeBlock(SKILL, "json"));
     expect(AskInput.safeParse(example).success).toBe(true);
+  });
+});
+
+describe("the phean-handoffs skill", () => {
+  const SKILL = SKILLS["phean-handoffs"];
+
+  it("names every delegation state, every handoff field, and the filter that finds handoffs", () => {
+    for (const state of DELEGATION_STATES) expect(SKILL).toContain(`\`${state}\``);
+    for (const field of Object.keys(HandOffInput.shape)) expect(SKILL).toContain(`\`${field}\``);
+    expect(ListTasksInput.shape.claimed.parse("handed_to_me")).toBe("handed_to_me");
+    expect(SKILL).toContain("`handed_to_me`");
+    expect(SKILL).toContain("`handed_to_you`");
+  });
+
+  it("carries an example handoff the server would accept", () => {
+    const example = JSON.parse(codeBlock(SKILL, "json"));
+    expect(HandOffInput.safeParse(example).success).toBe(true);
   });
 });
 

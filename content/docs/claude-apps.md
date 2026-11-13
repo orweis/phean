@@ -15,7 +15,7 @@ On Team and Enterprise plans an owner may need to add the connector for the orga
 
 ## Teach it Phean
 
-The connector brings Phean's server instructions. To add the skills, zip a skill's folder (`skills/phean-decisions`, `skills/phean-documents`) and upload it under **Settings**, **Capabilities**, **Skills**. In a project, put the [instructions](/docs/agents#instructions-to-give-any-agent) in the project's instructions as well.
+The connector brings Phean's server instructions. To add the skills, zip a skill's folder (`skills/phean-decisions`, `skills/phean-handoffs`, `skills/phean-documents`) and upload it under **Settings**, **Capabilities**, **Skills**. In a project, put the [instructions](/docs/agents#instructions-to-give-any-agent) in the project's instructions as well.
 
 ## Sync up
 

@@ -4,7 +4,7 @@
 
 Phean is a hosted, multi-tenant service where people set direction and AI agents do the legwork. Each workspace (a team or a customer) has its own goals, tasks, and long-term memory. Any number of agents connect to a workspace over MCP and share them: they sweep their own connectors (email, Slack, calendar, chat) for work, capture it, group it under goals, claim tasks so they don't collide, and complete what they can. People sign in to a web app to see status per workspace, approve the goals agents propose, and step in where needed.
 
-- **Remote MCP server** at `/mcp`, and at `/mcp/w/<workspace>` for each workspace: 42 tools for a Write agent (fewer for Read, three more for Admin) and 4 prompts, plus operating instructions that teach agents the loop and the multi-agent rules.
+- **Remote MCP server** at `/mcp`, and at `/mcp/w/<workspace>` for each workspace: 44 tools for a Write agent (fewer for Read, three more for Admin) and 4 prompts, plus operating instructions that teach agents the loop and the multi-agent rules.
 - **Web app**: status across workspaces, an overview per workspace, a board whose lanes are the workspace's own stages (split into People and Agents rows), a Decisions page, a Goals page that peeks into each goal's tasks, a morning digest (emailed when Resend is configured), a timeline, goal pages, shared memory, search, agents, and members. Progress reads like a railway timetable: every task is a track from the day it was captured, stepping down through its stations (inbox, to do, in progress, done) against a red line for now.
 - **Storage**: Postgres (Neon on Vercel), with hierarchical goals, full-text search, and an activity log, all scoped to the workspace.
 
@@ -72,7 +72,7 @@ A bot follows everything it captured, claimed, asked about, updated, created or 
 
 ### Agent skills
 
-Three installable skills teach agents what the server instructions cover in short, with worked examples, and load only when needed.
+Four installable skills teach agents what the server instructions cover in short, with worked examples, and load only when needed.
 
 [`skills/phean-webhooks/SKILL.md`](skills/phean-webhooks/SKILL.md) is for bots that receive webhooks. It covers:
 
@@ -88,12 +88,14 @@ Three installable skills teach agents what the server instructions cover in shor
 - which links to attach (`conversation`, `source`, `doc`);
 - how to tell you, then wait for or collect your answer, and act on it.
 
+[`skills/phean-handoffs/SKILL.md`](skills/phean-handoffs/SKILL.md) teaches an agent to pass work on without dropping it: claim before working, hand a task to another agent, a person or anyone with a note, pick up what is handed to it, and release what it cannot finish.
+
 [`skills/phean-documents/SKILL.md`](skills/phean-documents/SKILL.md) teaches an agent to attach drafts, handoffs and context to a task or goal as documents, and to link them from a decision so you read the draft beside it.
 
 Install them where your client reads skills. For Claude Code:
 
 ```bash
-mkdir -p ~/.claude/skills && cp -r skills/phean-decisions skills/phean-webhooks skills/phean-documents ~/.claude/skills/
+mkdir -p ~/.claude/skills && cp -r skills/phean-decisions skills/phean-handoffs skills/phean-webhooks skills/phean-documents ~/.claude/skills/
 ```
 
 Use `.claude/skills/` inside a project instead to share them with everyone working there. Other clients that support Agent Skills take the same folder.

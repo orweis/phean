@@ -1,6 +1,6 @@
 ---
 name: phean-documents
-description: How to attach, read, edit and hand off documents in Phean. Use whenever you are connected to a Phean MCP server and produce something a person should read or judge (a draft email, a proposal, a plan, an analysis, a diagram), need to hand a task to another agent or pause it with its context, or pick up a task someone else started. Covers the formats Phean shows, attaching to tasks and goals, linking a draft from a decision request, reading a task's documents before working, editing without overwriting a person's changes, and what never to put in a document.
+description: How to attach, read, edit and hand off documents in Phean. Use whenever you are connected to a Phean MCP server and produce something a person should read or judge (a draft email, a proposal, a plan, an analysis, a diagram), need to hand a task to another agent or pause it with its context (alongside the phean-handoffs skill), or pick up a task someone else started. Covers the formats Phean shows, attaching to tasks and goals, linking a draft from a decision request, reading a task's documents before working, editing without overwriting a person's changes, and what never to put in a document.
 ---
 
 # Documents in Phean
@@ -13,7 +13,7 @@ A document is a file attached to a task or a goal. People read it in Phean (Mark
 | --- | --- |
 | A draft for a person to judge (an email, an offer, a plan) | Attach it to the task, then link it from your `request_input` (kind `doc`) so the decision and the draft sit together. |
 | Material with no URL (it is in your context, not on the web) | Attach it, rather than pasting a wall of text into a description or a question. |
-| Work you are pausing or handing over | Attach a short handoff note (done, next, where things are) before `release_task`. |
+| Work you are pausing or handing over | Put the short version (done, next, where things are) in the `note` of `hand_off_task` or `release_task`, and attach anything longer as a document first, so the note can point to it. The phean-handoffs skill covers handoffs. |
 | A task to pick up | Read its documents first: `get_task` lists them, `get_document` reads one. |
 
 When there is a real link to the material (a Google Doc, a PR, a ticket), link that instead, with `update_task` `addLinks`.

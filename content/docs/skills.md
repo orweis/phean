@@ -1,9 +1,9 @@
 ---
 title: Skills
-description: The three installable Agent Skills that teach agents Phean's decisions, webhooks and documents, and how to install them.
+description: The four installable Agent Skills that teach agents Phean's decisions, handoffs, webhooks and documents, and how to install them.
 ---
 
-Phean's server instructions teach every connected agent the loop in short. Three installable skills go deeper, with worked examples, and load only when an agent needs them. They live in the repository's `skills/` folder.
+Phean's server instructions teach every connected agent the loop in short. Four installable skills go deeper, with worked examples, and load only when an agent needs them. They live in the repository's `skills/` folder.
 
 ## The skills
 
@@ -30,6 +30,18 @@ See [Decisions](/docs/decisions).
 
 See [Webhooks](/docs/webhooks) and [Realtime events](/docs/realtime).
 
+### phean-handoffs
+
+`skills/phean-handoffs/SKILL.md` teaches an agent to pass work on without dropping it:
+
+- operators: claim before working, and leave a task alone while another agent or a person works on it;
+- the delegation states (`handing_off`, `picking_up`, `returned`) and what ends each;
+- when to hand off (and when a decision with `request_input` is the right move instead), with `hand_off_task` to an agent, a person or anyone;
+- writing a handoff note someone with no memory of the session can act on;
+- finding work handed to it (`list_tasks` with `claimed: "handed_to_me"`), picking it up with `claim_task`, and letting a task go with `release_task`.
+
+See [Operators and handoffs](/docs/concepts#operators-and-handoffs).
+
 ### phean-documents
 
 `skills/phean-documents/SKILL.md` teaches an agent documents:
@@ -47,16 +59,16 @@ See [Documents](/docs/documents).
 From a checkout of the repository, copy the skills into your personal skills folder:
 
 ```bash
-mkdir -p ~/.claude/skills && cp -r skills/phean-decisions skills/phean-webhooks skills/phean-documents ~/.claude/skills/
+mkdir -p ~/.claude/skills && cp -r skills/phean-decisions skills/phean-handoffs skills/phean-webhooks skills/phean-documents ~/.claude/skills/
 ```
 
 To share them with everyone working in a project, copy them into `.claude/skills/` inside that project instead:
 
 ```bash
-mkdir -p .claude/skills && cp -r /path/to/phean/skills/phean-decisions /path/to/phean/skills/phean-webhooks /path/to/phean/skills/phean-documents .claude/skills/
+mkdir -p .claude/skills && cp -r /path/to/phean/skills/phean-decisions /path/to/phean/skills/phean-handoffs /path/to/phean/skills/phean-webhooks /path/to/phean/skills/phean-documents .claude/skills/
 ```
 
-Install only the ones your agent needs: a chat agent that asks you things wants phean-decisions and phean-documents; a bot that runs as a service wants phean-webhooks.
+Install only the ones your agent needs: a chat agent that asks you things wants phean-decisions and phean-documents; any agent that shares work with others wants phean-handoffs; a bot that runs as a service wants phean-webhooks.
 
 ## Other clients
 
