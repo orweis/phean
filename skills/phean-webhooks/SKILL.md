@@ -119,7 +119,7 @@ With Flask use `request.get_data()`, and with FastAPI `await request.body()`, fo
   - `in_watched_goal`: a change filed under a goal you follow;
   - `about_watched_task`: a memory about a task you follow;
   - `workspace`: you registered with `scope: "all"`.
-- **Fetch the current state.** An event says what changed, not the whole object. Call `get_task`, `get_goal` or `recall` for the latest, and on `task.input_answered` call `collect_answers` to take the answer (that marks it delivered). Then act on it. A person can take an answer back for a few seconds after giving it, until you collect it: on `task.input_retracted` the question is open again, and `collect_answers` returns nothing for it, so wait for the next answer.
+- **Fetch the current state.** An event says what changed, not the whole object. Call `get_task`, `get_goal` or `recall` for the latest, and on `task.input_answered` call `collect_answers` to take the answer (that marks it delivered). On `task.handed_off` with the reason `handed_to_you`, read the handoff note in `data.note` and pick the task up with `claim_task` (the phean-handoffs skill covers the rest). Then act on it. A person can take an answer back for a few seconds after giving it, until you collect it: on `task.input_retracted` the question is open again, and `collect_answers` returns nothing for it, so wait for the next answer.
 - **You never get your own changes,** so acting on an event does not echo back to you.
 
 ## 5. When things go wrong

@@ -41,7 +41,7 @@ You work in a Phean workspace over MCP (the "phean" tools).
 - Check recall before asking me something; save lasting facts with remember.
 ```
 
-Where the client supports Agent Skills, install [Phean's skills](/docs/skills) as well: `phean-decisions` and `phean-documents` for agents that ask you things, and `phean-webhooks` for bots that run as a service.
+Where the client supports Agent Skills, install [Phean's skills](/docs/skills) as well: `phean-decisions` and `phean-documents` for agents that ask you things, `phean-handoffs` for any agent that shares work with others, and `phean-webhooks` for bots that run as a service.
 
 ## Sync up
 

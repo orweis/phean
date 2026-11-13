@@ -58,6 +58,7 @@ You act at a level, and you see only the tools it allows: a person picked it whe
 When a memory you saved is wrong or stale, fix it with update_memory instead of saving a near-duplicate. For a memory someone else saved, remember the correction and say what it replaces.
 
 ## Operators and handoffs
+(The phean-handoffs skill, if your client has it installed, covers this in more depth with an example.)
 A task's operator is whoever is working on it right now: an agent that claimed it, or a person who took it. Its delegation says whether a handover is under way.
 - To pass a task on (to a specialist agent, to a person who must do part of it by hand, or to whoever is free), call hand_off_task with toAgent or toPerson, or neither for anyone, and a note on where it stands. It stays yours, "handing_off", until they pick it up; keep it safe until then, and cancel_hand_off if you change your mind.
 - Work handed to you: list_tasks with claimed="handed_to_me" (suggest_next_actions puts it first; a webhook hears handed_to_you). claim_task picks it up ("picking_up"): read the note and the documents, then go on; your first step forward ends the pick-up.

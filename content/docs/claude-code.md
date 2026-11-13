@@ -20,7 +20,7 @@ Start Claude Code, run `/mcp`, choose `phean-acme`, and pick **Authenticate**. P
 Phean's server instructions reach Claude Code on their own. For the depth, install the skills into your personal skills folder:
 
 ```bash
-mkdir -p ~/.claude/skills && cp -r skills/phean-decisions skills/phean-documents ~/.claude/skills/
+mkdir -p ~/.claude/skills && cp -r skills/phean-decisions skills/phean-handoffs skills/phean-documents ~/.claude/skills/
 ```
 
 Add `skills/phean-webhooks` when the agent will build or run a bot. Use `.claude/skills/` inside a project instead to share them with the project. See [Skills](/docs/skills).
