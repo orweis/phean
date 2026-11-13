@@ -113,7 +113,7 @@ const NO_DELEGATION = { delegation: null, delegateToAgentId: null, delegateToUse
 const settledBy = (ctx: Ctx, task: Task) => (task.delegation === "picking_up" && operates(ctx, task) ? NO_DELEGATION : {});
 
 /** Tasks being handed to the actor by name, or to anyone, that they do not already operate. */
-function handedTo(ctx: Ctx): SQL {
+export function handedTo(ctx: Ctx): SQL {
   const named = ctx.actor.type === "agent" ? eq(tasks.delegateToAgentId, ctx.actor.id) : eq(tasks.delegateToUserId, ctx.actor.id);
   const theirs = ctx.actor.type === "agent" ? sql`${tasks.claimedByAgentId} is distinct from ${ctx.actor.id}` : sql`${tasks.operatorUserId} is distinct from ${ctx.actor.id}`;
   return and(eq(tasks.delegation, "handing_off"), or(named, and(isNull(tasks.delegateToAgentId), isNull(tasks.delegateToUserId))), theirs)!;
@@ -991,6 +991,17 @@ export const listTasks = service(ListTasksInput, async (ctx, input): Promise<Tas
   )
     .orderBy(...byUrgency)
     .limit(input.limit);
+});
+
+/**
+ * Open tasks in a handover, for the overview: the ones being handed to the viewer (by name, or to
+ * anyone) first, then the longest waiting.
+ */
+export const listHandoffs = service(Empty, async (ctx): Promise<TaskView[]> => {
+  assertCan(ctx, "workspace:read");
+  return selectTaskViews(ctx, and(isOpenTask, isNotNull(tasks.delegation), isNull(tasks.archivedAt)))
+    .orderBy(sql`case when ${handedTo(ctx)} then 0 else 1 end`, asc(tasks.delegatedAt))
+    .limit(20);
 });
 
 /** Every task filed under a goal, not dropped and not archived, most urgent first: what the Goals page peeks into. */

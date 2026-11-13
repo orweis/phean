@@ -6,6 +6,7 @@ import { Suspense } from "react";
 
 import { BoardRowsToggle } from "@/components/board-rows-toggle";
 import { GoalFilter } from "@/components/goal-filter";
+import { HandoffFilter } from "@/components/handoff-filter";
 import { KanbanBoard } from "@/components/kanban-board";
 import { ManualEntry } from "@/components/manual-entry";
 import { PageHeader } from "@/components/page-header";
@@ -23,7 +24,7 @@ import { queryParam, routes } from "@/lib/routes";
 import { BOARD_ROWS_COOKIE, parseBoardRows, type BoardRows } from "@/lib/swimlanes";
 import { layoutMap } from "@/lib/task-map";
 import { parseTableSort } from "@/lib/task-table";
-import { parseStatusFilter, parseTaskLayout, type TaskLayout, type TaskQuery } from "@/lib/task-views";
+import { parseHandoffFilter, parseStatusFilter, parseTaskLayout, type TaskLayout, type TaskQuery } from "@/lib/task-views";
 import { requireWorkspace } from "@/server/auth/session";
 import { listAgents } from "@/server/domain/agents";
 import { listGoals, type GoalWithProgress } from "@/server/domain/goals";
@@ -54,9 +55,9 @@ function Partial({ shown, total }: { shown: number; total: number }) {
 
 /** The layout a request asked for, drawn from the tasks the shared filters select. */
 async function Layout({ layout, ctx, slug, query, goals, canWrite, rows }: { layout: TaskLayout; ctx: Ctx; slug: string; query: TaskQuery; goals: GoalWithProgress[]; canWrite: boolean; rows: BoardRows }) {
-  const scope = { goalId: query.goal, heldBy: query.agent, status: parseStatusFilter(query.status) };
+  const scope = { goalId: query.goal, heldBy: query.agent, status: parseStatusFilter(query.status), handoff: parseHandoffFilter(query.handoff) };
   if (layout === "board") {
-    const board = await orNotFound(getBoard(ctx, { goalId: scope.goalId, heldBy: scope.heldBy }));
+    const board = await orNotFound(getBoard(ctx, { goalId: scope.goalId, heldBy: scope.heldBy, handoff: scope.handoff }));
     return <KanbanBoard board={board} slug={slug} canWrite={canWrite} goals={goals} goalId={query.goal} lane={query.lane} rows={rows} />;
   }
   const grid = layout === "calendar" ? monthGrid(parseMonth(query.month)) : null;
@@ -118,6 +119,7 @@ export default async function TasksPage({ params, searchParams }: PageProps<"/w/
     dir: queryParam(raw.dir),
     month: queryParam(raw.month),
     due: queryParam(raw.due),
+    handoff: queryParam(raw.handoff),
   };
   const layout = parseTaskLayout(query.view);
   const { ctx } = await requireWorkspace(slug);
@@ -139,6 +141,7 @@ export default async function TasksPage({ params, searchParams }: PageProps<"/w/
           <Suspense>
             <GoalFilter goals={goals} />
             {layout !== "board" && <StatusFilter />}
+            <HandoffFilter />
           </Suspense>
           {layout === "board" && <BoardRowsToggle rows={rows} />}
           {/* The lanes are the workspace's stages, set in Settings; owners and admins reach them from the board too. */}

@@ -189,6 +189,10 @@ describe("tenant isolation", () => {
     const handed = await handOffTask(acmeOwner, { taskId: acmeTask.id, toAgent: "Scout" });
     expect(handed.delegateToAgentId).toBe(acme.scout.agentId);
     expect(await listTasks(globexAgent, { claimed: "handed_to_me" })).toEqual([]);
+    const { listHandoffs } = await import("@/server/domain/tasks");
+    expect(await listHandoffs(globexOwner, {})).toEqual([]);
+    expect((await browseTasks(globexOwner, { handoff: "any" })).tasks).toEqual([]);
+    expect((await listHandoffs(acmeOwner, {})).map((row) => row.id)).toEqual([acmeTask.id]);
   });
 
   it("streams only the agent's own workspace's events over the realtime socket", async () => {

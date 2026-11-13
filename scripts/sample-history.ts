@@ -206,6 +206,21 @@ const HANDOFFS: Record<string, Handoff> = {
   },
 };
 
+/** Handovers under way: one task its agent is passing to another, and one an agent let go of. */
+const DELEGATIONS: Record<string, { state: "handing_off" | "returned"; to?: AgentKey; note: string; hoursAgo: number }> = {
+  "Accrue December payroll": {
+    state: "handing_off",
+    to: "planner",
+    note: "Hours are in from all three teams; the accrual sheet is filled to the 15th. What is left is booking the payroll run on the 20th with the provider, which needs the calendar.",
+    hoursAgo: 2,
+  },
+  "Draft the revenue share terms": {
+    state: "returned",
+    note: "Started from the partner agreement draft, but the split per tier is a commercial call. Picking it up needs the tier prices from the Stripe mapping task first.",
+    hoursAgo: 26,
+  },
+};
+
 const MEMORIES: { content: string; goal?: GoalKey; kind: "fact" | "preference" | "decision" }[] = [
   { content: "Partners are paid monthly, net 30, in their own currency.", goal: "billing", kind: "decision" },
   { content: "The auditor wants card statements as PDFs, not CSV exports.", goal: "books", kind: "preference" },
@@ -304,6 +319,8 @@ export async function seedSampleHistory(db: Db, tenant: Tenant, owner: { id: str
     const handoff = HANDOFFS[sample.title];
     const handedOffAt = handoff && new Date(now.getTime() - handoff.hoursAgo * HOUR_MS);
     const who = { agentId: agentIds[sample.agent], agentName: AGENTS[sample.agent].name };
+    const delegation = DELEGATIONS[sample.title];
+    const delegatedAt = delegation && new Date(now.getTime() - delegation.hoursAgo * HOUR_MS);
 
     await db.insert(tasks).values({
       id,
@@ -318,6 +335,12 @@ export async function seedSampleHistory(db: Db, tenant: Tenant, owner: { id: str
       claimedByAgentId: last.status === "in_progress" ? agentIds[sample.agent] : null,
       claimedAt: last.status === "in_progress" ? last.at : null,
       completedAt: last.status === "done" ? last.at : null,
+      ...(delegation && {
+        delegation: delegation.state,
+        delegateToAgentId: delegation.to ? agentIds[delegation.to] : null,
+        delegationNote: delegation.note,
+        delegatedAt,
+      }),
       agentSessions: handoff ? [{ ...who, ...handoff.session, linkedAt: handedOffAt!.toISOString() }] : [],
       inputRequest: handoff?.question
         ? {
@@ -350,6 +373,12 @@ export async function seedSampleHistory(db: Db, tenant: Tenant, owner: { id: str
       else if (from === "in_progress" && stop.status === "todo") event(worker, "task.released", `released "${sample.title}"`, stop.at);
       else if (from === "inbox" && stop.status === "todo" && goalId) event(worker, "task.assigned", `filed "${sample.title}" under "${GOALS[sample.goal!].title}"`, stop.at);
       else event(human, "task.updated", `moved "${sample.title}" to ${TASK_STATUS_META[stop.status].label}`, stop.at, { changed: ["status"], status: stop.status });
+    }
+    if (delegation?.state === "handing_off") {
+      const to = delegation.to!;
+      event(worker, "task.handed_off", `is handing off "${sample.title}" to ${AGENTS[to].name}`, delegatedAt!, { toAgentId: agentIds[to], toName: AGENTS[to].name, note: delegation.note });
+    } else if (delegation?.state === "returned") {
+      event(worker, "task.released", `released "${sample.title}"`, delegatedAt!, { fromAgentId: agentIds[sample.agent], note: delegation.note });
     }
     if (handoff) {
       const session = { app: handoff.session.app, url: handoff.session.url, sessionId: handoff.session.sessionId };

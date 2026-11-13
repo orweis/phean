@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { STATUS_FILTERS } from "@/lib/task-views";
+import { HANDOFF_FILTERS, STATUS_FILTERS } from "@/lib/task-views";
 import { isResumeUrl, LINK_KINDS, MAX_LINKS, REQUEST_KINDS, RESUME_URL_SCHEMES } from "@/lib/agent-sessions";
 import {
   AGENT_ACCESS_LEVELS,
@@ -284,11 +284,13 @@ export const GoalScopeInput = z.object({
 export const BoardInput = GoalScopeInput.extend({
   doneLimit: limit(100, 20),
   heldBy: z.string().trim().min(1).optional().describe("Only the open tasks this agent holds (agent id)"),
+  handoff: z.enum(HANDOFF_FILTERS).default("all"),
 });
 /** The Tasks page's table, calendar and map: tasks in a goal's subtree, held by an agent, of a status, due in a range. */
 export const BrowseTasksInput = GoalScopeInput.extend({
   heldBy: z.string().trim().min(1).optional(),
   status: z.enum(STATUS_FILTERS).default("open"),
+  handoff: z.enum(HANDOFF_FILTERS).default("all"),
   dueFrom: isoDate.optional(),
   dueTo: isoDate.optional(),
   /** Only tasks with no due date: what the calendar cannot place. */

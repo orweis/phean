@@ -2,7 +2,7 @@ import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import type { Ctx } from "@/server/domain/context";
 import { listActivity } from "@/server/domain/events";
-import { getBoard } from "@/server/domain/overview";
+import { browseTasks, getBoard } from "@/server/domain/overview";
 import {
   addTask,
   cancelHandOff,
@@ -11,6 +11,7 @@ import {
   getTask,
   handOffTask,
   linkSession,
+  listHandoffs,
   listTasks,
   releaseTask,
   requestInput,
@@ -152,6 +153,40 @@ describe("handing off", () => {
     const listener = { agentId: ws.closer.agentId, topics: ["tasks"] as const, scope: "related" as const };
     expect(reasonsFor(event, listener, new Set(), ws.scout.agentId)).toEqual(["handed_to_you"]);
     expect(reasonsFor(event, { ...listener, agentId: ws.scout.agentId }, new Set(), null)).toEqual([]);
+  });
+});
+
+describe("handoff status in lists", () => {
+  it("lists open handoffs with the viewer's first, then the longest waiting, and filters every layout by them", async () => {
+    const { created } = await addTask(human, { title: "Book the venue", status: "todo" });
+    const venue = created[0]!;
+    await claimTask(scout, { taskId: task.id });
+    await handOffTask(scout, { taskId: task.id, toAgent: "Closer", note: "Draft is half done" });
+    await claimTask(closer, { taskId: venue.id });
+    await releaseTask(closer, { taskId: venue.id, note: "Need a budget first" });
+
+    // Neither is handed to Lee, so Lee sees them longest waiting first.
+    expect((await listHandoffs(leeCtx, {})).map((row) => [row.title, row.delegation])).toEqual([
+      ["Draft the launch post", "handing_off"],
+      ["Book the venue", "returned"],
+    ]);
+    await handOffTask(human, { taskId: venue.id, toPerson: lee.email, note: "Can you get the budget?" });
+    expect((await listHandoffs(leeCtx, {}))[0]?.title).toBe("Book the venue");
+    // Closer sees the one handed to it first.
+    expect((await listHandoffs(closer, {}))[0]?.id).toBe(task.id);
+
+    const titles = (rows: { title: string }[]) => rows.map((row) => row.title).sort();
+    expect(titles((await browseTasks(human, { handoff: "any" })).tasks)).toEqual(["Book the venue", "Draft the launch post"]);
+    expect(titles((await browseTasks(human, { handoff: "handing_off" })).tasks)).toEqual(["Book the venue", "Draft the launch post"]);
+    expect(titles((await browseTasks(closer, { handoff: "to_me" })).tasks)).toEqual(["Draft the launch post"]);
+    expect(titles((await browseTasks(leeCtx, { handoff: "to_me" })).tasks)).toEqual(["Book the venue"]);
+    const board = await getBoard(closer, { handoff: "to_me" });
+    expect(board.columns.flatMap((column) => column.tasks.map((row) => row.title))).toEqual(["Draft the launch post"]);
+
+    // Once picked up and settled, a task leaves the handoff lists.
+    await claimTask(closer, { taskId: task.id });
+    await linkSession(closer, { taskId: task.id, session: { sessionId: "s-3" } });
+    expect((await listHandoffs(human, {})).map((row) => row.title)).toEqual(["Book the venue"]);
   });
 });
 

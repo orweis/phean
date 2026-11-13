@@ -9,6 +9,7 @@ import {
   type TaskStatus,
 } from "@/lib/domain";
 import { subtreeIds } from "@/lib/goal-tree";
+import type { HandoffFilter } from "@/lib/task-views";
 import { stageOf, type Stage } from "@/lib/workflow";
 import { buildJourneys, fitWindow, TIMELINE_AHEAD_DAYS, timeWindow, type Journey, type TimeWindow } from "@/lib/timeline";
 
@@ -24,7 +25,7 @@ import { recall, type Memory } from "./memory";
 import { assertCan } from "./policy";
 import { BoardInput, BrowseTasksInput, Empty, GoalRefInput, GoalScopeInput, JourneysInput } from "./schemas";
 import { service } from "./service";
-import { byUrgency, isAwaitingInput, isDueWithinWeek, isOpenTask, isOverdue, selectTaskViews, type TaskView } from "./tasks";
+import { byUrgency, handedTo, isAwaitingInput, isDueWithinWeek, isOpenTask, isOverdue, selectTaskViews, type TaskView } from "./tasks";
 import { loadWorkflow } from "./workflow";
 
 export interface WorkspaceStats {
@@ -209,15 +210,23 @@ export interface Board {
 
 const BOARD_OPEN_LIMIT = 500;
 
-export const getBoard = service(BoardInput, async (ctx, { goalId, doneLimit, heldBy }): Promise<Board> => {
+/** The tasks a handoff filter keeps, or nothing to add for all tasks. */
+function inHandoff(ctx: Ctx, handoff: HandoffFilter): SQL | undefined {
+  if (handoff === "all") return undefined;
+  if (handoff === "any") return isNotNull(tasks.delegation);
+  if (handoff === "to_me") return handedTo(ctx);
+  return eq(tasks.delegation, handoff);
+}
+
+export const getBoard = service(BoardInput, async (ctx, { goalId, doneLimit, heldBy, handoff }): Promise<Board> => {
   assertCan(ctx, "workspace:read");
   const scope = await goalScope(ctx, goalId);
-  // A finished task is held by no one, so filtering by holder leaves the Done lane empty.
+  // A finished task is held by no one and in no handover, so filtering by either leaves the Done lane empty.
   const [open, done] = await Promise.all([
-    selectTaskViews(ctx, and(isOpenTask, scope, heldBy ? eq(tasks.claimedByAgentId, heldBy) : undefined))
+    selectTaskViews(ctx, and(isOpenTask, scope, heldBy ? eq(tasks.claimedByAgentId, heldBy) : undefined, inHandoff(ctx, handoff)))
       .orderBy(...byUrgency)
       .limit(BOARD_OPEN_LIMIT),
-    heldBy
+    heldBy || handoff !== "all"
       ? Promise.resolve([])
       : selectTaskViews(ctx, and(eq(tasks.status, "done"), isNull(tasks.archivedAt), scope))
           .orderBy(desc(tasks.completedAt))
@@ -237,7 +246,7 @@ export const getBoard = service(BoardInput, async (ctx, { goalId, doneLimit, hel
  * dropped (`all`), or one status. Archived tasks stay off, as on the board. The same goal scope and
  * holder filter as the board, so switching layouts never changes which tasks are meant.
  */
-export const browseTasks = service(BrowseTasksInput, async (ctx, { goalId, heldBy, status, dueFrom, dueTo, undated, limit }): Promise<BrowsedTasks> => {
+export const browseTasks = service(BrowseTasksInput, async (ctx, { goalId, heldBy, status, handoff, dueFrom, dueTo, undated, limit }): Promise<BrowsedTasks> => {
   assertCan(ctx, "workspace:read");
   const scope = await goalScope(ctx, goalId);
   const which = status === "open" ? isOpenTask : status === "all" ? ne(tasks.status, "dropped") : eq(tasks.status, status);
@@ -246,6 +255,7 @@ export const browseTasks = service(BrowseTasksInput, async (ctx, { goalId, heldB
     isNull(tasks.archivedAt),
     scope,
     heldBy ? eq(tasks.claimedByAgentId, heldBy) : undefined,
+    inHandoff(ctx, handoff),
     dueFrom ? gte(tasks.dueDate, dueFrom) : undefined,
     dueTo ? lte(tasks.dueDate, dueTo) : undefined,
     undated ? isNull(tasks.dueDate) : undefined,

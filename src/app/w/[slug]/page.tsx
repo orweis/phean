@@ -6,6 +6,7 @@ import { ActivityFeed } from "@/components/activity-feed";
 import { AgentWorkload } from "@/components/agent-list";
 import { Timetable, TimetableLegend } from "@/components/charts/timetable";
 import { GoalTree } from "@/components/goal-tree";
+import { HandoffList } from "@/components/handoffs";
 import { ManualEntry } from "@/components/manual-entry";
 import { OpenQuestions } from "@/components/open-questions";
 import { PageHeader } from "@/components/page-header";
@@ -23,7 +24,7 @@ import { listActivity } from "@/server/domain/events";
 import { listGoals } from "@/server/domain/goals";
 import { getAgentWorkload, getJourneys, getStatusSummary, type WorkspaceStats } from "@/server/domain/overview";
 import { can } from "@/server/domain/policy";
-import { suggestNextActions } from "@/server/domain/tasks";
+import { listHandoffs, suggestNextActions } from "@/server/domain/tasks";
 
 const NEXT_ACTIONS = 6;
 /** Tracks the overview's timetable draws; the Timeline tab has the rest. */
@@ -78,7 +79,7 @@ function statusSentence(stats: WorkspaceStats, slug: string): ReactNode {
 export default async function DashboardPage({ params }: PageProps<"/w/[slug]">) {
   const { slug } = await params;
   const { ctx } = await requireWorkspace(slug);
-  const [summary, goals, activity, workload, nextActions, { window, journeys }] = await Promise.all([
+  const [summary, goals, activity, workload, nextActions, { window, journeys }, handoffs] = await Promise.all([
     getStatusSummary(ctx, {}),
     listGoals(ctx, {}),
     listActivity(ctx, { limit: 30 }),
@@ -86,6 +87,7 @@ export default async function DashboardPage({ params }: PageProps<"/w/[slug]">) 
     // Tasks with an open question are already in the card above; ask for enough to fill the list without them.
     suggestNextActions(ctx, { limit: 20 }),
     getJourneys(ctx, { days: 14 }),
+    listHandoffs(ctx, {}),
   ]);
   const proposed = goals.filter((goal) => goal.status === "proposed");
   const pressing = mostPressing(journeys, PRESSING_TRACKS, window.now);
@@ -264,6 +266,22 @@ export default async function DashboardPage({ params }: PageProps<"/w/[slug]">) 
                     ),
                   )}
                 </ul>
+              </CardBody>
+            </Card>
+          )}
+          {handoffs.length > 0 && (
+            <Card id="handoffs" className="scroll-mt-32 max-lg:order-2">
+              <CardHeader
+                title="Handoffs"
+                description="Work passing between agents and people, yours first."
+                action={
+                  <ButtonLink href={routes.board(slug, { view: "table", handoff: "any" })} size="sm" variant="ghost">
+                    See all
+                  </ButtonLink>
+                }
+              />
+              <CardBody className="py-1">
+                <HandoffList tasks={handoffs} slug={slug} viewerId={ctx.actor.id} canWrite={canWrite} />
               </CardBody>
             </Card>
           )}

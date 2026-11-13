@@ -14,7 +14,7 @@ import {
 import { webUrl } from "@/lib/agent-sessions";
 import { cx } from "@/lib/cx";
 import { DELEGATION_META, isLate, isOpenTaskStatus, PRIORITY_META, SOURCE_META, TASK_STATUS_META, type TaskStatus } from "@/lib/domain";
-import { formatDueDate, relativeDue, truncate } from "@/lib/format";
+import { formatDueDate, relativeDue, timeAgo, truncate } from "@/lib/format";
 import { routes } from "@/lib/routes";
 import { stageLabel, stageOf, visibleStages, type Workflow } from "@/lib/workflow";
 import { requireWorkspace } from "@/server/auth/session";
@@ -280,7 +280,10 @@ export function HandoverNote({ task }: { task: Pick<TaskView, "delegation" | "de
   if (!task.delegation || !task.delegationNote) return null;
   return (
     <figure className="rounded-md border border-rule bg-fill/60 px-3 py-2 text-sm">
-      <figcaption className="text-xs font-semibold text-ink-2">{task.delegation === "returned" ? "Note left when it was released" : "Handoff note"}</figcaption>
+      <figcaption className="text-xs font-semibold text-ink-2">
+        {task.delegation === "returned" ? "Note left when it was released" : "Handoff note"}
+        <span className="font-normal text-muted"> · {timeAgo(task.delegatedAt)}</span>
+      </figcaption>
       <blockquote className="mt-1 whitespace-pre-wrap text-ink">{task.delegationNote}</blockquote>
     </figure>
   );
@@ -344,7 +347,8 @@ export function TaskCard({ task, slug, canWrite, showGoal = true, goals = [] }: 
       data-task={task.id}
       className={cx(
         "@container rounded-md border bg-panel p-3 has-[a[data-task-link]:focus-visible]:outline-2 has-[a[data-task-link]:focus-visible]:outline-offset-2 has-[a[data-task-link]:focus-visible]:outline-focus",
-        isLate(task) ? "border-late/45" : "border-rule",
+        // Late work stays loud; a task on its way to another operator gets a dashed edge, in transit.
+        isLate(task) ? "border-late/45" : task.delegation === "handing_off" ? "border-dashed border-line-inbox" : "border-rule",
         LEAVING,
       )}
     >
