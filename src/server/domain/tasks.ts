@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, isNotNull, isNull, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, isNull, or, sql, type SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import type { z } from "zod";
 
@@ -530,14 +530,20 @@ export const takeTask = service(TaskRefInput, async (ctx, { taskId }): Promise<T
 /** Who a handoff is for, found in this workspace: a live agent by id or name, or a member by user id or email. */
 async function handoffTarget(ctx: Ctx, toAgent?: string, toPerson?: string): Promise<{ agentId: string | null; userId: string | null; name: string } | null> {
   if (toAgent) {
-    const [agent] = await ctx.db
+    const [byId] = await ctx.db.select({ id: agents.id, name: agents.name }).from(agents).where(and(inTenant(ctx, agents), eq(agents.id, toAgent), liveAgent()));
+    if (byId) return { agentId: byId.id, userId: null, name: byId.name };
+    const named = await ctx.db
       .select({ id: agents.id, name: agents.name })
       .from(agents)
-      .where(and(inTenant(ctx, agents), or(eq(agents.id, toAgent), sql`lower(${agents.name}) = lower(${toAgent})`), liveAgent()))
-      .orderBy(desc(agents.createdAt))
-      .limit(1);
-    if (!agent) throw notFound("connected agent named or with id", toAgent);
-    return { agentId: agent.id, userId: null, name: agent.name };
+      .where(and(inTenant(ctx, agents), sql`lower(${agents.name}) = lower(${toAgent})`, liveAgent()))
+      .orderBy(asc(agents.createdAt))
+      .limit(5);
+    if (named.length === 0) throw notFound("connected agent named or with id", toAgent);
+    // Two agents can share a name (under different parents, say); a handoff must reach the one meant.
+    if (named.length > 1) {
+      throw invalid(`${named.length > 4 ? "Several" : named.length} connected agents are named "${toAgent}" (${named.map((agent) => agent.id).join(", ")}). Pass toAgent as the id of the one you mean.`);
+    }
+    return { agentId: named[0]!.id, userId: null, name: named[0]!.name };
   }
   if (toPerson) {
     const [person] = await ctx.db

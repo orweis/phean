@@ -23,6 +23,8 @@ There are three ways to give the name:
 
 The fixed-key panel on the Agents page says the same: sub-agents can share the key, each with a `Phean-Agent-Name` header (or `?agent=Name` on the URL), and Phean lists each under the key's agent by that name.
 
+A name means one sub-agent per parent, whichever way it was made. If the parent already has a sub-agent of that name (one it detected before, or one given its own token with `create_subagent`), the name acts as that sub-agent, case and spacing aside, so work handed to it can be picked up through any of the three ways above. A second live sub-agent of the same name under one parent is refused, and a revoked sub-agent's name stays refused.
+
 ## Sub-agents with their own token
 
 To give a sub-agent a token of its own, one you can revoke without touching the parent's, the parent calls `create_subagent` with a `name` and a one-line `purpose` ("Researches vendors"). It returns the sub-agent, its token and the MCP URL. The token is shown once. Hand it to the sub-agent's MCP connection only; never put it in chat, a task, a memory or a document.

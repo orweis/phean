@@ -1,5 +1,6 @@
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 
+import { agentContext, authenticateAgentToken, createAgent, createSubagent, resolveNamedSubagent, revokeAgent } from "@/server/domain/agents";
 import type { Ctx } from "@/server/domain/context";
 import { listActivity } from "@/server/domain/events";
 import { browseTasks, getBoard } from "@/server/domain/overview";
@@ -153,6 +154,49 @@ describe("handing off", () => {
     const listener = { agentId: ws.closer.agentId, topics: ["tasks"] as const, scope: "related" as const };
     expect(reasonsFor(event, listener, new Set(), ws.scout.agentId)).toEqual(["handed_to_you"]);
     expect(reasonsFor(event, { ...listener, agentId: ws.scout.agentId }, new Set(), null)).toEqual([]);
+  });
+});
+
+describe("handing off to a sub-agent", () => {
+  /** The context a call with `actingAs` runs in, exactly as the MCP handler builds it. */
+  const actingAs = async (token: string, name: string) => {
+    const principal = await resolveNamedSubagent(testDb.db, (await authenticateAgentToken(testDb.db, token))!, name);
+    if (!principal) throw new Error(`"${name}" was refused`);
+    return agentContext(testDb.db, principal);
+  };
+
+  it("lets a parent acting as its own-token sub-agent pick up a handoff addressed to that sub-agent", async () => {
+    // Scout gives its writer a token of its own; later Scout relays for it with actingAs.
+    const { agent: writer } = await createSubagent(scout, { name: "Scout Writer", purpose: "drafts posts" });
+    await claimTask(closer, { taskId: task.id });
+    await handOffTask(closer, { taskId: task.id, toAgent: "Scout Writer", note: "Draft it" });
+
+    const asWriter = await actingAs(ws.scout.token, "scout writer");
+    expect(asWriter.actor.id).toBe(writer.id);
+    expect((await listTasks(asWriter, { claimed: "handed_to_me" })).map((row) => row.id)).toEqual([task.id]);
+    await claimTask(asWriter, { taskId: task.id });
+    expect(await view(human)).toMatchObject({ claimedByAgentId: writer.id, delegation: "picking_up" });
+  });
+
+  it("never makes a second sub-agent of the same name, either way round", async () => {
+    const first = await actingAs(ws.scout.token, "Helper");
+    expect((await actingAs(ws.scout.token, " helper ")).actor.id).toBe(first.actor.id);
+    await expect(createSubagent(scout, { name: "HELPER" })).rejects.toMatchObject({ code: "conflict", message: expect.stringContaining("already has a sub-agent") });
+    // Another parent may use the name for its own sub-agent.
+    await createSubagent(closer, { name: "Helper" });
+  });
+
+  it("keeps a revoked sub-agent's name refused to actingAs", async () => {
+    const { agent } = await createSubagent(scout, { name: "Retired" });
+    await revokeAgent(scout, { agentId: agent.id });
+    expect(await resolveNamedSubagent(testDb.db, (await authenticateAgentToken(testDb.db, ws.scout.token))!, "Retired")).toBeNull();
+  });
+
+  it("refuses a handoff by a name two agents share, and takes the id instead", async () => {
+    const { agent: one } = await createAgent(human, { name: "Writer" });
+    await createAgent(human, { name: "writer" });
+    await expect(handOffTask(human, { taskId: task.id, toAgent: "Writer" })).rejects.toMatchObject({ code: "invalid", message: expect.stringContaining("Pass toAgent as the id") });
+    expect((await handOffTask(human, { taskId: task.id, toAgent: one.id })).delegateToAgentId).toBe(one.id);
   });
 });
 
