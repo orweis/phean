@@ -7,7 +7,7 @@ import type { Ctx } from "@/server/domain/context";
 import { inTransaction } from "@/server/domain/context";
 import { createGoal, setGoalStatus } from "@/server/domain/goals";
 import { remember } from "@/server/domain/memory";
-import { answerInput, captureTasks, requestInput, retractAnswer, updateTask } from "@/server/domain/tasks";
+import { answerInput, captureTasks, claimTask, completeTask, handOffTask, linkSession, listTasks, requestInput, retractAnswer, updateTask } from "@/server/domain/tasks";
 import { deleteWebhook, getWebhook, listWatches, pingWith, registerWebhook, unwatch, watch } from "@/server/domain/webhooks";
 import { backoffSeconds, dispatchDue, MAX_CONSECUTIVE_FAILURES, type DispatchDeps, type WebhookPayload } from "@/server/webhooks/dispatch";
 import { SIGNATURE_HEADER, verifySignature } from "@/server/webhooks/signing";
@@ -115,6 +115,49 @@ describe("routing changes to webhooks", () => {
       ["memory.saved", ["about_watched_task"]],
     ]);
     expect(sent[0]).toMatchObject({ entityId: task.id, actor: { name: "Closer" }, url: `https://phean.test/w/${ws.tenant.slug}/board` });
+  });
+
+  it("tells the agent that handed a task off how it goes, until it is done, whatever its topics", async () => {
+    const url = endpoint();
+    // Scout listens for decisions only, so ordinary task changes would not reach it.
+    await registerWebhook(scout, { url, topics: ["decisions"] });
+    const task = await todo(human, "Draft the launch post");
+    await claimTask(scout, { taskId: task.id });
+    await handOffTask(scout, { taskId: task.id, toAgent: "Closer", note: "Outline is attached" });
+    // Watching it by hand later keeps the handoff's follow.
+    await watch(scout, { entityType: "task", entityId: task.id });
+
+    await claimTask(closer, { taskId: task.id });
+    await linkSession(closer, { taskId: task.id, session: { sessionId: "s-1" } });
+    await updateTask(human, { taskId: task.id, priority: "high" });
+    await completeTask(closer, { taskId: task.id, note: "Published" });
+    await captureTasks(closer, { tasks: [{ title: "Unrelated chore" }] }); // nothing to do with it
+
+    const { received, deps } = receiver();
+    await dispatchDue(testDb.db, deps);
+    expect(eventsTo(received, url).map((event) => [event.action, event.reasons])).toEqual([
+      ["task.picked_up", ["handed_off_by_you"]],
+      ["task.session_linked", ["handed_off_by_you"]],
+      ["task.updated", ["handed_off_by_you"]],
+      ["task.completed", ["handed_off_by_you"]],
+    ]);
+    expect((await listWatches(scout, { entityType: "task" })).map((entry) => entry.reason)).toEqual(["handoff"]);
+    // An agent that polls finds the same work, done or not.
+    expect((await listTasks(scout, { claimed: "handed_off_by_me" })).map((row) => [row.id, row.status])).toEqual([[task.id, "done"]]);
+    expect(await listTasks(closer, { claimed: "handed_off_by_me" })).toEqual([]);
+    expect(await listTasks(human, { claimed: "handed_off_by_me" })).toEqual([]);
+  });
+
+  it("backfills the handoff follow from earlier handoffs, upgrading an ordinary watch", async () => {
+    const task = await todo(human, "Book the venue");
+    await claimTask(scout, { taskId: task.id });
+    await handOffTask(scout, { taskId: task.id, toAgent: "Closer" });
+    // As a handoff made before this release left it: an ordinary watch.
+    await testDb.db.execute(sql`update watches set reason = 'auto' where agent_id = ${ws.scout.agentId} and entity_id = ${task.id}`);
+    const { readFileSync } = await import("node:fs");
+    await testDb.db.execute(sql.raw(readFileSync(new URL("../drizzle/0016_handoff_watches.sql", import.meta.url), "utf8")));
+    expect((await listWatches(scout, { entityType: "task" })).map((entry) => [entry.entityId, entry.reason])).toEqual([[task.id, "handoff"]]);
+    expect(await listWatches(closer, { entityType: "task" })).toEqual([]);
   });
 
   it("always tells the asking agent when a person answers, and nothing when the change rolls back", async () => {

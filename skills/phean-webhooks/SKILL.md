@@ -115,6 +115,7 @@ With Flask use `request.get_data()`, and with FastAPI `await request.body()`, fo
 - **Read `reasons`** to see why you got each event:
   - `asked_by_you`: a person answered your question or decision, or took the answer back (`task.input_retracted`, which reopens the question);
   - `handed_to_you`: someone is handing a task off to you by name (`task.handed_off`); read its `note`, then `claim_task` to pick it up;
+  - `handed_off_by_you`: a change to a task you handed off (picked up, updated, completed, released), so you hear how it ends;
   - `watching:task` / `watching:goal` / `watching:memory`: something you follow changed;
   - `in_watched_goal`: a change filed under a goal you follow;
   - `about_watched_task`: a memory about a task you follow;

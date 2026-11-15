@@ -266,9 +266,11 @@ export const ListTasksInput = z.object({
   parentTaskId: taskId.optional().describe("Only the subtasks of this task"),
   priority: z.enum(PRIORITIES).optional(),
   claimed: z
-    .enum(["any", "mine", "unclaimed", "handed_to_me"])
+    .enum(["any", "mine", "unclaimed", "handed_to_me", "handed_off_by_me"])
     .default("any")
-    .describe("mine: tasks you operate; unclaimed: no operator; handed_to_me: tasks being handed off to you, or to anyone"),
+    .describe(
+      "mine: tasks you operate; unclaimed: no operator; handed_to_me: tasks being handed off to you, or to anyone; handed_off_by_me: tasks you handed off, to see where they went (combine with status \"done\" for the finished ones)",
+    ),
   due: z
     .enum(["any", "overdue", "next_7_days"])
     .default("any")

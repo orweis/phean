@@ -152,8 +152,8 @@ describe("handing off", () => {
   it("tells the named agent at once, whatever it watches", () => {
     const event = { id: 1, action: "task.handed_off", entityType: "task", entityId: task.id, data: { toAgentId: ws.closer.agentId } };
     const listener = { agentId: ws.closer.agentId, topics: ["tasks"] as const, scope: "related" as const };
-    expect(reasonsFor(event, listener, new Set(), ws.scout.agentId)).toEqual(["handed_to_you"]);
-    expect(reasonsFor(event, { ...listener, agentId: ws.scout.agentId }, new Set(), null)).toEqual([]);
+    expect(reasonsFor(event, listener, new Map(), ws.scout.agentId)).toEqual(["handed_to_you"]);
+    expect(reasonsFor(event, { ...listener, agentId: ws.scout.agentId }, new Map(), null)).toEqual([]);
   });
 });
 

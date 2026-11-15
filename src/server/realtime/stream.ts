@@ -8,7 +8,7 @@ import { agents, events, realtimeStreams, watches } from "../db/schema";
 import { liveAgent } from "../domain/agent-liveness";
 import type { AgentPrincipal } from "../domain/agents";
 import { eventUrl } from "../webhooks/dispatch";
-import { concerns, reasonsFor, topicsOf, type Listener, type RoutedEvent } from "../webhooks/routing";
+import { concerns, reasonsFor, topicsOf, watchingOf, type Listener, type RoutedEvent } from "../webhooks/routing";
 
 /**
  * The realtime event stream an agent opens over a WebSocket (`/api/events`): the same events, for
@@ -385,7 +385,7 @@ async function route(db: Db, tenantId: string, listener: Listener, rows: (typeof
   const keys = routable.flatMap((row) => concerns(row as RoutedEvent));
   const watched = keys.length
     ? await db
-        .select({ type: watches.entityType, id: watches.entityId })
+        .select({ type: watches.entityType, id: watches.entityId, reason: watches.reason })
         .from(watches)
         .where(
           and(
@@ -395,7 +395,7 @@ async function route(db: Db, tenantId: string, listener: Listener, rows: (typeof
           ),
         )
     : [];
-  const watching = new Set(watched.map((row) => `${row.type}|${row.id}`));
+  const watching = watchingOf(watched);
   return routable.flatMap((row) => {
     const reasons = reasonsFor(row as RoutedEvent, listener, watching, row.actorType === "agent" ? row.actorId : null);
     if (reasons.length === 0) return [];

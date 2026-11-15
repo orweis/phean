@@ -41,7 +41,7 @@ Markers below: **read-only** tools never change workspace state; **destructive**
 | Tool | Description |
 | --- | --- |
 | `capture_tasks` | Record up to 100 tasks in one call, de-duplicated by `source` and `sourceRef`; skipped items come back in `duplicates`. |
-| `list_tasks` | Read-only. Tasks filtered by status, goal, parent, priority, operator (`claimed`: `mine`, `unclaimed`, `handed_to_me`) or due date, most urgent first. Each carries its operator and delegation. |
+| `list_tasks` | Read-only. Tasks filtered by status, goal, parent, priority, operator (`claimed`: `mine`, `unclaimed`, `handed_to_me`, `handed_off_by_me`) or due date, most urgent first. Each carries its operator and delegation. |
 | `get_task` | Read-only. One task with its links, sessions, documents, open and answered requests, parent, subtasks and recent activity. |
 | `update_task` | Change only the fields you pass: title, description, status or stage, priority, due date, goal, tags, source, `sourceRef`, parent, links. |
 | `assign_tasks_to_goal` | File several tasks under one goal; inbox tasks become `todo`. |

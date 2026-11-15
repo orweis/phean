@@ -45,6 +45,13 @@ export type Station = (typeof STATIONS)[number];
  * No delegation (null) is the steady state.
  */
 export const DELEGATION_STATES = ["handing_off", "picking_up", "returned"] as const;
+
+/**
+ * Why an agent follows an object: it acted on it (`auto`), asked to (`manual`), or handed the task
+ * off (`handoff`), which keeps it hearing about the task until it is done, whatever its topics.
+ */
+export const WATCH_REASONS = ["auto", "manual", "handoff"] as const;
+export type WatchReason = (typeof WATCH_REASONS)[number];
 export type DelegationState = (typeof DELEGATION_STATES)[number];
 
 export const GOAL_STATUSES = ["proposed", "active", "achieved", "abandoned"] as const;

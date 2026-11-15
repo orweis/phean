@@ -60,7 +60,7 @@ When a memory you saved is wrong or stale, fix it with update_memory instead of 
 ## Operators and handoffs
 (The phean-handoffs skill, if your client has it installed, covers this in more depth with an example.)
 A task's operator is whoever is working on it right now: an agent that claimed it, or a person who took it. Its delegation says whether a handover is under way.
-- To pass a task on (to a specialist agent, to a person who must do part of it by hand, or to whoever is free), call hand_off_task with toAgent or toPerson, or neither for anyone, and a note on where it stands. It stays yours, "handing_off", until they pick it up; keep it safe until then, and cancel_hand_off if you change your mind.
+- To pass a task on (to a specialist agent, to a person who must do part of it by hand, or to whoever is free), call hand_off_task with toAgent or toPerson, or neither for anyone, and a note on where it stands. It stays yours, "handing_off", until they pick it up; keep it safe until then, and cancel_hand_off if you change your mind. After that you keep hearing how it goes (picked up, updated, questions, done) by webhook or the realtime stream, with the reason handed_off_by_you, whatever your topics; without either, list_tasks with claimed="handed_off_by_me" shows where your handoffs stand.
 - Work handed to you: list_tasks with claimed="handed_to_me" (suggest_next_actions puts it first; a webhook hears handed_to_you). claim_task picks it up ("picking_up"): read the note and the documents, then go on; your first step forward ends the pick-up.
 - Cannot finish and no one in mind? release_task with a note: the task returns to "todo", marked "returned", for the next operator.
 - A person working on a task is its operator too: leave it alone as you would another agent's claim, or ask them to hand it to you.
@@ -117,7 +117,7 @@ export const PROMPTS = [
     text: `Sync up with this Phean workspace before doing anything else:
 1. Call whoami.
 2. Call get_activity (limit 30). Summarize what changed and who did it, grouping repetitive events.
-3. Call list_tasks with claimed="mine". For each task you hold, say whether you will continue it now, hand it off, or release it. For the ones you continue, call link_session so humans can reach you in this session. Then call list_tasks with claimed="handed_to_me" and say which handoffs you will pick up.
+3. Call list_tasks with claimed="mine". For each task you hold, say whether you will continue it now, hand it off, or release it. For the ones you continue, call link_session so humans can reach you in this session. Then call list_tasks with claimed="handed_to_me" and say which handoffs you will pick up, and list_tasks with claimed="handed_off_by_me" to say how the work you handed off is going (finished, stalled, returned).
 4. Call collect_answers and act on every answer the human gave you. For questions of yours still open that you no longer need, call resolve_input.
 5. Call get_status_summary and mention pending approvals, questions waiting on the human, and overdue tasks, if any.
 6. Finish with the single most useful next step.`,
