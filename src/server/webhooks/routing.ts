@@ -1,6 +1,6 @@
 import { and, eq, inArray, or, sql } from "drizzle-orm";
 
-import { WATCHED_ENTITY_TYPES, type WatchedEntityType, type WebhookTopic } from "@/lib/domain";
+import { WATCHED_ENTITY_TYPES, type WatchedEntityType, type WatchReason, type WebhookTopic } from "@/lib/domain";
 
 import { agents, watches, webhookDeliveries, webhooks } from "../db/schema";
 import { liveAgent } from "../domain/agent-liveness";
@@ -89,21 +89,35 @@ export interface Listener {
   scope: "related" | "all";
 }
 
+/** What an agent follows: `type|id` of each watched object, with why it follows it. */
+export type Watching = ReadonlyMap<string, WatchReason>;
+
 /**
  * Why `listener` hears `event`, or nothing when it does not: an answer to its own question, an
- * object it watches (`watching` holds `type|id` keys of its watches), or, with scope "all", any
- * event in its topics. An agent never hears about its own actions.
+ * object it watches (`watching`), or, with scope "all", any event in its topics. Handoffs reach
+ * an agent whatever its topics: a task handed to it (`handed_to_you`), and every change to a task
+ * it handed off (`handed_off_by_you`), since it passed that work on and must hear how it ends. An
+ * agent never hears about its own actions.
  */
-export function reasonsFor(event: RoutedEvent, listener: Listener, watching: ReadonlySet<string>, actorAgentId: string | null): string[] {
+export function reasonsFor(event: RoutedEvent, listener: Listener, watching: Watching, actorAgentId: string | null): string[] {
   if (listener.agentId === actorAgentId) return [];
-  const topics = topicsOf(event.action);
-  if (!topics.some((topic) => listener.topics.includes(topic))) return [];
+  const inTopics = topicsOf(event.action).some((topic) => listener.topics.includes(topic));
   const reasons = new Set<string>();
-  if (ANSWER_ACTIONS.has(event.action) && event.data.agentId === listener.agentId) reasons.add("asked_by_you");
+  if (inTopics && ANSWER_ACTIONS.has(event.action) && event.data.agentId === listener.agentId) reasons.add("asked_by_you");
   if (event.action === HANDOFF_ACTION && event.data.toAgentId === listener.agentId) reasons.add("handed_to_you");
-  for (const key of concerns(event)) if (watching.has(`${key.type}|${key.id}`)) reasons.add(key.reason);
-  if (reasons.size === 0 && listener.scope === "all") reasons.add("workspace");
+  for (const key of concerns(event)) {
+    const followed = watching.get(`${key.type}|${key.id}`);
+    if (!followed) continue;
+    if (followed === "handoff") reasons.add("handed_off_by_you");
+    if (inTopics) reasons.add(key.reason);
+  }
+  if (inTopics && reasons.size === 0 && listener.scope === "all") reasons.add("workspace");
   return [...reasons];
+}
+
+/** Indexes watch rows (`type`, `id`, `reason`) as `reasonsFor` reads them. */
+export function watchingOf(rows: readonly { type: string; id: string; reason: WatchReason }[]): Map<string, WatchReason> {
+  return new Map(rows.map((row) => [`${row.type}|${row.id}`, row.reason]));
 }
 
 export async function enqueueDeliveries(ctx: Ctx, rows: readonly RoutedEvent[]): Promise<number> {
@@ -120,7 +134,7 @@ export async function enqueueDeliveries(ctx: Ctx, rows: readonly RoutedEvent[]):
   const keys = routable.flatMap(concerns);
   const watched = keys.length
     ? await ctx.db
-        .select({ agentId: watches.agentId, type: watches.entityType, id: watches.entityId })
+        .select({ agentId: watches.agentId, type: watches.entityType, id: watches.entityId, reason: watches.reason })
         .from(watches)
         .where(
           and(
@@ -130,17 +144,13 @@ export async function enqueueDeliveries(ctx: Ctx, rows: readonly RoutedEvent[]):
           ),
         )
     : [];
-  const watchingByAgent = new Map<string, Set<string>>();
-  for (const row of watched) {
-    const keys = watchingByAgent.get(row.agentId) ?? new Set<string>();
-    keys.add(`${row.type}|${row.id}`);
-    watchingByAgent.set(row.agentId, keys);
-  }
+  const watchingByAgent = new Map<string, Map<string, WatchReason>>();
+  for (const hook of hooks) watchingByAgent.set(hook.agentId, watchingOf(watched.filter((row) => row.agentId === hook.agentId)));
   const actorAgent = ctx.actor.type === "agent" ? ctx.actor.id : null;
 
   const deliveries = routable.flatMap((event) =>
     hooks.flatMap((hook) => {
-      const reasons = reasonsFor(event, hook, watchingByAgent.get(hook.agentId) ?? new Set(), actorAgent);
+      const reasons = reasonsFor(event, hook, watchingByAgent.get(hook.agentId) ?? new Map(), actorAgent);
       return reasons.length ? [{ tenantId: ctx.tenant.id, webhookId: hook.id, eventId: event.id, reasons }] : [];
     }),
   );

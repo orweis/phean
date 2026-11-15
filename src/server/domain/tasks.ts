@@ -22,7 +22,7 @@ import { truncate } from "@/lib/format";
 
 import { patchOf, publicColumns } from "../db/columns";
 import { newId } from "../db/ids";
-import { agents, goals, member, tasks, user, type TaskRow } from "../db/schema";
+import { agents, goals, member, tasks, user, watches, type TaskRow } from "../db/schema";
 import { liveAgent } from "./agent-liveness";
 import { createdByFields, inTenant, inTransaction, tenantRow, type Ctx } from "./context";
 import { conflict, invalid, notFound } from "./errors";
@@ -583,6 +583,13 @@ export const handOffTask = service(HandOffInput, async (ctx, { taskId, toAgent, 
       .set({ delegation: "handing_off", delegateToAgentId: target?.agentId ?? null, delegateToUserId: target?.userId ?? null, delegationNote: note, delegatedAt: new Date() })
       .where(tenantRow(tx, tasks, taskId))
       .returning(taskColumns);
+    // The agent passing the work on keeps hearing about it until it is done (`handed_off_by_you`).
+    if (tx.actor.type === "agent") {
+      await tx.db
+        .insert(watches)
+        .values({ tenantId: tx.tenant.id, agentId: tx.actor.id, entityType: "task", entityId: taskId, reason: "handoff" })
+        .onConflictDoUpdate({ target: [watches.agentId, watches.entityType, watches.entityId], set: { reason: "handoff" } });
+    }
     await recordEvent(tx, {
       action: "task.handed_off",
       entityType: "task",
@@ -980,6 +987,11 @@ export const listTasks = service(ListTasksInput, async (ctx, input): Promise<Tas
     mine: ctx.actor.type === "agent" ? eq(tasks.claimedByAgentId, ctx.actor.id) : eq(tasks.operatorUserId, ctx.actor.id),
     unclaimed: and(isNull(tasks.claimedByAgentId), isNull(tasks.operatorUserId)),
     handed_to_me: handedTo(ctx),
+    // Tasks this agent handed off, wherever they went since: picked up, updated, done.
+    handed_off_by_me:
+      ctx.actor.type === "agent"
+        ? sql`exists (select 1 from ${watches} where ${watches.tenantId} = ${tasks.tenantId} and ${watches.agentId} = ${ctx.actor.id} and ${watches.entityType} = 'task' and ${watches.entityId} = ${tasks.id} and ${watches.reason} = 'handoff')`
+        : sql`false`,
   }[input.claimed];
   const due = { any: undefined, overdue: isOverdue, next_7_days: isDueWithinWeek }[input.due];
 

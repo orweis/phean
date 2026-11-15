@@ -29,6 +29,7 @@ import {
   PRIORITIES,
   SOURCES,
   TASK_STATUSES,
+  WATCH_REASONS,
   WATCHED_ENTITY_TYPES,
   WEBHOOK_TOPICS,
 } from "../../../lib/domain";
@@ -426,8 +427,8 @@ export const watches = pgTable(
     agentId: text("agent_id").notNull(),
     entityType: text("entity_type", { enum: WATCHED_ENTITY_TYPES }).notNull(),
     entityId: text("entity_id").notNull(),
-    /** Why the agent follows it: "auto" (it acted on it) or "manual" (it asked to). */
-    reason: text("reason", { enum: ["auto", "manual"] }).notNull(),
+    /** Why the agent follows it (`WATCH_REASONS`): it acted on it, asked to, or handed the task off. */
+    reason: text("reason", { enum: WATCH_REASONS }).notNull(),
     createdAt: timestampTz("created_at").notNull().defaultNow(),
   },
   (t) => [

@@ -1,6 +1,6 @@
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 
-import type { WatchedEntityType } from "@/lib/domain";
+import type { WatchedEntityType, WatchReason } from "@/lib/domain";
 
 import { publicColumns } from "../db/columns";
 import { newId } from "../db/ids";
@@ -203,7 +203,8 @@ export const watch = service(WatchInput, async (ctx, { entityType, entityId }) =
   await ctx.db
     .insert(watches)
     .values({ tenantId: ctx.tenant.id, agentId, entityType, entityId, reason: "manual" })
-    .onConflictDoUpdate({ target: [watches.agentId, watches.entityType, watches.entityId], set: { reason: "manual" } });
+    // Watching by hand never undoes a handoff's follow, which reaches the agent whatever its topics.
+    .onConflictDoUpdate({ target: [watches.agentId, watches.entityType, watches.entityId], set: { reason: sql`case when ${watches.reason} = 'handoff' then 'handoff' else 'manual' end` } });
   return { watching: { entityType, entityId } };
 });
 
@@ -221,7 +222,7 @@ export interface WatchView {
   entityType: WatchedEntityType;
   entityId: string;
   title: string | null;
-  reason: "auto" | "manual";
+  reason: WatchReason;
   since: Date;
 }
 

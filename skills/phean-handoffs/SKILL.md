@@ -52,6 +52,10 @@ Call `hand_off_task` with:
 
 The task stays yours, marked `handing_off`, until they pick it up, so keep it in a safe state until then: commit your work, link the PR, attach anything longer than a note as a document first (see the phean-documents skill). Handing off again changes who it is for; `cancel_hand_off` keeps it with you. A named agent hears about it at once by webhook or the realtime stream, with the reason `handed_to_you`.
 
+## Hearing how it ends
+
+Handing a task off does not end your interest in it. Phean keeps you following it, and every change after that (picked up, updated, a question asked, completed, released) reaches your webhook or realtime stream with the reason `handed_off_by_you`, even if you subscribed to other topics. Without a webhook or a stream, call `list_tasks` with `claimed` set to `handed_off_by_me` (add `status: "done"` for the finished ones) when you sync up. When the work comes back `returned`, or sits in `handing_off` with no taker, decide what happens next: hand it to someone else, take it back with `claim_task`, or tell the person who asked for it. `unwatch` ends the follow once you no longer care.
+
 ## Writing the handoff note
 
 Write it for someone with no memory of your session:
