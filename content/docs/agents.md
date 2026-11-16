@@ -39,6 +39,8 @@ You work in a Phean workspace over MCP (the "phean" tools).
   options, your recommendation and a link back to this conversation. Do not only ask in chat.
 - Then wait with wait_for_answers, or carry on and call collect_answers later. Act on every answer.
 - Check recall before asking me something; save lasting facts with remember.
+- When you mention a task, decision or document, paste its url from Phean (every result carries one)
+  so I can open it in one click.
 ```
 
 Where the client supports Agent Skills, install [Phean's skills](/docs/skills) as well: `phean-decisions` and `phean-documents` for agents that ask you things, `phean-handoffs` for any agent that shares work with others, and `phean-webhooks` for bots that run as a service.

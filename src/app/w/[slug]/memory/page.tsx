@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/page-header";
 import { RememberForm } from "@/components/remember-form";
 import { SearchForm } from "@/components/search-form";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
+import { FocusOnLoad } from "@/components/ui/focus-on-load";
 import { Popover } from "@/components/ui/popover";
 import { cx } from "@/lib/cx";
 import { isOneOf, MEMORY_KIND_META, MEMORY_KINDS } from "@/lib/domain";
@@ -15,7 +16,7 @@ import { pluralize } from "@/lib/format";
 import { queryParam, routes } from "@/lib/routes";
 import { requireWorkspace } from "@/server/auth/session";
 import { listGoals } from "@/server/domain/goals";
-import { countMemoryKinds, recall } from "@/server/domain/memory";
+import { countMemoryKinds, getMemory, recall } from "@/server/domain/memory";
 import { can } from "@/server/domain/policy";
 
 export const metadata: Metadata = { title: "Memory" };
@@ -28,12 +29,16 @@ export default async function MemoryPage({ params, searchParams }: PageProps<"/w
   const q = queryParam(query.q);
   const kindParam = queryParam(query.kind);
   const kind = isOneOf(MEMORY_KINDS, kindParam) ? kindParam : undefined;
+  const focus = queryParam(query.focus);
   const { ctx } = await requireWorkspace(slug);
-  const [memories, goals, counts] = await Promise.all([
+  const [found, goals, counts, linked] = await Promise.all([
     recall(ctx, { query: q, kind, limit: MEMORY_PAGE_SIZE }),
     listGoals(ctx, {}),
     countMemoryKinds(ctx, { query: q }),
+    // A link to one memory shows it even when it is not among the most relevant.
+    focus ? getMemory(ctx, { memoryId: focus }).catch(() => null) : null,
   ]);
+  const memories = linked && !found.some((memory) => memory.id === linked.id) ? [linked, ...found] : found;
   const total = Object.values(counts).reduce((sum, value) => sum + value, 0);
   const canWrite = can(ctx.actor, "memory:write");
   const filtered = Boolean(q || kind);
@@ -82,7 +87,9 @@ export default async function MemoryPage({ params, searchParams }: PageProps<"/w
             canWrite={canWrite}
             goalTitles={new Map(goals.map((goal) => [goal.id, goal.title]))}
             empty={filtered ? "No memories match" : undefined}
+            focus={focus}
           />
+          <FocusOnLoad id={focus} />
         </CardBody>
       </Card>
     </>

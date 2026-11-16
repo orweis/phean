@@ -249,6 +249,9 @@ export const HandOffInput = z
 /** The web form's handoff: one choice of who, `agent:<id>`, `person:<user id>`, or empty for anyone. */
 export const HandOffChoiceInput = z.object({ taskId, to: z.string().trim().max(LIMITS.ref).default(""), note: handoffNote });
 
+/** One question or decision an agent asked, open or answered, by its id (q_…). */
+export const RequestRefInput = z.object({ requestId: z.string().trim().min(1).max(LIMITS.ref).describe("Request id (q_...)") });
+
 export const ReleaseTaskInput = z.object({
   taskId,
   note: handoffNote.describe("Why you are letting it go and where it stands, for whoever takes it next"),

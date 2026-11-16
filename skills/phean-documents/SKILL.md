@@ -43,7 +43,7 @@ Call `attach_document`:
 | `goalId` | The goal, when it is about a goal rather than one task. |
 | `content` / `contentBase64` | The text, or the bytes as base64. |
 
-It returns the `document` (with its `id` and `version`) and a `url` people can open.
+It returns the `document` (with its `id` and `version`) and a `url` people can open. That link opens the document itself: paste it in chat, in a decision's links, or in a handoff note, rather than describing where the document is. Documents listed on a task (`get_task`) carry their `url` too.
 
 ### Example: a draft behind a decision
 

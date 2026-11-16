@@ -86,6 +86,26 @@ describe("MCP authentication", () => {
   });
 });
 
+describe("links in tool results", () => {
+  it("gives every task, request, document and activity entry a link a person can open, and whoami the template", async () => {
+    const { created } = dataOf<{ created: { id: string }[] }>(await call(scout, "capture_tasks", { tasks: [{ title: "Pick the venue", status: "todo" }] }));
+    const taskId = created[0]!.id;
+    await call(scout, "request_input", { taskId, question: "Which venue?", kind: "decision", options: ["Hall", "Barn"] });
+    await call(scout, "attach_document", { taskId, title: "Venue shortlist", content: "Hall, Barn" });
+
+    const { task } = dataOf<{ task: { url: string; inputRequest: { id: string; url: string }; documents: { id: string; url: string }[] } }>(await call(scout, "get_task", { taskId }));
+    const base = `${TEST_ORIGIN}/w/${ws.tenant.slug}`;
+    expect(task.url).toBe(`${base}/tasks/${taskId}`);
+    expect(task.inputRequest.url).toBe(`${base}/decisions?focus=${task.inputRequest.id}`);
+    expect(task.documents[0]!.url).toBe(`${base}/documents/${task.documents[0]!.id}`);
+
+    const { events } = dataOf<{ events: { entityId: string; url?: string }[] }>(await call(scout, "get_activity", { limit: 5 }));
+    expect(events.find((event) => event.entityId === taskId)?.url).toBe(`${base}/tasks/${taskId}`);
+    const me = dataOf<{ linkTemplate: string }>(await call(scout, "whoami"));
+    expect(me.linkTemplate).toBe(`${base}/link/{id}`);
+  });
+});
+
 describe("MCP surface", () => {
   it("advertises every tool with annotations, plus prompts and instructions", async () => {
     const { tools } = await scout.listTools();

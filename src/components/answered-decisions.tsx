@@ -11,6 +11,7 @@ import type { DecisionRecord } from "@/server/domain/tasks";
 import { TaskLinks } from "./agent-sessions";
 import { GoalLink } from "./goal-link";
 import { MetaBadge } from "./ui/badge";
+import { CopyLinkButton } from "./ui/copy-link-button";
 
 /** Whether the asking agent has the answer yet: what a person checks after deciding. */
 function Delivery({ request }: { request: DecisionRecord["request"] }) {
@@ -69,27 +70,28 @@ const RECENT = 8;
  * every option offered, the written answer and the links. Past the most recent few, the rest fold
  * under one "Show earlier" so the page stays about what waits.
  */
-export function AnsweredDecisions({ records, slug }: { records: readonly DecisionRecord[]; slug: string }) {
+export function AnsweredDecisions({ records, slug, focus }: { records: readonly DecisionRecord[]; slug: string; focus?: string }) {
   const recent = records.slice(0, RECENT);
   const earlier = records.slice(RECENT);
   return (
     <>
-      <AnsweredList records={recent} slug={slug} />
+      <AnsweredList records={recent} slug={slug} focus={focus} />
       {earlier.length > 0 && (
-        <details className="group/earlier border-t border-rule">
+        // A link to an earlier answer opens the fold it sits in.
+        <details className="group/earlier border-t border-rule" open={earlier.some(({ request }) => request.id === focus) || undefined}>
           <summary className="flex h-11 items-center gap-1.5 text-sm font-semibold text-ink-2 hover:text-ink [&::-webkit-details-marker]:hidden">
             <ChevronDown aria-hidden className="size-4 transition-transform group-open/earlier:rotate-180" />
             <span className="group-open/earlier:hidden">Show {pluralize(earlier.length, "earlier answer")}</span>
             <span className="hidden group-open/earlier:inline">Hide earlier answers</span>
           </summary>
-          <AnsweredList records={earlier} slug={slug} />
+          <AnsweredList records={earlier} slug={slug} focus={focus} />
         </details>
       )}
     </>
   );
 }
 
-function AnsweredList({ records, slug }: { records: readonly DecisionRecord[]; slug: string }) {
+function AnsweredList({ records, slug, focus }: { records: readonly DecisionRecord[]; slug: string; focus?: string }) {
   return (
     <ul>
       {records.map(({ task, request }) => {
@@ -98,8 +100,14 @@ function AnsweredList({ records, slug }: { records: readonly DecisionRecord[]; s
         const written = !chosen.length || (request.choices && request.answer !== request.choices.join("; "));
         const answered = request.outcome === "answered" || request.outcome === "answered_elsewhere";
         return (
-          <li key={`${task.id}:${request.id}`} data-task={task.id} className="border-b border-rule last:border-b-0">
-            <details className="group/answer">
+          <li
+            key={`${task.id}:${request.id}`}
+            data-task={task.id}
+            data-focused={request.id === focus ? focus : undefined}
+            tabIndex={request.id === focus ? -1 : undefined}
+            className="scroll-mt-32 border-b border-rule outline-none last:border-b-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus data-focused:bg-accent-tint/30"
+          >
+            <details className="group/answer" open={request.id === focus || undefined}>
               <summary className="grid grid-cols-[1rem_minmax(0,1fr)] gap-x-2 py-3 [&::-webkit-details-marker]:hidden">
                 <ChevronRight aria-hidden className="mt-0.5 size-4 text-muted transition-transform group-open/answer:rotate-90" />
                 <span className="min-w-0">
@@ -148,9 +156,12 @@ function AnsweredList({ records, slug }: { records: readonly DecisionRecord[]; s
                   </time>
                 </p>
                 <TaskLinks links={request.links} className="mt-2" />
-                <Link href={routes.task(slug, task.id)} scroll={false} className="mt-2 inline-block text-xs font-semibold link">
-                  Open “{truncate(task.title, 60)}”
-                </Link>
+                <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+                  <Link href={routes.task(slug, task.id)} scroll={false} className="text-xs font-semibold link">
+                    Open “{truncate(task.title, 60)}”
+                  </Link>
+                  <CopyLinkButton path={routes.request(slug, request.id)} subject={`link to this ${request.kind}`} />
+                </p>
               </div>
             </details>
           </li>

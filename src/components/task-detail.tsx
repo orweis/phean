@@ -22,6 +22,7 @@ import { OpenQuestions } from "./open-questions";
 import { HandOffPopover } from "./hand-off-form";
 import { HandoverNote, StageBadge, TaskActionRow, TaskMeta } from "./task-card";
 import { ActionButton } from "./ui/action-button";
+import { CopyLinkButton } from "./ui/copy-link-button";
 import { Badge, MetaBadge } from "./ui/badge";
 
 function Section({ title, children, count }: { title: string; count?: number; children: React.ReactNode }) {
@@ -99,8 +100,9 @@ export async function TaskDetail({ slug, taskId, headingLevel = 1 }: { slug: str
             Unarchive
           </ActionButton>
         )}
-        <p className="text-xs text-muted">
+        <p className="flex flex-wrap items-center gap-x-2 text-xs text-muted">
           Captured by {task.createdByName} {timeAgo(task.createdAt)} · updated {timeAgo(task.updatedAt)}
+          <CopyLinkButton path={routes.task(slug, task.id)} subject="link to this task" />
         </p>
         <HandoverNote task={task} />
         <TaskActionRow task={task} slug={slug} canWrite={canWrite} goals={goals} className="pt-1" />

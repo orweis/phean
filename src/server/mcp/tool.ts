@@ -5,6 +5,7 @@ import type { Actor, Ctx } from "../domain/context";
 import { isDomainError } from "../domain/errors";
 import { can } from "../domain/policy";
 import type { ServiceFn } from "../domain/service";
+import { withUrls } from "./links";
 
 /** A domain context plus what tools need to link humans back to the web app. */
 export interface ToolContext extends Ctx {
@@ -68,7 +69,8 @@ export function defineTool<S extends z.ZodObject, O extends object>(spec: ToolSp
     },
     execute: async (ctx, input) => {
       try {
-        const output = await spec.run(ctx, input as z.output<S>);
+        // Everything a person can open carries its link, so agents can share the exact thing.
+        const output = withUrls(await spec.run(ctx, input as z.output<S>), ctx.tenant.slug, ctx.url);
         return toolResult(output, spec.format?.(output));
       } catch (error) {
         return toolError(error);

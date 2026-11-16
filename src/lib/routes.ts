@@ -25,6 +25,8 @@ export const routes = {
   decisions: (slug: string) => `/w/${slug}/decisions`,
   /** One request on the Decisions page, which scrolls to it and rings it. */
   decision: (slug: string, taskId: string) => `/w/${slug}/decisions#task-${taskId}`,
+  /** One request, open or answered, on the Decisions page, which opens it and brings it into view. */
+  request: (slug: string, requestId: string) => withQuery(`/w/${slug}/decisions`, { focus: requestId }),
   /** The goals waiting on a person's approval, on the Decisions page. */
   approvals: (slug: string) => `/w/${slug}/decisions#approvals`,
   /** The Tasks page: the board by default, or another layout (`view`) with the same filters. */
@@ -39,6 +41,10 @@ export const routes = {
   /** A task: a peek over the page it was opened from, or its own page on a refresh or a shared link. */
   task: (slug: string, taskId: string) => `/w/${slug}/tasks/${taskId}`,
   memory: (slug: string, filters?: { kind?: string; q?: string }) => withQuery(`/w/${slug}/memory`, filters),
+  /** One memory, brought into view on the Memory page. */
+  memoryItem: (slug: string, memoryId: string) => withQuery(`/w/${slug}/memory`, { focus: memoryId }),
+  /** A permalink for anything with a Phean id (`t_`, `g_`, `d_`, `m_`, `q_`): it redirects to where that thing is shown. */
+  link: (slug: string, id: string) => `/w/${slug}/link/${id}`,
   documents: (slug: string, query?: string) => withQuery(`/w/${slug}/documents`, { q: query }),
   document: (slug: string, documentId: string, mode?: "edit") => withQuery(`/w/${slug}/documents/${documentId}`, { mode }),
   /** A document's bytes, served by Phean after it checks access; blobs are never addressed directly. */

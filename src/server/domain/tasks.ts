@@ -47,6 +47,7 @@ import {
   ListTasksInput,
   NextActionsInput,
   ReleaseTaskInput,
+  RequestRefInput,
   SessionInput,
   TaskDraft,
   TaskRefInput,
@@ -1166,6 +1167,20 @@ export interface Decisions {
 }
 
 /** Everything agents asked people to decide or answer: what still waits, and what was settled. */
+/** The task holding one question or decision, open or already answered: what a link to the request shows. */
+export const findRequest = service(RequestRefInput, async (ctx, { requestId }): Promise<{ task: TaskView; record: DecisionRecord | null }> => {
+  assertCan(ctx, "workspace:read");
+  const [task] = await selectTaskViews(
+    ctx,
+    sql`(${tasks.inputRequest}->>'id' = ${requestId} or ${tasks.inputAnswers} @> ${JSON.stringify([{ id: requestId }])}::jsonb)`,
+  ).limit(1);
+  if (!task) throw notFound("question or decision", requestId);
+  if (task.inputRequest?.id === requestId) return { task, record: null };
+  const request = task.inputAnswers.find((answer) => answer.id === requestId)!;
+  const { id, title, status, goalId, goalTitle, agentSessions } = task;
+  return { task, record: { task: { id, title, status, goalId, goalTitle, agentSessions }, request } };
+});
+
 export const listDecisions = service(DecisionsInput, async (ctx, { limit }): Promise<Decisions> => {
   assertCan(ctx, "workspace:read");
   const [open, withHistory] = await Promise.all([
