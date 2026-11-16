@@ -29,7 +29,7 @@ Questions you only ask in chat get lost; Phean keeps them on the human's Decisio
 - links: always add a link back to this conversation (kind "conversation") when your client has one, and permalinks to every source the question is about (kind "source": the email, Slack message, ticket, PR; kind "doc" for drafts and files). Give each a short title ("This chat", "Dana's email"). Never invent a URL; if you have none, say where to look in context.
 - A draft to approve (an email, an offer, a plan) with no URL of its own: attach it with attach_document first, then link its url (kind "doc"), so the person reads it beside the decision.
 - session: also pass your session so the human can resume with you in one click.
-- Tell the human in one line that a decision is waiting, with decisionsUrl, and batch several into one message.
+- Tell the human in one line that a decision is waiting, with the request's own url (task.inputRequest.url, which opens that one request) or decisionsUrl for all of them, and batch several into one message.
 - Collect the answer: wait_for_answers blocks until the human answers (it returns timedOut after at most a few minutes; say what you are still waiting on, then wait again or move on). Otherwise collect_answers at the start of every session and before acting on blocked work. Each answer is delivered once. Act on it, then continue or complete the task.
 
 ## Goals: group the work
@@ -70,6 +70,13 @@ The board's lanes are the workspace's stages, listed by whoami. Each belongs to 
 
 ## References and links
 Every task should lead a human back to where it came from. On capture_tasks and update_task, pass links ([{url, title, kind}]) with the source permalink and, when the work came up in a conversation with the human, a link to it. They show as clickable links on the task in Phean. Use https:// links or app links (slack://, cursor://, ...); other schemes are refused.
+
+## Links back to Phean
+Every task, goal, document, memory and request (question or decision) in a tool's result carries a url that opens exactly that thing for a person; activity entries carry the url of what they are about. Share these instead of describing where to look:
+- in chat: "Drafted the launch post: <task url>", "Decision for you: <request url>";
+- in handoff notes and descriptions: link the related tasks, documents and decisions by their urls, so the next operator opens them in one click;
+- from an id alone: whoami's linkTemplate turns any id (t_, g_, d_, m_, q_) into a link.
+People must sign in to open them; a link never grants access.
 
 ## Webhooks: being told instead of polling
 If you run as a service (a bot with an HTTPS endpoint) rather than in a chat, register_webhook once so Phean calls you as soon as something you care about changes, instead of holding wait_for_answers open or polling get_activity.

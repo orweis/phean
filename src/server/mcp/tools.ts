@@ -67,7 +67,7 @@ export const TOOLS: readonly PheanTool[] = [
     name: "whoami",
     title: "Who am I",
     description:
-      "Your agent identity, your access level (read, write or admin) and when your access ends (accessEndsAt; null for a key that does not lapse), the workspace you are connected to, what you may do, the dashboard link to share with humans, and the board's stages (workflow): each has a key, a name people see, and the status kind it belongs to. Move a task to a workspace's own stage with update_task stage.",
+      "Your agent identity, your access level (read, write or admin) and when your access ends (accessEndsAt; null for a key that does not lapse), the workspace you are connected to, what you may do, the dashboard link to share with humans, linkTemplate (any Phean id in place of {id} gives a link a person can open; every task, goal, document, memory and request in any tool's result already carries its own url), and the board's stages (workflow): each has a key, a name people see, and the status kind it belongs to. Move a task to a workspace's own stage with update_task stage.",
     input: Empty,
     readOnly: true,
     run: async (ctx) => ({
@@ -76,6 +76,8 @@ export const TOOLS: readonly PheanTool[] = [
       accessEndsAt: ctx.accessEndsAt?.toISOString() ?? null,
       workspace: ctx.tenant,
       dashboardUrl: ctx.url(routes.workspace(ctx.tenant.slug)),
+      // Any Phean id (t_, g_, d_, m_, q_) as a link a person can open: put the id in place of {id}.
+      linkTemplate: `${ctx.url(routes.link(ctx.tenant.slug, "x")).slice(0, -1)}{id}`,
       // The realtime stream: the same origin, over a WebSocket.
       eventsUrl: ctx.url(routes.events()).replace(/^http/, "ws"),
       permissions: ACTIONS.filter((action) => can(ctx.actor, action)),

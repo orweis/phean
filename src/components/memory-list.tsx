@@ -3,12 +3,14 @@ import { Bot, Brain, Trash2, User } from "lucide-react";
 import { forgetAction } from "@/app/w/[slug]/actions";
 import { MEMORY_KIND_META } from "@/lib/domain";
 import { timeAgo, truncate } from "@/lib/format";
+import { routes } from "@/lib/routes";
 import type { Memory } from "@/server/domain/memory";
 
 import { EditMemoryPopover } from "./edit-memory-form";
 import { GoalLink } from "./goal-link";
 import { ActionButton } from "./ui/action-button";
 import { Badge, MetaBadge } from "./ui/badge";
+import { CopyLinkButton } from "./ui/copy-link-button";
 import { EmptyState } from "./ui/stat";
 
 interface MemoryListProps {
@@ -18,9 +20,11 @@ interface MemoryListProps {
   /** Titles for linking each memory to its goal; omit when the list is already under one goal. */
   goalTitles?: ReadonlyMap<string, string>;
   empty?: string;
+  /** The memory a link pointed at, marked so `FocusOnLoad` can bring it into view. */
+  focus?: string;
 }
 
-export function MemoryList({ memories, slug, canWrite, goalTitles, empty = "Nothing remembered yet" }: MemoryListProps) {
+export function MemoryList({ memories, slug, canWrite, goalTitles, empty = "Nothing remembered yet", focus }: MemoryListProps) {
   if (memories.length === 0) {
     return (
       <EmptyState icon={<Brain />} title={empty}>
@@ -34,7 +38,12 @@ export function MemoryList({ memories, slug, canWrite, goalTitles, empty = "Noth
         const goalTitle = memory.goalId ? goalTitles?.get(memory.goalId) : undefined;
         const AuthorIcon = memory.createdByType === "agent" ? Bot : User;
         return (
-          <li key={memory.id} className="group/mem flex gap-3 py-3">
+          <li
+            key={memory.id}
+            data-focused={memory.id === focus ? focus : undefined}
+            tabIndex={memory.id === focus ? -1 : undefined}
+            className="group/mem -mx-3 flex scroll-mt-32 gap-3 rounded-md px-3 py-3 outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus data-focused:bg-accent-tint/30"
+          >
             <div className="min-w-0 flex-1">
               <p className="text-sm whitespace-pre-line text-ink">{memory.content}</p>
               <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
@@ -50,8 +59,10 @@ export function MemoryList({ memories, slug, canWrite, goalTitles, empty = "Noth
                 <span>{timeAgo(memory.updatedAt)}</span>
               </div>
             </div>
-            {canWrite && (
-              <div className="flex shrink-0 items-start gap-0.5 pointer-fine:opacity-0 pointer-fine:group-hover/mem:opacity-100 pointer-fine:group-focus-within/mem:opacity-100 pointer-fine:has-[details[open]]:opacity-100">
+            <div className="flex shrink-0 items-start gap-0.5 pointer-fine:opacity-0 pointer-fine:group-hover/mem:opacity-100 pointer-fine:group-focus-within/mem:opacity-100 pointer-fine:has-[details[open]]:opacity-100">
+              <CopyLinkButton path={routes.memoryItem(slug, memory.id)} subject={`link to “${truncate(memory.content, 50)}”`} compact />
+              {canWrite && (
+              <>
               <EditMemoryPopover memory={memory} slug={slug} />
               <ActionButton
                 action={forgetAction}
@@ -65,8 +76,9 @@ export function MemoryList({ memories, slug, canWrite, goalTitles, empty = "Noth
               >
                 <Trash2 aria-hidden />
               </ActionButton>
-              </div>
-            )}
+              </>
+              )}
+            </div>
           </li>
         );
       })}

@@ -17,6 +17,7 @@ import { MultipleChoice } from "./multiple-choice";
 import { ActionButton } from "./ui/action-button";
 import { ActionForm } from "./ui/action-form";
 import { MetaBadge } from "./ui/badge";
+import { CopyLinkButton } from "./ui/copy-link-button";
 import { CountedTextarea } from "./ui/counted-textarea";
 import { Field } from "./ui/field";
 import { Popover, PopoverCancel } from "./ui/popover";
@@ -129,11 +130,14 @@ export function OpenQuestions({
   slug,
   canAnswer,
   showGoal = false,
+  focus,
 }: {
   tasks: readonly TaskView[];
   slug: string;
   canAnswer: boolean;
   showGoal?: boolean;
+  /** The request a link pointed at, marked so `FocusOnLoad` can bring it into view. */
+  focus?: string;
 }) {
   const list = (
     <ul>
@@ -146,6 +150,7 @@ export function OpenQuestions({
             key={task.id}
             id={`task-${task.id}`}
             data-task={task.id}
+            data-focused={request.id === focus ? focus : undefined}
             data-entry
             tabIndex={-1}
             aria-label={task.title}
@@ -154,6 +159,8 @@ export function OpenQuestions({
               // Selected (it holds focus, or J and K moved to it): an accent bar, a tint and a ring, never a hue alone.
               "before:absolute before:inset-y-2 before:left-0 before:w-1 before:rounded-full before:bg-transparent",
               "data-selected:bg-accent-tint/45 data-selected:before:bg-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus",
+              // The one a link pointed at keeps the same accent bar, so it reads as where the link landed.
+              "data-focused:before:bg-accent",
             )}
           >
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -193,6 +200,7 @@ export function OpenQuestions({
                     <Resume session={session} prominent={false} />
                   </span>
                   <MoreAnswers taskId={task.id} slug={slug} request={request} title={task.title} />
+                  <CopyLinkButton path={routes.request(slug, request.id)} subject={`link to the request on ${task.title}`} compact />
                 </div>
                 {request.context && <p className="mt-2.5 text-sm whitespace-pre-line text-ink-2">{request.context}</p>}
                 <TaskLinks links={request.links} className="mt-2.5" />
@@ -207,6 +215,7 @@ export function OpenQuestions({
                   <Resume session={session} prominent />
                   {canAnswer && <OtherAnswer taskId={task.id} slug={slug} request={request} />}
                   {canAnswer && <MoreAnswers taskId={task.id} slug={slug} request={request} title={task.title} />}
+                  <CopyLinkButton path={routes.request(slug, request.id)} subject={`link to the request on ${task.title}`} compact />
                 </div>
               </>
             )}

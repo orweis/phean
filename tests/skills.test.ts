@@ -60,6 +60,14 @@ describe("the phean-decisions skill", () => {
   });
 });
 
+describe("links in the skills", () => {
+  it("teaches agents to share the links Phean returns", () => {
+    expect(SKILLS["phean-decisions"]).toContain("inputRequest.url");
+    expect(SKILLS["phean-handoffs"]).toContain("linkTemplate");
+    expect(SKILLS["phean-documents"]).toContain("Documents listed on a task (`get_task`) carry their `url`");
+  });
+});
+
 describe("the phean-handoffs skill", () => {
   const SKILL = SKILLS["phean-handoffs"];
 

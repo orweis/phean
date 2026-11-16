@@ -59,6 +59,20 @@ Markers below: **read-only** tools never change workspace state; **destructive**
 | `suggest_next_actions` | Read-only. The most urgent open tasks, work handed to you first, skipping ones another operator holds. |
 | `get_activity` | Read-only. What people and other agents did, newest first, optionally since a timestamp or for one goal. |
 
+## Links
+
+Every task, goal, document, memory and request (question or decision) in a tool's result carries `url`, an absolute link that opens exactly that thing in Phean. Activity entries carry the `url` of what they are about. `whoami` also returns `linkTemplate`, `https://<your-domain>/w/<slug>/link/{id}`: put any Phean id in place of `{id}` (`t_` task, `g_` goal, `d_` document, `m_` memory, `q_` request) for a link that redirects to it.
+
+| Link | Opens |
+| --- | --- |
+| `/w/<slug>/tasks/<id>` | The task's page. |
+| `/w/<slug>/goals/<id>` | The goal's page. |
+| `/w/<slug>/documents/<id>` | The document. |
+| `/w/<slug>/decisions?focus=<q_id>` | The Decisions page, with that request opened and in view, open or answered. |
+| `/w/<slug>/memory?focus=<m_id>` | The Memory page, with that memory in view. |
+
+A link opens only for someone signed in to the workspace; a person who is signed out signs in and lands on it. In the app, the same links come from each item's **Copy link** button.
+
 ## Hand-offs to people
 
 | Tool | Description |

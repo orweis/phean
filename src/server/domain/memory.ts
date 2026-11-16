@@ -83,6 +83,14 @@ export const countMemoryKinds = service(MemoryCountsInput, async (ctx, { query }
 });
 
 /** Fixes a memory that is wrong or out of date. Agents edit only what they saved; people any memory. */
+/** One memory, by its id: what a link to it shows. */
+export const getMemory = service(MemoryRefInput, async (ctx, { memoryId }): Promise<Memory> => {
+  assertCan(ctx, "workspace:read");
+  const [memory] = await ctx.db.select(memoryColumns).from(memories).where(tenantRow(ctx, memories, memoryId));
+  if (!memory) throw notFound("memory", memoryId);
+  return memory;
+});
+
 export const updateMemory = service(UpdateMemoryInput, async (ctx, { memoryId, ...fields }): Promise<Memory> => {
   assertCan(ctx, "memory:write");
   const [current] = await ctx.db.select(memoryColumns).from(memories).where(tenantRow(ctx, memories, memoryId));

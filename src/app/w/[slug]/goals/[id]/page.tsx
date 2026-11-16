@@ -9,6 +9,7 @@ import { FlowStat } from "@/components/charts/flow-bar";
 import { Timetable } from "@/components/charts/timetable";
 import { EditGoalForm, NewGoalForm } from "@/components/goal-forms";
 import { GoalStatusActions } from "@/components/goal-status-actions";
+import { CopyLinkButton } from "@/components/ui/copy-link-button";
 import { DocumentChips } from "@/components/documents/document-chips";
 import { GoalTree } from "@/components/goal-tree";
 import { MemoryList } from "@/components/memory-list";
@@ -117,6 +118,7 @@ export default async function GoalPage({ params }: PageProps<"/w/[slug]/goals/[i
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <CopyLinkButton path={routes.goal(slug, goal.id)} subject="link to this goal" />
           {canEditGoals && (
             <Popover icon={<Pencil aria-hidden />} label="Edit" variant="ghost" title="Edit goal">
               <EditGoalForm slug={slug} goal={goal} goals={goals} />

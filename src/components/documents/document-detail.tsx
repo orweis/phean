@@ -15,6 +15,7 @@ import { orNotFound } from "@/server/web";
 import { ActionButton } from "../ui/action-button";
 import { Badge } from "../ui/badge";
 import { ButtonLink } from "../ui/button";
+import { CopyLinkButton } from "../ui/copy-link-button";
 import { DocumentBody } from "./document-body";
 import { DocumentEditor } from "./document-editor";
 
@@ -68,6 +69,7 @@ export async function DocumentDetail({ slug, documentId, editing, headingLevel =
         </div>
         {!editing && (
           <div className="flex flex-wrap items-center gap-2">
+            <CopyLinkButton path={routes.document(slug, document.id)} subject="link to this document" />
             {editable && (
               <ButtonLink href={routes.document(slug, document.id, "edit")} scroll={false} size="sm" variant="secondary">
                 <Pencil aria-hidden />

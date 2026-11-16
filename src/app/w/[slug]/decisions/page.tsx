@@ -6,13 +6,15 @@ import { OpenQuestions } from "@/components/open-questions";
 import { PageHeader } from "@/components/page-header";
 import { PendingApprovals } from "@/components/pending-approvals";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
+import { FocusOnLoad } from "@/components/ui/focus-on-load";
 import { EmptyState } from "@/components/ui/stat";
 import { DELIVERED_OUTCOMES } from "@/lib/agent-sessions";
 import { pluralize } from "@/lib/format";
+import { queryParam } from "@/lib/routes";
 import { requireWorkspace } from "@/server/auth/session";
 import { listGoals } from "@/server/domain/goals";
 import { can } from "@/server/domain/policy";
-import { listDecisions, type DecisionRecord } from "@/server/domain/tasks";
+import { findRequest, listDecisions, type DecisionRecord } from "@/server/domain/tasks";
 
 export const metadata: Metadata = { title: "Decisions" };
 
@@ -26,10 +28,17 @@ function answeredSummary(closed: readonly DecisionRecord[]): string {
   return `${kinds} settled.${pickup}`;
 }
 
-export default async function DecisionsPage({ params }: PageProps<"/w/[slug]/decisions">) {
+export default async function DecisionsPage({ params, searchParams }: PageProps<"/w/[slug]/decisions">) {
   const { slug } = await params;
+  const focus = queryParam((await searchParams).focus);
   const { ctx } = await requireWorkspace(slug);
-  const [{ open, closed }, goals] = await Promise.all([listDecisions(ctx, {}), listGoals(ctx, {})]);
+  const [{ open, closed }, goals, linked] = await Promise.all([
+    listDecisions(ctx, {}),
+    listGoals(ctx, {}),
+    // A link to one request: found wherever it is, even past the answers this page lists.
+    focus ? findRequest(ctx, { requestId: focus }).catch(() => null) : null,
+  ]);
+  const linkedElsewhere = linked?.record && !closed.some(({ request }) => request.id === focus) ? linked.record : null;
   const canAnswer = can(ctx.actor, "task:write");
   const proposed = goals.filter((goal) => goal.status === "proposed");
   const decisions = open.filter((task) => task.inputRequest?.kind === "decision").length;
@@ -40,7 +49,21 @@ export default async function DecisionsPage({ params }: PageProps<"/w/[slug]/dec
         title="Decisions"
         description="Everything agents asked you to decide, answer or approve. Pick an option or write your answer; an agent that is waiting picks it up at once, others the next time they check in. With a request focused, number keys pick its options and J and K move between requests."
       />
+      <FocusOnLoad id={focus} />
       <div className="space-y-6">
+        {focus && !linked && (
+          <p role="status" className="rounded-lg border border-rule bg-panel px-4 py-3 text-sm text-ink-2">
+            That question or decision is not in this workspace. It may have been in a task that was deleted, or the link is mistyped.
+          </p>
+        )}
+        {linkedElsewhere && (
+          <Card id="linked">
+            <CardHeader title="Linked answer" description="The answered request this link points to, from further back than the list below." />
+            <CardBody className="py-1">
+              <AnsweredDecisions records={[linkedElsewhere]} slug={slug} focus={focus} />
+            </CardBody>
+          </Card>
+        )}
         {open.length > 0 || proposed.length === 0 ? (
           <Card id="questions" tone={open.length ? "wait" : "plain"}>
             <CardHeader
@@ -55,7 +78,7 @@ export default async function DecisionsPage({ params }: PageProps<"/w/[slug]/dec
             />
             {open.length > 0 ? (
               <CardBody className="py-1">
-                <OpenQuestions tasks={open} slug={slug} canAnswer={canAnswer} showGoal />
+                <OpenQuestions tasks={open} slug={slug} canAnswer={canAnswer} showGoal focus={focus} />
               </CardBody>
             ) : (
               <CardBody className="pt-0">
@@ -89,7 +112,7 @@ export default async function DecisionsPage({ params }: PageProps<"/w/[slug]/dec
             {closed.length ? (
               <>
                 <p className="border-b border-rule py-3 text-sm text-ink-2">{answeredSummary(closed)}</p>
-                <AnsweredDecisions records={closed} slug={slug} />
+                <AnsweredDecisions records={closed} slug={slug} focus={focus} />
               </>
             ) : (
               <p className="py-6 text-center text-sm text-muted">No answered questions yet.</p>

@@ -69,7 +69,7 @@ Rules:
 
 ## 3. Tell the person
 
-`request_input` returns `decisionsUrl`. Tell the person in one line what is waiting and link it: "1 decision for you in Phean: the Globex discount → <decisionsUrl>". When you have several, batch them into one message.
+`request_input` returns the task, whose `inputRequest.url` opens exactly this request on the Decisions page, and `decisionsUrl` for everything waiting. Tell the person in one line what is waiting and link the request itself: "1 decision for you in Phean: the Globex discount → <inputRequest.url>". When you have several, batch them into one message, each with its own link, or send `decisionsUrl` once. An answered request keeps its link: share it when you report what was decided.
 
 ## 4. Get the answer
 
