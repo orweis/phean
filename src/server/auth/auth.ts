@@ -11,8 +11,9 @@ import { APIError, createAuthMiddleware } from "better-auth/api";
 import { nextCookies } from "better-auth/next-js";
 import { jwt } from "better-auth/plugins/jwt";
 import { organization } from "better-auth/plugins/organization";
+import { twoFactor } from "better-auth/plugins/two-factor";
 
-import { WORKSPACE_SLUG_PATTERN } from "@/lib/domain";
+import { LIMITS, WORKSPACE_SLUG_PATTERN } from "@/lib/domain";
 import { routes } from "@/lib/routes";
 
 import { appUrl, mcpResourceUrl, oauthAuthorizeLimit, oauthProviders, oauthRegisterLimit, trustedOrigins } from "../config";
@@ -22,6 +23,7 @@ import { oauthResource } from "../db/schema/auth";
 import { resolveOAuthAgent } from "../domain/agents";
 import { findTenantBySlug } from "../domain/tenants";
 import { pruneUnusedClients } from "./clients";
+import { providerSignInChallenge, TRUST_DEVICE_SECONDS, TWO_FACTOR_CHALLENGE_SECONDS } from "./two-factor";
 
 const SEVEN_DAYS_IN_SECONDS = 60 * 60 * 24 * 7;
 const ONE_HOUR_IN_SECONDS = 60 * 60;
@@ -84,8 +86,13 @@ export function createAuth(database: Db, baseUrl: string) {
     baseURL: baseUrl,
     trustedOrigins: [...new Set([baseUrl, ...trustedOrigins()])],
     database: drizzleAdapter(database, { provider: "pg", schema: authSchema }),
-    emailAndPassword: { enabled: true, minPasswordLength: 8, autoSignIn: true },
+    emailAndPassword: { enabled: true, minPasswordLength: LIMITS.passwordMin, maxPasswordLength: LIMITS.passwordMax, autoSignIn: true },
     socialProviders: socialProviders(),
+    account: {
+      // People connect GitHub or Google from their account page while signed in, so the provider's
+      // address may differ from their Phean one; the provider must still have verified it.
+      accountLinking: { enabled: true, allowDifferentEmails: true },
+    },
     // Serverless instances do not share memory, so limits are counted in Postgres.
     rateLimit: { storage: "database" },
     // Consent happens only through the dialog's action, and auth.api still reaches these. /token would hand out session JWTs.
@@ -109,12 +116,16 @@ export function createAuth(database: Db, baseUrl: string) {
           throw new APIError("BAD_REQUEST", { error: "invalid_client_metadata", error_description: 'Phean registers public clients only. Register with token_endpoint_auth_method "none".' });
         }
       }),
+      after: providerSignInChallenge(baseUrl),
     },
     plugins: [
       // Organizations are Phean tenants ("workspaces"). Invitations are shared as links,
       // so no email delivery is configured.
       organization({ creatorRole: "owner", invitationExpiresIn: SEVEN_DAYS_IN_SECONDS }),
       jwt({ disableSettingJwtHeader: true }),
+      // An authenticator app with backup codes. Passwordless people (GitHub or Google only) may turn
+      // it on too; `challengeProviderSignIn` asks for it after a provider sign-in.
+      twoFactor({ issuer: "Phean", allowPasswordless: true, twoFactorCookieMaxAge: TWO_FACTOR_CHALLENGE_SECONDS, trustDeviceMaxAge: TRUST_DEVICE_SECONDS }),
       mcp({
         loginPage: "/sign-in",
         consentPage: "/oauth/approve",

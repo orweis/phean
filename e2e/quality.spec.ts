@@ -7,6 +7,7 @@ import { oauthClient } from "./support/oauth-client";
 
 const PAGES = [
   "/workspaces",
+  "/account",
   "/w/globex",
   "/w/globex/decisions",
   "/w/globex/board",
@@ -48,6 +49,7 @@ const PANELS = [
   ["/w/globex/memory", "Add"],
   ["/w/globex/documents", "New document"],
   ["/w/globex/agents", "Key for a bot"],
+  ["/account", "Change password"],
 ] as const;
 
 async function openPanel(page: Page, path: string, trigger: string) {
@@ -383,7 +385,7 @@ test.describe("signed in", () => {
 test.describe("in the dark appearance", () => {
   test.use({ colorScheme: "dark" });
 
-  for (const path of ["/", "/sign-in", "/sign-up"]) {
+  for (const path of ["/", "/sign-in", "/sign-up", "/sign-in/two-factor"]) {
     test(`${path} has no detectable accessibility violations`, async ({ page }) => {
       await page.goto(path);
       await expectAccessible(page);
@@ -417,7 +419,7 @@ test.describe("in the dark appearance", () => {
 test.describe("signed out, on a 375px phone", () => {
   test.use({ viewport: { width: 375, height: 812 } });
 
-  for (const path of ["/", "/sign-in", "/sign-up"]) {
+  for (const path of ["/", "/sign-in", "/sign-up", "/sign-in/two-factor"]) {
     test(`${path} keeps everything inside the screen`, async ({ page }) => {
       await page.goto(path);
       await expectNothingCutOff(page);

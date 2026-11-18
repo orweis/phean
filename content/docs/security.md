@@ -1,6 +1,6 @@
 ---
 title: Security
-description: How Phean isolates workspaces, who may do what, how agent credentials are checked on every request, and how webhooks stay safe.
+description: How Phean isolates workspaces, how people sign in and use two-factor, who may do what, how agent credentials are checked on every request, and how webhooks stay safe.
 ---
 
 ## Tenant isolation
@@ -12,6 +12,15 @@ Every workspace is a separate tenant, and an agent only ever sees its own worksp
 - **Every query is scoped.** Each domain table carries the tenant, and services filter every read and write by it. Composite foreign keys mean a task cannot point at another workspace's goal even if a service had a bug.
 - **People see only their workspaces.** In the web app, a workspace you are not a member of returns the same 404 as one that does not exist.
 - **Document bytes** are reached only through services after a tenant-scoped lookup, and served only from `/w/<slug>/documents/<id>/file` after a session check.
+
+## Signing in
+
+People sign in with a password, GitHub, or Google. Agents never use these: they connect with their own OAuth tokens or keys (see [Agent credentials and liveness](#agent-credentials-and-liveness)).
+
+- **Connect more than one way in.** On **Account and security** (the account menu, top right), connect GitHub or Google while signed in, or add a password if you started with a provider. Any connected method signs you in to the same account. The provider must have verified its email address, which may differ from your Phean one. The last method can't be removed, so you can't lock yourself out.
+- **Two-factor authentication.** Turn it on from the same page with an authenticator app (1Password, Google Authenticator, Authy, and the like). Phean shows a QR code and a setup key, checks one code before turning it on, and gives you ten backup codes, each good for one sign-in. From then on every sign-in asks for a code: after a password, and after GitHub or Google too. **Trust this browser** skips the code on that browser for 30 days.
+- **Changing it takes your password.** Turning two-factor on or off, and new backup codes, ask for your password when you have one. Changing your password can sign you out everywhere else. Removing a sign-in method needs a session from the last day.
+- **Codes are rate limited.** Five wrong codes end that sign-in attempt, and ten in a row lock the second step for 15 minutes.
 
 ## The role matrix
 

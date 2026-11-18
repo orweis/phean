@@ -127,8 +127,13 @@ interface Tick {
   week: boolean;
 }
 
-/** Share of the axis a date label or the Now chip covers on the narrowest track, a phone's. */
-const LABEL_SPAN = 0.14;
+/**
+ * Shares of the axis on the narrowest track, a 320px phone's (about 250px wide): a date label
+ * ("Nov 16") and the Now chip. Both run rightward from their line, so a label before now must end
+ * before the line, and one after it must start past the chip.
+ */
+const LABEL_SPAN = 0.18;
+const NOW_SPAN = 0.14;
 
 /**
  * Day lines when a day is wide enough to see, week lines otherwise. Mondays are labelled, or
@@ -141,7 +146,8 @@ function ticksOf(window: TimeWindow, now: number): Tick[] {
     const monday = day.getUTCDay() === 1;
     if (dense && !monday) return [];
     const at = fractionOf(window, day);
-    const labelled = (daily || monday) && Math.abs(at - now) >= LABEL_SPAN;
+    const clear = at < now ? now - at >= LABEL_SPAN : at - now >= NOW_SPAN;
+    const labelled = (daily || monday) && clear;
     return [{ at, week: monday, label: labelled ? formatDay(day) : undefined }];
   });
 }

@@ -1,4 +1,4 @@
-import { Check, ChevronsUpDown, LayoutList, Settings } from "lucide-react";
+import { Check, ChevronsUpDown, LayoutList, Settings, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { Suspense, type ReactNode } from "react";
 
@@ -13,6 +13,7 @@ import { Logo } from "./logo";
 import { HeaderSearch } from "./search-form";
 import { SignOutButton } from "./sign-out-button";
 import { Avatar } from "./ui/avatar";
+import { buttonClasses } from "./ui/button";
 import { Popover } from "./ui/popover";
 
 function WorkspaceSwitcher({ current, workspaces }: { current: Tenant; workspaces: readonly Tenant[] }) {
@@ -79,6 +80,10 @@ async function AccountMenu({ user }: { user: Viewer }) {
       </div>
       <AppearancePicker initial={appearance} className="mt-4" />
       <div className="mt-4 space-y-1 border-t border-rule pt-3">
+        <Link href={routes.account()} className={buttonClasses("ghost", "menu")}>
+          <ShieldCheck aria-hidden />
+          Account and security
+        </Link>
         <ShortcutsButton />
         <SignOutButton />
       </div>

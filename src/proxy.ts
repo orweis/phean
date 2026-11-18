@@ -16,5 +16,5 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/workspaces/:path*", "/w/:path*", "/invite/:path*", "/oauth/:path*"],
+  matcher: ["/account/:path*", "/workspaces/:path*", "/w/:path*", "/invite/:path*", "/oauth/:path*"],
 };
