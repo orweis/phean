@@ -744,6 +744,11 @@
     animation: hill-crew var(--hill) linear infinite;
   }
 
+  /* The three.js scene keeps time with this: the same loop as the card, stopped by the page's pause. */
+  [data-hill] [data-hill-clock] {
+    animation: hill-clock var(--hill) linear infinite;
+  }
+
   [data-hill] [data-roll] {
     transform-box: fill-box;
     transform-origin: center;
@@ -817,6 +822,27 @@
 /* "Pause motion" on the site (WCAG 2.2.2): everything that loops stops where it is. */
 [data-paused] :is([data-demo] *, [data-hill] *, [data-glow]::before, [data-drift], [data-drift]::before, .hero-scene .art) {
   animation-play-state: paused !important;
+}
+
+@keyframes hill-clock {
+  from,
+  to {
+    opacity: 0;
+  }
+}
+
+/*
+ * The clay scene (components/marketing/hill-scene.tsx) over the drawing: the drawing gives way once
+ * the scene has painted, and the canvas fades into the band at its edges, as the drawing's hill does.
+ */
+[data-hill]:has([data-scene="ready"]) > svg {
+  opacity: 0;
+  transition: opacity 700ms var(--ease-out);
+}
+
+.hill-canvas {
+  mask-image: linear-gradient(to bottom, transparent, black 8%, black 78%, transparent), linear-gradient(to right, transparent, black 6%, black 94%, transparent);
+  mask-composite: intersect;
 }
 
 @keyframes hill-crew {

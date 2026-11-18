@@ -3,6 +3,8 @@ import { Check, Scale } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cx } from "@/lib/cx";
 
+import { HillScene } from "./hill-scene";
+
 /*
  * The scene is drawn in a 1200×640 box (y from -120, the sky the call card floats in). The slope runs from (140, 470) to (860, 170); everything that
  * climbs it is drawn in the slope's own frame (x up the slope, negative y above its surface), so the
@@ -85,6 +87,9 @@ function Boulder({ x, r, rolls = false }: { x: number; r: number; rolls?: boolea
  * Why the product is called Phean, drawn: a crew of AI agents rolls the boulder up the hill on a
  * loop, stops at the top for a person's call, and starts on the next one. With motion off it shows
  * the moment at the top, the call made. Decorative; the figure's caption says it in words.
+ *
+ * The SVG below is the poster: what shows before the three.js scene (`HillScene`) has painted, and
+ * where there is no WebGL. Once the scene is up it takes the drawing's place, in the same box.
  */
 export function BoulderHill() {
   return (
@@ -136,6 +141,10 @@ export function BoulderHill() {
           </g>
         </g>
       </svg>
+
+      {/* The same scene in clay, in three.js; it covers the drawing once it has painted, and keeps time with this clock. */}
+      <span aria-hidden data-hill-clock className="pointer-events-none absolute size-px opacity-0" />
+      <HillScene />
 
       {/* The call the crew stopped for, as the Decisions page shows it. */}
       <div aria-hidden data-hill-card className="absolute top-[3%] right-[3%] w-[min(19rem,44%)] rounded-lg bg-panel p-3 text-left shadow-lift max-sm:hidden sm:p-4">
