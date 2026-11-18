@@ -15,6 +15,7 @@ export const routes = {
   home: () => "/",
   /** The public docs site, or one page of it. */
   docs: (slug?: string) => (slug ? `/docs/${slug}` : "/docs"),
+  privacy: () => "/privacy",
   signIn: (next?: string) => withQuery("/sign-in", { next }),
   signUp: (next?: string) => withQuery("/sign-up", { next }),
   /** The second step of a sign-in, for people with two-factor on: their authenticator code or a backup code. */

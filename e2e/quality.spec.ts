@@ -32,6 +32,7 @@ const PAGES = [
   "/docs/security",
   "/docs/agents",
   "/docs/claude-code",
+  "/privacy",
 ];
 
 /** Pages that draw a timetable, so the Now marker can be checked against the date labels. */
