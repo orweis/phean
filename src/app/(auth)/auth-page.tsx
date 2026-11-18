@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 
 import { AuthForm, type SocialProvider } from "@/components/auth-form";
 import { authorizeRetryPath } from "@/lib/oauth-consent";
-import { queryParam, queryStringOf, safeNextPath } from "@/lib/routes";
+import { queryParam, queryStringOf, routes, safeNextPath } from "@/lib/routes";
 import { getSession } from "@/server/auth/session";
 import { oauthProviders } from "@/server/config";
 
@@ -39,6 +39,13 @@ export async function AuthPage({ mode, searchParams }: AuthPageProps) {
       <h1 className="text-xl font-bold text-ink">{COPY[mode].title}</h1>
       <p className="mt-1 mb-6 text-sm text-ink-2">{COPY[mode].subtitle}</p>
       <AuthForm mode={mode} next={next} providers={providers} initialError={socialError(queryParam(params.error))} />
+      <p className="mt-6 text-xs text-muted">
+        See how Phean handles your information in our{" "}
+        <a href={routes.privacy()} className="link">
+          privacy policy
+        </a>
+        .
+      </p>
     </>
   );
 }

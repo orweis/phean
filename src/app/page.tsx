@@ -368,6 +368,11 @@ export default async function LandingPage() {
                     </Link>
                   </li>
                 ))}
+                <li>
+                  <Link href={routes.privacy()} className="text-ink-2 link hover:text-ink">
+                    Privacy
+                  </Link>
+                </li>
               </ul>
             </nav>
           </div>
