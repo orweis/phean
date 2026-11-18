@@ -1,0 +1,422 @@
+[
+  {
+    "id": "hero-light",
+    "files": [
+      {
+        "path": "/marketing/hero-light-800.avif",
+        "width": 800,
+        "height": 450,
+        "format": "avif"
+      },
+      {
+        "path": "/marketing/hero-light-800.webp",
+        "width": 800,
+        "height": 450,
+        "format": "webp"
+      },
+      {
+        "path": "/marketing/hero-light-1600.avif",
+        "width": 1600,
+        "height": 900,
+        "format": "avif"
+      },
+      {
+        "path": "/marketing/hero-light-1600.webp",
+        "width": 1600,
+        "height": 900,
+        "format": "webp"
+      },
+      {
+        "path": "/marketing/hero-light-2400.avif",
+        "width": 2400,
+        "height": 1350,
+        "format": "avif"
+      },
+      {
+        "path": "/marketing/hero-light-2400.webp",
+        "width": 2400,
+        "height": 1350,
+        "format": "webp"
+      }
+    ],
+    "alt": "Three small rounded violet figures push a large glowing ember boulder up a long violet hill under a pale lavender and peach dusk sky; the left half of the sky is empty.",
+    "use": "Hero, on the light appearance: full-bleed behind the headline, text on the empty left side",
+    "ground": "light",
+    "prompt": "A wide panoramic hero illustration. Scene: a long gentle violet hill rising from lower left to upper right under a soft dusk sky that fades from pale lavender at the top to warm bone-peach near the horizon. Near the upper right of the slope, three small abstract agent figures (rounded violet capsule-orbs) are together rolling a large glowing ember-orange boulder up the hill; the boulder emits a warm soft glow that lights the slope around it. A faint winding path traces the hill behind them. The entire left 45 percent of the image is calm, empty, pale sky with almost no detail, leaving clean room for a headline. Light, airy overall value so dark text can sit on the left. Style: cohesive editorial illustration, like a single illustrator's series for a premium software company. Flat and softly modelled simple geometric shapes, smooth soft gradients, fine film grain texture, gentle atmospheric depth. Palette: dusk violets and deep indigos (#2a1f5c, #3b2a7a, #6a4fd0, #9a86e8), pale lavender and warm bone mist (#f3eef8, #efe6dc), and a single warm ember/amber accent (#f0a050, #e8783a) that glows softly. Calm, quiet, unhurried, spacious composition with generous negative space. The AI agents are small friendly abstract figures: smooth rounded capsule-and-orb shapes in violet and lavender with a tiny soft glow, no faces, no eyes, no limbs beyond simple rounded nubs, not robots. Absolutely no text, letters, numbers, words, logos, icons of real apps, UI screenshots, or watermarks. Not photorealistic, not 3D render plastic, not neon, no lens flare, no busy sci-fi circuitry.",
+    "model": "gpt-image-2.6-sunburst"
+  },
+  {
+    "id": "hero-dark",
+    "files": [
+      {
+        "path": "/marketing/hero-dark-800.avif",
+        "width": 800,
+        "height": 450,
+        "format": "avif"
+      },
+      {
+        "path": "/marketing/hero-dark-800.webp",
+        "width": 800,
+        "height": 450,
+        "format": "webp"
+      },
+      {
+        "path": "/marketing/hero-dark-1600.avif",
+        "width": 1600,
+        "height": 900,
+        "format": "avif"
+      },
+      {
+        "path": "/marketing/hero-dark-1600.webp",
+        "width": 1600,
+        "height": 900,
+        "format": "webp"
+      },
+      {
+        "path": "/marketing/hero-dark-2400.avif",
+        "width": 2400,
+        "height": 1350,
+        "format": "avif"
+      },
+      {
+        "path": "/marketing/hero-dark-2400.webp",
+        "width": 2400,
+        "height": 1350,
+        "format": "webp"
+      }
+    ],
+    "alt": "Three small rounded lavender figures push a large glowing ember boulder up a dark violet hill under an indigo night sky, a thin amber band of last light on the far horizon.",
+    "use": "Hero, on the dark appearance: full-bleed behind the headline, text on the empty left side",
+    "ground": "dark",
+    "prompt": "A wide panoramic hero illustration at deep dusk, the same scene as a companion piece: a long gentle hill in deep violet-indigo rising from lower left to upper right under a dark indigo night-falling sky with a few faint stars and a last thin band of warm amber light low on the horizon. Near the upper right of the slope, three small abstract agent figures (rounded lavender capsule-orbs with a faint inner glow) together roll a large glowing ember-orange boulder up the hill; the boulder is the brightest thing in the image and casts warm light on the slope and the figures. A faint winding path traces the hill behind them. The entire left 45 percent of the image is calm, dark, nearly empty indigo sky, leaving clean room for a light-coloured headline. Overall dark value. Style: cohesive editorial illustration, like a single illustrator's series for a premium software company. Flat and softly modelled simple geometric shapes, smooth soft gradients, fine film grain texture, gentle atmospheric depth. Palette: dusk violets and deep indigos (#2a1f5c, #3b2a7a, #6a4fd0, #9a86e8), pale lavender and warm bone mist (#f3eef8, #efe6dc), and a single warm ember/amber accent (#f0a050, #e8783a) that glows softly. Calm, quiet, unhurried, spacious composition with generous negative space. The AI agents are small friendly abstract figures: smooth rounded capsule-and-orb shapes in violet and lavender with a tiny soft glow, no faces, no eyes, no limbs beyond simple rounded nubs, not robots. Absolutely no text, letters, numbers, words, logos, icons of real apps, UI screenshots, or watermarks. Not photorealistic, not 3D render plastic, not neon, no lens flare, no busy sci-fi circuitry.",
+    "model": "gpt-image-2.6-sunburst"
+  },
+  {
+    "id": "decisions",
+    "files": [
+      {
+        "path": "/marketing/decisions-800.avif",
+        "width": 800,
+        "height": 533,
+        "format": "avif"
+      },
+      {
+        "path": "/marketing/decisions-800.webp",
+        "width": 800,
+        "height": 533,
+        "format": "webp"
+      },
+      {
+        "path": "/marketing/decisions-1536.avif",
+        "width": 1536,
+        "height": 1024,
+        "format": "avif"
+      },
+      {
+        "path": "/marketing/decisions-1536.webp",
+        "width": 1536,
+        "height": 1024,
+        "format": "webp"
+      }
+    ],
+    "alt": "A tall pale figure stands on a dark violet hilltop before a low stone holding three pebbles, the middle one glowing ember; below, three small lavender figures each hold up a glowing orb, waiting for an answer.",
+    "use": "Decisions section (#decisions, dusk band): 'A fleet of agents needs one place to ask'",
+    "ground": "dark",
+    "prompt": "A calm scene at dusk: a single simple stylised person (a tall soft bone-coloured rounded silhouette, no face, no detail) stands at the top of a gentle violet hill, calmly considering three small smooth stones laid on a low flat stone before them, one of which glows ember-amber as it is chosen. Three small abstract agent figures, each one a single clearly separate rounded lavender capsule-orb body with a round head, stand spaced apart in a soft arc further down the slope, each holding up one tiny glowing orb like a question, waiting patiently. Each figure is distinct and not overlapping. Quiet, considered, no hurry. Dark ground: deep indigo-violet dusk background so the image sits on a dark page. Style: cohesive editorial illustration, like a single illustrator's series for a premium software company. Flat and softly modelled simple geometric shapes, smooth soft gradients, fine film grain texture, gentle atmospheric depth. Palette: dusk violets and deep indigos (#2a1f5c, #3b2a7a, #6a4fd0, #9a86e8), pale lavender and warm bone mist (#f3eef8, #efe6dc), and a single warm ember/amber accent (#f0a050, #e8783a) that glows softly. Calm, quiet, unhurried, spacious composition with generous negative space. The AI agents are small friendly abstract figures: smooth rounded capsule-and-orb shapes in violet and lavender with a tiny soft glow, no faces, no eyes, no limbs beyond simple rounded nubs, not robots. Absolutely no text, letters, numbers, words, logos, icons of real apps, UI screenshots, or watermarks. Not photorealistic, not 3D render plastic, not neon, no lens flare, no busy sci-fi circuitry.",
+    "model": "gpt-image-2.6-sunburst"
+  },
+  {
+    "id": "capture",
+    "files": [
+      {
+        "path": "/marketing/capture-800.avif",
+        "width": 800,
+        "height": 533,
+        "format": "avif"
+      },
+      {
+        "path": "/marketing/capture-800.webp",
+        "width": 800,
+        "height": 533,
+        "format": "webp"
+      },
+      {
+        "path": "/marketing/capture-1536.avif",
+        "width": 1536,
+        "height": 1024,
+        "format": "avif"
+      },
+      {
+        "path": "/marketing/capture-1536.webp",
+        "width": 1536,
+        "height": 1024,
+        "format": "webp"
+      }
+    ],
+    "alt": "Small violet figures carry blank slips, tiles and envelopes along curving paths into one neat glowing stack at the centre, while loose papers drift around them on a pale lavender ground.",
+    "use": "'Task management, flipped' (#flip) or the capture step: agents gather scattered work into one ledger",
+    "ground": "light",
+    "prompt": "Small abstract agent figures (rounded violet capsule-orbs) glide across a soft lavender landscape, gathering scattered drifting fragments - small floating blank paper slips, rounded tiles and envelope-like shapes with no markings - from many directions, and carrying them along gentle curving paths into one neat, orderly stack of softly glowing ledger tiles at the centre, which has a warm ember glow. Sense of scattered becoming orderly. Light airy ground: pale lavender and warm bone mist background so the image sits on a light page. Style: cohesive editorial illustration, like a single illustrator's series for a premium software company. Flat and softly modelled simple geometric shapes, smooth soft gradients, fine film grain texture, gentle atmospheric depth. Palette: dusk violets and deep indigos (#2a1f5c, #3b2a7a, #6a4fd0, #9a86e8), pale lavender and warm bone mist (#f3eef8, #efe6dc), and a single warm ember/amber accent (#f0a050, #e8783a) that glows softly. Calm, quiet, unhurried, spacious composition with generous negative space. The AI agents are small friendly abstract figures: smooth rounded capsule-and-orb shapes in violet and lavender with a tiny soft glow, no faces, no eyes, no limbs beyond simple rounded nubs, not robots. Absolutely no text, letters, numbers, words, logos, icons of real apps, UI screenshots, or watermarks. Not photorealistic, not 3D render plastic, not neon, no lens flare, no busy sci-fi circuitry.",
+    "model": "gpt-image-2.6-sunburst"
+  },
+  {
+    "id": "handoffs",
+    "files": [
+      {
+        "path": "/marketing/handoffs-800.avif",
+        "width": 800,
+        "height": 533,
+        "format": "avif"
+      },
+      {
+        "path": "/marketing/handoffs-800.webp",
+        "width": 800,
+        "height": 533,
+        "format": "webp"
+      },
+      {
+        "path": "/marketing/handoffs-1536.avif",
+        "width": 1536,
+        "height": 1024,
+        "format": "avif"
+      },
+      {
+        "path": "/marketing/handoffs-1536.webp",
+        "width": 1536,
+        "height": 1024,
+        "format": "webp"
+      }
+    ],
+    "alt": "On a violet hillside path, a rounded violet figure hands a small glowing ember orb to a tall pale figure, while another violet figure waits further up the path.",
+    "use": "Handoffs between agents and people (features or use cases)",
+    "ground": "light",
+    "prompt": "A gentle handover: on a soft violet hillside path, one small abstract agent figure (a rounded lavender capsule-orb) passes a small glowing ember orb to a simple stylised person figure (a tall soft bone-coloured rounded silhouette, no face), while a second agent figure waits a little further up the path, ready to receive the next one. The path continues uphill. Calm, cooperative, trusting. Light airy ground: pale lavender and warm bone mist background so the image sits on a light page. Style: cohesive editorial illustration, like a single illustrator's series for a premium software company. Flat and softly modelled simple geometric shapes, smooth soft gradients, fine film grain texture, gentle atmospheric depth. Palette: dusk violets and deep indigos (#2a1f5c, #3b2a7a, #6a4fd0, #9a86e8), pale lavender and warm bone mist (#f3eef8, #efe6dc), and a single warm ember/amber accent (#f0a050, #e8783a) that glows softly. Calm, quiet, unhurried, spacious composition with generous negative space. The AI agents are small friendly abstract figures: smooth rounded capsule-and-orb shapes in violet and lavender with a tiny soft glow, no faces, no eyes, no limbs beyond simple rounded nubs, not robots. Absolutely no text, letters, numbers, words, logos, icons of real apps, UI screenshots, or watermarks. Not photorealistic, not 3D render plastic, not neon, no lens flare, no busy sci-fi circuitry.",
+    "model": "gpt-image-2.6-sunburst"
+  },
+  {
+    "id": "memory",
+    "files": [
+      {
+        "path": "/marketing/memory-800.avif",
+        "width": 800,
+        "height": 533,
+        "format": "avif"
+      },
+      {
+        "path": "/marketing/memory-800.webp",
+        "width": 800,
+        "height": 533,
+        "format": "webp"
+      },
+      {
+        "path": "/marketing/memory-1536.avif",
+        "width": 1536,
+        "height": 1024,
+        "format": "avif"
+      },
+      {
+        "path": "/marketing/memory-1536.webp",
+        "width": 1536,
+        "height": 1024,
+        "format": "webp"
+      }
+    ],
+    "alt": "Rounded violet figures stack smooth stones into a tall cairn on a misty lavender hilltop, two of the stones glowing ember from within, with smaller glowing cairns on the distant hills.",
+    "use": "Memory feature (agents remember across sessions)",
+    "ground": "light",
+    "prompt": "Memory as a cairn: small abstract agent figures (rounded violet capsule-orbs) carefully place smooth rounded stones onto a tall, balanced, softly glowing cairn on a quiet violet hilltop; a few of the stones glow faintly ember-amber from within, like remembered things. Other small cairns dot the distant hills at dusk. Quiet, patient, accumulating. Light airy ground: pale lavender and warm bone mist background so the image sits on a light page. Style: cohesive editorial illustration, like a single illustrator's series for a premium software company. Flat and softly modelled simple geometric shapes, smooth soft gradients, fine film grain texture, gentle atmospheric depth. Palette: dusk violets and deep indigos (#2a1f5c, #3b2a7a, #6a4fd0, #9a86e8), pale lavender and warm bone mist (#f3eef8, #efe6dc), and a single warm ember/amber accent (#f0a050, #e8783a) that glows softly. Calm, quiet, unhurried, spacious composition with generous negative space. The AI agents are small friendly abstract figures: smooth rounded capsule-and-orb shapes in violet and lavender with a tiny soft glow, no faces, no eyes, no limbs beyond simple rounded nubs, not robots. Absolutely no text, letters, numbers, words, logos, icons of real apps, UI screenshots, or watermarks. Not photorealistic, not 3D render plastic, not neon, no lens flare, no busy sci-fi circuitry.",
+    "model": "gpt-image-2.6-sunburst"
+  },
+  {
+    "id": "hearback",
+    "files": [
+      {
+        "path": "/marketing/hearback-800.avif",
+        "width": 800,
+        "height": 533,
+        "format": "avif"
+      },
+      {
+        "path": "/marketing/hearback-800.webp",
+        "width": 800,
+        "height": 533,
+        "format": "webp"
+      },
+      {
+        "path": "/marketing/hearback-1536.avif",
+        "width": 1536,
+        "height": 1024,
+        "format": "avif"
+      },
+      {
+        "path": "/marketing/hearback-1536.webp",
+        "width": 1536,
+        "height": 1024,
+        "format": "webp"
+      }
+    ],
+    "alt": "A glowing ember orb beside a small figure on one hill sends rings of warm light and a long arc across a misty valley to a far hilltop, where another small figure lights up as it arrives.",
+    "use": "'Hear back': webhooks, realtime stream and routines that wake an agent when its answer arrives",
+    "ground": "any",
+    "prompt": "Hearing back: on one hilltop a small glowing ember lantern-orb sends out soft concentric ripples of warm light across a valley at dusk; on a far hill a small abstract agent figure (a rounded lavender capsule-orb) lifts and brightens as the ripple reaches it, turning toward the signal. A gentle arc of light connects the two hills. Wide, quiet, spacious. Mid-tone dusk sky from indigo above to pale peach at the horizon so it works on light or dark pages. Style: cohesive editorial illustration, like a single illustrator's series for a premium software company. Flat and softly modelled simple geometric shapes, smooth soft gradients, fine film grain texture, gentle atmospheric depth. Palette: dusk violets and deep indigos (#2a1f5c, #3b2a7a, #6a4fd0, #9a86e8), pale lavender and warm bone mist (#f3eef8, #efe6dc), and a single warm ember/amber accent (#f0a050, #e8783a) that glows softly. Calm, quiet, unhurried, spacious composition with generous negative space. The AI agents are small friendly abstract figures: smooth rounded capsule-and-orb shapes in violet and lavender with a tiny soft glow, no faces, no eyes, no limbs beyond simple rounded nubs, not robots. Absolutely no text, letters, numbers, words, logos, icons of real apps, UI screenshots, or watermarks. Not photorealistic, not 3D render plastic, not neon, no lens flare, no busy sci-fi circuitry.",
+    "model": "gpt-image-2.6-sunburst"
+  },
+  {
+    "id": "assistants",
+    "files": [
+      {
+        "path": "/marketing/assistants-800.avif",
+        "width": 800,
+        "height": 533,
+        "format": "avif"
+      },
+      {
+        "path": "/marketing/assistants-800.webp",
+        "width": 800,
+        "height": 533,
+        "format": "webp"
+      },
+      {
+        "path": "/marketing/assistants-1536.avif",
+        "width": 1536,
+        "height": 1024,
+        "format": "avif"
+      },
+      {
+        "path": "/marketing/assistants-1536.webp",
+        "width": 1536,
+        "height": 1024,
+        "format": "webp"
+      }
+    ],
+    "alt": "Small violet figures carrying a parcel, a card, a basket and a letter walk separate paths through rolling lavender hills that meet at a softly glowing stone in the distance.",
+    "use": "Assistants section (#assistants): 'Built for personal assistants'",
+    "ground": "light",
+    "prompt": "Personal assistants running errands: across a soft rolling violet landscape of small rounded hills, several small abstract agent figures (rounded lavender capsule-orbs) each carry a simple object - a small blank parcel box, a rounded blank card, a little basket, a blank folded letter - along separate gentle paths that all converge on one small softly glowing ember beacon-stone in the middle distance, where they report in. Friendly, light, orderly. Light airy ground: pale lavender and warm bone mist background so the image sits on a light page. Style: cohesive editorial illustration, like a single illustrator's series for a premium software company. Flat and softly modelled simple geometric shapes, smooth soft gradients, fine film grain texture, gentle atmospheric depth. Palette: dusk violets and deep indigos (#2a1f5c, #3b2a7a, #6a4fd0, #9a86e8), pale lavender and warm bone mist (#f3eef8, #efe6dc), and a single warm ember/amber accent (#f0a050, #e8783a) that glows softly. Calm, quiet, unhurried, spacious composition with generous negative space. The AI agents are small friendly abstract figures: smooth rounded capsule-and-orb shapes in violet and lavender with a tiny soft glow, no faces, no eyes, no limbs beyond simple rounded nubs, not robots. Absolutely no text, letters, numbers, words, logos, icons of real apps, UI screenshots, or watermarks. Not photorealistic, not 3D render plastic, not neon, no lens flare, no busy sci-fi circuitry.",
+    "model": "gpt-image-2.6-sunburst"
+  },
+  {
+    "id": "cta-band",
+    "files": [
+      {
+        "path": "/marketing/cta-band-1600.avif",
+        "width": 1600,
+        "height": 900,
+        "format": "avif"
+      },
+      {
+        "path": "/marketing/cta-band-1600.webp",
+        "width": 1600,
+        "height": 900,
+        "format": "webp"
+      },
+      {
+        "path": "/marketing/cta-band-2400.avif",
+        "width": 2400,
+        "height": 1350,
+        "format": "avif"
+      },
+      {
+        "path": "/marketing/cta-band-2400.webp",
+        "width": 2400,
+        "height": 1350,
+        "format": "webp"
+      }
+    ],
+    "alt": "",
+    "use": "Background behind the closing call-to-action band (#close) or any dusk band; light text sits on top",
+    "ground": "dark",
+    "prompt": "An abstract wide background texture for a call-to-action band. Absolutely no figures, characters, objects or creatures of any kind: only landscape and light. Deep indigo and dusk violet layered soft rolling hill silhouettes in horizontal bands, very low contrast, heavy fine film grain, smooth soft gradients, a soft warm ember-amber glow rising from behind the hills at the far right edge only, the rest calm, dark and even so light text can sit on top anywhere. Minimal, premium, quiet, editorial illustration. Palette: #1f1846, #2a1f5c, #3b2a7a, #6a4fd0, with ember #f0a050 and #e8783a only in the glow. No text, letters, logos, stars, lens flare or neon.",
+    "model": "gpt-image-2.6-sunburst"
+  },
+  {
+    "id": "spot-boulder",
+    "files": [
+      {
+        "path": "/marketing/spot-boulder-400.avif",
+        "width": 400,
+        "height": 252,
+        "format": "avif"
+      },
+      {
+        "path": "/marketing/spot-boulder-400.webp",
+        "width": 400,
+        "height": 252,
+        "format": "webp"
+      },
+      {
+        "path": "/marketing/spot-boulder-800.avif",
+        "width": 800,
+        "height": 504,
+        "format": "avif"
+      },
+      {
+        "path": "/marketing/spot-boulder-800.webp",
+        "width": 800,
+        "height": 504,
+        "format": "webp"
+      }
+    ],
+    "alt": "A small rounded violet figure leans into a large glowing ember boulder on a short curve of violet hill.",
+    "use": "Spot illustration with transparent background: empty states, step markers, footer, 404",
+    "ground": "any",
+    "prompt": "A single small spot illustration isolated on a fully transparent background: one small abstract agent figure (a rounded lavender-violet capsule-orb with a soft glow, no face) pushing a glowing ember-orange boulder up a short curved sliver of violet hill. Centered, compact, with clean soft edges and no background scenery, no ground shadow box. Style: cohesive editorial illustration, like a single illustrator's series for a premium software company. Flat and softly modelled simple geometric shapes, smooth soft gradients, fine film grain texture, gentle atmospheric depth. Palette: dusk violets and deep indigos (#2a1f5c, #3b2a7a, #6a4fd0, #9a86e8), pale lavender and warm bone mist (#f3eef8, #efe6dc), and a single warm ember/amber accent (#f0a050, #e8783a) that glows softly. Calm, quiet, unhurried, spacious composition with generous negative space. The AI agents are small friendly abstract figures: smooth rounded capsule-and-orb shapes in violet and lavender with a tiny soft glow, no faces, no eyes, no limbs beyond simple rounded nubs, not robots. Absolutely no text, letters, numbers, words, logos, icons of real apps, UI screenshots, or watermarks. Not photorealistic, not 3D render plastic, not neon, no lens flare, no busy sci-fi circuitry.",
+    "model": "gpt-image-2.6-sunburst"
+  },
+  {
+    "id": "spot-signal",
+    "files": [
+      {
+        "path": "/marketing/spot-signal-400.avif",
+        "width": 400,
+        "height": 514,
+        "format": "avif"
+      },
+      {
+        "path": "/marketing/spot-signal-400.webp",
+        "width": 400,
+        "height": 514,
+        "format": "webp"
+      },
+      {
+        "path": "/marketing/spot-signal-554.avif",
+        "width": 554,
+        "height": 712,
+        "format": "avif"
+      },
+      {
+        "path": "/marketing/spot-signal-554.webp",
+        "width": 554,
+        "height": 712,
+        "format": "webp"
+      }
+    ],
+    "alt": "A small rounded violet figure holds up a glowing ember orb that sends out two soft arcs of light, like a signal.",
+    "use": "Spot illustration with transparent background: notifications, webhooks, 'hear back' callouts",
+    "ground": "any",
+    "prompt": "A single small spot illustration isolated on a fully transparent background: a small abstract agent figure (a rounded lavender-violet capsule-orb with a soft glow, no face) holding up a small glowing ember orb, with two soft concentric arcs of warm light radiating from the orb like a signal. Centered, compact, clean soft edges, no background scenery. Style: cohesive editorial illustration, like a single illustrator's series for a premium software company. Flat and softly modelled simple geometric shapes, smooth soft gradients, fine film grain texture, gentle atmospheric depth. Palette: dusk violets and deep indigos (#2a1f5c, #3b2a7a, #6a4fd0, #9a86e8), pale lavender and warm bone mist (#f3eef8, #efe6dc), and a single warm ember/amber accent (#f0a050, #e8783a) that glows softly. Calm, quiet, unhurried, spacious composition with generous negative space. The AI agents are small friendly abstract figures: smooth rounded capsule-and-orb shapes in violet and lavender with a tiny soft glow, no faces, no eyes, no limbs beyond simple rounded nubs, not robots. Absolutely no text, letters, numbers, words, logos, icons of real apps, UI screenshots, or watermarks. Not photorealistic, not 3D render plastic, not neon, no lens flare, no busy sci-fi circuitry.",
+    "model": "gpt-image-2.6-sunburst"
+  },
+  {
+    "id": "og-card",
+    "files": [
+      {
+        "path": "/marketing/og-card-1200x630.jpg",
+        "width": 1200,
+        "height": 630,
+        "format": "jpeg"
+      },
+      {
+        "path": "/marketing/og-card-1200x630.webp",
+        "width": 1200,
+        "height": 630,
+        "format": "webp"
+      }
+    ],
+    "alt": "Three tiny lavender figures roll a glowing ember boulder up a violet hill near its crest at the right, under a deep violet sky fading to amber at the horizon.",
+    "use": "Open Graph / social card background (1200x630); title text goes on the empty left two thirds",
+    "ground": "dark",
+    "prompt": "A wide social card background, no text: a deep dusk violet sky fading to warm amber at the horizon, a long gentle violet hill rising from left to right, with three tiny abstract agent figures (rounded lavender capsule-orbs) rolling a small glowing ember boulder near the crest at the far right. The left two thirds is calm, even, darkish sky with room for a title. Simple, bold, readable at small size. Style: cohesive editorial illustration, like a single illustrator's series for a premium software company. Flat and softly modelled simple geometric shapes, smooth soft gradients, fine film grain texture, gentle atmospheric depth. Palette: dusk violets and deep indigos (#2a1f5c, #3b2a7a, #6a4fd0, #9a86e8), pale lavender and warm bone mist (#f3eef8, #efe6dc), and a single warm ember/amber accent (#f0a050, #e8783a) that glows softly. Calm, quiet, unhurried, spacious composition with generous negative space. The AI agents are small friendly abstract figures: smooth rounded capsule-and-orb shapes in violet and lavender with a tiny soft glow, no faces, no eyes, no limbs beyond simple rounded nubs, not robots. Absolutely no text, letters, numbers, words, logos, icons of real apps, UI screenshots, or watermarks. Not photorealistic, not 3D render plastic, not neon, no lens flare, no busy sci-fi circuitry.",
+    "model": "gpt-image-2.6-sunburst"
+  }
+]

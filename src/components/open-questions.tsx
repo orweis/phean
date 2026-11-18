@@ -159,7 +159,7 @@ export function OpenQuestions({
               "relative -mx-3 scroll-mt-32 rounded-md border-b border-rule px-3 py-3.5 outline-none last:border-b-0 motion-safe:transition-colors motion-safe:duration-(--dur-micro)",
               // Selected (it holds focus, or J and K moved to it): an accent bar, a tint and a ring, never a hue alone.
               "before:absolute before:inset-y-2 before:left-0 before:w-1 before:rounded-full before:bg-transparent",
-              "data-selected:bg-accent-tint/45 data-selected:before:bg-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus",
+              "data-selected:bg-accent-tint/35 data-selected:before:bg-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus",
               // The one a link pointed at keeps the same accent bar, so it reads as where the link landed.
               "data-focused:before:bg-accent",
             )}

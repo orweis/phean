@@ -38,8 +38,10 @@ const SIZES: Record<ButtonSize, string> = {
 
 export function buttonClasses(variant: ButtonVariant = "secondary", size: ButtonSize = "md", className?: string) {
   return cx(
-    "inline-flex shrink-0 items-center font-semibold transition-colors duration-(--dur-micro)",
+    "inline-flex shrink-0 items-center font-semibold transition-[color,background-color,box-shadow,scale] duration-(--dur-micro) ease-out",
     size !== "choice" && "whitespace-nowrap",
+    // Pressed: a capsule gives a little under the finger. Menu rows and agents' long answers stay still.
+    size !== "menu" && size !== "choice" && "motion-safe:active:not-disabled:not-aria-disabled:scale-[0.97]",
     "disabled:cursor-not-allowed disabled:opacity-55 aria-disabled:cursor-not-allowed aria-disabled:opacity-55",
     VARIANTS[variant],
     SIZES[size],

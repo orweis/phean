@@ -4,6 +4,8 @@ import type { ReactNode } from "react";
 import type { Tone } from "@/lib/domain";
 import { cx } from "@/lib/cx";
 
+import { Art, type ArtId } from "../marketing/art";
+
 const VALUE_TONES: Partial<Record<Tone, string>> = {
   danger: "text-late-ink",
   warning: "text-wait-ink",
@@ -61,10 +63,25 @@ export function ProgressBar({ value, className, label }: { value: number; classN
   );
 }
 
-export function EmptyState({ icon, title, children }: { icon?: ReactNode; title: string; children?: ReactNode }) {
+interface EmptyStateProps {
+  icon?: ReactNode;
+  /**
+   * A small spot illustration in place of the icon, for the few empty states that are a moment rather
+   * than a gap (nothing waits on you; no agent yet). Never on a working surface or in a list's gap.
+   */
+  art?: Extract<ArtId, "spot-boulder" | "spot-signal">;
+  title: string;
+  children?: ReactNode;
+}
+
+export function EmptyState({ icon, art, title, children }: EmptyStateProps) {
   return (
-    <div className="flex flex-col items-center px-6 py-8 text-center">
-      {icon && <div className="mb-2 text-faint [&_svg]:size-6">{icon}</div>}
+    <div className={cx("flex flex-col items-center px-6 text-center", art ? "pt-4 pb-8" : "py-8")}>
+      {art ? (
+        <Art id={art} sizes="7rem" decorative className="mb-3 h-auto w-28" />
+      ) : (
+        icon && <div className="mb-2.5 flex size-10 items-center justify-center rounded-full bg-fill text-muted [&_svg]:size-5">{icon}</div>
+      )}
       <p className="text-sm font-semibold text-ink">{title}</p>
       {children && <div className="mt-1 max-w-sm text-xs text-muted">{children}</div>}
     </div>

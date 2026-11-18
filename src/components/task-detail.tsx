@@ -114,7 +114,7 @@ export async function TaskDetail({ slug, taskId, headingLevel = 1 }: { slug: str
       </header>
 
       {task.inputRequest && (
-        <section aria-label="Waiting on you" className="rounded-lg border border-wait/70 bg-wait-tint/40 px-4">
+        <section aria-label="Waiting on you" className="rounded-lg border border-wait/45 bg-wait-tint/30 px-4 shadow-[inset_0_2px_0_var(--color-wait)]">
           <OpenQuestions tasks={[task]} slug={slug} canAnswer={canWrite} />
         </section>
       )}

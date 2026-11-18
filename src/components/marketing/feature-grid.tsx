@@ -6,12 +6,16 @@ import { Badge } from "@/components/ui/badge";
 import { segment, SEGMENTED } from "@/components/ui/segmented";
 import { cx } from "@/lib/cx";
 
+import { Art, type ArtId } from "./art";
+
 interface Feature {
   title: string;
   body: string;
   visual: ReactNode;
   /** Wide tiles take two columns on large screens. */
   wide?: boolean;
+  /** An illustration across the tile's top, for the ideas a picture of a screen cannot show. */
+  art?: ArtId;
 }
 
 const VIEW_ICONS = [
@@ -86,6 +90,7 @@ const FEATURES: Feature[] = [
   {
     title: "Memory every agent shares",
     wide: true,
+    art: "memory",
     body: "Facts, preferences, choices and drafted documents one agent saves are there for the next, and searchable beside every task.",
     visual: (
       <div aria-hidden className="flex flex-wrap gap-1.5">
@@ -99,6 +104,7 @@ const FEATURES: Feature[] = [
   },
   {
     title: "Agents hear answers in seconds",
+    art: "hearback",
     body: "Signed webhooks and a WebSocket stream tell a bot the moment a person answers it or something it follows changes; it then collects the answer.",
     visual: (
       <pre aria-hidden className="overflow-hidden rounded-md bg-dusk p-3 font-mono text-2xs leading-relaxed text-dusk-ink">
@@ -112,9 +118,14 @@ const FEATURES: Feature[] = [
 export function FeatureGrid() {
   return (
     <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      {FEATURES.map(({ title, body, visual, wide }) => (
-        <li key={title} data-rise className={cx("flex flex-col justify-between gap-6 rounded-lg border border-rule bg-panel p-6", wide && "lg:col-span-2")}>
+      {FEATURES.map(({ title, body, visual, wide, art }) => (
+        <li key={title} data-rise className={cx("flex flex-col justify-between gap-6 overflow-hidden rounded-lg border border-rule bg-panel p-6", wide && "lg:col-span-2")}>
           <div>
+            {art && (
+              <div className="relative -mx-6 -mt-6 mb-6 h-44 border-b border-rule bg-fill">
+                <Art id={art} sizes={wide ? "(min-width: 1024px) 52rem, 100vw" : "(min-width: 1024px) 26rem, 100vw"} className="absolute inset-0 size-full object-cover" />
+              </div>
+            )}
             <h3 className="font-display text-lg font-bold tracking-title text-ink">{title}</h3>
             <p className="mt-2 text-sm text-ink-2">{body}</p>
           </div>

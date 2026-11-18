@@ -18,5 +18,8 @@ export const entryKind = (entry: Locator, kind: "Task" | "Goal") => entry.getByR
 export const appearanceOption = (scope: Locator, option: "Light" | "Dark" | "System") =>
   scope.getByRole("group", { name: "Appearance" }).getByText(option, { exact: true });
 
+/** An option of a theme picker (Dusk, Ledger, Ink, Console), the label a person clicks. */
+export const themeOption = (scope: Locator, option: string) => scope.getByRole("group", { name: "Theme" }).locator("label").filter({ hasText: option });
+
 /** A board lane by task status. */
 export const lane = (page: Page, stage: "inbox" | "backlog" | "todo" | "in_progress" | "done" | (string & {})) => page.locator(`section[aria-labelledby="lane-${stage}"]`);

@@ -351,9 +351,9 @@ export function TaskCard({ task, slug, canWrite, showGoal = true, goals = [] }: 
     <article
       data-task={task.id}
       className={cx(
-        "@container rounded-md border bg-panel p-3 has-[a[data-task-link]:focus-visible]:outline-2 has-[a[data-task-link]:focus-visible]:outline-offset-2 has-[a[data-task-link]:focus-visible]:outline-focus",
+        "@container surface rounded-md border p-3 has-[a[data-task-link]:focus-visible]:outline-2 has-[a[data-task-link]:focus-visible]:outline-offset-2 has-[a[data-task-link]:focus-visible]:outline-focus",
         // Late work stays loud; a task on its way to another operator gets a dashed edge, in transit.
-        isLate(task) ? "border-late/45" : task.delegation === "handing_off" ? "border-dashed border-line-inbox" : "border-rule",
+        isLate(task) ? "border-late/45" : task.delegation === "handing_off" ? "border-dashed border-line-inbox" : "border-rule hover:border-edge/60",
         LEAVING,
       )}
     >

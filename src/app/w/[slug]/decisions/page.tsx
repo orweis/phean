@@ -1,4 +1,3 @@
-import { CheckCheck } from "lucide-react";
 import type { Metadata } from "next";
 
 import { AnsweredDecisions } from "@/components/answered-decisions";
@@ -52,7 +51,7 @@ export default async function DecisionsPage({ params, searchParams }: PageProps<
       <FocusOnLoad id={focus} />
       <div className="space-y-6">
         {focus && !linked && (
-          <p role="status" className="rounded-lg border border-rule bg-panel px-4 py-3 text-sm text-ink-2">
+          <p role="status" className="surface rounded-lg border border-rule px-4 py-3 text-sm text-ink-2">
             That question or decision is not in this workspace. It may have been in a task that was deleted, or the link is mistyped.
           </p>
         )}
@@ -82,7 +81,7 @@ export default async function DecisionsPage({ params, searchParams }: PageProps<
               </CardBody>
             ) : (
               <CardBody className="pt-0">
-                <EmptyState icon={<CheckCheck />} title="All clear">
+                <EmptyState art="spot-boulder" title="All clear">
                   When an agent needs your call, it shows up here with its context and links.{" "}
                   {closed.length > 0 && (
                     <a href="#answered" className="font-semibold text-ink-2 link">

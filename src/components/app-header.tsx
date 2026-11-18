@@ -4,7 +4,7 @@ import { Suspense, type ReactNode } from "react";
 
 import { routes } from "@/lib/routes";
 import type { Tenant } from "@/server/domain/context";
-import { getAppearance } from "@/server/web";
+import { getAppearance, getTheme } from "@/server/web";
 
 import { AppearancePicker } from "./appearance-picker";
 import { CloseMenusOnNavigate } from "./close-menus-on-navigate";
@@ -12,6 +12,7 @@ import { KeyboardShortcuts, ShortcutsButton } from "./keyboard-shortcuts";
 import { Logo } from "./logo";
 import { HeaderSearch } from "./search-form";
 import { SignOutButton } from "./sign-out-button";
+import { ThemePicker } from "./theme-picker";
 import { Avatar } from "./ui/avatar";
 import { buttonClasses } from "./ui/button";
 import { Popover } from "./ui/popover";
@@ -58,7 +59,7 @@ interface Viewer {
 
 /** Who is signed in, how the app looks for them, and the way out. On phones the trigger is the avatar alone. */
 async function AccountMenu({ user }: { user: Viewer }) {
-  const appearance = await getAppearance();
+  const [appearance, theme] = await Promise.all([getAppearance(), getTheme()]);
   return (
     <Popover
       variant="ghost"
@@ -78,6 +79,7 @@ async function AccountMenu({ user }: { user: Viewer }) {
           <p className="truncate text-xs text-ink-2">{user.email}</p>
         </div>
       </div>
+      <ThemePicker initial={theme} className="mt-4" />
       <AppearancePicker initial={appearance} className="mt-4" />
       <div className="mt-4 space-y-1 border-t border-rule pt-3">
         <Link href={routes.account()} className={buttonClasses("ghost", "menu")}>

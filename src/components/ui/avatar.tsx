@@ -7,7 +7,7 @@ const SIZES = { sm: "size-6 text-2xs", md: "size-8 text-sm" } as const;
 /** A person's initial on a violet disc. Decorative: their name is always written beside it. */
 export function Avatar({ name, size = "md" }: { name: string; size?: keyof typeof SIZES }) {
   return (
-    <span aria-hidden className={cx("flex shrink-0 items-center justify-center rounded-full bg-accent-tint font-bold text-accent-ink", SIZES[size])}>
+    <span aria-hidden className={cx("flex shrink-0 items-center justify-center rounded-full bg-accent-tint font-bold text-accent-ink ring-1 ring-accent/15 ring-inset", SIZES[size])}>
       {name.slice(0, 1).toUpperCase()}
     </span>
   );
@@ -24,7 +24,7 @@ export function ActorAvatar({ type, className }: { type: string; className?: str
     <span
       role="img"
       aria-label={agent ? "Agent" : "Person"}
-      className={cx("mt-0.5 flex size-6 shrink-0 items-center justify-center bg-fill text-ink-2", agent ? "rounded-xs" : "rounded-full", className)}
+      className={cx("mt-0.5 flex size-6 shrink-0 items-center justify-center bg-fill text-ink-2 ring-1 ring-rule ring-inset", agent ? "rounded-xs" : "rounded-full", className)}
     >
       <Icon className="size-3.5" aria-hidden />
     </span>

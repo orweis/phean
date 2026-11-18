@@ -5,7 +5,7 @@ const BAR = "rounded-sm bg-fill motion-safe:animate-pulse";
 /** A panel whose rows are a label and an empty dashed track, like a timetable before it fills. */
 function PanelPlaceholder({ rows }: { rows: number }) {
   return (
-    <div className="rounded-lg border border-rule bg-panel">
+    <div className="surface rounded-lg border border-rule">
       <div className="border-b border-rule px-5 py-4">
         <div className={cx(BAR, "h-4 w-36")} />
       </div>
@@ -29,7 +29,7 @@ export default function WorkspaceLoading() {
       <div aria-hidden>
         <div className={cx(BAR, "h-8 w-52")} />
         <div className={cx(BAR, "mt-2 h-4 w-full max-w-md")} />
-        <div className="mt-6 h-20 rounded-lg border border-rule bg-panel" />
+        <div className="mt-6 h-20 surface rounded-lg border border-rule" />
         <div className="mt-6 grid gap-6 lg:grid-cols-3">
           <div className="space-y-6 lg:col-span-2">
             <PanelPlaceholder rows={5} />

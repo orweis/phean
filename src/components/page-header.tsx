@@ -18,11 +18,11 @@ export function PageHeader({ title, description, actions, inlineActions = false 
       <div className="min-w-0 flex-1 basis-80">
         {/* The description folds behind a (?) beside the title, so the page starts higher. */}
         <div className="flex items-center gap-1.5">
-          <h1 className="text-2xl font-bold text-ink">{title}</h1>
+          <h1 className="text-2xl font-bold tracking-display text-ink">{title}</h1>
           {description && <InfoTip about={typeof title === "string" ? title : "this page"}>{description}</InfoTip>}
         </div>
       </div>
-      {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
+      {actions && <div className={cx("flex flex-wrap items-center gap-2", inlineActions && "max-sm:flex-nowrap")}>{actions}</div>}
     </div>
   );
 }

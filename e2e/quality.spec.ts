@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 
+import { DEFAULT_THEME, THEME_COOKIE, THEMES } from "../src/lib/themes";
 import { expectAccessible, expectNothingCutOff, expectNowClearOfDates } from "./support/checks";
 import { BASE_URL, DEMO_SESSION } from "./support/env";
 import { card, entryKind, popover } from "./support/locators";
@@ -393,6 +394,12 @@ test.describe("in the dark appearance", () => {
     });
   }
 
+  test("the landing page's hero shows the night hill, and only it", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.locator('img[data-art="hero-dark"]')).toBeVisible();
+    await expect(page.locator('img[data-art="hero-light"]')).toBeHidden();
+  });
+
   test.describe("signed in", () => {
     test.use({ storageState: DEMO_SESSION });
 
@@ -416,6 +423,32 @@ test.describe("in the dark appearance", () => {
     }
   });
 });
+
+/**
+ * The scans above run in the default theme, in light and dark. Every other theme gets a smoke scan
+ * of the pages that carry most of the palette, in both appearances.
+ */
+const THEME_SMOKE_PAGES = ["/", "/w/globex", "/w/globex/decisions", "/w/globex/board", "/account"];
+
+for (const theme of THEMES.filter((theme) => theme !== DEFAULT_THEME)) {
+  for (const colorScheme of ["light", "dark"] as const) {
+    test.describe(`in the ${theme} theme, ${colorScheme}`, () => {
+      test.use({ storageState: DEMO_SESSION, colorScheme });
+
+      test.beforeEach(async ({ context }) => {
+        await context.addCookies([{ name: THEME_COOKIE, value: theme, url: BASE_URL }]);
+      });
+
+      for (const path of THEME_SMOKE_PAGES) {
+        test(`${path} has no detectable accessibility violations`, async ({ page }) => {
+          await page.goto(path);
+          await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+          await expectAccessible(page);
+        });
+      }
+    });
+  }
+}
 
 test.describe("signed out, on a 375px phone", () => {
   test.use({ viewport: { width: 375, height: 812 } });

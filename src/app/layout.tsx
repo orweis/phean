@@ -1,8 +1,9 @@
 import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 
-import { COLOR_SCHEMES, colorSchemeFor, themeColorFor } from "@/lib/appearance";
-import { getAppearance } from "@/server/web";
+import { COLOR_SCHEMES, colorSchemeFor } from "@/lib/appearance";
+import { themeColorFor } from "@/lib/themes";
+import { getAppearance, getTheme } from "@/server/web";
 
 import "./globals.css";
 
@@ -23,18 +24,19 @@ export const metadata: Metadata = {
   description: "Agents do the tasks. You make the calls. Phean is the decision center for a fleet of AI agents.",
 };
 
-/** One theme-color per device scheme, so the browser chrome still follows the device under System. */
+/** One theme-color per device scheme, in the theme's paper, so the browser chrome still follows the device under System. */
 export async function generateViewport(): Promise<Viewport> {
-  const appearance = await getAppearance();
+  const [appearance, theme] = await Promise.all([getAppearance(), getTheme()]);
   return {
     colorScheme: colorSchemeFor(appearance),
-    themeColor: COLOR_SCHEMES.map((scheme) => ({ media: `(prefers-color-scheme: ${scheme})`, color: themeColorFor(appearance, scheme) })),
+    themeColor: COLOR_SCHEMES.map((scheme) => ({ media: `(prefers-color-scheme: ${scheme})`, color: themeColorFor(theme, appearance, scheme) })),
   };
 }
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
+  const [appearance, theme] = await Promise.all([getAppearance(), getTheme()]);
   return (
-    <html lang="en" data-appearance={await getAppearance()} className={display.variable}>
+    <html lang="en" data-appearance={appearance} data-theme={theme} className={display.variable}>
       <body className="min-h-dvh">{children}</body>
     </html>
   );
