@@ -39,11 +39,11 @@ function OfferedOptions({ request, chosen }: { request: InputAnswer; chosen: rea
           <li
             key={option}
             className={cx(
-              "inline-flex h-6 items-center gap-1 rounded-full border px-2.5 text-xs",
+              "inline-flex min-h-6 max-w-full items-center gap-1 rounded-xl border px-2.5 py-0.5 text-xs wrap-anywhere",
               picked ? "border-edge font-semibold text-ink" : "border-rule text-muted",
             )}
           >
-            {picked && <Check className="size-3" aria-hidden />}
+            {picked && <Check className="size-3 shrink-0" aria-hidden />}
             {option}
             {picked && <span className="sr-only"> (chosen)</span>}
           </li>

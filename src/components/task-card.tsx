@@ -270,7 +270,12 @@ export function DelegationBadge({ task }: { task: Pick<TaskView, "delegation" | 
   return (
     <Badge tone={tone}>
       <Handshake aria-hidden />
-      {task.delegation === "handing_off" ? `${label} to ${task.delegateToName ?? "anyone"}` : label}
+      {/* An agent's name can be long; the badge ends in an ellipsis inside its row, and the name stays in the title. */}
+      {task.delegation === "handing_off" ? (
+        <span className="min-w-0 truncate" title={task.delegateToName ?? undefined}>{`${label} to ${task.delegateToName ?? "anyone"}`}</span>
+      ) : (
+        label
+      )}
     </Badge>
   );
 }

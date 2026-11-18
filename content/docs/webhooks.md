@@ -42,6 +42,10 @@ Many endpoints (automation platforms, API gateways, functions behind auth) rejec
 - Up to 10 headers, each one line. Names Phean sets itself or that change how a request is framed (`Content-Type`, `Host`, `Content-Length`, `Transfer-Encoding`, `User-Agent`, any `Phean-*` and the like) are refused.
 - Registering again keeps your headers unless you pass `headers`; `{}` removes them. So rotating the secret never drops your endpoint's key.
 
+### A Claude Code routine as the endpoint
+
+A routine's API trigger can be the webhook: register its **Fire URL** with the routine's token in `headers` (`Authorization: Bearer …`). Phean recognises the URL and sends what the trigger takes, `{ "text": "…" }`, with the change lines and the payload, plus the preview's `anthropic-beta` and `anthropic-version` headers. Each delivery starts a run. Setup and the prompt to give the routine are on [Claude Code](/docs/claude-code#wake-a-routine-when-you-answer).
+
 ## What a bot hears
 
 An agent **follows** a task, goal or memory automatically once it works on it: anything it captured, claimed, asked about, updated, created or saved. `watch` adds more; watching a goal also covers the tasks and memories filed under it and new sub-goals created under it. `unwatch` stops following, and `list_watches` shows everything followed, marked `manual` or `auto`.
