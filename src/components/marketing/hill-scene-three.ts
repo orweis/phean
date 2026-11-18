@@ -2,12 +2,12 @@ import {
   AdditiveBlending,
   CanvasTexture,
   CapsuleGeometry,
-  CatmullRomCurve3,
   Color,
   DirectionalLight,
   Fog,
   Group,
   HemisphereLight,
+  LatheGeometry,
   Mesh,
   MeshStandardMaterial,
   PCFShadowMap,
@@ -23,7 +23,7 @@ import {
   Sprite,
   SpriteMaterial,
   SRGBColorSpace,
-  TubeGeometry,
+  Vector2,
   Vector3,
   WebGLRenderer,
   type Material,
@@ -78,10 +78,9 @@ function hillSlope(x: number): number {
   return (hillY(x + h) - hillY(x - h)) / (2 * h);
 }
 
-/** The near hill's surface: the profile, rounding off towards the camera and away from it. */
+/** The near hill's surface: the profile, rolling gently down towards the camera and faster away from it. */
 function hillSurface(x: number, z: number): number {
-  const across = Math.exp(-((z / 5.5) ** 2));
-  return hillY(x) * across + (1 - across) * (hillY(x) - 1.4) - 0.02 * z * z;
+  return hillY(x) - (z > 0 ? 0.011 : 0.03) * z * z;
 }
 
 /* ---------------------------------------------------------------------------------------------- */
@@ -91,7 +90,7 @@ const BOULDER_R = 0.62;
 const START_X = FOOT + 0.4;
 const TOP_X = CREST - 0.35;
 /** How far behind the boulder each agent pushes, along x. */
-const CREW_OFFSETS = [0.98, 1.66, 2.34];
+const CREW_OFFSETS = [1.0, 1.72, 2.42];
 
 function smooth(t: number): number {
   const c = Math.min(1, Math.max(0, t));
@@ -164,35 +163,47 @@ interface Agent {
   material: MeshStandardMaterial;
 }
 
+/** The illustrations' agent: a soft pear of a body, a round head resting on it, stubby arms, little feet. */
+const BODY_PROFILE = [
+  [0, 0],
+  [0.24, 0.02],
+  [0.36, 0.12],
+  [0.4, 0.28],
+  [0.37, 0.46],
+  [0.29, 0.66],
+  [0.17, 0.82],
+  [0.06, 0.9],
+  [0, 0.92],
+].map(([radius, height]) => new Vector2(radius!, height!));
+
 function makeAgent(material: MeshStandardMaterial, scale: number): Agent {
   const root = new Group();
   const body = new Group();
   root.add(body);
-  const torso = new Mesh(new CapsuleGeometry(0.3, 0.32, 8, 20), material);
-  torso.position.y = 0.62;
-  torso.scale.set(1, 1, 0.92);
-  const head = new Mesh(new SphereGeometry(0.25, 28, 20), material);
-  head.position.set(0.06, 1.2, 0);
-  const armGeometry = new CapsuleGeometry(0.075, 0.34, 6, 12);
+  const torso = new Mesh(new LatheGeometry(BODY_PROFILE, 40), material);
+  torso.position.y = 0.06;
+  torso.scale.set(1, 1, 0.9);
+  const head = new Mesh(new SphereGeometry(0.25, 32, 24), material);
+  head.position.set(0.05, 1.08, 0);
+  const armGeometry = new CapsuleGeometry(0.085, 0.22, 6, 12);
   const armNear = new Mesh(armGeometry, material);
-  armNear.position.set(0.36, 0.78, 0.18);
-  armNear.rotation.z = -1.25;
+  armNear.position.set(0.38, 0.6, 0.2);
+  armNear.rotation.z = -1.35;
   const armFar = armNear.clone();
-  armFar.position.z = -0.18;
-  armFar.position.y = 0.82;
-  const legGeometry = new CapsuleGeometry(0.1, 0.18, 6, 12);
-  legGeometry.translate(0, -0.14, 0);
-  const legNear = new Mesh(legGeometry, material);
-  legNear.position.set(0, 0.3, 0.13);
-  const legFar = new Mesh(legGeometry, material);
-  legFar.position.set(0, 0.3, -0.13);
-  for (const mesh of [torso, head, armNear, armFar, legNear, legFar]) {
+  armFar.position.set(0.38, 0.66, -0.2);
+  const footGeometry = new SphereGeometry(0.1, 16, 12);
+  footGeometry.scale(1.4, 0.6, 1);
+  const footNear = new Mesh(footGeometry, material);
+  footNear.position.set(0.06, 0.05, 0.16);
+  const footFar = new Mesh(footGeometry, material);
+  footFar.position.set(0.06, 0.05, -0.16);
+  for (const mesh of [torso, head, armNear, armFar, footNear, footFar]) {
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     body.add(mesh);
   }
   root.scale.setScalar(scale);
-  return { root, body, legs: [legNear, legFar], material };
+  return { root, body, legs: [footNear, footFar], material };
 }
 
 /* ---------------------------------------------------------------------------------------------- */
@@ -209,7 +220,7 @@ export function createHillScene(canvas: HTMLCanvasElement, palette: HillPalette)
   scene.fog = new Fog(0x000000, 14, 34);
 
   const camera = new PerspectiveCamera(26, 15 / 8, 0.1, 80);
-  const lookAt = new Vector3(0.4, 0.15, 0);
+  const lookAt = new Vector3(0.4, 1.75, 0);
 
   const probeCanvas = document.createElement("canvas");
   probeCanvas.width = probeCanvas.height = 1;
@@ -245,7 +256,7 @@ export function createHillScene(canvas: HTMLCanvasElement, palette: HillPalette)
   scene.add(ember);
 
   /* The near hill. */
-  const hillGeometry = keep(new PlaneGeometry(40, 16, 160, 40));
+  const hillGeometry = keep(new PlaneGeometry(44, 30, 176, 60));
   hillGeometry.rotateX(-Math.PI / 2);
   const hillPositions = hillGeometry.getAttribute("position");
   for (let i = 0; i < hillPositions.count; i += 1) {
@@ -254,24 +265,11 @@ export function createHillScene(canvas: HTMLCanvasElement, palette: HillPalette)
     hillPositions.setY(i, hillSurface(x, z));
   }
   hillGeometry.computeVertexNormals();
-  const hillMaterial = keep(new MeshStandardMaterial({ roughness: 0.95, metalness: 0 }));
+  hillGeometry.setAttribute("color", new Float32BufferAttribute(new Float32Array(hillPositions.count * 3), 3));
+  const hillMaterial = keep(new MeshStandardMaterial({ roughness: 0.95, metalness: 0, vertexColors: true }));
   const hill = new Mesh(hillGeometry, hillMaterial);
   hill.receiveShadow = true;
   scene.add(hill);
-
-  /* The path up it, a pale winding line as in the illustrations. */
-  const pathPoints: Vector3[] = [];
-  for (let i = 0; i <= 48; i += 1) {
-    const t = i / 48;
-    const x = FOOT - 7 + t * (CREST - FOOT + 6.6);
-    // It winds up from the front of the hill and straightens as it nears the top, behind the crew.
-    const z = 3.2 * (1 - t) ** 1.6 * Math.cos(t * 7.5) + 0.75 * (1 - t) + 0.5;
-    pathPoints.push(new Vector3(x, hillSurface(x, z) + 0.012, z));
-  }
-  const pathGeometry = keep(new TubeGeometry(new CatmullRomCurve3(pathPoints), 240, 0.05, 6, false));
-  pathGeometry.scale(1, 0.25, 1);
-  const pathMaterial = keep(new MeshStandardMaterial({ roughness: 1, transparent: true, opacity: 0.35, emissiveIntensity: 0.25 }));
-  scene.add(new Mesh(pathGeometry, pathMaterial));
 
   /* Far hills, lower and lighter in the haze. */
   const farMaterials: MeshStandardMaterial[] = [];
@@ -317,7 +315,7 @@ export function createHillScene(canvas: HTMLCanvasElement, palette: HillPalette)
 
   /* The crew. */
   const agentMaterials = [0, 1, 2].map(() => keep(new MeshStandardMaterial({ roughness: 0.78, metalness: 0, transparent: true })));
-  const crew = agentMaterials.map((material, index) => makeAgent(material, 0.78 - index * 0.04));
+  const crew = agentMaterials.map((material, index) => makeAgent(material, 0.92 - index * 0.05));
   for (const agent of crew) scene.add(agent.root);
 
   /* You, at the top, with the phone where the call is made. */
@@ -336,9 +334,9 @@ export function createHillScene(canvas: HTMLCanvasElement, palette: HillPalette)
     mesh.receiveShadow = true;
   }
   person.add(personBody, personHead, phone);
-  const personX = CREST + 1.25;
+  const personX = CREST + 1.05;
   person.position.set(personX, hillSurface(personX, -0.5), -0.5);
-  person.scale.setScalar(0.92);
+  person.scale.setScalar(0.8);
   scene.add(person);
   const phoneGlowMaterial = keep(new SpriteMaterial({ map: glow, blending: AdditiveBlending, depthWrite: false, transparent: true, fog: false }));
   const phoneGlow = new Sprite(phoneGlowMaterial);
@@ -380,9 +378,23 @@ export function createHillScene(canvas: HTMLCanvasElement, palette: HillPalette)
     rim.color.copy(signal).lerp(ink, 0.2);
     ember.color.copy(signal);
 
-    hillMaterial.color.copy(hillColor).lerp(dusk, 0.18);
-    pathMaterial.color.copy(ink).lerp(signal, 0.35);
-    pathMaterial.emissive.copy(signal);
+    // The hill darkens down its face and warms towards the crest, as the illustrations light it.
+    const low = hillColor.clone().lerp(dusk, 0.55);
+    const high = hillColor.clone().lerp(ink, 0.12);
+    const warm = high.clone().lerp(signal, 0.22);
+    const colors = hillGeometry.getAttribute("color");
+    const vertex = new Color();
+    for (let i = 0; i < colors.count; i += 1) {
+      const x = hillPositions.getX(i);
+      const y = hillPositions.getY(i);
+      const z = hillPositions.getZ(i);
+      const height = smooth((y + 2.2) / 4.2);
+      vertex.copy(low).lerp(high, height);
+      const nearCrest = Math.exp(-(((x - CREST) / 3.2) ** 2)) * Math.exp(-((z / 4) ** 2));
+      vertex.lerp(warm, 0.6 * nearCrest);
+      colors.setXYZ(i, vertex.r, vertex.g, vertex.b);
+    }
+    colors.needsUpdate = true;
     farMaterials.forEach((material, index) => material.color.copy(hillColor).lerp(dusk2, 0.45 + index * 0.12));
     horizonMaterial.color.copy(signal).lerp(accent, 0.35);
 
@@ -392,8 +404,10 @@ export function createHillScene(canvas: HTMLCanvasElement, palette: HillPalette)
     }
     haloMaterial.color.copy(signal);
     // The crew is the illustrations' lavender clay: the brand, lifted towards the light.
-    agentMaterials.forEach((material, index) => material.color.copy(accent).lerp(ink, 0.12 + index * 0.08));
+    agentMaterials.forEach((material, index) => material.color.copy(accent).lerp(dusk, 0.04 + index * 0.07));
     personMaterial.color.copy(ink).lerp(signal, 0.08);
+    personMaterial.emissive.copy(ink);
+    personMaterial.emissiveIntensity = 0.3;
     phoneMaterial.color.copy(signal);
     phoneMaterial.emissive.copy(signal);
     phoneGlowMaterial.color.copy(signal);
@@ -446,12 +460,14 @@ export function createHillScene(canvas: HTMLCanvasElement, palette: HillPalette)
       agent.root.position.z = 0.18 * (index - 1);
       const slope = Math.atan(hillSlope(ax));
       agent.root.rotation.z = slope;
-      agent.body.rotation.z = -0.32 * climbing - 0.08;
+      // Leaning into the push, waddling as they go: a side-to-side rock and a bob, the feet stepping under them.
       const phase = stride + index * 1.9;
-      const swing = climbing ? 0.55 * Math.sin(phase) : 0.06 * Math.sin(seconds * 1.6 + index);
-      agent.legs[0].rotation.z = swing;
-      agent.legs[1].rotation.z = -swing;
-      agent.body.position.y = climbing ? 0.035 * Math.abs(Math.sin(phase)) : 0.015 * Math.sin(seconds * 1.6 + index);
+      agent.body.rotation.z = -0.3 * climbing - 0.06;
+      agent.body.rotation.x = climbing ? 0.09 * Math.sin(phase) : 0.03 * Math.sin(seconds * 1.6 + index);
+      agent.body.position.y = climbing ? 0.04 * Math.abs(Math.sin(phase)) : 0.012 * Math.sin(seconds * 1.6 + index);
+      const step = climbing ? 0.09 * Math.sin(phase) : 0;
+      agent.legs[0].position.x = 0.06 + step;
+      agent.legs[1].position.x = 0.06 - step;
       agent.material.opacity = Math.max(0, Math.min(1, crewOpacity));
       agent.root.visible = agent.material.opacity > 0.01;
     });
