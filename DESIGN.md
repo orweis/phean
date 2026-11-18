@@ -1,101 +1,107 @@
 ---
 name: Phean
-description: The decision center for a fleet of AI agents. A quiet violet ledger under a Liquid Glass bar in the app; a bright brand mesh and lifted product frames on the site.
+description: The decision center for a fleet of AI agents. A quiet ledger in the person's chosen theme (Dusk by default) under a Liquid Glass bar in the app; a bright brand mesh and lifted product frames on the site.
 colors:
-  paper: "oklch(97.3% 0.008 300)"
-  panel: "oklch(99.5% 0.002 300)"
-  fill: "oklch(94.4% 0.011 300)"
-  raised: "oklch(99.5% 0.002 300)"
-  rule: "oklch(90.6% 0.014 300)"
-  edge: "oklch(61% 0.03 298)"
-  ink: "oklch(22% 0.04 295)"
-  ink-2: "oklch(37% 0.035 295)"
-  muted: "oklch(49.5% 0.03 295)"
-  faint: "oklch(72% 0.02 295)"
-  accent: "oklch(50% 0.2 292)"
-  accent-2: "oklch(44% 0.19 292)"
-  accent-ink: "oklch(47% 0.19 292)"
-  accent-tint: "oklch(95% 0.026 298)"
-  on-accent: "oklch(99% 0.004 300)"
-  signal: "oklch(73% 0.165 50)"
-  signal-2: "oklch(79% 0.15 56)"
-  signal-shade: "oklch(62% 0.17 40)"
-  signal-ink: "oklch(52% 0.15 42)"
-  signal-tint: "oklch(95.6% 0.028 62)"
-  on-signal: "oklch(25% 0.06 40)"
-  late: "oklch(56% 0.2 22)"
-  late-ink: "oklch(49% 0.18 22)"
-  late-tint: "oklch(96% 0.018 18)"
+  paper: "oklch(95.5% 0.008 75)"
+  panel: "oklch(99.5% 0.003 75)"
+  fill: "oklch(92% 0.01 75)"
+  raised: "oklch(99.5% 0.003 75)"
+  rule: "oklch(87.5% 0.009 75)"
+  edge: "oklch(58% 0.018 266)"
+  ink: "oklch(21% 0.016 268)"
+  ink-2: "oklch(35% 0.02 266)"
+  muted: "oklch(46% 0.018 265)"
+  faint: "oklch(70% 0.014 265)"
+  accent: "oklch(45% 0.13 274)"
+  accent-2: "oklch(39% 0.12 274)"
+  accent-ink: "oklch(44% 0.13 274)"
+  accent-tint: "oklch(92.5% 0.032 274)"
+  on-accent: "oklch(99.5% 0.003 75)"
+  signal: "oklch(79% 0.13 60)"
+  signal-2: "oklch(84% 0.11 64)"
+  signal-shade: "oklch(66% 0.14 46)"
+  signal-ink: "oklch(49% 0.12 50)"
+  signal-tint: "oklch(94.5% 0.03 66)"
+  on-signal: "oklch(24% 0.05 50)"
+  late: "oklch(54% 0.19 25)"
+  late-ink: "oklch(47% 0.17 25)"
+  late-tint: "oklch(95% 0.02 20)"
   wait: "{colors.signal}"
-  wait-ink: "oklch(49% 0.15 40)"
+  wait-ink: "oklch(47% 0.12 48)"
   wait-tint: "{colors.signal-tint}"
-  inbox: "oklch(68% 0.12 232)"
-  inbox-ink: "oklch(47% 0.11 237)"
-  inbox-tint: "oklch(95.5% 0.025 230)"
-  arrive: "oklch(58% 0.13 158)"
-  arrive-ink: "oklch(44% 0.1 158)"
-  arrive-tint: "oklch(95.6% 0.032 160)"
-  station-backlog: "oklch(84% 0.015 280)"
-  station-todo: "oklch(72% 0.13 322)"
-  station-progress: "oklch(55% 0.19 292)"
-  station-done: "oklch(62% 0.13 158)"
-  line-inbox: "oklch(60% 0.12 235)"
-  line-todo: "oklch(56% 0.15 322)"
-  line-backlog: "oklch(62% 0.03 280)"
-  focus: "oklch(54% 0.2 292)"
-  dusk: "oklch(27% 0.09 292)"
-  dusk-2: "oklch(34% 0.11 292)"
-  dusk-ink: "oklch(97% 0.012 300)"
-  dusk-muted: "oklch(82% 0.05 300)"
-  dusk-hill: "oklch(63% 0.17 292)"
-  glass: "oklch(98.6% 0.006 300 / 0.78)"
-  glass-thick: "oklch(99.2% 0.004 300 / 0.88)"
-  glass-rim: "oklch(22% 0.04 295 / 0.1)"
-  dark-paper: "oklch(16.5% 0.022 292)"
-  dark-panel: "oklch(21% 0.026 292)"
-  dark-fill: "oklch(26.5% 0.028 292)"
-  dark-raised: "oklch(36% 0.03 292)"
-  dark-rule: "oklch(30% 0.028 292)"
-  dark-edge: "oklch(55% 0.03 295)"
-  dark-ink: "oklch(95.5% 0.008 300)"
-  dark-ink-2: "oklch(85% 0.015 300)"
-  dark-muted: "oklch(71% 0.02 300)"
-  dark-faint: "oklch(47% 0.022 296)"
-  dark-accent: "oklch(55% 0.19 292)"
-  dark-accent-2: "oklch(50% 0.19 292)"
-  dark-accent-ink: "oklch(77% 0.13 296)"
-  dark-accent-tint: "oklch(30% 0.075 292)"
-  dark-signal: "oklch(76% 0.15 52)"
-  dark-signal-2: "oklch(81% 0.135 58)"
-  dark-signal-shade: "oklch(64% 0.16 42)"
-  dark-signal-ink: "oklch(80% 0.13 56)"
-  dark-signal-tint: "oklch(30% 0.06 45)"
-  dark-on-signal: "oklch(22% 0.05 40)"
-  dark-late: "oklch(66% 0.18 22)"
-  dark-late-ink: "oklch(77% 0.13 22)"
-  dark-late-tint: "oklch(25% 0.03 20)"
-  dark-wait: "{colors.dark-signal}"
-  dark-wait-ink: "oklch(80% 0.13 56)"
-  dark-wait-tint: "{colors.dark-signal-tint}"
-  dark-inbox: "oklch(68% 0.11 232)"
-  dark-inbox-ink: "oklch(82% 0.08 228)"
-  dark-inbox-tint: "oklch(29% 0.05 235)"
-  dark-arrive: "oklch(68% 0.13 158)"
-  dark-arrive-ink: "oklch(79% 0.12 158)"
-  dark-arrive-tint: "oklch(28% 0.05 160)"
-  dark-station-backlog: "oklch(46% 0.02 285)"
-  dark-station-todo: "oklch(74% 0.12 322)"
-  dark-station-progress: "oklch(65% 0.17 292)"
-  dark-station-done: "oklch(68% 0.13 158)"
-  dark-line-todo: "oklch(72% 0.12 322)"
-  dark-line-backlog: "oklch(66% 0.03 280)"
-  dark-focus: "oklch(72% 0.15 294)"
-  dark-hill: "oklch(63% 0.17 292)"
-  dark-dusk: "oklch(23% 0.07 292)"
-  dark-dusk-2: "oklch(31% 0.09 292)"
-  dark-glass: "oklch(22% 0.026 292 / 0.78)"
-  dark-glass-thick: "oklch(24% 0.028 292 / 0.88)"
-  dark-glass-rim: "oklch(95% 0.01 300 / 0.12)"
+  inbox: "oklch(67% 0.1 222)"
+  inbox-ink: "oklch(45% 0.09 226)"
+  inbox-tint: "oklch(94.5% 0.022 222)"
+  move: "{colors.station-progress}"
+  move-ink: "{colors.accent-ink}"
+  move-tint: "{colors.accent-tint}"
+  arrive: "oklch(57% 0.11 160)"
+  arrive-ink: "oklch(43% 0.09 160)"
+  arrive-tint: "oklch(94.5% 0.03 160)"
+  station-inbox: "{colors.inbox}"
+  station-backlog: "oklch(84% 0.012 268)"
+  station-todo: "oklch(71% 0.12 330)"
+  station-progress: "oklch(52% 0.13 274)"
+  station-done: "oklch(61% 0.11 160)"
+  line-inbox: "oklch(58% 0.1 226)"
+  line-todo: "oklch(55% 0.14 330)"
+  line-backlog: "oklch(61% 0.02 268)"
+  focus: "oklch(50% 0.13 274)"
+  hill: "{colors.accent}"
+  dusk: "oklch(19% 0.018 268)"
+  dusk-2: "oklch(27% 0.035 280)"
+  dusk-ink: "oklch(96% 0.006 75)"
+  dusk-muted: "oklch(82% 0.025 268)"
+  dusk-hill: "oklch(72% 0.1 274)"
+  glass: "oklch(97% 0.006 75 / 0.78)"
+  glass-thick: "oklch(99% 0.004 75 / 0.88)"
+  glass-rim: "oklch(21% 0.016 268 / 0.1)"
+  dark-paper: "oklch(17.5% 0.014 268)"
+  dark-panel: "oklch(21% 0.016 268)"
+  dark-fill: "oklch(27.5% 0.018 268)"
+  dark-raised: "oklch(35% 0.02 268)"
+  dark-rule: "oklch(30% 0.016 266)"
+  dark-edge: "oklch(55% 0.02 266)"
+  dark-ink: "oklch(96% 0.006 75)"
+  dark-ink-2: "oklch(85% 0.01 262)"
+  dark-muted: "oklch(71% 0.016 262)"
+  dark-faint: "oklch(47% 0.016 264)"
+  dark-accent: "oklch(77% 0.1 274)"
+  dark-accent-2: "oklch(84% 0.085 274)"
+  dark-accent-ink: "oklch(80% 0.09 274)"
+  dark-accent-tint: "oklch(30% 0.05 274)"
+  dark-on-accent: "oklch(19% 0.035 274)"
+  dark-signal: "oklch(81% 0.11 62)"
+  dark-signal-2: "oklch(86% 0.09 66)"
+  dark-signal-shade: "oklch(68% 0.13 48)"
+  dark-signal-ink: "oklch(84% 0.095 62)"
+  dark-signal-tint: "oklch(30% 0.045 60)"
+  dark-on-signal: "oklch(22% 0.04 50)"
+  dark-late: "oklch(68% 0.16 22)"
+  dark-late-ink: "oklch(79% 0.11 22)"
+  dark-late-tint: "oklch(27% 0.04 22)"
+  dark-wait-ink: "oklch(84% 0.095 62)"
+  dark-inbox: "oklch(74% 0.09 222)"
+  dark-inbox-ink: "oklch(83% 0.07 222)"
+  dark-inbox-tint: "oklch(29% 0.04 226)"
+  dark-arrive: "oklch(74% 0.1 160)"
+  dark-arrive-ink: "oklch(82% 0.09 160)"
+  dark-arrive-tint: "oklch(28% 0.04 160)"
+  dark-station-backlog: "oklch(46% 0.016 268)"
+  dark-station-todo: "oklch(72% 0.11 330)"
+  dark-station-progress: "oklch(70% 0.11 274)"
+  dark-station-done: "oklch(73% 0.1 160)"
+  dark-line-inbox: "oklch(74% 0.09 222)"
+  dark-line-todo: "oklch(72% 0.11 330)"
+  dark-line-backlog: "oklch(64% 0.02 268)"
+  dark-focus: "oklch(80% 0.1 274)"
+  dark-hill: "oklch(72% 0.1 274)"
+  dark-dusk: "oklch(14% 0.02 268)"
+  dark-dusk-2: "oklch(23% 0.04 282)"
+  dark-glass: "oklch(22% 0.018 268 / 0.72)"
+  dark-glass-thick: "oklch(24% 0.018 268 / 0.88)"
+  dark-glass-rim: "oklch(100% 0 0 / 0.1)"
+  icon-tile-top: "#3b296b"
   icon-tile-bottom: "#211541"
 typography:
   display:
@@ -248,72 +254,87 @@ components:
 
 # Design System: Phean
 
-The tokens above mirror the `@theme` block in `src/app/globals.css`, which is the source of truth. That block resets Tailwind's default palette (`--color-*: initial`), so a class like `text-zinc-500` does not exist here: every colour is one of these names. The `dark-` entries are the same tokens in the dark appearance, set once under the file's custom `dark` variant (`@variant dark` on `:root`), so components never name a dark colour themselves.
+The colour tokens above are the default theme, Dusk; the `dark-` entries are the same tokens in its dark appearance. Every theme's values live in `src/lib/theme-tokens.ts`, the source of truth, and `pnpm themes` writes them into `src/app/themes.css`, which `src/app/globals.css` imports for everything else (type, radii, motion, the utilities). The generated `@theme` block resets Tailwind's default palette (`--color-*: initial`), so a class like `text-zinc-500` does not exist here: every colour is one of these names, and components never name a theme or a dark colour themselves.
 
 ## Overview
 
 **Creative North Star: "The Decision Center"**
 
-Agents do the tasks; people make the calls. The app is where those calls are made, so it stays quiet and exact, and the site is where the idea is sold, so it is bright and moving. The logo keeps the boulder on its violet slope. The marketing site explains the name once, in a drawing of agents rolling the boulder up the hill. The ledger itself is quiet. A lavender-white ground holds white cards ruled in hairlines, and the only material that floats is a Liquid Glass bar on top, in Apple's manner: the functional layer of navigation and menus sits on glass above the content and lets the content show through, blurred, as it scrolls beneath.
+Agents do the tasks; people make the calls. The app is where those calls are made, so it stays quiet and exact, and the site is where the idea is sold, so it is bright and moving. The logo keeps the boulder on its slope. The marketing site explains the name once, in a drawing of agents rolling the boulder up the hill. The ledger itself is quiet. A quiet tinted ground holds lighter cards ruled in hairlines, and the only material that floats is a Liquid Glass bar on top, in Apple's manner: the functional layer of navigation and menus sits on glass above the content and lets the content show through, blurred, as it scrolls beneath.
 
-The density is that of an operations screen, not a marketing page. People check in a few times a day to see what agents did, what is late, and what awaits their decision or answer, so the overview leads with the line, the agents' questions and the decisions, and every figure is a tabular numeral with its label. Colour carries meaning only: violet is the brand and work in motion, ember is what is new and what needs a person, and each state has one hue on every screen.
+The density is that of an operations screen, not a marketing page. People check in a few times a day to see what agents did, what is late, and what awaits their decision or answer, so the overview leads with the line, the agents' questions and the decisions, and every figure is a tabular numeral with its label. Colour carries meaning only: the brand (`accent`) is primary actions and work in motion, the signal (the boulder's ember) is what is new and what needs a person, and each state has one hue on every screen, in every theme.
 
-Each person picks Light, Dark, or System (the default, which follows the device and changes with it) in the account menu, or in the landing page's footer before signing in. In dark the ground turns to a deep violet night and the glass to smoked violet; the hues lift to keep their contrast.
+Each person picks a colour theme (Dusk, the default; Ledger, Phean's first look; Ink; or Console) and, separately, Light, Dark, or System (the default, which follows the device and changes with it), in the account menu, on the Account page, or in the landing page's footer before signing in. Every theme has both appearances: in dark the ground turns to the theme's night and the glass smokes with it, and the hues lift to keep their contrast.
 
 **Key Characteristics:**
 
 - A sticky Liquid Glass header with the boulder wordmark, a workspace switcher and a capsule tab rail; content scrolls under it and fades at its edge.
-- One brand hue, violet, for primary actions, the selected tab, focus and work in progress; one ember for the boulder, the counts on the rail and the call to action on a dusk band.
+- One brand hue (`accent`: Dusk's periwinkle, Ledger's violet, Ink's teal, Console's blue) for primary actions, the selected tab, focus and work in progress; one warm signal for the boulder, the counts on the rail and the call to action on a dusk band.
 - Capsule controls throughout (buttons, tabs, badges, segmented controls); cards keep a 14px continuous-looking corner.
 - SF Pro on Apple devices, Inter Variable with optical sizing everywhere else; SF Pro Rounded for figures where it exists.
 - State is carried by line form as well as hue: dashed while waiting, solid while moving, a dot on arrival, a slash when dropped.
-- Light, Dark, and System appearances, every text pair at 4.5:1 or better and every line and control at 3:1 or better in both palettes.
+- Four themes, each with Light and Dark (and System), every text pair at 4.5:1 or better and every line and control at 3:1 or better in all eight palettes, checked by `tests/themes.test.ts`.
 
 ## Colors
 
-A cool lavender ground under a violet brand, with one ember signal and four state hues that mean the same thing on every screen.
+A tinted ground under one brand hue, with one warm signal and four state hues that mean the same thing on every screen. The roles below are the same in every theme; the values are Dusk's, the default (light · dark). Names such as "ember" and "violet" in the rest of this file name a role (the signal, the brand), whatever hue a theme gives it.
 
 ### Primary
 
-- **Slope violet** (`accent`, oklch(50% 0.2 292) · dark oklch(55% 0.19 292)): the primary button, the active tab's capsule (as `accent-tint` with `accent-ink`), the selected workspace's check, the hero's gradient headline, focus rings (`focus`), and the in-progress station. `accent-2` is its hover. Text on it is `on-accent` (6.5:1 in light, 5.2:1 in dark); violet text on the ground is `accent-ink`.
-- **The hill** (`hill`): the slope in the logo. It is the accent in light and a lighter cut, oklch(63% 0.17 292), in dark and on any dusk band (`dusk-hill`), so the mark holds on a dark ground.
+- **Brand** (`accent`, Dusk's periwinkle, oklch(45% 0.13 274) · dark oklch(77% 0.1 274)): the primary button, the active tab's capsule (as `accent-tint` with `accent-ink`), the selected workspace's check, the hero's second sentence, focus rings (`focus`), and the in-progress station. `accent-2` is its hover. Text on it is `on-accent`: white in Dusk's light, Dusk's dark slate on its light periwinkle in dark (7.6:1 and 8.9:1); brand text on the ground is `accent-ink`.
+- **The hill** (`hill`): the slope in the logo. It is the accent in light and a lighter cut in dark and on any dusk band (`dusk-hill`), so the mark holds on a dark ground.
 
 ### Secondary
 
-- **Boulder ember** (`signal`, oklch(73% 0.165 50) · dark oklch(76% 0.15 52)): the boulder in the logo, the tab rail's counts of what needs a person, everything waiting on a person (as `wait`), the travelling requests in the marketing site's decisions band, and the one call to action on a dusk band. Labels on it are `on-signal`. `signal-shade` is the boulder's shaded side; `signal-ink` is ember text, used only in the accent badge on `signal-tint`.
+- **Signal** (`signal`, Dusk's apricot, oklch(79% 0.13 60) · dark oklch(81% 0.11 62)): the boulder in the logo, the tab rail's counts of what needs a person, everything waiting on a person (as `wait`), the travelling requests in the marketing site's decisions band, and the one call to action on a dusk band. Labels on it are `on-signal`, always dark. `signal-shade` is the boulder's shaded side; `signal-ink` is signal text, used only in the accent badge on `signal-tint`. Every theme keeps it warm (an ember, apricot or amber, hue 40 to 90), never red.
 
 ### Tertiary
 
-- **Late crimson** (`late`, `late-ink`, `late-tint`): the now line, late tracks and cards, urgent priority, and destructive buttons.
-- **Waiting ember** (`wait`, `wait-ink`, `wait-tint`): what waits on a person, in the theme's own ember (goals awaiting approval, and agent questions: the Waiting on you badge, the question under it on a card, the rule beside it on the overview), high priority, read-only access. `wait` and `wait-tint` are the ember itself; `wait-ink` is a deeper cut for text, at 5.9:1 on its tint.
-- **Inbox sky** (`inbox`, `inbox-ink`, `inbox-tint`): what just arrived and is still to triage: the inbox station, its line and its badge. A cool sky blue, so it never reads as waiting on a person, which is ember's alone.
-- **Moving** (`move`, `move-ink`, `move-tint`): in-progress work, active goals and agent claims. It is the violet, by reference, so moving work and the brand are one hue.
+- **Late red** (`late`, `late-ink`, `late-tint`): the now line, late tracks and cards, urgent priority, and destructive buttons. Red in every theme (hue 15 to 30).
+- **Waiting** (`wait`, `wait-ink`, `wait-tint`): what waits on a person, in the theme's own signal (goals awaiting approval, and agent questions: the Waiting on you badge, the question under it on a card, the rule beside it on the overview), high priority, read-only access. `wait` and `wait-tint` are the signal itself, by reference; `wait-ink` is a deeper cut for text on its tint.
+- **Inbox** (`inbox`, `inbox-ink`, `inbox-tint`): what just arrived and is still to triage: the inbox station, its line and its badge. A cool sky (Dusk's is a misty blue, Console's ice), so it never reads as waiting on a person, which is the signal's alone, and never as the brand.
+- **Moving** (`move`, `move-ink`, `move-tint`): in-progress work, active goals and agent claims. It is the brand, by reference, so moving work and the brand are one hue.
 - **Arrived green** (`arrive`, `arrive-ink`, `arrive-tint`): done tasks, achieved goals, active agents.
-- **The five stations**: inbox is sky (`station-inbox`), backlog is a quiet grey (`station-backlog`), to do is orchid (`station-todo`), a pink-violet set well apart from backlog's grey in hue, chroma and lightness, and lighter than in progress so the two never merge, in progress is violet (`station-progress`), and done is green (`station-done`). Thin timetable lines use the darker cuts `line-inbox`, `line-backlog` and `line-todo`, which keep 3:1 against a card; backlog's line is dotted, since nothing is planned for it yet. A workspace's own stages take the colour of their kind: a "Review" stage inside In progress is violet.
+- **The five stations**: inbox is the sky (`station-inbox`), backlog a quiet grey (`station-backlog`), to do a rose or orchid (`station-todo`: Dusk's own dusk rose, oklch(71% 0.12 330)), set well apart from backlog in hue, chroma and lightness and from in progress in hue, in progress the brand (`station-progress`), and done green (`station-done`). Thin timetable lines use the darker cuts `line-inbox`, `line-backlog` and `line-todo`, which keep 3:1 against a card; backlog's line is dotted, since nothing is planned for it yet. A workspace's own stages take the colour of their kind: a "Review" stage inside In progress takes the brand. The contrast test holds every pair of inbox, to do, in progress and done at least 25 degrees of hue apart in every theme.
 
 ### Neutral
 
-- **Lavender ground** (`paper`): the page background, with a faint violet glow at the top left and an ember one at the top right (`glow-violet`, `glow-ember`) for the glass to pick up.
+- **Ground** (`paper`): the page background (Dusk's bone in light, slate in dark), with a faint brand glow at the top left and a signal one at the top right (`glow-violet`, `glow-ember`, named for Ledger but set by each theme) for the glass to pick up.
 - **Panel** (`panel`): cards, inputs, the sample timetable.
 - **Fill** (`fill`): secondary buttons, segmented-control wells, hover fills, chart troughs, the future side of the now line, skeletons.
-- **Raised** (`raised`): the selected segment of a segmented control; white in light, a lifted violet-grey in dark.
+- **Raised** (`raised`): the selected segment of a segmented control; near white in light, a lifted grey of the ground in dark.
 - **Hairline** (`rule`) and **Edge** (`edge`): dividers and card borders; `edge` outlines form controls.
 - **Ink** (`ink`), **Ink 2** (`ink-2`), **Muted** (`muted`), **Faint** (`faint`): text from titles down to empty-state icons.
-- **Dusk** (`dusk`, `dusk-2`, `dusk-ink`, `dusk-muted`): the marketing site's decisions band, and code blocks. The `dusk` utility is a sky that lightens from `dusk` at the top to `dusk-2` at the horizon, with no glow: on a dusk band the ember belongs to the boulder and the one call to action.
+- **Dusk** (`dusk`, `dusk-2`, `dusk-ink`, `dusk-muted`): the marketing site's decisions band, and code blocks. The `dusk` utility is a sky that lightens from `dusk` at the top to `dusk-2` at the horizon, with no glow: on a dusk band the signal belongs to the boulder and the one call to action. In every theme `dusk` is dark and `dusk-ink` light, at 7:1 or more, because the QR code for two-factor (`components/account/qr-code.tsx`) draws `dusk` modules on `dusk-ink` and must stay dark on light to scan.
+
+### Themes
+
+A theme is a named set of every token above, with a light and a dark value for each, selected by `<html data-theme>`. Four ship, each adapted from a Hallmark theme to Phean's roles (only their colours: the type stays Phean's in every theme):
+
+| Theme | From Hallmark | Ground (light · dark) | Brand | Signal | Inbox · to do · done |
+| --- | --- | --- | --- | --- | --- |
+| `dusk` (default) | Dusk | bone oklch(95.5% 0.008 75) · slate oklch(17.5% 0.014 268) | periwinkle 274 | apricot 60 | misty blue 222 · dusk rose 330 · sage 160 |
+| `ledger` | none (Phean's first, custom theme), value for value | lavender oklch(97.3% 0.008 300) · violet night oklch(16.5% 0.022 292) | violet 292 | ember 50 | sky 232 · orchid 322 · green 158 |
+| `ink` | Ink | white oklch(97.6% 0.003 100) · hueless black oklch(15% 0 0) | teal 188 | ember 52 | blue 255 · orchid 322 · leaf 140 |
+| `console` | Console (light is its paper colourway) | warm paper oklch(96.4% 0.005 85) · graphite oklch(17% 0.008 250) | instrument blue 250 | amber 80, Console's colour for a person | ice 205 · violet 305 · green 150 |
+
+**How a theme reaches the page.** The `phean-theme` cookie is read on the server by `getTheme()` in `server/web.ts`, as the appearance is by `getAppearance()`, and the root layout renders it as `<html data-theme>` beside `data-appearance`, so the first paint is already in both. `themes.css` sets each theme's light tokens under `[data-theme="…"]` and its dark ones under `[data-appearance="dark"]`, or under System (or no choice) on a device that prefers dark. The rules match `[data-theme]` on any element too, so the picker's swatches (`ThemeSwatch`) show each theme's real colours in the appearance in force. `lib/themes.ts` holds what the client shares: the ids, their names and descriptions, what a swatch shows, and each theme's paper in sRGB for the `theme-color` meta. The picker (`ThemePicker`, in the account menu, the Account page's Appearance card, and the landing page's footer as a compact row) is a group of radios: each a swatch and a name, the selected one ringed in the brand, marked with a check and `data-selected`, so the choice never rests on colour alone; arrow keys move between them and a choice applies at once, with the cookie and the metas, and every other picker on the page follows.
+
+**Adding a theme.** Add its id to `THEMES` with a name and description in `THEME_META` (`lib/themes.ts`); give it a light and a dark palette in `THEME_TOKENS` (`lib/theme-tokens.ts`), every token, deriving dark by `references/dark-mode.md`'s recipe (ground at 12 to 18% L, elevation lighter, the hue never moving); run `pnpm themes`; add its paper to `THEME_PAPER` (the test prints the sRGB); then run `pnpm test`, which fails until the stylesheet matches and every text pair holds 4.5:1, every line and mark 3:1, red stays red, the signal warm, the stations apart and the QR code dark on light. `e2e/quality.spec.ts` scans the key pages in it in both appearances. Then add its row to the table above.
 
 ### Dark appearance
 
-Every token above is redefined under the custom `dark` variant, which holds when `<html data-appearance>` is `dark`, or when it is `system` (or missing) and the device prefers dark. The attribute comes from the `phean-appearance` cookie, read by `getAppearance()` in the root layout, so the first paint is already in the chosen appearance; the picker sets the attribute and the cookie together, and the change is instant. The ground drops to oklch(16.5% 0.022 292), panels to 21% and fills to 26.5%, all on the violet hue; text inverts to a lavender white; each `-ink` lifts to a light cut of its hue (violet ink to 77%, crimson to 77%, ember to 80%, sky to 82%, green to 79%); and each `-tint` becomes a deep wash of its hue around 28% lightness. Glass turns to smoked violet with a light rim. The `theme-color` and `color-scheme` metas follow the choice: `#f7f5fb` in light, `#0e0d17` in dark, and one of each, by media query, under System.
+Every token is redefined for dark in every theme, which holds when `<html data-appearance>` is `dark`, or when it is `system` (or missing) and the device prefers dark. The attribute comes from the `phean-appearance` cookie, read by `getAppearance()` in the root layout, so the first paint is already in the chosen appearance; the picker sets the attribute and the cookie together, and the change is instant. In Dusk the ground drops to slate at 17.5%, panels to 21% and fills to 27.5%, on hue 268; text turns to a bone white; each `-ink` lifts to a light cut of its hue; each `-tint` becomes a deep wash of its hue around 28 to 30% lightness; and the brand lightens to a periwinkle that takes dark labels. Glass turns to smoked slate with a light rim. The `theme-color` and `color-scheme` metas follow the choice: the theme's paper in each scheme (Dusk `#f3efea` and `#0e1017`), and one of each, by media query, under System.
 
 ### Named Rules
 
-**The Two Appearances Rule.** A colour is a token with a light and a dark value, never a literal in a component. Every text pair holds 4.5:1 and every line and control 3:1 in both appearances; the dark-scheme axe scans in `e2e/quality.spec.ts` and the picker's tests in `e2e/appearance.spec.ts` guard it.
+**The Every Theme Rule.** A colour is a token with a light and a dark value in every theme, never a literal in a component, and never a theme's name in a component. Every text pair holds 4.5:1 and every line and control 3:1 in every theme and both appearances; `tests/themes.test.ts` computes them from the tokens, the axe scans in `e2e/quality.spec.ts` run the default theme in both appearances and every other theme on the key pages, and the pickers' tests in `e2e/appearance.spec.ts` and `e2e/themes.spec.ts` guard the switch.
 
-**The Prominence Rule.** A view has one or two filled violet actions at most. The forward step repeated on every row of a list (Done on each task) is tinted, and the rest are secondary or ghost.
+**The Prominence Rule.** A view has one or two filled brand actions at most. The forward step repeated on every row of a list (Done on each task) is tinted, and the rest are secondary or ghost.
 
-**The One Ember Rule.** Ember marks what needs a person: the boulder, the counts on the rail, what waits on someone's answer or approval, and one call to action on a dusk band. New work in the inbox is sky, not ember. Ember is never a panel fill and never body text.
+**The One Ember Rule.** The signal (ember, in any theme's hue) marks what needs a person: the boulder, the counts on the rail, what waits on someone's answer or approval, and one call to action on a dusk band. New work in the inbox is sky, not ember. Ember is never a panel fill and never body text.
 
-**The Station Rule.** A station hue means that status everywhere: in the flow bar, the rail atop each board column, the cumulative flow and the timetable. Nothing else borrows those hues except the violet, which the brand and in-progress share on purpose.
+**The Station Rule.** A station hue means that status everywhere: in the flow bar, the rail atop each board column, the cumulative flow and the timetable. Nothing else borrows those hues except the brand, which in-progress shares on purpose.
 
 **The Red Line Rule.** Red is the now line and late work, plus urgent priority and destructive actions. If something is red, a person should look at it today.
 
@@ -351,7 +372,7 @@ On phones both columns dissolve into a single stack ordered by what needs a pers
 
 ## Elevation & Depth
 
-Two layers, as in Apple's Liquid Glass: content and the functional layer above it. The content layer is flat, and its depth is tonal: white panels on the lavender ground, filled wells and hover fills, the shaded future past the now line. The functional layer is glass: translucent, blurred and saturated, with a hairline rim, so it reads as floating over the content rather than as another band of colour.
+Two layers, as in Apple's Liquid Glass: content and the functional layer above it. The content layer is flat, and its depth is tonal: lighter panels on the tinted ground, filled wells and hover fills, the shaded future past the now line. The functional layer is glass: translucent, blurred and saturated, with a hairline rim, so it reads as floating over the content rather than as another band of colour.
 
 ### Glass Vocabulary
 
@@ -380,8 +401,8 @@ Controls are capsules: buttons, tabs, badges, count chips, segmented controls an
 ### Buttons
 
 - **Shape:** capsules, 36px tall; small buttons are 32px with a hit area extended to 44px.
-- **Primary:** violet with white text, darker violet on hover. One or two per view (see The Prominence Rule).
-- **Tinted:** a violet wash with violet text, for the forward step repeated on each row (Done).
+- **Primary:** the brand with `on-accent` text, `accent-2` on hover. One or two per view (see The Prominence Rule).
+- **Tinted:** a brand wash with brand text, for the forward step repeated on each row (Done).
 - **Secondary:** a filled grey capsule, a shade deeper on hover.
 - **Ghost:** text only, for the secondary actions in a row (Release, Drop, Open board, Mark answered), the account menu's trigger and its Sign out, and every manual entry point (Add manually, Add task, Add sub-goal).
 - **Danger:** crimson text on a crimson wash, and it always asks for confirmation.
@@ -390,7 +411,7 @@ Controls are capsules: buttons, tabs, badges, count chips, segmented controls an
 **The Undo or Confirm Rule.** Frequent, reversible actions run at once and offer Undo: Drop, Done, Reopen, lane moves and answers say what they did in the status region ("Dropped “Read the thread”" · Undo), and Undo runs the reverse transition that already exists. Rare actions with consequences ask first: Revoke, Forget, Abandon, Remove, Mark answered, and Mark achieved while tasks are still open. If everything asked, people would learn to click through.
 - **Signal:** ember with dark text, used at most once per dusk band.
 - **Dusk:** quiet text controls on a dusk band, lifting to `dusk-2` on hover.
-- **Focus:** a 2px violet outline offset 2px; on a dusk band the ring turns ember.
+- **Focus:** a 2px `focus` outline (the brand) offset 2px; on a dusk band the ring turns ember.
 
 **The Agents First Rule.** Agents fill the ledger, so adding a task or goal by hand is always a ghost button, never primary or secondary, and never a form laid open on the page. It sits in the page header or a card header and opens a panel. Connecting an agent is what a new workspace is asked to do first.
 
@@ -398,7 +419,7 @@ Controls are capsules: buttons, tabs, badges, count chips, segmented controls an
 
 - **Style:** badges are 20px capsules, a tint of their tone with the tone's ink. Every status, priority, role and memory kind renders through its `{ label, tone }` table in `src/lib/domain.ts`.
 - **Counts:** the tab rail's counts for what needs a person (Overview, Decisions) are ember capsules with dark numerals; the Tasks tab's inbox count is a neutral capsule (`fill`, `ink-2`), so ember keeps its meaning.
-- **Filters:** the memory kinds are capsules, violet-tinted when selected and filled grey otherwise, each with its count.
+- **Filters:** the memory kinds are capsules, brand-tinted when selected and filled grey otherwise, each with its count.
 - **Lane counts:** a neutral capsule beside the lane's name; a folded lane reads "5 of 13".
 - **Who acted:** an agent is a squared tile with a bot, a person a round disc, both neutral; a task's operator is meta text with a bot or person glyph, "Operator: Finance clerk", never a violet badge, since violet is a state. A handover under way is a badge with a handshake, in `DELEGATION_META`'s tones: handing off is sky (new to whoever picks it up), picking up is the violet of work in motion, returned is neutral; never ember, which stays for what waits on a person's answer. The handoff note sits under the title on the task's page as a quiet figure, with its age. A board card being handed off takes a dashed `line-inbox` edge, so work in transit reads by its outline as well as its badge (late work keeps its late edge). The overview's Handoffs card, in the right column after Late, lists handovers with the viewer's first, marked "For you" in words, each with from and to, its age, the note's first lines, and a tinted Take it.
 
@@ -413,16 +434,16 @@ Controls are capsules: buttons, tabs, badges, count chips, segmented controls an
 ### Inputs / Fields
 
 - **Style:** panel, a 1px edge border, 10px corners, 36px tall, full width of their wrapper (size the wrapper, not the control).
-- **Focus:** the border turns violet and a soft 3px violet halo grows around it, as on Apple's text fields.
+- **Focus:** the border turns to the brand and a soft 3px brand halo grows around it, as on Apple's text fields.
 - **Error / Disabled:** errors show inline under the form in late ink; disabled controls go filled with muted text.
 
 ### Segmented controls
 
-A grey capsule well with capsule segments; the selected one is raised (white with the raised shadow in light, a lifted violet-grey in dark). Used for the timeline window (14, 30 or 90 days), the MCP client tabs in Connect an agent, the task or goal choice in manual entry, and the Light, Dark and System choice of the appearance picker, whose segments carry a sun, a moon and a display.
+A grey capsule well with capsule segments; the selected one is raised (near white with the raised shadow in light, a lifted grey in dark). Used for the timeline window (14, 30 or 90 days), the MCP client tabs in Connect an agent, the task or goal choice in manual entry, and the Light, Dark and System choice of the appearance picker, whose segments carry a sun, a moon and a display.
 
 ### Navigation
 
-The glass header holds the boulder wordmark, a `/`, the workspace switcher (a capsule that opens a glass menu), the search box (from 768px; phones use the Search tab), and the account menu: a ghost capsule with the person's initial on a violet disc and their name (the initial alone on phones), which opens a glass popover with their name and email, the appearance picker, and Sign out. Below them, the tab rail (Overview, Decisions, Tasks, Goals, Timeline, Memory, Documents, Search, Agents, Members, from `WORKSPACE_PAGES` in `lib/workspace-pages.ts`) is a row of capsules: muted until hovered, which fills them grey; the active tab is a violet-tinted capsule with semibold violet text. Inline text links underline on hover and thicken the underline while pressed (the `link` utility).
+The glass header holds the boulder wordmark, a `/`, the workspace switcher (a capsule that opens a glass menu), the search box (from 768px; phones use the Search tab), and the account menu: a ghost capsule with the person's initial on a brand-tinted disc and their name (the initial alone on phones), which opens a glass popover with their name and email, the theme picker, the appearance picker, and Sign out. Below them, the tab rail (Overview, Decisions, Tasks, Goals, Timeline, Memory, Documents, Search, Agents, Members, from `WORKSPACE_PAGES` in `lib/workspace-pages.ts`) is a row of capsules: muted until hovered, which fills them grey; the active tab is a violet-tinted capsule with semibold violet text. Inline text links underline on hover and thicken the underline while pressed (the `link` utility).
 
 ### Menus, popovers and sheets
 
@@ -473,7 +494,7 @@ Sources for these choices: Linear's [peek](https://linear.app/docs/peek.md); Not
 
 A toolbar filter is a capsule at the height of the segmented control beside it, "Goal: All goals ▾", with a label for screen readers (`ToolbarSelect`); fields inside forms stay rectangular. A search box above a list is a pill with a clear button, and `/` focuses it from anywhere on the page (or opens Search). Matched words in results are marked with a violet wash (`accent-tint`), never the browser's yellow.
 
-A popover's trigger is a small button, except where the panel leads elsewhere rather than acts: **Resume** uses the link trigger (`Popover look="link"`), violet semibold text with its icon, underlined on hover, with the same 44px hit area as a small button. It sits at the end of a task card's action row, after the state actions, and never wraps onto a line of its own in a board lane. Its panel lists each agent's session: the agent, its app and when it linked, the brief, a tinted **Resume in …** link, and the ids and command as monospace values, cut to one line, each with a ghost copy button named for what it copies ("Copy session id").
+A popover's trigger is a small button, except where the panel leads elsewhere rather than acts: **Resume** uses the link trigger (`Popover look="link"`), brand semibold text with its icon, underlined on hover, with the same 44px hit area as a small button. It sits at the end of a task card's action row, after the state actions, and never wraps onto a line of its own in a board lane. Its panel lists each agent's session: the agent, its app and when it linked, the brief, a tinted **Resume in …** link, and the ids and command as monospace values, cut to one line, each with a ghost copy button named for what it copies ("Copy session id").
 
 ### Outside links
 
@@ -481,7 +502,7 @@ Everything that leaves Phean goes through `OutsideLink` and ends with an up-righ
 
 ### Logo
 
-The mark is drawn in `src/components/logo.tsx` from one `MARK` geometry on a 32-unit square: a concave hill rising from the bottom left to the top right edge, and a boulder (a circle of radius 6.4 at 12.65, 19.17) resting on the slope partway up. The boulder is ember, lit from the upper left (`signal`) with a crescent of shade on its downhill side (`signal-shade`). The wordmark sets "Phean" beside it in 700 at title tracking. The favicon (`src/app/icon.svg`) and the Apple touch icon (`src/app/apple-icon.tsx`) put the same mark on a dusk tile, a gradient from `dark-dusk-2` (`#3b296b`) to `icon-tile-bottom` (`#211541`), with the dark-appearance hill and boulder colours and the slope carried past the tile's edges. The favicon adds a faint white rim (30% opacity, 1.2 units) so the tile keeps its square on dark tab strips, where the dusk ground would otherwise melt into the chrome. Inside a workspace, `components/favicon-badge.tsx` redraws the favicon so the boulder carries a count, the way mail apps show unread mail: a larger boulder in the icon's own ember, lit from the upper left, drawn where the original rests and covering it, so there is one boulder, with the rim drawn again over it, with dark figures counting decisions, approvals and inbox tasks (the tab rail's Decisions and Board counts). Past 99 it stretches into a pebble reading "99+", and at zero the plain mark returns. It is drawn into the page's own icon links, because browsers pick icons by size and type, so an added PNG would lose to the SVG.
+The mark is drawn in `src/components/logo.tsx` from one `MARK` geometry on a 32-unit square: a concave hill rising from the bottom left to the top right edge, and a boulder (a circle of radius 6.4 at 12.65, 19.17) resting on the slope partway up. The boulder is ember, lit from the upper left (`signal`) with a crescent of shade on its downhill side (`signal-shade`). The wordmark sets "Phean" beside it in 700 at title tracking. The favicon (`src/app/icon.svg`) and the Apple touch icon (`src/app/apple-icon.tsx`) put the same mark on a dusk tile, a gradient from `icon-tile-top` (`#3b296b`) to `icon-tile-bottom` (`#211541`), with Ledger's dark hill and boulder colours and the slope carried past the tile's edges. The icons, the favicon badge and the digest email are the brand mark, fixed in Ledger's colours whatever theme a person picks, since a browser tab, a home screen and a mail client never see the theme. The favicon adds a faint white rim (30% opacity, 1.2 units) so the tile keeps its square on dark tab strips, where the dusk ground would otherwise melt into the chrome. Inside a workspace, `components/favicon-badge.tsx` redraws the favicon so the boulder carries a count, the way mail apps show unread mail: a larger boulder in the icon's own ember, lit from the upper left, drawn where the original rests and covering it, so there is one boulder, with the rim drawn again over it, with dark figures counting decisions, approvals and inbox tasks (the tab rail's Decisions and Board counts). Past 99 it stretches into a pebble reading "99+", and at zero the plain mark returns. It is drawn into the page's own icon links, because browsers pick icons by size and type, so an added PNG would lose to the SVG.
 
 ### Marketing site (signature)
 
@@ -517,7 +538,7 @@ Open work by station as one stacked bar in flow order, with a legend of swatches
 
 ### Timetable (signature)
 
-Every task is a track on one time axis, grouped under its goal (or flat, on the overview). Inbox and to do are dashed in their station colour, in progress is a solid violet bar, arrival is a green dot, a drop is a slash, a due date is a short ink tick, and a late stretch is shaded crimson up to the red now line. The Now chip sits on the date baseline and any date label it would cover is left off. Hovering a track dims the others. The window shows the last 14, 30 or 90 days plus a week ahead, and starts with the history when the history is shorter.
+Every task is a track on one time axis, grouped under its goal (or flat, on the overview). Inbox and to do are dashed in their station colour, in progress is a solid brand bar, arrival is a green dot, a drop is a slash, a due date is a short ink tick, and a late stretch is shaded crimson up to the red now line. The Now chip sits on the date baseline and any date label it would cover is left off. Hovering a track dims the others. The window shows the last 14, 30 or 90 days plus a week ahead, and starts with the history when the history is shorter.
 
 ### Cumulative flow
 
@@ -525,7 +546,7 @@ A stacked area of how many tasks stood at each station at the end of each day: d
 
 ### Goal map
 
-The goal tree as a line with stations: a violet ring per active goal, a dashed ember ring while proposed, a filled green dot when achieved, a grey one when abandoned, branches for sub-goals, and a flow bar of each goal's tasks with its percentage done.
+The goal tree as a line with stations: a brand ring per active goal, a dashed signal ring while proposed, a filled green dot when achieved, a grey one when abandoned, branches for sub-goals, and a flow bar of each goal's tasks with its percentage done.
 
 ## Do's and Don'ts
 
@@ -544,7 +565,7 @@ The goal tree as a line with stations: a violet ring per active goal, a dashed e
 ### Don't:
 
 - **Don't** set small labels in uppercase or letter-spaced; use sentence case at the label size.
-- **Don't** put more than two filled violet buttons in a view, or ember anywhere but the boulder, the counts, the inbox and the dusk band's call to action.
+- **Don't** put more than two filled brand buttons in a view, or ember anywhere but the boulder, the counts, the inbox and the dusk band's call to action.
 - **Don't** make a card, board column, table or chart out of glass, or put glass inside a card.
 - **Don't** use red for anything that is not late, now, urgent or destructive.
 - **Don't** add shadows to cards, or gradients beyond the dusk band's sky and the ground's two faint top glows.
@@ -558,12 +579,14 @@ The locked system for Hallmark runs: every page shares it.
 
 - Genre: modern-minimal
 - Shape of the first page: app screen
-- Theme: custom, by request (vibe: "Apple-calm Liquid Glass over a lavender ledger, one ember glow"; idea: "dusk on the slope: a violet hill, and the ember boulder the agents keep rolling up it")
-- Axes: light+dark/neo-grotesk/violet-ember · posture: committed tinted ground under a glass functional layer, full palette for the four stations
+- Theme: dusk (by request), the default of four person-picked themes (dusk, ledger, ink, console), each a colourway of Phean's one system; ledger is the earlier custom theme (vibe: "Apple-calm Liquid Glass over a lavender ledger, one ember glow"), kept value for value
+- Dusk dials: hour none (no photograph; the dusk band carries the slate) · signals periwinkle-apricot · product surface glass
+- Axes: light+dark/neo-grotesk/periwinkle-apricot · posture: committed tinted ground under a glass functional layer, full palette for the four stations
+- Type: Phean's own in every theme (Bricolage Grotesque display, SF Pro or Inter body); the Hallmark themes lend their colours only
 
 ## Controls
 
-- Primary: violet fill · capsule · 36px
+- Primary: brand fill · capsule · 36px
 - Secondary: grey fill · capsule · 36px
 
 ## Motion
@@ -572,4 +595,4 @@ The locked system for Hallmark runs: every page shares it.
 
 ## Exports
 
-`src/app/globals.css` in this project (the `@theme` block, the dark-appearance block, and the `link`, `figure`, `glass-bar`, `glass-float` and `dusk` utilities); `src/components/logo.tsx` for the mark's geometry; `src/app/icon.svg` and `src/app/apple-icon.tsx` for the icons.
+`src/lib/theme-tokens.ts` for every theme's tokens, light and dark, and `src/app/themes.css`, generated from it by `pnpm themes`; `src/app/globals.css` in this project (the `@theme` block for type, radii and motion, and the `link`, `figure`, `glass-bar`, `glass-float` and `dusk` utilities); `src/components/logo.tsx` for the mark's geometry; `src/app/icon.svg` and `src/app/apple-icon.tsx` for the icons.
