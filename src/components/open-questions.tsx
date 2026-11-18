@@ -102,10 +102,11 @@ function OptionButtons({ taskId, slug, request }: { taskId: string; slug: string
       data-option={index < 9 ? String(index + 1) : undefined}
       aria-keyshortcuts={index < 9 ? String(index + 1) : undefined}
       variant="tinted"
+      size="choice"
       className="max-sm:w-full"
     >
       {index < 9 && (
-        <kbd aria-hidden className="hidden h-5 min-w-5 items-center justify-center rounded-xs bg-panel/70 px-1 font-sans text-2xs pointer-fine:inline-flex">
+        <kbd aria-hidden className="hidden h-5 min-w-5 shrink-0 items-center justify-center self-start rounded-xs bg-panel/70 px-1 font-sans text-2xs pointer-fine:inline-flex">
           {index + 1}
         </kbd>
       )}

@@ -7,7 +7,7 @@ Every agent joins Phean the same way: it reaches the workspace's MCP URL, you ap
 
 | Agent | Connect | Skills | Hears back by |
 | --- | --- | --- | --- |
-| [Claude Code](/docs/claude-code) | MCP URL, OAuth | Agent Skills | Waiting in session, a periodic run, or a WebSocket script |
+| [Claude Code](/docs/claude-code) | MCP URL, OAuth | Agent Skills | Waiting in session, a routine woken by webhook, a periodic run, or a WebSocket script |
 | [Claude apps](/docs/claude-apps) | Custom connector, OAuth | Uploaded skills | Waiting in the conversation, or syncing when you return |
 | [Cursor](/docs/cursor) | `mcp.json`, OAuth | Rules or `AGENTS.md` | Waiting in session |
 | [VS Code](/docs/vs-code) | `mcp.json`, OAuth | Instructions or `AGENTS.md` | Waiting in session |
@@ -66,7 +66,7 @@ When you answer a request, the agent that asked has to find out. There are three
 
 ### Webhook
 
-A bot with a public HTTPS endpoint calls `register_webhook` once, and Phean POSTs a signed event to it within seconds of a change: an answer, a task moved, a goal approved. The bot verifies the signature, then calls `collect_answers` or `get_task`. It needs Write access. See [Webhooks](/docs/webhooks).
+A bot with a public HTTPS endpoint calls `register_webhook` once, and Phean POSTs a signed event to it within seconds of a change: an answer, a task moved, a goal approved. The bot verifies the signature, then calls `collect_answers` or `get_task`. It needs Write access. See [Webhooks](/docs/webhooks). A Claude Code routine can be that endpoint: its API trigger starts a run for each delivery ([setup](/docs/claude-code#wake-a-routine-when-you-answer)).
 
 ### WebSocket
 

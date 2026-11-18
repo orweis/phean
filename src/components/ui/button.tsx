@@ -5,7 +5,7 @@ import type { ComponentProps, ReactNode } from "react";
 import { cx } from "@/lib/cx";
 
 export type ButtonVariant = "primary" | "tinted" | "secondary" | "ghost" | "danger" | "dusk" | "signal";
-export type ButtonSize = "sm" | "md" | "lg" | "menu";
+export type ButtonSize = "sm" | "md" | "lg" | "menu" | "choice";
 
 const VARIANTS: Record<ButtonVariant, string> = {
   /** The prominent action of a view; keep it to one or two per screen. */
@@ -29,11 +29,17 @@ const SIZES: Record<ButtonSize, string> = {
   lg: "h-12 justify-center gap-2 rounded-full px-6 text-md [&_svg]:size-4",
   /** A row of a menu panel: full width, its label at the start, 36px tall. */
   menu: "h-9 w-full justify-start gap-2 rounded-md px-2.5 text-sm [&_svg]:size-4 [&_svg]:text-muted",
+  /**
+   * An answer an agent wrote (a decision's option): 36px tall on one line, and when the words are
+   * longer than the row it wraps inside its container instead of running out of it.
+   */
+  choice: "min-h-9 max-w-full justify-start gap-2 rounded-[1.125rem] px-4 py-1.5 text-left text-sm text-pretty wrap-anywhere [&_svg]:size-4",
 };
 
 export function buttonClasses(variant: ButtonVariant = "secondary", size: ButtonSize = "md", className?: string) {
   return cx(
-    "inline-flex shrink-0 items-center font-semibold whitespace-nowrap transition-colors duration-(--dur-micro)",
+    "inline-flex shrink-0 items-center font-semibold transition-colors duration-(--dur-micro)",
+    size !== "choice" && "whitespace-nowrap",
     "disabled:cursor-not-allowed disabled:opacity-55 aria-disabled:cursor-not-allowed aria-disabled:opacity-55",
     VARIANTS[variant],
     SIZES[size],

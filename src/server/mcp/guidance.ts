@@ -86,6 +86,7 @@ If you run as a service (a bot with an HTTPS endpoint) rather than in a chat, re
 - An event says what changed and why you got it, not the whole object: call get_task, get_goal or collect_answers for the current state, and still collect answers through collect_answers so each is marked delivered.
 - If your endpoint needs its own credentials (an API key in Authorization, say), pass them in register_webhook's headers; they are sent with every request and stored encrypted. Never put them in the URL or in chat.
 - After registering, ping_webhook checks the endpoint; a 401 or 403 there usually means the endpoint's own key is missing from headers.
+- A Claude Code routine can be your webhook: register its API trigger's Fire URL (https://api.anthropic.com/v1/claude_code/routines/…/fire) with headers {"Authorization": "Bearer <the routine's token>"}. Phean sends it {"text": ...} (a line per change with its link, then the payload) with the routine's beta headers, and each delivery starts a run. The run can't verify the signature, so it reads the current state from Phean before acting.
 
 ## Realtime events over a WebSocket
 If you can hold a connection open (a Claude Code hook or background script, a long-running bot) but have no public HTTPS endpoint for a webhook, open whoami's eventsUrl (wss://<host>/api/events) instead. It pushes the same events, for the same reasons, as a webhook, within a couple of seconds.

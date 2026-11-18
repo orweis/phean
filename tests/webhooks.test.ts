@@ -10,6 +10,7 @@ import { remember } from "@/server/domain/memory";
 import { answerInput, captureTasks, claimTask, completeTask, handOffTask, linkSession, listTasks, requestInput, retractAnswer, updateTask } from "@/server/domain/tasks";
 import { deleteWebhook, getWebhook, listWatches, pingWith, registerWebhook, unwatch, watch } from "@/server/domain/webhooks";
 import { backoffSeconds, dispatchDue, MAX_CONSECUTIVE_FAILURES, type DispatchDeps, type WebhookPayload } from "@/server/webhooks/dispatch";
+import { isRoutineFireUrl, ROUTINE_BETA, ROUTINE_TEXT_MAX, routineText } from "@/server/webhooks/routines";
 import { SIGNATURE_HEADER, verifySignature } from "@/server/webhooks/signing";
 import { setDispatchScheduler } from "@/server/webhooks/trigger";
 import { assertWebhookUrlSafe, isPrivateAddress } from "@/server/webhooks/url-safety";
@@ -540,5 +541,60 @@ describe("webhooks pause with their agent", () => {
     await touch(task, "Draft the launch post v2");
     expect(await hookOf(agent.id)).toMatchObject({ status: "disabled", disabledReason: "The agent was revoked." });
     expect(await rows()).toEqual([]);
+  });
+});
+
+describe("a Claude Code routine as the webhook", () => {
+  const fireUrl = () => `https://api.anthropic.com/v1/claude_code/routines/trig_${ws.tenant.slug.replace(/[^a-z0-9]/g, "")}${++urlCounter}/fire`;
+
+  it("knows a routine's Fire URL from any other", () => {
+    expect(isRoutineFireUrl("https://api.anthropic.com/v1/claude_code/routines/trig_01ABC/fire")).toBe(true);
+    expect(isRoutineFireUrl("https://api.anthropic.com/v1/claude_code/routines/trig_01ABC/fire?x=1")).toBe(false);
+    expect(isRoutineFireUrl("https://api.anthropic.com.evil.test/v1/claude_code/routines/trig_01ABC/fire")).toBe(false);
+    expect(isRoutineFireUrl("http://api.anthropic.com/v1/claude_code/routines/trig_01ABC/fire")).toBe(false);
+    expect(isRoutineFireUrl("https://hooks.example.com/v1/claude_code/routines/trig_01ABC/fire")).toBe(false);
+  });
+
+  it("sends the routine the text it takes, with its beta headers and the routine's own token", async () => {
+    const url = fireUrl();
+    await registerWebhook(scout, { url, topics: ["decisions"], headers: { Authorization: "Bearer routine-token-for-tests" } });
+    const task = await todo(scout, "Pick the auditor");
+    await requestInput(scout, { taskId: task.id, kind: "decision", question: "Rivera or Okafor?", options: ["Rivera", "Okafor"] });
+    await answerInput(human, { taskId: task.id, answer: "Okafor" });
+
+    const received: { headers: Headers; body: string }[] = [];
+    const deps: DispatchDeps = {
+      fetch: (async (_url: string | URL | Request, init?: RequestInit) => {
+        received.push({ headers: new Headers(init!.headers), body: String(init!.body) });
+        return Response.json({ type: "routine_fire", claude_code_session_id: "session_test" });
+      }) as unknown as typeof fetch,
+      resolve: async () => ["93.184.216.34"],
+      allowPrivate: true,
+      baseUrl: "https://phean.test",
+      budgetMs: 5_000,
+    };
+    await dispatchDue(testDb.db, deps);
+
+    expect(received).toHaveLength(1);
+    const [request] = received;
+    expect(request!.headers.get("authorization")).toBe("Bearer routine-token-for-tests");
+    expect(request!.headers.get("anthropic-beta")).toBe(ROUTINE_BETA);
+    expect(request!.headers.get("anthropic-version")).toBe("2023-06-01");
+    const body = JSON.parse(request!.body) as Record<string, unknown>;
+    expect(Object.keys(body)).toEqual(["text"]);
+    const text = String(body.text);
+    expect(text).toMatch(/^Phean: 1 change for Scout in /);
+    expect(text).toContain(`- Dana answered Scout on "Pick the auditor" [asked_by_you, watching:task] https://phean.test/w/${ws.tenant.slug}/decisions`);
+    // The whole payload follows the summary, for a run that wants the fields.
+    const payload = JSON.parse(text.slice(text.indexOf("Payload:\n") + "Payload:\n".length)) as WebhookPayload;
+    expect(payload.events[0]).toMatchObject({ entityId: task.id, data: expect.objectContaining({ answer: "Okafor" }) });
+  });
+
+  it("keeps the summary and drops the payload when the batch is too long for a run's text", () => {
+    const events = Array.from({ length: 25 }, (_, index) => ({ summary: `Dana answered request ${index}`, reasons: ["answered_you"], url: "https://phean.test/x", data: { blob: "x".repeat(2_000) } }));
+    const text = routineText(JSON.stringify({ type: "phean.events", agent: { name: "Scout" }, workspace: { name: "Acme" }, events }));
+    expect(text.length).toBeLessThanOrEqual(ROUTINE_TEXT_MAX);
+    expect(text).toContain("Dana answered request 24");
+    expect(text).toContain("call get_activity");
   });
 });

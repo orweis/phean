@@ -8,6 +8,7 @@ import { queryRows } from "../db/raw";
 import { liveAgent } from "../domain/agent-liveness";
 import { agents, events, organization, webhookDeliveries, webhooks, type WebhookRow } from "../db/schema";
 import { assertWebhookUrlSafe, allowPrivateWebhooks, resolveHost, type Resolver } from "./url-safety";
+import { isRoutineFireUrl, ROUTINE_HEADERS, routineBody } from "./routines";
 import { decryptSecret, SIGNATURE_HEADER, signPayload } from "./signing";
 
 /** Events per request: enough to drain a burst quickly, small enough to process in one go. */
@@ -179,7 +180,8 @@ async function buildBatch(db: Db, hook: Claimed, deps: DispatchDeps) {
 
 /**
  * POSTs a signed body, with the endpoint's own headers (its API key, say) under Phean's, which
- * always win. Only a 2xx counts; redirects are not followed.
+ * always win. Only a 2xx counts; redirects are not followed. A Claude Code routine's Fire URL gets
+ * the body it takes, `{ "text": ... }`, and its beta headers (see `routines.ts`).
  */
 export async function postSigned(
   url: string,
@@ -190,6 +192,8 @@ export async function postSigned(
   extraHeaders: Record<string, string> = {},
 ): Promise<{ ok: boolean; status: number | null; error: string | null; latencyMs: number }> {
   const started = Date.now();
+  const routine = isRoutineFireUrl(url);
+  const sent = routine ? routineBody(body) : body;
   try {
     await assertWebhookUrlSafe(url, { allowPrivate: deps.allowPrivate, resolve: deps.resolve });
     const response = await deps.fetch(url, {
@@ -197,14 +201,15 @@ export async function postSigned(
       redirect: "manual",
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       headers: {
+        ...(routine && ROUTINE_HEADERS),
         ...extraHeaders,
         "content-type": "application/json",
         "user-agent": "Phean-Webhooks/1",
-        [SIGNATURE_HEADER]: signPayload(secret, body),
+        [SIGNATURE_HEADER]: signPayload(secret, sent),
         "Phean-Webhook-Id": ids.webhookId,
         "Phean-Delivery-Id": ids.deliveryId,
       },
-      body,
+      body: sent,
     });
     await response.body?.cancel().catch(() => undefined);
     const ok = response.status >= 200 && response.status < 300;

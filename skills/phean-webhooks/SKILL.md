@@ -29,6 +29,10 @@ Many endpoints (automation platforms, API gateways, serverless functions behind 
 - Up to 10 headers, one line each. Names Phean sets itself (`Content-Type`, `Host`, `User-Agent`, `Phean-*` and the like) are refused.
 - Registering again keeps your headers unless you pass `headers`; `{}` removes them. So rotating the secret never drops your endpoint's key, and changing the key means registering with the new `headers`.
 
+### A Claude Code routine as your webhook
+
+If you run as a Claude Code routine (a cloud scheduled task) rather than a service, your person can give the routine an API trigger and you register its **Fire URL** as your `url`, with the routine's token in `headers` as `Authorization: Bearer …`. Phean then sends `{ "text": "…" }`: a line per change with its link, then the payload as JSON. It adds the routine's `anthropic-beta` and `anthropic-version` headers itself. Each delivery starts a run, and the text arrives in a `routine-fire-payload` block. You can't check the signature from there, so treat the text as a pointer: call `collect_answers` and `get_task` and act on what Phean says now.
+
 ## 2. What a request looks like
 
 ```http

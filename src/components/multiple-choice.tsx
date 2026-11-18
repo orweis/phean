@@ -36,7 +36,7 @@ export function MultipleChoice({ taskId, slug, request, title }: { taskId: strin
           <label
             key={option}
             className={cx(
-              buttonClasses("secondary", "md"),
+              buttonClasses("secondary", "choice"),
               "cursor-pointer select-none max-sm:w-full",
               "has-checked:bg-accent-tint has-checked:text-accent-ink has-checked:ring-2 has-checked:ring-accent has-checked:ring-inset",
               "has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-focus",
@@ -51,7 +51,7 @@ export function MultipleChoice({ taskId, slug, request, title }: { taskId: strin
               className="size-4 shrink-0 accent-accent"
             />
             {index < 9 && (
-              <kbd aria-hidden className="hidden h-5 min-w-5 items-center justify-center rounded-xs bg-panel/70 px-1 font-sans text-2xs pointer-fine:inline-flex">
+              <kbd aria-hidden className="hidden h-5 min-w-5 shrink-0 items-center justify-center rounded-xs bg-panel/70 px-1 font-sans text-2xs pointer-fine:inline-flex">
                 {index + 1}
               </kbd>
             )}

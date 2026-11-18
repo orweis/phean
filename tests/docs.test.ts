@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import { headingId, plainHeading } from "@/lib/docs";
 import { DOC_SLUGS, isDocSlug, loadDoc, parseDoc, type DocPage } from "@/server/docs";
 import { TOOLS } from "@/server/mcp/tools";
+import { ROUTINE_API_VERSION, ROUTINE_BETA, ROUTINE_TEXT_MAX } from "@/server/webhooks/routines";
 
 const pages: DocPage[] = await Promise.all(DOC_SLUGS.map(loadDoc));
 
@@ -47,6 +48,13 @@ describe("the docs site", () => {
         if (hash) expect(anchors.get(slug as DocPage["slug"])?.has(hash), `${page.slug} links to ${target}`).toBe(true);
       }
     }
+  });
+
+  it("quotes the headers and the text limit Phean sends a Claude Code routine", () => {
+    const page = pages.find((candidate) => candidate.slug === "claude-code")!;
+    expect(page.body).toContain(`anthropic-beta: ${ROUTINE_BETA}`);
+    expect(page.body).toContain(`anthropic-version: ${ROUTINE_API_VERSION}`);
+    expect(page.body).toContain(`${ROUTINE_TEXT_MAX.toLocaleString("en-US")} characters`);
   });
 
   it("names every MCP tool in the reference", async () => {

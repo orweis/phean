@@ -52,6 +52,19 @@ const FOCUSABLE = "a[href], button:not(:disabled), input:not([type=hidden]):not(
 
 /** Height a panel needs below its trigger before it opens upward instead. */
 const ROOM_BELOW = 320;
+/** Space a panel keeps from the edge of the screen. */
+const EDGE = 8;
+
+/**
+ * Which edge of the trigger the panel lines up with: the one asked for, unless the panel would run
+ * off that side of the screen and fits the other way (a ⋯ menu at the start of a wrapped row).
+ */
+function sideToAlign(asked: "left" | "right", trigger: DOMRect, width: number, screen: number): "left" | "right" {
+  if (!width) return asked;
+  if (asked === "right" && trigger.right - width < EDGE && trigger.left + width <= screen - EDGE) return "left";
+  if (asked === "left" && trigger.left + width > screen - EDGE && trigger.right - width >= EDGE) return "right";
+  return asked;
+}
 
 /**
  * A small disclosure panel built on <details>, so it opens and closes from its trigger without
@@ -97,29 +110,37 @@ export function Popover({
     const onPointerDown = (event: PointerEvent) => {
       if (details.open && !details.contains(event.target as Node)) details.open = false;
     };
+    const placeAcross = () => {
+      const trigger = details.querySelector("summary")!.getBoundingClientRect();
+      details.dataset.align = sideToAlign(align, trigger, panel.current?.offsetWidth ?? 0, document.documentElement.clientWidth);
+    };
     const onToggle = () => {
       if (!details.open) return;
       const trigger = details.querySelector("summary")!.getBoundingClientRect();
       const below = window.innerHeight - trigger.bottom;
       details.dataset.side = below < ROOM_BELOW && trigger.top > below ? "top" : "bottom";
+      placeAcross();
       const box = panel.current;
       if (!box) return;
       const target = box.querySelector<HTMLElement>(FOCUS_FIRST) ?? box.querySelector<HTMLElement>(FOCUSABLE) ?? box;
       target.focus({ preventScroll: true });
     };
+    placeAcross();
     document.addEventListener("keydown", onKeyDown);
     document.addEventListener("pointerdown", onPointerDown);
     details.addEventListener("toggle", onToggle);
+    window.addEventListener("resize", placeAcross);
     return () => {
       document.removeEventListener("keydown", onKeyDown);
       document.removeEventListener("pointerdown", onPointerDown);
       details.removeEventListener("toggle", onToggle);
+      window.removeEventListener("resize", placeAcross);
     };
-  }, [close]);
+  }, [close, align]);
 
   const inline = phone === "inline";
   return (
-    <details ref={ref} data-menu className={cx("group/pop relative", inline && "max-sm:open:basis-full")}>
+    <details ref={ref} data-menu data-align={align} className={cx("group/pop relative", inline && "max-sm:open:basis-full")}>
       <summary
         aria-label={triggerLabel}
         className={cx(
@@ -143,7 +164,7 @@ export function Popover({
           inline
             ? "max-sm:static max-sm:mt-2 max-sm:w-full"
             : "max-sm:fixed max-sm:inset-x-3 max-sm:bottom-3 max-sm:max-h-[calc(100dvh-1.5rem)] max-sm:w-auto max-sm:origin-bottom max-sm:overflow-y-auto",
-          align === "right" ? "sm:right-0" : "sm:left-0",
+          "sm:group-data-[align=right]/pop:right-0 sm:group-data-[align=left]/pop:left-0",
           className,
         )}
       >
