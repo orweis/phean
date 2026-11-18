@@ -393,6 +393,12 @@ test.describe("in the dark appearance", () => {
     });
   }
 
+  test("the landing page's hero shows the night hill, and only it", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.locator('img[data-art="hero-dark"]')).toBeVisible();
+    await expect(page.locator('img[data-art="hero-light"]')).toBeHidden();
+  });
+
   test.describe("signed in", () => {
     test.use({ storageState: DEMO_SESSION });
 

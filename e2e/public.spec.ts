@@ -11,7 +11,11 @@ test("the landing page leads with the value, shows the product at work, and the 
 
   // Use cases are tabs: arrow keys move between them and show each team's sample morning.
   const tabs = page.getByRole("tablist", { name: "Who runs a fleet of agents" });
-  await tabs.getByRole("tab", { name: "Marketing teams" }).click();
+  // Click until the tab takes it: a click that lands before the page hydrates does nothing.
+  await expect(async () => {
+    await tabs.getByRole("tab", { name: "Marketing teams" }).click();
+    await expect(tabs.getByRole("tab", { name: "Marketing teams" })).toHaveAttribute("aria-selected", "true", { timeout: 1000 });
+  }).toPass();
   await page.keyboard.press("ArrowRight");
   await expect(tabs.getByRole("tab", { name: "Software factories" })).toHaveAttribute("aria-selected", "true");
   await expect(page.getByRole("tabpanel")).toContainText("Coding agents in parallel");
@@ -41,6 +45,42 @@ test("the landing page leads with the value, shows the product at work, and the 
   await page.getByRole("navigation", { name: "Account" }).getByRole("link", { name: "Get started" }).click();
   await expect(page).toHaveURL("/sign-up");
   await expect(page.getByRole("button", { name: "Create account" })).toBeVisible();
+});
+
+test("the landing page's illustrations load at their size, with words for the ones that carry meaning", async ({ page }) => {
+  await page.goto("/");
+  // The hero shows one hill, the appearance's: the light one here, and the dark one is never fetched.
+  const hero = page.locator('img[data-art="hero-light"]').first();
+  await expect(hero).toBeVisible();
+  await expect(hero).toHaveAttribute("alt", /boulder up a long violet hill/);
+  await expect(page.locator('main img[data-art="hero-dark"]')).toBeHidden();
+  for (const id of ["capture", "assistants", "decisions", "memory", "hearback"]) {
+    const art = page.locator(`img[data-art="${id}"]`);
+    await art.scrollIntoViewIfNeeded();
+    await expect(art).toHaveAttribute("alt", /\w{4,}/);
+    await expect(art).toHaveAttribute("width", /\d+/);
+    await expect(art).toHaveAttribute("height", /\d+/);
+    await expect.poll(() => art.evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth > 0)).toBe(true);
+  }
+  // The closing band's hills are decoration behind the words.
+  await expect(page.locator('img[data-art="cta-band"]')).toHaveAttribute("alt", "");
+  // Shared links show the social card.
+  await expect(page.locator('meta[property="og:image"]')).toHaveAttribute("content", /\/marketing\/og-card-1200x630\.jpg$/);
+  await expect(page.locator('meta[name="twitter:card"]')).toHaveAttribute("content", "summary_large_image");
+});
+
+test("the landing page names the agents it works with, each with its mark and its docs page", async ({ page }) => {
+  await page.goto("/");
+  const strip = page.getByRole("region", { name: "Made for the agents you already run" });
+  await expect(strip.getByRole("list", { name: "Coding agents" }).getByRole("link")).toHaveText(["Claude Code", "Cursor", "VS Code"]);
+  const assistants = strip.getByRole("list", { name: "Assistants" }).getByRole("link");
+  await expect(assistants).toHaveText(["Claude", "ChatGPT", "Grok", "Dots", "Muse", "Instinct"]);
+  // Vendors' marks where an official or openly licensed one exists; a monogram chip otherwise.
+  await expect(strip.locator("svg[data-mark]")).toHaveCount(5);
+  await expect(strip.locator("[data-monogram]")).toHaveCount(4);
+  await expect(strip.getByRole("link", { name: "Cursor" })).toHaveAttribute("href", "/docs/cursor");
+  await strip.getByRole("link", { name: "Grok" }).click();
+  await expect(page).toHaveURL("/docs/grok");
 });
 
 test("the landing page's animations can be paused and played again", async ({ page }) => {
@@ -83,6 +123,8 @@ test("the docs are one click from the landing page, and walk page to page", asyn
   // Each agent has its own page under Agents, from connecting it to hearing back.
   await page.goto("/docs/agents");
   await expect(page.getByRole("heading", { level: 1, name: "Agents" })).toBeVisible();
+  // Each agent in the table carries its mark beside its name.
+  await expect(page.getByRole("table").getByRole("link", { name: "Cursor" }).locator("svg[data-mark]")).toHaveCount(1);
   await page.getByRole("table").getByRole("link", { name: "Grok" }).click();
   await expect(page).toHaveURL("/docs/grok");
   for (const section of ["Connect in the Grok app", "Teach it Phean", "Sync up", "Hear back"]) await expect(page.getByRole("heading", { level: 2, name: section })).toBeVisible();

@@ -19,7 +19,7 @@ export function DocArticle({ page, previous, next }: { page: DocPage; previous: 
           {page.description && <p className="mt-2 text-md text-ink-2">{page.description}</p>}
         </header>
         <div className="docs-body mt-6">
-          <MarkdownView source={page.body} headings="anchored" />
+          <MarkdownView source={page.body} headings="anchored" agentMarks />
         </div>
         {(previous || next) && (
           <nav aria-label="More docs" className="mt-12 grid gap-3 border-t border-rule pt-6 sm:grid-cols-2">

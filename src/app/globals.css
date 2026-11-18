@@ -1,17 +1,19 @@
 /* Hallmark · shape: app screen · genre: modern-minimal · theme: dusk (by request) · themes: dusk (default), ledger, ink, console · redesign: restyle
- * idea: "task management, flipped: agents do the tasks, people make the calls, in one decision center" · vibe: "Apple-calm Liquid Glass over a slate-and-bone ledger at the calm end of the day in the app; a bright brand mesh and lifted product frames on the site"
+ * idea: "task management, flipped: agents do the tasks, people make the calls, in one decision center" · vibe: "Apple-calm Liquid Glass over a slate-and-bone ledger at the calm end of the day in the app; an illustrated hill at dusk behind the head, dusk bands and lifted product frames on the site"
  * paper: oklch(95.5% 0.008 75) · dark paper: oklch(17.5% 0.014 268) · accent: oklch(45% 0.13 274) · signal: oklch(79% 0.13 60) · display: Bricolage Grotesque (page titles, the site's headlines) · body: SF Pro, with Inter Variable where SF is absent
  * nav: Liquid Glass header with a capsule tab rail · signature: the timetable, every task a track on one time axis · states: loading, empty, error, full
- * axes: light+dark/neo-grotesk/periwinkle-apricot · dusk: none/periwinkle-apricot/glass · posture: committed tinted ground under a glass functional layer, full palette for the four stations · modes: light+dark, in every theme · contrast: pass (tests/themes.test.ts, every theme and mode) · v3.0.0 */
+ * axes: light+dark/neo-grotesk/periwinkle-apricot · dusk: fog (an illustrated hill, by request)/periwinkle-apricot/glass · posture: committed tinted ground under a glass functional layer, full palette for the four stations · modes: light+dark, in every theme · contrast: pass (tests/themes.test.ts, every theme and mode) · v3.0.0 */
 /* Hallmark · pre-emit critique: P4 H4 E4 S5 R4 V5 · weakest: E, many screens share one system; every surface goes through the same primitives and tokens */
 /* Hallmark · themes · a theme is a colourway of this one system: Dusk, Ink and Console lend Hallmark's palettes, mapped onto Phean's roles (brand, signal, late, the stations), and Ledger keeps the earlier custom palette value for value; the type stays Phean's in all of them, so a person's pick never moves a layout */
-/* Hallmark · waive dusk hour · no photograph behind the hero: the product is the hero here, and the slate moves into the dusk bands instead */
+/* Hallmark · answered dusk hour · hero-light and hero-dark from public/marketing/manifest.json fill the hero and the auth panel, the head on their empty sky over a paper fog (hero-fog) · an illustration by request instead of a photograph: the hill the agents roll the boulder up is the name's own story, and the person supplied the series */
 /* Hallmark · waive dusk "never a glow behind glass" · the ground keeps its two faint top glows, at a fraction of Ledger's strength, so the glass bar has light to pick up as content scrolls beneath it */
 /* Hallmark · waive 29 · glass only on the sticky header, the workspace switcher, popovers and the phone sheet · the person asked for Apple's Liquid Glass, which belongs on the floating controls above the ledger and never on its cards */
 /* Hallmark · reworded "How it works" to "The route in" · the three steps are drawn as stations on one line, so the heading names the route */
 /* Hallmark · dropped <NewGoalForm slug={slug} goals={goals} /> · the overview renders one ghost Add manually popover in the header, which holds both the task and the goal form, because agents do most of the capturing */
 /* Hallmark · reworded "<RememberForm slug={slug} goals={goals} goalId={goal.id} />" and "<NewGoalForm slug={slug} goals={goals} parentGoalId={goal.id} />" · both goal-page popovers stay with the same forms; only their triggers became ghost buttons, so manual entry stays quieter than the agents' work */
-/* Hallmark · waive 80 · the landing's hero is the product itself · a drawing of the Decisions page built from the app's own components, animated on one loop, over the brand mesh */
+/* Hallmark · waive 80 · every drawn picture is an <Art> from public/marketing/manifest.json with its alt text, placed where its use field says (the hero's hour, capture beside the flip, assistants behind the phone, decisions on the dusk band, memory and hearback atop two feature tiles, cta-band behind the close) · the illustrations are the person's own material, and the product drawing (HeroDemo) stays the signature, rising out of the hero's foot */
+/* Hallmark · answered pictures budget (83) · below the hero, six illustrations, none of them in two sections in a row as the section's lead, well under a third of the page; Ink and Console take them desaturated through --art-tone so a neutral theme gets no third hue */
+/* Hallmark · answered logos (46a) · the agents strip names compatible clients with their makers' marks (Simple Icons CC0, Microsoft Codicons CC BY 4.0, OpenAI's own published mark) and monogram chips where none is usable; it is not a customer logo wall and claims no partnership */
 /* Hallmark · dismissed 41 · here every hue's -ink token is its text colour on light surfaces, as with late-ink and arrive-ink; the label on the brand fill is on-accent, at 4.5:1 or better in every theme (Dusk 7.6:1 in light and 8.9:1 in dark), as tests/themes.test.ts checks */
 /* Hallmark · waive 49b · a real phrase that cannot shorten, two lines at most · an activity line links the sentence that names the goal, and on a 320px phone the goal title wraps with it */
 /* Hallmark · dismissed F25 · on phones the first column is pinned, so each agent or workspace stays named while its figures and the revoke action scroll beside it inside the card */
@@ -580,6 +582,72 @@
     }
   }
 
+  /*
+   * The illustrations (components/marketing/art.tsx). They are drawn in violet and ember, Dusk's and
+   * Ledger's own hues, so those themes show them as they are; Ink and Console are neutral grounds with
+   * a teal or blue brand, so there the drawings go quiet (most of their colour taken out, the ember
+   * still warm) instead of bringing a third hue to the page. In dark, a drawing made for a light page
+   * is dimmed so it does not glare off the slate; the dark-ground ones are left as they are.
+   */
+  .art {
+    filter: var(--art-tone, saturate(1)) var(--art-dim, brightness(1));
+
+    @variant dark {
+      &[data-ground="light"] {
+        --art-dim: brightness(0.72) contrast(1.05);
+      }
+    }
+  }
+
+  [data-theme="ink"] .art {
+    --art-tone: saturate(0.3) contrast(1.02);
+  }
+
+  [data-theme="console"] .art {
+    --art-tone: saturate(0.38);
+  }
+
+  /* The hero's art in the appearance in force: one of the pair is display: none, and lazy, so it is never fetched. */
+  .art-dark {
+    display: none;
+  }
+
+  @variant dark {
+    .art-light {
+      display: none;
+    }
+
+    .art-dark {
+      display: block;
+    }
+  }
+
+  /*
+   * The hour's fog (Hallmark's Dusk): on a phone the picture sits under the words and fades into the
+   * ground at both edges; from 1024px it fills the hero, the ground lifts as a soft fog behind the head
+   * so every word keeps its contrast on the sky, and its foot fades to the ground the product rises from.
+   */
+  .hero-fog {
+    background: linear-gradient(var(--color-paper), transparent 22%, transparent 64%, var(--color-paper));
+
+    @media (width >= 64rem) {
+      background:
+        radial-gradient(ellipse 46% 58% at 22% 44%, color-mix(in oklch, var(--color-paper) 74%, transparent), transparent 78%),
+        linear-gradient(to top, var(--color-paper), transparent 36%);
+    }
+  }
+
+  /* The closing band's scrim: the night behind the words, so they hold 4.5:1 wherever the hills are lighter. */
+  .cta-scrim {
+    background:
+      radial-gradient(ellipse 58% 64% at 50% 50%, color-mix(in oklch, var(--color-dusk) 74%, transparent), color-mix(in oklch, var(--color-dusk) 30%, transparent));
+  }
+
+  /* The auth pages' panel: the same hour below the headline, its sky fading up into the ground the words sit on. */
+  .auth-fog {
+    background: linear-gradient(var(--color-paper), transparent 38%);
+  }
+
   /* The marketing display type: big, tight, optical-sized. */
   .display {
     font-family: var(--font-display);
@@ -705,14 +773,23 @@
     animation: hill-twinkle 5s ease-in-out infinite;
   }
 
-  /* The names of the agents Phean works with, drifting past; the list is doubled so the loop is seamless. */
-  [data-marquee] {
-    animation: marquee 40s linear infinite;
+  /* The hero's hill drifts, slowly, as Dusk's photograph does. */
+  .hero-scene .art {
+    animation: art-drift 48s ease-in-out infinite alternate;
   }
 
   /* The light that turns around the hero's picture of the product. */
   [data-glow]::before {
     animation: glow-turn 9s linear infinite;
+  }
+}
+
+@keyframes art-drift {
+  from {
+    transform: scale(1.02);
+  }
+  to {
+    transform: scale(1.08) translate(-1.5%, 1%);
   }
 }
 
@@ -723,7 +800,7 @@
 }
 
 /* "Pause motion" on the site (WCAG 2.2.2): everything that loops stops where it is. */
-[data-paused] :is([data-demo] *, [data-hill] *, [data-marquee], [data-glow]::before, [data-drift], [data-drift]::before) {
+[data-paused] :is([data-demo] *, [data-hill] *, [data-glow]::before, [data-drift], [data-drift]::before, .hero-scene .art) {
   animation-play-state: paused !important;
 }
 
@@ -844,12 +921,6 @@
 @keyframes hill-twinkle {
   50% {
     opacity: 0.25;
-  }
-}
-
-@keyframes marquee {
-  to {
-    transform: translateX(-50%);
   }
 }
 
