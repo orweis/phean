@@ -76,8 +76,10 @@ test("the landing page names the agents it works with, each with its mark and it
   const assistants = strip.getByRole("list", { name: "Assistants" }).getByRole("link");
   await expect(assistants).toHaveText(["Claude", "ChatGPT", "Grok", "Dots", "Muse", "Instinct"]);
   // Vendors' marks where an official or openly licensed one exists; a monogram chip otherwise.
-  await expect(strip.locator("svg[data-mark]")).toHaveCount(5);
-  await expect(strip.locator("[data-monogram]")).toHaveCount(4);
+  await expect(strip.locator("svg[data-mark]")).toHaveCount(8);
+  await expect(strip.locator("[data-monogram]")).toHaveCount(1);
+  await expect(strip.getByRole("link", { name: "Grok" }).locator("svg[data-mark=grok]")).toHaveCount(1);
+  await expect(strip.getByRole("link", { name: "Muse" }).locator("svg[data-mark=muse]")).toHaveCount(1);
   await expect(strip.getByRole("link", { name: "Cursor" })).toHaveAttribute("href", "/docs/cursor");
   await strip.getByRole("link", { name: "Grok" }).click();
   await expect(page).toHaveURL("/docs/grok");
