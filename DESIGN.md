@@ -318,7 +318,7 @@ A theme is a named set of every token above, with a light and a dark value for e
 | `ink` | Ink | white oklch(97.6% 0.003 100) · hueless black oklch(15% 0 0) | teal 188 | ember 52 | blue 255 · orchid 322 · leaf 140 |
 | `console` | Console (light is its paper colourway) | warm paper oklch(96.4% 0.005 85) · graphite oklch(17% 0.008 250) | instrument blue 250 | amber 80, Console's colour for a person | ice 205 · violet 305 · green 150 |
 
-**How a theme reaches the page.** The `phean-theme` cookie is read on the server by `getTheme()` in `server/web.ts`, as the appearance is by `getAppearance()`, and the root layout renders it as `<html data-theme>` beside `data-appearance`, so the first paint is already in both. `themes.css` sets each theme's light tokens under `[data-theme="…"]` and its dark ones under `[data-appearance="dark"]`, or under System (or no choice) on a device that prefers dark. The rules match `[data-theme]` on any element too, so the picker's swatches (`ThemeSwatch`) show each theme's real colours in the appearance in force. `lib/themes.ts` holds what the client shares: the ids, their names and descriptions, what a swatch shows, and each theme's paper in sRGB for the `theme-color` meta. The picker (`ThemePicker`, in the account menu, the Account page's Appearance card, and the landing page's footer as a compact row) is a group of radios: each a swatch and a name, the selected one ringed in the brand, marked with a check and `data-selected`, so the choice never rests on colour alone; arrow keys move between them and a choice applies at once, with the cookie and the metas, and every other picker on the page follows.
+**How a theme reaches the page.** The `phean-theme` cookie is read on the server by `getTheme()` in `server/web.ts`, as the appearance is by `getAppearance()`, and the root layout renders it as `<html data-theme>` beside `data-appearance`, so the first paint is already in both. `themes.css` sets each theme's light tokens under `[data-theme="…"]` and its dark ones under `[data-appearance="dark"]`, or under System (or no choice) on a device that prefers dark. The rules match `[data-theme]` on any element too, so the picker's swatches (`ThemeSwatch`) show each theme's real colours in the appearance in force. `lib/themes.ts` holds what the client shares: the ids, their names and descriptions, what a swatch shows, and each theme's paper in sRGB for the `theme-color` meta. The picker (`ThemePicker`, in the account menu, the Account page's Appearance card, and the landing page's footer as a compact row) is a group of radios: each a swatch and a name (the swatch's `size`: `sm` in the footer, `md` in the menu, and `lg` on the Account page, where four cards in a row each show a small picture of the app in that theme: the bar with the ember and the selected tab, and a card with a line of text, the four stations and a brand button), the selected one ringed in the brand, marked with a check and `data-selected`, so the choice never rests on colour alone; arrow keys move between them and a choice applies at once, with the cookie and the metas, and every other picker on the page follows.
 
 **Adding a theme.** Add its id to `THEMES` with a name and description in `THEME_META` (`lib/themes.ts`); give it a light and a dark palette in `THEME_TOKENS` (`lib/theme-tokens.ts`), every token, deriving dark by `references/dark-mode.md`'s recipe (ground at 12 to 18% L, elevation lighter, the hue never moving); run `pnpm themes`; add its paper to `THEME_PAPER` (the test prints the sRGB); then run `pnpm test`, which fails until the stylesheet matches and every text pair holds 4.5:1, every line and mark 3:1, red stays red, the signal warm, the stations apart and the QR code dark on light. `e2e/quality.spec.ts` scans the key pages in it in both appearances. Then add its row to the table above.
 
@@ -390,7 +390,7 @@ Two layers, as in Apple's Liquid Glass: content and the functional layer above i
 
 **The Functional Layer Rule.** Glass is for navigation and controls that float above the content: the header, the switcher, popovers and the phone sheet. Cards, lanes, tables and charts are never glass, and nothing that is content sits on glass.
 
-**The Flat Content Rule.** Cards, task cards and tables never cast a shadow, and a card never sits inside another card. If something needs to stand out, give it a state tone, not elevation.
+**The Flat Content Rule.** Cards, task cards and tables never cast a shadow, and a card never sits inside another card. If something needs to stand out, give it a state tone, not elevation. The surface ladder is tonal: `paper` (the ground) → `panel` (cards, through `surface`, with its lit top edge in dark) → `raised` (the selected segment), with `fill` for wells and hovers inside a panel. A board card's hairline deepens toward `edge` on hover.
 
 ## Shapes
 
@@ -401,6 +401,7 @@ Controls are capsules: buttons, tabs, badges, count chips, segmented controls an
 ### Buttons
 
 - **Shape:** capsules, 36px tall; small buttons are 32px with a hit area extended to 44px.
+- **Pressed:** a capsule gives a little under the finger (scaled to 97% for 120ms, motion-safe only, never while disabled); menu rows and agents' long answers (`choice`) stay still.
 - **Primary:** the brand with `on-accent` text, `accent-2` on hover. One or two per view (see The Prominence Rule).
 - **Tinted:** a brand wash with brand text, for the forward step repeated on each row (Done).
 - **Secondary:** a filled grey capsule, a shade deeper on hover.
@@ -421,13 +422,13 @@ Controls are capsules: buttons, tabs, badges, count chips, segmented controls an
 - **Counts:** the tab rail's counts for what needs a person (Overview, Decisions) are ember capsules with dark numerals; the Tasks tab's inbox count is a neutral capsule (`fill`, `ink-2`), so ember keeps its meaning.
 - **Filters:** the memory kinds are capsules, brand-tinted when selected and filled grey otherwise, each with its count.
 - **Lane counts:** a neutral capsule beside the lane's name; a folded lane reads "5 of 13".
-- **Who acted:** an agent is a squared tile with a bot, a person a round disc, both neutral; a task's operator is meta text with a bot or person glyph, "Operator: Finance clerk", never a violet badge, since violet is a state. A handover under way is a badge with a handshake, in `DELEGATION_META`'s tones: handing off is sky (new to whoever picks it up), picking up is the violet of work in motion, returned is neutral; never ember, which stays for what waits on a person's answer. The handoff note sits under the title on the task's page as a quiet figure, with its age. A board card being handed off takes a dashed `line-inbox` edge, so work in transit reads by its outline as well as its badge (late work keeps its late edge). The overview's Handoffs card, in the right column after Late, lists handovers with the viewer's first, marked "For you" in words, each with from and to, its age, the note's first lines, and a tinted Take it.
+- **Who acted:** an agent is a squared tile with a bot, a person a round disc, both neutral and ringed in a hairline so they hold their shape on any surface; a task's operator is meta text with a bot or person glyph, "Operator: Finance clerk", never a violet badge, since violet is a state. A handover under way is a badge with a handshake, in `DELEGATION_META`'s tones: handing off is sky (new to whoever picks it up), picking up is the violet of work in motion, returned is neutral; never ember, which stays for what waits on a person's answer. The handoff note sits under the title on the task's page as a quiet figure, with its age. A board card being handed off takes a dashed `line-inbox` edge, so work in transit reads by its outline as well as its badge (late work keeps its late edge). The overview's Handoffs card, in the right column after Late, lists handovers with the viewer's first, marked "For you" in words, each with from and to, its age, the note's first lines, and a tinted Take it.
 
 ### Cards / Containers
 
 - **Corner Style:** 14px.
-- **Background:** panel; the question and decision cards are ember and the late card crimson, in both their border and header, and a tinted header's description takes the tone's ink rather than grey.
-- **Shadow Strategy:** none (see Elevation & Depth).
+- **Background:** panel, through the `surface` utility (globals.css), which in dark adds a hairline of light along the top edge (`glass-sheen`, inset) so the step from the ground to the panel reads without a heavier border. The question and decision cards are ember and the late card crimson: a softened border (the tone at 45% and 30%), and a header that is a quiet wash of the tone's tint over the panel (55% and 60%), lit along its top edge by a 2px inset line in the tone itself, never a full band of colour (Dusk's signals are never a large fill). A tinted header's description takes the tone's ink rather than grey; the wash sits between the tint and the panel, so that ink holds its contrast in every theme. Card titles take `--tracking-title`.
+- **Shadow Strategy:** none (see Elevation & Depth); the dark top edge is an inset line, not a lift.
 - **Border:** one hairline.
 - **Internal Padding:** 20px; the header is ruled off from the body.
 
@@ -436,6 +437,10 @@ Controls are capsules: buttons, tabs, badges, count chips, segmented controls an
 - **Style:** panel, a 1px edge border, 10px corners, 36px tall, full width of their wrapper (size the wrapper, not the control).
 - **Focus:** the border turns to the brand and a soft 3px brand halo grows around it, as on Apple's text fields.
 - **Error / Disabled:** errors show inline under the form in late ink; disabled controls go filled with muted text.
+
+### Empty states
+
+A quiet centred block: an icon in a 40px `fill` disc in `muted`, a semibold title, and one muted line saying what will fill the space and how. Two empty states are moments rather than gaps, and carry a small spot illustration instead of the icon (`EmptyState` with `art`, decorative, 7rem wide): **All clear** on Decisions when nothing waits on the person (`spot-boulder`), and **No agents yet** on the Agents page (`spot-signal`, an agent sending its first signal). Never on a working surface, a card in a list, or more than one per view.
 
 ### Segmented controls
 
