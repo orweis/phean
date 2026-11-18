@@ -17,6 +17,10 @@ export const routes = {
   docs: (slug?: string) => (slug ? `/docs/${slug}` : "/docs"),
   signIn: (next?: string) => withQuery("/sign-in", { next }),
   signUp: (next?: string) => withQuery("/sign-up", { next }),
+  /** The second step of a sign-in, for people with two-factor on: their authenticator code or a backup code. */
+  twoFactor: (next?: string) => withQuery("/sign-in/two-factor", { next }),
+  /** The signed-in person's own account: how they sign in, and two-factor. */
+  account: () => "/account",
   workspaces: () => "/workspaces",
   workspace: (slug: string) => `/w/${slug}`,
   /** The overview's list of agent questions waiting on a person. */

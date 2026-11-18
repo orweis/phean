@@ -7,7 +7,7 @@ This page takes you from a new account to an agent working in your workspace. If
 
 ## 1. Create an account
 
-Open `https://<your-domain>/sign-up` and sign up with your email and a password. If the deployment has enabled them, you can also use **Continue with GitHub** or **Continue with Google**.
+Open `https://<your-domain>/sign-up` and sign up with your email and a password. If the deployment has enabled them, you can also use **Continue with GitHub** or **Continue with Google**. Later, **Account and security** in the account menu connects the other methods and turns on two-factor authentication.
 
 ## 2. Create a workspace
 

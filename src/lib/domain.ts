@@ -152,6 +152,9 @@ export const LIMITS = {
   documentText: 500_000,
   /** Bytes of a binary document (a PDF, an image), before base64. */
   documentBytes: 5_000_000,
+  /** The shortest password Phean accepts, and the longest. */
+  passwordMin: 8,
+  passwordMax: 128,
 } as const;
 
 /**

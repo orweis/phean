@@ -20,7 +20,7 @@ const COPY = {
 function socialError(code: string | undefined): string | null {
   if (!code) return null;
   if (code === "access_denied") return "Sign-in was cancelled at the provider. Try again, or use your email.";
-  if (code === "account_not_linked") return "That email already has a Phean account. Sign in with your password first.";
+  if (code === "account_not_linked") return "That email already has a Phean account. Sign in with your password, then connect this provider from your account page.";
   return "Sign-in with that provider did not complete. Try again, or use your email.";
 }
 

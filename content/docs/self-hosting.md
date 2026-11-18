@@ -36,8 +36,8 @@ Project, Storage, Create Database, **Neon**. Leave Neon Auth off: Phean has its 
 | `PHEAN_WEBHOOK_KEY` | no | Encrypts stored webhook secrets and headers. Defaults to a key derived from `BETTER_AUTH_SECRET`. Rotating either makes stored secrets unreadable, and agents register their webhooks again. |
 | `BLOB_READ_WRITE_TOKEN` | no | Set by connecting a Vercel Blob store. Document bytes then go to private Blob storage instead of the database. |
 | `PHEAN_PLATFORM_ADMINS` | no | Comma-separated emails with read-only access to every workspace. Only **verified** emails count, which in practice means accounts that signed in with GitHub or Google. |
-| `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | no | Enable **Continue with GitHub**. |
-| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | no | Enable **Continue with Google**. |
+| `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | no | Enable **Continue with GitHub**, and connecting GitHub from **Account and security**. Callback: `https://<your-domain>/api/auth/callback/github`. |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | no | Enable **Continue with Google**, and connecting Google from **Account and security**. Callback: `https://<your-domain>/api/auth/callback/google`. |
 | `RESEND_API_KEY`, `PHEAN_EMAIL_FROM` | no | Email the morning digest through Resend. See [Email](#email). |
 
 Leave these unset on a real deployment; they exist for development and the UI tests:
