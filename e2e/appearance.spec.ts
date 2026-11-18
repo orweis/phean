@@ -1,10 +1,12 @@
 import { expect, test, type Page } from "@playwright/test";
 
+import { DEFAULT_THEME, THEME_PAPER } from "../src/lib/themes";
 import { expectAccessible, expectNothingCutOff } from "./support/checks";
 import { DEMO_SESSION } from "./support/env";
 import { appearanceOption, popover } from "./support/locators";
 
-const DARK_PAPER = "#0e0d17";
+/** The default theme's dark paper, which the browser chrome takes in Dark. */
+const DARK_PAPER = THEME_PAPER[DEFAULT_THEME].dark;
 
 /** Whether the ground is painted dark: the body's background, converted to sRGB through a canvas. */
 function groundIsDark(page: Page) {

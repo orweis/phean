@@ -11,7 +11,7 @@ import {
   withSession,
   type AgentSession,
 } from "@/lib/agent-sessions";
-import { appearanceCookie, colorSchemeFor, parseAppearance, themeColorFor } from "@/lib/appearance";
+import { appearanceCookie, colorSchemeFor, parseAppearance } from "@/lib/appearance";
 import { addDays, dayOf, daysBetween, isoDate, isoDayFromToday, isPastDue, startOfUtcDay, todayIso } from "@/lib/dates";
 import { faviconBadgeText } from "@/lib/favicon";
 import { swimlaneOf } from "@/lib/swimlanes";
@@ -213,11 +213,7 @@ describe("appearance", () => {
     expect(parseAppearance("sepia")).toBe("system");
   });
 
-  it("gives the browser chrome the paper of the chosen appearance, or of the device's under System", () => {
-    expect(themeColorFor("system", "light")).toBe("#f7f5fb");
-    expect(themeColorFor("system", "dark")).toBe("#0e0d17");
-    expect(themeColorFor("dark", "light")).toBe("#0e0d17");
-    expect(themeColorFor("light", "dark")).toBe("#f7f5fb");
+  it("sets the form controls' colour scheme to the appearance, or both under System", () => {
     expect(colorSchemeFor("system")).toBe("light dark");
     expect(colorSchemeFor("dark")).toBe("dark");
   });

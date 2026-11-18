@@ -4,9 +4,11 @@ import { headers } from "next/headers";
 import { SignInMethods, type ProviderMethod } from "@/components/account/sign-in-methods";
 import { TwoFactorSettings } from "@/components/account/two-factor-settings";
 import { AppHeader } from "@/components/app-header";
+import { AppearancePicker } from "@/components/appearance-picker";
 import { PageHeader } from "@/components/page-header";
 import { PROVIDER_LABELS, type SocialProvider } from "@/components/provider-mark";
 import { SkipLink } from "@/components/skip-link";
+import { ThemePicker } from "@/components/theme-picker";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { StatusRegion } from "@/components/ui/status-region";
 import { callbackErrorMessage } from "@/lib/auth-errors";
@@ -14,6 +16,7 @@ import { queryParam } from "@/lib/routes";
 import { auth } from "@/server/auth/auth";
 import { getViewer } from "@/server/auth/session";
 import { oauthProviders } from "@/server/config";
+import { getAppearance, getTheme } from "@/server/web";
 
 export const metadata: Metadata = { title: "Account" };
 
@@ -23,7 +26,7 @@ function isProvider(value: string | undefined): value is SocialProvider {
   return PROVIDERS.includes(value as SocialProvider);
 }
 
-/** The signed-in person's own account: the ways they sign in, and two-factor. */
+/** The signed-in person's own account: how Phean looks for them, the ways they sign in, and two-factor. */
 export default async function AccountPage({ searchParams }: PageProps<"/account">) {
   const viewer = await getViewer();
   const params = await searchParams;
@@ -40,6 +43,7 @@ export default async function AccountPage({ searchParams }: PageProps<"/account"
   const connected = queryParam(params.connected);
   const failed = callbackErrorMessage(queryParam(params.error));
   const twoFactorEnabled = Boolean((viewer.user as { twoFactorEnabled?: boolean | null }).twoFactorEnabled);
+  const [appearance, theme] = await Promise.all([getAppearance(), getTheme()]);
 
   return (
     <StatusRegion>
@@ -70,6 +74,13 @@ export default async function AccountPage({ searchParams }: PageProps<"/account"
           />
           <CardBody>
             <TwoFactorSettings enabled={twoFactorEnabled} hasPassword={Boolean(password.connectedAt)} />
+          </CardBody>
+        </Card>
+        <Card>
+          <CardHeader title="Appearance" description="A colour theme, and Light, Dark or System, which follows your device. Both apply at once and stay with this browser." />
+          <CardBody className="grid gap-6 sm:grid-cols-2">
+            <ThemePicker initial={theme} />
+            <AppearancePicker initial={appearance} />
           </CardBody>
         </Card>
       </main>

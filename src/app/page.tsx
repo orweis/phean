@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import { AppearancePicker } from "@/components/appearance-picker";
+import { ThemePicker } from "@/components/theme-picker";
 import { TimetableLegend } from "@/components/charts/timetable";
 import { Logo, LogoMark } from "@/components/logo";
 import { AssistantInbox } from "@/components/marketing/assistant-inbox";
@@ -21,7 +22,7 @@ import { cx } from "@/lib/cx";
 import { routes } from "@/lib/routes";
 import { getSession } from "@/server/auth/session";
 import { mcpResourceUrl } from "@/server/config";
-import { getAppearance } from "@/server/web";
+import { getAppearance, getTheme } from "@/server/web";
 
 export const metadata: Metadata = {
   title: { absolute: "Phean: your agents run the tasks, you make the calls" },
@@ -85,7 +86,7 @@ function ConnectCommand({ command }: { command: string }) {
 }
 
 export default async function LandingPage() {
-  const [session, appearance] = await Promise.all([getSession(), getAppearance()]);
+  const [session, appearance, theme] = await Promise.all([getSession(), getAppearance(), getTheme()]);
   const signedIn = Boolean(session);
   const start = signedIn ? { href: routes.workspaces(), label: "Go to your workspaces" } : { href: routes.signUp(), label: "Create a workspace" };
   const connect = `claude mcp add --transport http phean ${mcpResourceUrl()}`;
@@ -371,7 +372,10 @@ export default async function LandingPage() {
               </ul>
             </nav>
           </div>
-          <AppearancePicker initial={appearance} className="w-full sm:w-72" />
+          <div className="grid w-full gap-4 sm:w-80">
+            <ThemePicker initial={theme} compact />
+            <AppearancePicker initial={appearance} />
+          </div>
         </div>
       </footer>
     </div>

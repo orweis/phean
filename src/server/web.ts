@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import { cache } from "react";
 
 import { APPEARANCE_COOKIE, parseAppearance, type Appearance } from "@/lib/appearance";
+import { parseTheme, THEME_COOKIE, type ThemeId } from "@/lib/themes";
 
 import type { Stage } from "@/lib/workflow";
 
@@ -26,6 +27,11 @@ export async function orNotFound<T>(load: Promise<T>): Promise<T> {
 /** The viewer's appearance, read from its cookie so the first paint is already in it. */
 export async function getAppearance(): Promise<Appearance> {
   return parseAppearance((await cookies()).get(APPEARANCE_COOKIE)?.value);
+}
+
+/** The viewer's colour theme, read from its cookie like the appearance, so the first paint is already in it. */
+export async function getTheme(): Promise<ThemeId> {
+  return parseTheme((await cookies()).get(THEME_COOKIE)?.value);
 }
 
 /** An absolute URL on the origin the viewer is using, so copied links work on previews too. */
