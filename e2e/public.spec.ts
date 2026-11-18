@@ -80,6 +80,7 @@ test("the landing page names the agents it works with, each with its mark and it
   await expect(strip.locator("[data-monogram]")).toHaveCount(1);
   await expect(strip.getByRole("link", { name: "Grok" }).locator("svg[data-mark=grok]")).toHaveCount(1);
   await expect(strip.getByRole("link", { name: "Muse" }).locator("svg[data-mark=muse]")).toHaveCount(1);
+  await expect(strip.getByRole("link", { name: "Dots" }).locator("svg[data-mark=dots]")).toHaveCount(1);
   await expect(strip.getByRole("link", { name: "Cursor" })).toHaveAttribute("href", "/docs/cursor");
   await strip.getByRole("link", { name: "Grok" }).click();
   await expect(page).toHaveURL("/docs/grok");
