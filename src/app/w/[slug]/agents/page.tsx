@@ -1,4 +1,4 @@
-import { Archive, ArchiveRestore, Bot, CornerDownRight, KeyRound } from "lucide-react";
+import { Archive, ArchiveRestore, CornerDownRight, KeyRound } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 
@@ -201,7 +201,7 @@ export default async function AgentsPage({ params, searchParams }: PageProps<"/w
             Archive a revoked agent to file it away here.
           </EmptyState>
         ) : agents.length === 0 ? (
-          <EmptyState icon={<Bot />} title="No agents yet">
+          <EmptyState art="spot-signal" title="No agents yet">
             Add Phean to your MCP client to connect your first agent.
           </EmptyState>
         ) : (

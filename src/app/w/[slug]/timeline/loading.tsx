@@ -10,8 +10,8 @@ export default function TimelineLoading() {
       <div aria-hidden>
         <div className={cx(BAR, "h-8 w-36")} />
         <div className={cx(BAR, "mt-2 mb-6 h-4 w-full max-w-xl")} />
-        <div className="mb-6 h-72 rounded-lg border border-rule bg-panel" />
-        <div className="rounded-lg border border-rule bg-panel">
+        <div className="mb-6 h-72 surface rounded-lg border border-rule" />
+        <div className="surface rounded-lg border border-rule">
           <div className="border-b border-rule px-5 py-4">
             <div className={cx(BAR, "h-4 w-32")} />
           </div>

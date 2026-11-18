@@ -8,14 +8,19 @@ export type PanelTone = "plain" | "wait" | "late";
 
 const PANEL_TONES: Record<PanelTone, string> = {
   plain: "border-rule",
-  wait: "border-wait/70",
-  late: "border-late/40",
+  wait: "border-wait/45",
+  late: "border-late/30",
 };
 
+/**
+ * A toned header is a quiet wash of its tone over the panel, lit along its top edge in the tone itself,
+ * so the card reads as waiting or late at a glance without a band of colour across the page. The wash
+ * sits between the tint and the panel, so the tone's ink holds its contrast on it in every theme.
+ */
 const HEADER_TONES: Record<PanelTone, string> = {
   plain: "border-rule",
-  wait: "border-wait/50 bg-wait-tint",
-  late: "border-late/25 bg-late-tint",
+  wait: "border-wait/35 bg-wait-tint/55 shadow-[inset_0_2px_0_var(--color-wait)]",
+  late: "border-late/25 bg-late-tint/60 shadow-[inset_0_2px_0_var(--color-late)]",
 };
 
 /** On a tinted header, grey would wash out; the description takes the tone's ink instead. */
@@ -26,7 +31,7 @@ const DESCRIPTION_TONES: Record<PanelTone, string> = {
 };
 
 export function Card({ className, tone = "plain", ...props }: ComponentProps<"section"> & { tone?: PanelTone }) {
-  return <section data-tone={tone} className={cx("rounded-lg border bg-panel", PANEL_TONES[tone], className)} {...props} />;
+  return <section data-tone={tone} className={cx("surface rounded-lg border", PANEL_TONES[tone], className)} {...props} />;
 }
 
 interface CardHeaderProps {
@@ -49,7 +54,7 @@ export function CardHeader({ title, description, action, tone = "plain", divided
     >
       <div className="min-w-0">
         <div className="flex items-center gap-1">
-          <h2 className="text-md font-semibold">{title}</h2>
+          <h2 className="text-md font-semibold tracking-title text-ink">{title}</h2>
           {description && (
             <InfoTip about={typeof title === "string" ? title : "this section"} className={DESCRIPTION_TONES[tone]}>
               {description}

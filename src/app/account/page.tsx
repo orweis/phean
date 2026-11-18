@@ -78,9 +78,9 @@ export default async function AccountPage({ searchParams }: PageProps<"/account"
         </Card>
         <Card>
           <CardHeader title="Appearance" description="A colour theme, and Light, Dark or System, which follows your device. Both apply at once and stay with this browser." />
-          <CardBody className="grid gap-6 sm:grid-cols-2">
-            <ThemePicker initial={theme} />
-            <AppearancePicker initial={appearance} />
+          <CardBody className="space-y-5">
+            <ThemePicker initial={theme} size="lg" />
+            <AppearancePicker initial={appearance} className="sm:max-w-sm" />
           </CardBody>
         </Card>
       </main>

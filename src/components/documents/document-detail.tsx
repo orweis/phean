@@ -99,7 +99,7 @@ export async function DocumentDetail({ slug, documentId, editing, headingLevel =
       {editing && editable ? (
         <DocumentEditor slug={slug} document={document} content={content ?? ""} />
       ) : (
-        <div className="rounded-lg border border-rule bg-panel px-5 py-5">
+        <div className="surface rounded-lg border border-rule px-5 py-5">
           <DocumentBody slug={slug} document={document} content={content} />
         </div>
       )}
