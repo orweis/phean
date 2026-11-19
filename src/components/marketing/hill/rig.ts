@@ -81,6 +81,11 @@ export function bend(root: Vector3, target: Vector3, upper: number, lower: numbe
   joint.copy(root).addScaledVector(along, toJoint).addScaledVector(side, out);
 }
 
+/** Draws an ink line round each mesh: its own shape again, a little larger and inside out, in `material` (which swells it). */
+export function ink(targets: readonly Mesh[], material: Material) {
+  for (const mesh of targets) mesh.add(new Mesh(mesh.geometry, material));
+}
+
 /** a + (b - a) * t, into `out`. */
 export function mix(out: Vector3, a: Vector3, b: Vector3, t: number): Vector3 {
   return out.copy(a).lerp(b, t);

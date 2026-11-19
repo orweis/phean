@@ -32,7 +32,7 @@ const PACK_FACES = v(-1, 0, 0);
 /** From a wrist to the far side of its mitten, in the bot's own units: a wrist held this far off a surface lays the mitten on it. */
 export const PALM = 0.118;
 /** A bent arm's comfortable reach, shoulder to wrist. */
-export const REACH = 0.445;
+export const REACH = 0.44;
 
 export interface BotKit {
   torso: Map<Slot, BufferGeometry>;
@@ -147,6 +147,8 @@ export interface BotPose {
 export interface Bot {
   root: Group;
   look: BotLook;
+  /** The meshes that take an ink outline. */
+  inked: Mesh[];
   pose(pose: BotPose): void;
   /** Where a shoulder is in the world, as posed last (0 is the camera's side). */
   shoulder(index: 0 | 1, out: Vector3): Vector3;
@@ -170,11 +172,11 @@ export function makeBot(kit: BotKit, materials: BotMaterials, look: BotLook): Bo
   root.scale.setScalar(look.scale);
   const body = new Group();
   root.add(body);
-  meshes(body, kit.torso, materials);
+  const inked = meshes(body, kit.torso, materials);
   const head = new Group();
   head.position.y = NECK;
   body.add(head);
-  meshes(head, kit.head, materials);
+  inked.push(...meshes(head, kit.head, materials));
   const eyes = new Mesh(kit.eyes, materials.eye);
   eyes.position.set(0.236, 0.205, 0);
   head.add(eyes);
@@ -194,6 +196,7 @@ export function makeBot(kit: BotKit, materials: BotMaterials, look: BotLook): Bo
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     root.add(mesh);
+    inked.push(mesh);
     return mesh;
   };
   const arms = [0, 1].map(() => ({ upper: limb(kit.upperArm, materials.dark), fore: limb(kit.forearm, materials.shell) }));
@@ -211,7 +214,7 @@ export function makeBot(kit: BotKit, materials: BotMaterials, look: BotLook): Bo
     body.rotation.set(0.06 * stride * swing, 0, -0.36 * push - 0.03 + 0.1 * cheer + 0.07 * walk);
     body.updateMatrix();
     head.rotation.set(0, -p.headTurn, p.headTilt + 0.24 * push);
-    antenna.rotation.set(0.1 * swing * stride + 0.08 * Math.sin(p.seconds * 2.9 + look.antennaAt * 9), 0, look.antennaLean + 0.32 * push + 0.07 * Math.sin(p.seconds * 3.87 + look.scale * 9));
+    antenna.rotation.set(0.1 * swing * stride + 0.08 * Math.sin(p.seconds * 2.9 + look.antennaAt * 9), 0, look.antennaLean + 0.4 * push + 0.07 * Math.sin(p.seconds * 3.87 + look.scale * 9));
     eyes.scale.y = p.blink ? 0.12 : 1 - 0.35 * cheer;
     tip.scale.setScalar(1 + 0.18 * Math.sin(p.seconds * 4.83 + look.scale * 30) + 0.5 * cheer);
 
@@ -256,6 +259,7 @@ export function makeBot(kit: BotKit, materials: BotMaterials, look: BotLook): Bo
   return {
     root,
     look,
+    inked,
     pose,
     shoulder(index, out) {
       return root.localToWorld(out.copy(SHOULDER[index]).applyMatrix4(body.matrix));

@@ -18,7 +18,7 @@
 /* Hallmark · answered logos (46a) · the agents strip names compatible clients with their makers' marks (Simple Icons CC0, Microsoft Codicons CC BY 4.0, OpenAI's own published mark) and monogram chips where none is usable; it is not a customer logo wall and claims no partnership */
 /* Hallmark · dismissed 41 · here every hue's -ink token is its text colour on light surfaces, as with late-ink and arrive-ink; the label on the brand fill is on-accent, at 4.5:1 or better in every theme (Dusk 7.6:1 in light and 8.9:1 in dark), as tests/themes.test.ts checks */
 /* Hallmark · waive 49b · a real phrase that cannot shorten, two lines at most · an activity line links the sentence that names the goal, and on a 320px phone the goal title wraps with it */
-/* Hallmark · answered motion · the name band's boulder is a three.js scene after the hero illustration (components/marketing/hill-scene.tsx and hill/): robot agents with visors, LED eyes and antennas push a cracked ember boulder in from below the frame and up the path, hands on the stone and on each other's packs; a person in a knitted sweater, with a clay face that smiles, makes the call at the crest; the boulder leaves in a column of light and the crew walks back down, so the 18s loop closes on an empty hill; every surface textured by maps painted in the browser and tinted by the theme; loaded only near the screen, timed by the hill's CSS clock so the pause and the card stay in step, one still frame under reduced motion, and the SVG drawing as its poster where there is no WebGL or only software WebGL */
+/* Hallmark · answered motion · the name band's boulder is a three.js scene after the hero illustration (components/marketing/hill-scene.tsx and hill/): cel-shaded robot agents with visors, LED eyes and antennas push a cracked ember boulder in from below the frame and up the path, hands on the stone and on each other's packs, placed afresh each frame from the loop's progress alone; an anime person in a knitted sweater makes the call at the crest and smiles; the boulder leaves in a column of light and the crew walks back down, so the 18s loop closes on an empty hill; the painted world is textured by maps made in the browser and tinted by the theme; loaded only near the screen, with a still drawing of its first frame (drawn through the same camera, in the same tokens) in its place until it paints and nothing animating meanwhile; timed by the hill's CSS clock so the pause and the card stay in step, one still frame under reduced motion, and the drawing showing the call where there is no WebGL or only software WebGL */
 /* Hallmark · dismissed F25 · on phones the first column is pinned, so each agent or workspace stays named while its figures and the revoke action scroll beside it inside the card */
 /* Hallmark · dropped <p>An MCP server for teams of AI agents</p> · the eyebrow announced the head; the lede now says the ledger is served over MCP to a team of AI agents */
 /* Hallmark · dropped <p>This goal is waiting for a decision…</p> · the Proposed chip beside the title and the Approve and Reject buttons already say it */
@@ -733,37 +733,18 @@
   }
 
   /*
-   * The name, drawn (components/marketing/boulder-hill.tsx): the crew climbs for the first 42% of the
-   * loop, holds at the top while the call is made (the answer is picked at 54.5%), and fades as the
-   * next boulder waits below. Without motion the scene rests on the call made, which is every
-   * element's own unanimated state. The three.js scene runs on the same beats (BEATS in
-   * hill-scene-three.ts), and its loop is this long (LOOP_MS in hill-scene.tsx).
+   * The name (components/marketing/boulder-hill.tsx): the decision card shows at 42% of the loop, as
+   * the boulder reaches the top, and its answer is picked at 54.5%. The three.js scene runs on the
+   * same beats (BEATS in hill/crew.ts) and its loop is this long (LOOP_MS in hill-scene.tsx), timed
+   * by the clock. Without motion the card rests on the answer picked, its own unanimated state.
    */
   [data-hill] {
     --hill: 18s;
   }
 
-  [data-hill] [data-crew] {
-    animation: hill-crew var(--hill) linear infinite;
-  }
-
   /* The three.js scene keeps time with this: the same loop as the card, stopped by the page's pause. */
   [data-hill] [data-hill-clock] {
     animation: hill-clock var(--hill) linear infinite;
-  }
-
-  [data-hill] [data-roll] {
-    transform-box: fill-box;
-    transform-origin: center;
-    animation: hill-roll var(--hill) linear infinite;
-  }
-
-  [data-hill] [data-next] {
-    animation: hill-next var(--hill) linear infinite;
-  }
-
-  [data-hill] [data-done] {
-    animation: hill-done var(--hill) var(--ease-out) infinite;
   }
 
   [data-hill] [data-hill-card] {
@@ -772,28 +753,6 @@
 
   [data-hill] [data-hill-pick] {
     animation: hill-pick var(--hill) ease infinite;
-  }
-
-  [data-hill] [data-bob] {
-    animation: hill-bob 0.7s ease-in-out infinite alternate;
-  }
-
-  [data-hill] [data-leg] {
-    transform-box: fill-box;
-    transform-origin: 50% 0;
-    animation: hill-leg 0.7s ease-in-out infinite alternate;
-  }
-
-  [data-hill] [data-leg="back"] {
-    animation-direction: alternate-reverse;
-  }
-
-  [data-hill] [data-blink] {
-    animation: demo-pulse 2.4s ease-in-out infinite;
-  }
-
-  [data-hill] [data-star] {
-    animation: hill-twinkle 5s ease-in-out infinite;
   }
 
   /* The hero's hill drifts, slowly, as Dusk's photograph does. */
@@ -835,67 +794,42 @@
 }
 
 /*
- * The three.js scene (components/marketing/hill-scene.tsx) over the drawing: the drawing gives way once
- * the scene has painted, and the canvas fades into the band at its edges, as the drawing's hill does.
+ * The three.js scene (components/marketing/hill-scene.tsx) over the drawing of its first frame: the
+ * drawing gives way once the scene has painted. Both fade into the band at their edges. Where the
+ * scene will never come (no WebGL worth using) and where motion is off, the drawing shows the call
+ * instead of the empty hill: the boulder at the top, the crew, the answer held up.
  */
 [data-hill]:has([data-scene="ready"]) > svg {
   opacity: 0;
   transition: opacity 700ms var(--ease-out);
 }
 
+[data-hill] [data-call] {
+  opacity: 0;
+  transition: opacity 500ms var(--ease-out);
+}
+
+[data-hill]:has([data-scene="poster"]) [data-call] {
+  opacity: 1;
+}
+
+[data-hill]:has([data-scene="poster"]) [data-idle] {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-hill] [data-call] {
+    opacity: 1;
+  }
+
+  [data-hill] [data-idle] {
+    opacity: 0;
+  }
+}
+
 .hill-canvas {
   mask-image: linear-gradient(to bottom, transparent, black 8%, black 78%, transparent), linear-gradient(to right, transparent, black 6%, black 94%, transparent);
   mask-composite: intersect;
-}
-
-@keyframes hill-crew {
-  0% {
-    opacity: 0;
-    transform: translateX(-550px);
-    animation-timing-function: cubic-bezier(0.3, 0, 0.6, 1);
-  }
-  4% {
-    opacity: 1;
-  }
-  42%,
-  66% {
-    opacity: 1;
-    transform: none;
-  }
-  72%,
-  100% {
-    opacity: 0;
-    transform: none;
-  }
-}
-
-/* 550 units up the slope on a boulder of radius 58 is 9.5 radians: the marks turn as far as it rolls. */
-@keyframes hill-roll {
-  0% {
-    transform: rotate(-543deg);
-    animation-timing-function: cubic-bezier(0.3, 0, 0.6, 1);
-  }
-  42%,
-  100% {
-    transform: none;
-  }
-}
-
-@keyframes hill-next {
-  0%,
-  5% {
-    opacity: 1;
-  }
-  8%,
-  72% {
-    opacity: 0;
-    transform: translateX(-40px);
-  }
-  90%,
-  100% {
-    opacity: 1;
-    transform: none;
-  }
 }
 
 @keyframes hill-card {
@@ -927,44 +861,6 @@
     background-color: var(--color-accent-tint);
     color: var(--color-accent-ink);
     box-shadow: inset 0 0 0 2px var(--color-accent);
-  }
-}
-
-@keyframes hill-done {
-  0%,
-  55% {
-    opacity: 0;
-    stroke-width: 18;
-  }
-  58.5%,
-  66% {
-    opacity: 1;
-    stroke-width: 5;
-  }
-  72%,
-  100% {
-    opacity: 0;
-  }
-}
-
-@keyframes hill-bob {
-  to {
-    transform: translateY(-2px);
-  }
-}
-
-@keyframes hill-leg {
-  from {
-    transform: rotate(16deg);
-  }
-  to {
-    transform: rotate(-16deg);
-  }
-}
-
-@keyframes hill-twinkle {
-  50% {
-    opacity: 0.25;
   }
 }
 

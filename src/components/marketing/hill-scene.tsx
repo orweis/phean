@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import type { HillPalette, HillScene as Scene } from "./hill-scene-three";
 
@@ -56,6 +56,17 @@ function canDraw(): boolean {
   }
 }
 
+let drawable: boolean | undefined;
+/** `canDraw`, asked once: the answer does not change while the page is open. */
+function canDrawOnce(): boolean {
+  drawable ??= canDraw();
+  return drawable;
+}
+
+function never(): () => void {
+  return () => {};
+}
+
 /**
  * The boulder scene in three.js, over the drawn hill it replaces once it has painted. three.js loads
  * only when the figure comes near the screen, so it is never part of the page's first load, and the
@@ -69,11 +80,15 @@ export function HillScene() {
   const host = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [ready, setReady] = useState(false);
+  // Known only in the browser; the server, and the first paint, assume the scene will come.
+  const able = useSyncExternalStore(never, canDrawOnce, () => true);
+  const state = ready ? "ready" : able ? "loading" : "poster";
 
   useEffect(() => {
     const element = host.current;
     const canvas = canvasRef.current;
-    if (!element || !canvas || !canDraw()) return;
+    // Where the scene will not come, the drawing stays, and shows the call.
+    if (!element || !canvas || !able) return;
     const figure = element.closest("[data-hill]") ?? element;
     const clock = figure.querySelector<HTMLElement>("[data-hill-clock]");
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -229,10 +244,10 @@ export function HillScene() {
       scene?.dispose();
       scene = null;
     };
-  }, []);
+  }, [able]);
 
   return (
-    <div ref={host} aria-hidden data-scene={ready ? "ready" : "loading"} className="pointer-events-none absolute inset-0">
+    <div ref={host} aria-hidden data-scene={state} className="pointer-events-none absolute inset-0">
       <canvas
         ref={canvasRef}
         className="hill-canvas block size-full opacity-0 transition-opacity duration-700 data-[ready]:opacity-100"
