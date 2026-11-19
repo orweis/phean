@@ -15,7 +15,8 @@ export type HillAnswer = "ship" | "hold";
  * picture: it shows as the boulder reaches the top and its answer is picked on the loop's clock
  * (globals.css), and nothing in it can be used. Every fourth loop the scene stops at the question
  * and waits (`HILL_HOLD`): then the card is the visitor's, its buttons work, "Ship it" is ringed and
- * a line says it is their call. Either answer is the call made (`HILL_ANSWER`), and the scene goes on.
+ * a line says it is their call. Either answer is the call made (`HILL_ANSWER`), and the scene goes on:
+ * the boulder leaves in light if they ship it, and rolls back down the hill if they hold a week.
  *
  * It sits in the sky above the person on a wide screen and on the hill's open face below them on a
  * narrower one. Under 768px there is no room for it in the picture, so it shows only when it is the

@@ -266,7 +266,7 @@ export function BoulderHill() {
         A scene of three AI agents rolling a boulder up a hill at dusk: three small robots, the boulder glowing like an ember. At the top they stop and ask the
         person standing there, an anime character in a dark jacket, one question: ship the launch on Monday? The person picks “Ship it” on their phone, smiles
         and holds it up; the boulder is done and vanishes in a column of light, and the robots cheer, turn and walk back down the hill for the next one. Every
-        fourth time, the scene waits at the question for you to make the call.
+        fourth time, the scene waits at the question for you to make the call; hold a week, and the boulder rolls back down the hill with the robots after it.
       </figcaption>
     </figure>
   );

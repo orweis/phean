@@ -1,10 +1,13 @@
 import { BEATS, LOOP_SECONDS } from "./cast";
 
+/** How a call went: shipped, or held a week. */
+export type Choice = "ship" | "hold";
+
 /*
  * The loop over time, and the visitor's turn in it. The scene plays through by itself three times;
  * the fourth time the crew reaches the top it stops there, the question on the card, and waits for
  * the visitor to make the call. When they do, it goes on from that moment, and plays three more
- * loops before it asks again.
+ * loops before it asks again. What they answered decides how that one loop ends (`branchAt`).
  *
  * Time here is the loop's own clock (the CSS animation's, in milliseconds), which only runs while
  * the loop does. Everything is a function of that time and of how many calls the visitor has made:
@@ -39,4 +42,14 @@ export function momentAt(elapsed: number, answered: number): Moment {
   const hold = holdTime(answered);
   const time = Math.min(Math.max(0, elapsed), hold);
   return { time, progress: (time % LOOP_MS) / LOOP_MS, loop: Math.floor(time / LOOP_MS) + 1, held: elapsed >= hold };
+}
+
+/**
+ * Which way the loop is going at `time` on its clock: the visitor's last call, for the rest of the
+ * loop it was made in, and the loop's own course ("ship") at every other time.
+ */
+export function branchAt(time: number, answered: number, choice: Choice): Choice {
+  if (answered < 1 || choice === "ship") return "ship";
+  const made = holdTime(answered - 1);
+  return time >= made && time < (Math.floor(made / LOOP_MS) + 1) * LOOP_MS ? "hold" : "ship";
 }
