@@ -1,151 +1,262 @@
 import { Check, Scale } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
-import { cx } from "@/lib/cx";
 
+import { BOULDER_R, CREW, TOP_X } from "./hill/cast";
+import { hillSurface, pathPoint, pathSlope, pathZ } from "./hill/terrain";
+import { HORIZON, PERSON_HEIGHT, PERSON_X, PERSON_Z, project, RIDGES, ridgeHalf, ridgeTop, SKY, SKY_STOPS, skyline, starAt, STARS } from "./hill/view";
 import { HillScene } from "./hill-scene";
 
 /*
- * The scene is drawn in a 1200×640 box (y from -120, the sky the call card floats in). The slope runs from (140, 470) to (860, 170); everything that
- * climbs it is drawn in the slope's own frame (x up the slope, negative y above its surface), so the
- * crew moves along x alone and leans into the hill as people pushing a weight do.
+ * The drawing is the three.js scene's first frame, still: the empty hill at dusk and the person at
+ * its crest. It is drawn in a 1200×640 box (y from -120) through the scene's own camera
+ * (hill/view.ts) from the scene's own hill (hill/terrain.ts), so when the scene has loaded and takes
+ * its place nothing moves. Its colours are the same mixes of the same tokens, so it follows every
+ * theme. Worked out once, on the server: none of this reaches the browser as script.
  */
-const SLOPE = { x: 140, y: 470, angle: -22.62 };
-const BOULDER = { x: 700, r: 58 };
-/** How far the crew climbs in one loop, in the slope's units; `globals.css` (hill-crew) uses the same. */
-const CLIMB = 550;
+const BOX = { width: 1200, height: 640, top: -120 };
+const round = (value: number) => Math.round(value * 10) / 10;
+/** A point in the scene, in the drawing. */
+function at(x: number, y: number, z: number): [number, number] {
+  const [u, v] = project(x, y, z);
+  return [round(u * BOX.width), round(BOX.top + v * BOX.height)];
+}
+const points = (list: [number, number][]) => list.map(([x, y]) => `${x},${y}`).join(" ");
+const FLOOR = BOX.top + BOX.height;
 
-/** The fleet: three agents in the station hues, nose to tail behind the boulder. */
-const CREW = [
-  { x: BOULDER.x - 78, fill: "fill-move", delay: "0s" },
-  { x: BOULDER.x - 116, fill: "fill-inbox", delay: "-0.2s" },
-  { x: BOULDER.x - 154, fill: "fill-arrive", delay: "-0.4s" },
-] as const;
+/** A token, and a mix of two colours as three.js mixes them (in linear light): `amount` of `b` in `a`. */
+const token = (name: string) => `var(--color-${name})`;
+const mix = (a: string, b: string, amount: number) => `color-mix(in srgb-linear, ${b} ${round(amount * 100)}%, ${a})`;
+const shaded = (colour: string, light: number) => mix("black", colour, light);
+const HAZE = mix(token("dusk-2"), token("accent"), 0.14);
+const GLOW = mix(mix(token("signal"), token("signal-shade"), 0.35), token("accent"), 0.22);
+const HILL = token("dusk-hill");
 
-/** A fixed sky, so the server and every visit draw the same stars. */
-const STARS = [
-  [60, 60, 1.6],
-  [180, 120, 1.2],
-  [260, 40, 1.8],
-  [370, 96, 1.1],
-  [470, 30, 1.4],
-  [540, 150, 1.2],
-  [640, 70, 1.7],
-  [720, 24, 1.1],
-  [1010, 40, 1.5],
-  [1110, 96, 1.2],
-  [1160, 24, 1.8],
-  [90, 210, 1.1],
-  [320, 220, 1.3],
-  [430, 290, 1.1],
-  [120, -80, 1.4],
-  [300, -40, 1.1],
-  [560, -96, 1.6],
-  [820, -60, 1.2],
-  [960, -100, 1.1],
-  [1180, -50, 1.4],
-] as const;
+const SKY_TOP = SKY.y + SKY.height / 2;
+const skyY = (down: number) => at(SKY.x, SKY_TOP - down * SKY.height, SKY.z)[1];
+const skyX = (across: number) => at(SKY.x - SKY.width / 2 + across * SKY.width, SKY.y, SKY.z)[0];
+const SKY_BOX = { x: skyX(0), y: skyY(0), width: skyX(1) - skyX(0), height: skyY(1) - skyY(0) };
 
-/** One agent, feet on the slope at `x`, facing up it, arms on whatever is ahead of it. */
-function Agent({ x, fill, delay }: (typeof CREW)[number]) {
+const STAR_POINTS = Array.from({ length: STARS }, (_, index) => at(...starAt(index))).filter(([x, y]) => x > 0 && x < BOX.width && y > BOX.top && y < FLOOR);
+
+const RIDGE_SHAPES = [...RIDGES].reverse().map((ridge) => {
+  const half = ridgeHalf(ridge);
+  const crest: [number, number][] = [];
+  for (let x = -half; x <= half; x += half / 36) crest.push(at(x, ridgeTop(ridge, x), ridge.z));
+  const top = mix(mix(mix(HILL, token("dusk"), 0.5), HAZE, ridge.haze), token("signal"), 0.1 * ridge.haze);
+  return { z: ridge.z, shape: points([...crest, [crest.at(-1)![0], FLOOR], [crest[0]![0], FLOOR]]), top, foot: mix(top, HAZE, 0.6), from: Math.min(...crest.map(([, y]) => y)) };
+});
+
+const COLUMNS = 150;
+const SKYLINE = skyline(COLUMNS).map((down, column): [number, number] => [round((column / COLUMNS) * BOX.width), round(BOX.top + down * BOX.height)]);
+const HILL_SHAPE = points([...SKYLINE, [BOX.width, FLOOR], [0, FLOOR]]);
+const HILL_TOP = Math.min(...SKYLINE.map(([, y]) => y));
+
+/** The path: its two edges, up the hill and back. */
+const PATH_SHAPE = (() => {
+  const near: [number, number][] = [];
+  const far: [number, number][] = [];
+  for (let x = -10; x <= 9; x += 0.15) {
+    const z = pathZ(x);
+    near.push(at(x, hillSurface(x, z + 0.27), z + 0.27));
+    far.push(at(x, hillSurface(x, z - 0.27), z - 0.27));
+  }
+  return points([...near, ...far.reverse()]);
+})();
+
+const PERSON_GROUND = hillSurface(PERSON_X, PERSON_Z);
+const PERSON_FEET = at(PERSON_X, PERSON_GROUND, PERSON_Z);
+const PERSON_TALL = PERSON_FEET[1] - at(PERSON_X, PERSON_GROUND + PERSON_HEIGHT, PERSON_Z)[1];
+
+/** The call, for where the scene never comes: the boulder at the top, the crew stood back from it. */
+const BOULDER = (() => {
+  const [x, y, z] = pathPoint(TOP_X);
+  const slope = pathSlope(TOP_X);
+  const lift = (BOULDER_R * 0.95) / Math.hypot(slope, 1);
+  const centre = at(x - slope * lift, y + lift, z);
+  return { centre, radius: round(centre[1] - at(x - slope * lift, y + lift + BOULDER_R, z)[1]) };
+})();
+const TRIMS = ["station-todo", "station-done", "station-inbox"];
+const BOTS = CREW.map((look, index) => {
+  const x = TOP_X - (look.behind + 0.2) * 0.94;
+  const z = pathZ(x) + look.aside;
+  const ground = hillSurface(x, z);
+  const feet = at(x, ground, z);
+  return { feet, tall: round(feet[1] - at(x, ground + 1.44 * look.scale, z)[1]), shell: shaded(mix(token("dusk-ink"), token("accent"), 0.26 + index * 0.13), 0.78), trim: token(TRIMS[index]!), antenna: look.antenna };
+});
+
+/** One of the crew, standing: drawn one unit tall from its feet, facing up the hill. */
+function Bot({ feet, tall, shell, trim, antenna }: (typeof BOTS)[number]) {
+  const ink = shaded(mix(token("dusk"), token("accent"), 0.1), 0.35);
+  const dark = shaded(mix(token("dusk"), token("accent"), 0.22), 0.8);
   return (
-    <g transform={`translate(${x} 0)`}>
-      <g data-bob style={{ animationDelay: delay }}>
-        <rect data-leg x="-9" y="-17" width="7" height="17" rx="3.5" className={fill} style={{ animationDelay: delay }} />
-        <rect data-leg="back" x="3" y="-17" width="7" height="17" rx="3.5" className={cx(fill, "opacity-70")} style={{ animationDelay: delay }} />
-        <rect x="-15" y="-48" width="30" height="33" rx="10" className={fill} />
-        <line x1="8" y1="-38" x2="27" y2="-38" strokeWidth="7" strokeLinecap="round" className="stroke-dusk-ink" />
-        <rect x="-13" y="-72" width="28" height="22" rx="8" className={fill} />
-        <rect x="-3" y="-67" width="16" height="10" rx="5" className="fill-dusk" />
-        <circle cx="2" cy="-62" r="1.8" className="fill-dusk-ink" />
-        <circle cx="8.5" cy="-62" r="1.8" className="fill-dusk-ink" />
-        <line x1="1" y1="-72" x2="1" y2="-82" strokeWidth="2.5" strokeLinecap="round" className="stroke-dusk-ink" />
-        <circle data-blink cx="1" cy="-85" r="3.5" className="fill-signal" style={{ animationDelay: delay }} />
-      </g>
+    <g transform={`translate(${feet[0]} ${feet[1]}) scale(${tall})`} strokeWidth="0.014" style={{ stroke: ink }}>
+      <rect x="-0.1" y="-0.33" width="0.07" height="0.3" rx="0.03" style={{ fill: dark }} />
+      <rect x="0.03" y="-0.33" width="0.07" height="0.3" rx="0.03" style={{ fill: dark }} />
+      <rect x="-0.13" y="-0.08" width="0.19" height="0.08" rx="0.035" style={{ fill: shell }} />
+      <rect x="0" y="-0.08" width="0.19" height="0.08" rx="0.035" style={{ fill: shell }} />
+      <rect x="-0.24" y="-0.56" width="0.1" height="0.2" rx="0.03" style={{ fill: dark }} />
+      <rect x="-0.16" y="-0.64" width="0.32" height="0.32" rx="0.09" style={{ fill: shell }} />
+      <rect x="-0.165" y="-0.45" width="0.33" height="0.06" rx="0.025" style={{ fill: trim }} />
+      <rect x="-0.02" y="-0.6" width="0.09" height="0.26" rx="0.04" style={{ fill: shell }} />
+      <circle cx="0.01" cy="-0.6" r="0.06" style={{ fill: trim }} />
+      <line x1="-0.05" y1="-1" x2="-0.07" y2={-1 - antenna * 0.7} strokeWidth="0.02" style={{ stroke: dark }} />
+      <circle cx="-0.07" cy={-1 - antenna * 0.7} r="0.035" stroke="none" style={{ fill: token("signal") }} />
+      <rect x="-0.17" y="-0.99" width="0.34" height="0.27" rx="0.09" style={{ fill: shell }} />
+      <rect x="-0.06" y="-0.93" width="0.24" height="0.14" rx="0.05" style={{ fill: shaded(token("dusk"), 0.4) }} />
+      <circle cx="-0.09" cy="-0.86" r="0.055" style={{ fill: trim }} />
+      <ellipse cx="0.05" cy="-0.86" rx="0.018" ry="0.03" stroke="none" style={{ fill: token("dusk-ink") }} />
+      <ellipse cx="0.12" cy="-0.86" rx="0.018" ry="0.03" stroke="none" style={{ fill: token("dusk-ink") }} />
     </g>
   );
 }
 
-/** The boulder in the logo's ember, lit from the upper left; its marks turn as it rolls, the light does not. */
-function Boulder({ x, r, rolls = false }: { x: number; r: number; rolls?: boolean }) {
+/**
+ * The person at the crest, as the scene draws them: an anime figure in flat colour with an ink line,
+ * one unit tall from the feet, turned down the hill towards the crew.
+ */
+function PersonDrawn() {
+  const ink = shaded(mix(token("dusk"), token("accent"), 0.1), 0.35);
+  const skin = shaded(mix(token("dusk-ink"), token("signal-shade"), 0.3), 0.72);
+  const sweater = shaded(mix(token("dusk-ink"), token("signal"), 0.1), 0.7);
+  const trousers = shaded(mix(token("dusk-2"), token("accent"), 0.45), 0.8);
+  const hair = shaded(mix(token("signal-shade"), token("dusk"), 0.3), 0.85);
   return (
-    <g transform={`translate(${x} ${-r})`}>
-      <circle r={r} className="fill-signal-shade" />
-      <circle r={r * 0.92} cx={-r * 0.1} cy={-r * 0.1} className="fill-signal" />
-      <g data-roll={rolls ? "" : undefined}>
-        <circle r={r} fill="transparent" />
-        <circle cx={r * 0.35} cy={-r * 0.3} r={r * 0.11} className="fill-signal-shade" opacity="0.55" />
-        <circle cx={-r * 0.42} cy={r * 0.28} r={r * 0.15} className="fill-signal-shade" opacity="0.45" />
-        <circle cx={r * 0.18} cy={r * 0.5} r={r * 0.07} className="fill-signal-shade" opacity="0.6" />
-        <circle cx={-r * 0.3} cy={-r * 0.48} r={r * 0.06} className="fill-signal-shade" opacity="0.5" />
+    <g transform={`translate(${PERSON_FEET[0]} ${PERSON_FEET[1]}) scale(${round(PERSON_TALL)})`} strokeWidth="0.008" strokeLinejoin="round" style={{ stroke: ink }}>
+      <ellipse cx="-0.045" cy="-0.02" rx="0.06" ry="0.024" style={{ fill: shaded(mix(token("dusk"), token("signal-shade"), 0.3), 0.8) }} />
+      <ellipse cx="0.02" cy="-0.015" rx="0.06" ry="0.024" style={{ fill: shaded(mix(token("dusk"), token("signal-shade"), 0.3), 0.8) }} />
+      <path d="M-0.055 -0.47L-0.075 -0.04H-0.02L0 -0.3L0.01 -0.035H0.06L0.065 -0.47Z" style={{ fill: trousers }} />
+      <path d="M0.03 -0.72Q0.09 -0.7 0.09 -0.56L0.085 -0.46Q0.06 -0.44 0.045 -0.46Z" style={{ fill: sweater }} />
+      <path d="M-0.07 -0.74Q0 -0.77 0.07 -0.74L0.075 -0.45Q0 -0.42 -0.075 -0.45Z" style={{ fill: sweater }} />
+      {/* The arm that holds the phone, low and a little forward. */}
+      <g data-idle>
+        <path d="M-0.05 -0.73Q-0.1 -0.7 -0.095 -0.6L-0.135 -0.545L-0.11 -0.515L-0.05 -0.59Z" style={{ fill: sweater }} />
+        <circle cx="-0.13" cy="-0.525" r="0.02" style={{ fill: skin }} />
+        <rect x="-0.158" y="-0.585" width="0.022" height="0.07" rx="0.005" transform="rotate(-25 -0.147 -0.55)" style={{ fill: shaded(token("dusk"), 0.6) }} />
+      </g>
+      <rect x="-0.018" y="-0.79" width="0.036" height="0.05" stroke="none" style={{ fill: skin }} />
+      <path d="M-0.04 -0.775Q0 -0.755 0.04 -0.775V-0.745Q0 -0.725 -0.04 -0.745Z" style={{ fill: sweater }} />
+      {/* The head: full cheeks narrowing to a small chin, an ear, and hair in locks. */}
+      <path d="M-0.075 -0.9Q-0.08 -0.83 -0.035 -0.79Q-0.01 -0.775 0.02 -0.795Q0.07 -0.83 0.068 -0.9Q0.06 -0.97 -0.005 -0.97Q-0.07 -0.97 -0.075 -0.9Z" style={{ fill: skin }} />
+      <ellipse cx="0.035" cy="-0.865" rx="0.012" ry="0.02" style={{ fill: skin }} />
+      <path
+        d="M-0.085 -0.915L-0.07 -0.875L-0.06 -0.925L-0.045 -0.88L-0.03 -0.93L-0.012 -0.885L0.005 -0.93L0.015 -0.84L0.035 -0.9L0.05 -0.82L0.075 -0.87L0.105 -0.8L0.092 -0.9L0.12 -0.89L0.085 -0.96L0.1 -0.99L0.055 -0.985L0.045 -1.02L0.01 -0.99L-0.015 -1.035L-0.03 -0.99L-0.07 -0.975Z"
+        style={{ fill: hair }}
+      />
+      <ellipse cx="-0.048" cy="-0.868" rx="0.009" ry="0.014" stroke="none" style={{ fill: shaded(token("dusk-ink"), 0.82) }} />
+      <ellipse cx="-0.05" cy="-0.867" rx="0.006" ry="0.011" stroke="none" style={{ fill: shaded(mix(token("accent"), token("dusk"), 0.25), 0.85) }} />
+      <path d="M-0.06 -0.882Q-0.048 -0.892 -0.036 -0.88" fill="none" strokeWidth="0.006" />
+      <path d="M-0.062 -0.823H-0.046" fill="none" strokeWidth="0.005" />
+      {/* The answer held up, for where the scene never comes and the drawing shows the call. */}
+      <g data-call>
+        <path d="M-0.05 -0.735L-0.075 -0.72L-0.19 -0.93L-0.165 -0.955Z" style={{ fill: sweater }} />
+        <circle cx="-0.185" cy="-0.955" r="0.02" style={{ fill: skin }} />
+        <circle cx="-0.19" cy="-1.01" r="0.11" stroke="none" fill="url(#hill-lamp)" opacity="0.6" />
+        <rect x="-0.205" y="-1.05" width="0.03" height="0.075" rx="0.006" style={{ fill: mix(token("signal"), token("dusk-ink"), 0.4) }} />
       </g>
     </g>
   );
 }
 
 /**
- * Why the product is called Phean, drawn: a crew of AI agents rolls the boulder up the hill on a
- * loop, stops at the top for a person's call, and starts on the next one. With motion off it shows
- * the moment at the top, the call made. Decorative; the figure's caption says it in words. The
- * loop's beats (the top at 42%, the pick at 54.5%) are the keyframes in globals.css, which the
- * three.js scene follows.
- *
- * The SVG below is the poster: what shows before the three.js scene (`HillScene`) has painted, and
- * where there is no WebGL. Once the scene is up it takes the drawing's place, in the same box: the
- * hero illustration come to life, with robots for agents and a person at the crest.
+ * Why the product is called Phean: a crew of AI agents rolls the boulder up the hill, stops at the
+ * top for a person's call, and goes back down for the next one. That is the three.js scene
+ * (`HillScene`). This figure holds it, the decision card that keeps time with it, and the drawing
+ * that stands in for it: the scene's first frame, still, which shows while the scene loads and
+ * gives way to it with a cross-fade, and which is all there is where there is no WebGL worth using.
+ * There, and with motion off, the drawing shows the call instead (`data-call`): the boulder at the
+ * top, the crew stood back, the answer held up. Decorative; the figure's caption says it in words.
+ * The loop's beats (the top at 42%, the pick at 54.5%) are the card's keyframes in globals.css,
+ * which the scene follows.
  */
 export function BoulderHill() {
   return (
     <figure data-hill className="relative">
-      <svg aria-hidden viewBox="0 -120 1200 640" className="block h-auto w-full overflow-visible">
+      <svg aria-hidden viewBox={`0 ${BOX.top} ${BOX.width} ${BOX.height}`} className="hill-canvas block h-auto w-full">
         <defs>
-          <linearGradient id="hill-face" x1="0" y1="1" x2="0" y2="0">
-            <stop offset="0" className="[stop-color:var(--color-dusk-hill)]" stopOpacity="0" />
-            <stop offset="0.4" className="[stop-color:var(--color-dusk-hill)]" stopOpacity="0.7" />
-            <stop offset="1" className="[stop-color:var(--color-dusk-hill)]" />
+          <linearGradient id="hill-sky" gradientUnits="userSpaceOnUse" x1="0" y1={SKY_BOX.y} x2="0" y2={SKY_BOX.y + SKY_BOX.height}>
+            {SKY_STOPS.map(([down, strength], index) => (
+              <stop key={down} offset={down} stopOpacity={strength} style={{ stopColor: index === 2 ? mix(HAZE, token("accent"), 0.25) : mix(HAZE, GLOW, [0, 0, 0, 0.5, 1, 1][index]!) }} />
+            ))}
           </linearGradient>
-          <radialGradient id="hill-glow" cx="0.5" cy="0.5" r="0.5">
-            <stop offset="0" className="[stop-color:var(--color-signal)]" stopOpacity="0.45" />
-            <stop offset="1" className="[stop-color:var(--color-signal)]" stopOpacity="0" />
+          <linearGradient id="hill-sky-sides" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0.08" stopColor="#000" />
+            <stop offset="0.36" stopColor="#fff" />
+            <stop offset="0.6" stopColor="#fff" />
+            <stop offset="0.92" stopColor="#000" />
+          </linearGradient>
+          <mask id="hill-sky-mask" maskUnits="userSpaceOnUse" x={SKY_BOX.x} y={SKY_BOX.y} width={SKY_BOX.width} height={SKY_BOX.height}>
+            <rect x={SKY_BOX.x} y={SKY_BOX.y} width={SKY_BOX.width} height={SKY_BOX.height} fill="url(#hill-sky-sides)" />
+          </mask>
+          <radialGradient id="hill-horizon">
+            <stop offset="0" stopOpacity={HORIZON.strength * 1.5} style={{ stopColor: mix(GLOW, token("dusk-ink"), 0.3) }} />
+            <stop offset="0.25" stopOpacity={HORIZON.strength * 0.8} style={{ stopColor: mix(GLOW, token("dusk-ink"), 0.15) }} />
+            <stop offset="0.6" stopOpacity={HORIZON.strength * 0.2} style={{ stopColor: GLOW }} />
+            <stop offset="1" stopOpacity="0" style={{ stopColor: GLOW }} />
           </radialGradient>
+          <linearGradient id="hill-ground" gradientUnits="userSpaceOnUse" x1="0" y1={HILL_TOP} x2="0" y2={FLOOR}>
+            <stop offset="0" style={{ stopColor: shaded(mix(HILL, token("dusk-2"), 0.42), 0.3) }} />
+            <stop offset="0.4" style={{ stopColor: shaded(mix(HILL, token("dusk"), 0.55), 0.3) }} />
+            <stop offset="1" style={{ stopColor: shaded(mix(HILL, token("dusk"), 0.72), 0.24) }} />
+          </linearGradient>
+          <radialGradient id="hill-warmth" gradientUnits="userSpaceOnUse" cx={PERSON_FEET[0] - 30} cy={PERSON_FEET[1] + 20} r="330">
+            <stop offset="0" stopOpacity="0.12" style={{ stopColor: mix(HILL, token("signal"), 0.5) }} />
+            <stop offset="1" stopOpacity="0" style={{ stopColor: mix(HILL, token("signal"), 0.5) }} />
+          </radialGradient>
+          <radialGradient id="hill-lamp">
+            <stop offset="0" stopOpacity="0.9" style={{ stopColor: token("signal") }} />
+            <stop offset="0.3" stopOpacity="0.4" style={{ stopColor: token("signal") }} />
+            <stop offset="1" stopOpacity="0" style={{ stopColor: token("signal") }} />
+          </radialGradient>
+          <radialGradient id="hill-stone" cx="0.38" cy="0.34" r="0.75">
+            <stop offset="0" style={{ stopColor: mix(token("signal"), token("dusk-ink"), 0.25) }} />
+            <stop offset="0.55" style={{ stopColor: token("signal") }} />
+            <stop offset="1" style={{ stopColor: token("signal-shade") }} />
+          </radialGradient>
+          <filter id="hill-soft" x="-5%" y="-30%" width="110%" height="160%">
+            <feGaussianBlur stdDeviation="3" />
+          </filter>
         </defs>
 
-        {STARS.map(([cx, cy, r], index) => (
-          <circle key={`${cx}-${cy}`} data-star cx={cx} cy={cy} r={r} className="fill-dusk-ink" style={{ animationDelay: `${-index * 0.7}s` }} />
+        {STAR_POINTS.map(([x, y]) => (
+          <circle key={`${x}-${y}`} cx={x} cy={y} r="0.9" opacity="0.75" style={{ fill: mix(token("dusk-ink"), token("dusk-muted"), 0.3) }} />
         ))}
-
-        {/* The summit, and the warm light of what waits at the top. */}
-        <circle cx="900" cy="150" r="190" fill="url(#hill-glow)" />
-        <path d="M0 520V482C60 480 100 476 140 470L850 174Q900 151 960 150H1200V520Z" fill="url(#hill-face)" />
-        <path d="M0 482C60 480 100 476 140 470L850 174Q900 151 960 150H1200" fill="none" strokeWidth="2" className="stroke-dusk-ink" opacity="0.35" />
-
-        {/* You, at the top with your phone, where the calls are made. */}
-        <g transform="translate(1010 150)">
-          <path d="M-15 0L-13 -38Q0 -50 13 -38L15 0Z" className="fill-dusk-ink" />
-          <circle cy="-60" r="12" className="fill-dusk-ink" />
-          <path d="M-9 -36Q-20 -40 -22 -52" fill="none" strokeWidth="6" strokeLinecap="round" className="stroke-dusk-ink" />
-          <rect x="-29" y="-66" width="11" height="17" rx="3" className="fill-dusk" />
-          <rect data-blink x="-27" y="-64" width="7" height="12" rx="1.5" className="fill-signal" />
-        </g>
-
-        <g transform={`translate(${SLOPE.x} ${SLOPE.y}) rotate(${SLOPE.angle})`}>
-          {/* The next boulder, already waiting at the foot of the hill. */}
-          <g data-next>
-            <Boulder x={BOULDER.x - CLIMB} r={BOULDER.r} />
+        {/* The sky: clear at the top, where the band shows through, warming to the horizon; and the glow on it. */}
+        <rect x={SKY_BOX.x} y={SKY_BOX.y} width={SKY_BOX.width} height={SKY_BOX.height} fill="url(#hill-sky)" mask="url(#hill-sky-mask)" />
+        <ellipse
+          cx={at(HORIZON.x, HORIZON.y, HORIZON.z)[0]}
+          cy={at(HORIZON.x, HORIZON.y, HORIZON.z)[1]}
+          rx={(at(HORIZON.x + HORIZON.width / 2, HORIZON.y, HORIZON.z)[0] - at(HORIZON.x - HORIZON.width / 2, HORIZON.y, HORIZON.z)[0]) / 2}
+          ry={(at(HORIZON.x, HORIZON.y - HORIZON.height / 2, HORIZON.z)[1] - at(HORIZON.x, HORIZON.y + HORIZON.height / 2, HORIZON.z)[1]) / 2}
+          fill="url(#hill-horizon)"
+        />
+        {/* Far hills, each paler than the one before it. */}
+        {RIDGE_SHAPES.map((ridge) => (
+          <g key={ridge.z}>
+            <linearGradient id={`hill-ridge${ridge.z}`} gradientUnits="userSpaceOnUse" x1="0" y1={ridge.from} x2="0" y2={ridge.from + 420}>
+              <stop offset="0" style={{ stopColor: ridge.top }} />
+              <stop offset="1" style={{ stopColor: ridge.foot }} />
+            </linearGradient>
+            <polygon points={ridge.shape} fill={`url(#hill-ridge${ridge.z})`} />
           </g>
-          <g data-crew>
-            {CREW.map((agent) => (
-              <Agent key={agent.fill} {...agent} />
-            ))}
-            <Boulder x={BOULDER.x} r={BOULDER.r} rolls />
-            <g data-done transform={`translate(${BOULDER.x} ${-BOULDER.r})`}>
-              <circle r={BOULDER.r + 8} fill="none" strokeWidth="5" className="stroke-arrive" />
-            </g>
-          </g>
+        ))}
+        {/* The hill, the warmth near its crest, and the path worn up it. */}
+        <polygon points={HILL_SHAPE} fill="url(#hill-ground)" />
+        <polygon points={HILL_SHAPE} fill="url(#hill-warmth)" />
+        <polygon points={PATH_SHAPE} filter="url(#hill-soft)" opacity="0.55" style={{ fill: shaded(mix(HILL, token("dusk-ink"), 0.3), 0.55) }} />
+
+        <g data-call>
+          <circle cx={BOULDER.centre[0]} cy={BOULDER.centre[1]} r={BOULDER.radius * 2.4} fill="url(#hill-lamp)" opacity="0.55" />
+          <ellipse cx={BOULDER.centre[0]} cy={BOULDER.centre[1] + BOULDER.radius * 0.96} rx={BOULDER.radius * 2.6} ry={BOULDER.radius * 0.5} fill="url(#hill-lamp)" opacity="0.5" />
+          <circle cx={BOULDER.centre[0]} cy={BOULDER.centre[1]} r={BOULDER.radius} fill="url(#hill-stone)" />
+          {[...BOTS].reverse().map((bot) => (
+            <Bot key={bot.trim} {...bot} />
+          ))}
         </g>
+        <PersonDrawn />
       </svg>
 
-      {/* The same scene in clay, in three.js; it covers the drawing once it has painted, and keeps time with this clock. */}
+      {/* The scene itself; it covers the drawing once it has painted, and keeps time with this clock. */}
       <span aria-hidden data-hill-clock className="pointer-events-none absolute size-px opacity-0" />
       <HillScene />
 
@@ -178,8 +289,8 @@ export function BoulderHill() {
 
       <figcaption className="sr-only">
         A scene of three AI agents rolling a boulder up a hill at dusk: three small robots, the boulder glowing like an ember. At the top they stop and ask the
-        person standing there one question: ship the launch on Monday? The person picks “Ship it” on their phone, smiles and holds it up; the boulder is done and
-        vanishes in a column of light, and the robots cheer, turn and walk back down the hill for the next one.
+        person standing there, drawn as an anime character, one question: ship the launch on Monday? The person picks “Ship it” on their phone, smiles and holds
+        it up; the boulder is done and vanishes in a column of light, and the robots cheer, turn and walk back down the hill for the next one.
       </figcaption>
     </figure>
   );

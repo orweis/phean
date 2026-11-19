@@ -1,5 +1,6 @@
 import {
   AdditiveBlending,
+  BackSide,
   BufferGeometry,
   CanvasTexture,
   Color,
@@ -9,11 +10,11 @@ import {
   Fog,
   Group,
   HemisphereLight,
-  Matrix4,
   Mesh,
   MeshBasicMaterial,
   MeshLambertMaterial,
   MeshStandardMaterial,
+  MeshToonMaterial,
   PCFShadowMap,
   PerspectiveCamera,
   PlaneGeometry,
@@ -28,15 +29,16 @@ import {
   SRGBColorSpace,
   Vector3,
   WebGLRenderer,
-  type Object3D,
 } from "three";
 
-import { makeBot, makeBotKit, PALM, REACH, type BotLook, type BotMaterials } from "./hill/bot";
+import { makeBot, makeBotKit, type BotMaterials } from "./hill/bot";
+import { BEATS, BOULDER_R, CREW, LOOP_SECONDS, onPath, placeBoulder, placeCrew, scoreAt, type Member } from "./hill/crew";
 import { band, clamp01, fbm } from "./hill/noise";
 import { makePerson } from "./hill/person";
-import { Parts } from "./hill/rig";
-import { FACE, hillSurface, pathLength, pathPoint, pathSlope, pathTurn, pathZ } from "./hill/terrain";
-import { beamMap, boulderMaps, glowMap, grainMap, GRASS_SHADE, GROUND, groundMap, knitMap, panelMap, ringMap, shadowMap, stoneAt } from "./hill/textures";
+import { ink, Parts } from "./hill/rig";
+import { hillSurface, pathZ } from "./hill/terrain";
+import { ASPECT, cameraAt, FOV, HORIZON, PERSON_SCALE, PERSON_X, PERSON_Z, RIDGE_DROP, ridgeHalf, RIDGES, ridgeTop, SKY, SKY_STOPS, starAt, STARS } from "./hill/view";
+import { beamMap, boulderMaps, glowMap, grainMap, GRASS_SHADE, GROUND, groundMap, knitMap, panelMap, ringMap, shadowMap, stoneAt, toonRamp } from "./hill/textures";
 
 /**
  * The name, in clay: the hero illustration, moving. Three robot agents push the ember boulder in
@@ -77,58 +79,6 @@ export interface HillScene {
 }
 
 /* ---------------------------------------------------------------------------------------------- */
-
-const BOULDER_R = 1.02;
-/** Where along the path the boulder starts (out of the frame, below its left edge) and stops, as x; the person stands past the top. */
-const START_X = -8.5;
-const TOP_X = 2.55;
-const PERSON_X = 5.05;
-/** The loop's beats, as fractions of it. globals.css keys the decision card to the same ones. */
-const BEATS = {
-  /** The boulder reaches the top, and the card shows. */
-  top: 0.42,
-  /** The person taps the answer. */
-  tap: 0.545,
-  /** The boulder gathers light, */
-  charge: 0.552,
-  /** goes in a flash, */
-  flash: 0.585,
-  /** and its light has died away. */
-  dark: 0.65,
-  /** The crew turns round, */
-  turn: 0.685,
-  /** and sets off down the hill. */
-  descend: 0.7,
-};
-/** How far down the path the crew walks before the loop ends: enough to take the last of them out of the frame. */
-const DESCENT = 9.7;
-/** The idle motion (breathing, blinking, the antennas' sway) runs on a clock of this many beats a loop, so it comes round with it. */
-const IDLE_BEATS = 13;
-/** The loop, in seconds: `--hill` in globals.css and LOOP_MS in hill-scene.tsx. */
-const LOOP_SECONDS = 18;
-/** The crew, nose to tail as the hero draws them: roughly how far behind the boulder's centre each one's feet are (the push settles the rest). */
-const CREW: (BotLook & { behind: number; aside: number; turn: number })[] = [
-  { scale: 0.96, behind: 1.62, aside: 0.12, turn: 0.75, antenna: 0.2, antennaAt: 0.06, antennaLean: -0.12 },
-  { scale: 0.87, behind: 2.4, aside: 0.26, turn: 0.95, antenna: 0.13, antennaAt: -0.08, antennaLean: -0.3 },
-  { scale: 0.79, behind: 3.1, aside: 0.12, turn: 0.6, antenna: 0.27, antennaAt: 0, antennaLean: 0.05 },
-];
-
-/** The climb, 0 at the foot to 1 at the top, with the slip Sisyphus knows: it rolls back a little and is caught. */
-function climb(p: number): number {
-  const up = p / BEATS.top;
-  // Already at a walk when the loop begins (it is out of sight then), easing to a stop at the top.
-  const pace = (t: number) => 0.5 - 0.5 * Math.cos(Math.PI * (0.2 + 0.8 * t));
-  const eased = up >= 1 ? 1 : (pace(Math.max(0, up)) - pace(0)) / (1 - pace(0));
-  const slip = Math.sin(Math.PI * clamp01((up - 0.56) / 0.13));
-  return eased - 0.03 * slip * (up < 1 ? 1 : 0);
-}
-
-/** The walk back down, 0 to 1: a step to get going, then steady. */
-function descend(p: number): number {
-  const t = clamp01((p - BEATS.descend) / (1 - BEATS.descend));
-  const ease = 0.12;
-  return (t < ease ? (t * t) / (2 * ease) : t - ease / 2) / (1 - ease / 2);
-}
 
 /** A stone for the crew to push: a sphere dented into plates, split where the cracks of its texture run. */
 function boulderGeometry(): SphereGeometry {
@@ -199,9 +149,7 @@ export async function createHillScene(canvas: HTMLCanvasElement, palette: HillPa
   const scene = new Scene();
   scene.fog = new Fog(0x000000, 16, 46);
 
-  const camera = new PerspectiveCamera(24, 15 / 8, 0.5, 90);
-  const lookAt = new Vector3(-0.1, 3.15, 0);
-  const cameraHome = new Vector3();
+  const camera = new PerspectiveCamera(FOV, ASPECT, 0.5, 90);
 
   const probeCanvas = document.createElement("canvas");
   probeCanvas.width = probeCanvas.height = 1;
@@ -318,22 +266,16 @@ export async function createHillScene(canvas: HTMLCanvasElement, palette: HillPa
   }
 
   /* Far hills: ridges one behind another, each paler than the last, as the hero's horizon. */
-  const RIDGES = [
-    { z: -9, base: -1.3, height: 1.3, phase: 0.4, haze: 0.22 },
-    { z: -15, base: -2.5, height: 1.6, phase: 2.1, haze: 0.42 },
-    { z: -22, base: -3.9, height: 2.0, phase: 4.4, haze: 0.6 },
-    { z: -30, base: -5.4, height: 2.4, phase: 6.0, haze: 0.76 },
-  ];
   const ridgeMaterial = keep(new MeshBasicMaterial({ vertexColors: true, fog: false }));
   const ridges = RIDGES.map((ridge) => {
     const columns = 72;
     const positions: number[] = [];
     const indices: number[] = [];
-    const half = 30 - ridge.z * 0.9;
+    const half = ridgeHalf(ridge);
     for (let i = 0; i <= columns; i += 1) {
       const x = -half + (2 * half * i) / columns;
-      const roll = 0.55 + 0.3 * Math.sin(x * 0.19 + ridge.phase) + 0.15 * Math.sin(x * 0.43 + ridge.phase * 2.3) + 0.08 * Math.sin(x * 0.9 + ridge.phase * 0.7);
-      positions.push(x, ridge.base + ridge.height * (roll - 0.55), ridge.z, x, ridge.base - 16, ridge.z);
+      const top = ridgeTop(ridge, x);
+      positions.push(x, top, ridge.z, x, ridge.base - RIDGE_DROP, ridge.z);
       if (i < columns) indices.push(i * 2, i * 2 + 1, i * 2 + 2, i * 2 + 2, i * 2 + 1, i * 2 + 3);
     }
     const geometry = keep(new BufferGeometry());
@@ -352,18 +294,14 @@ export async function createHillScene(canvas: HTMLCanvasElement, palette: HillPa
   const skyTexture = keep(new CanvasTexture(skyCanvas));
   skyTexture.colorSpace = SRGBColorSpace;
   const skyMaterial = keep(new MeshBasicMaterial({ map: skyTexture, transparent: true, depthWrite: false, fog: false }));
-  const skyPlane = new Mesh(keep(new PlaneGeometry(64, 32)), skyMaterial);
-  skyPlane.position.set(-2, -4, -40);
+  const skyPlane = new Mesh(keep(new PlaneGeometry(SKY.width, SKY.height)), skyMaterial);
+  skyPlane.position.set(SKY.x, SKY.y, SKY.z);
   skyPlane.renderOrder = -2;
   scene.add(skyPlane);
 
   /* A few stars, high in the band. */
   const starPositions: number[] = [];
-  for (let i = 0; i < 80; i += 1) {
-    const a = Math.sin(i * 12.9898) * 43758.5453;
-    const b = Math.sin(i * 78.233) * 12345.678;
-    starPositions.push((a - Math.floor(a) - 0.5) * 60, -3 + (b - Math.floor(b)) * 9, -38);
-  }
+  for (let i = 0; i < STARS; i += 1) starPositions.push(...starAt(i));
   const starGeometry = keep(new BufferGeometry());
   starGeometry.setAttribute("position", new Float32BufferAttribute(starPositions, 3));
   const starMaterial = keep(new PointsMaterial({ size: 0.16, transparent: true, opacity: 0.75, fog: false, depthWrite: false }));
@@ -435,30 +373,37 @@ export async function createHillScene(canvas: HTMLCanvasElement, palette: HillPa
   sparks.renderOrder = 4;
   scene.add(sparks);
 
-  const horizonMaterial = keep(new SpriteMaterial({ ...additive, opacity: 0.5 }));
+  const horizonMaterial = keep(new SpriteMaterial({ ...additive, opacity: HORIZON.strength }));
   const horizon = new Sprite(horizonMaterial);
-  horizon.position.set(-12, -8, -36);
-  horizon.scale.set(52, 13, 1);
+  horizon.position.set(HORIZON.x, HORIZON.y, HORIZON.z);
+  horizon.scale.set(HORIZON.width, HORIZON.height, 1);
   horizon.renderOrder = -1;
   scene.add(horizon);
 
   /* The crew: one kit of parts, three bots, each with its own shell tint and trim. */
   const kit = keep(makeBotKit());
-  const dark = keep(new MeshStandardMaterial({ roughness: 0.55, metalness: 0.25 }));
-  const visor = keep(new MeshStandardMaterial({ roughness: 0.12, metalness: 0.6 }));
-  const eye = keep(new MeshStandardMaterial({ roughness: 0.4 }));
-  const tip = keep(new MeshStandardMaterial({ roughness: 0.4 }));
-  const shells: MeshStandardMaterial[] = [];
-  const trims: MeshStandardMaterial[] = [];
+  // Cel shading for the characters: light in flat steps, and an ink line round every shape (each drawn again, swollen and inside out).
+  const ramp = keep(toonRamp());
+  const inkMaterial = keep(new MeshBasicMaterial({ side: BackSide }));
+  inkMaterial.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader.replace("#include <begin_vertex>", "vec3 transformed = position + normalize(normal) * 0.0105;");
+  };
+  const dark = keep(new MeshToonMaterial({ gradientMap: ramp }));
+  const visor = keep(new MeshToonMaterial({ gradientMap: ramp }));
+  const eye = keep(new MeshToonMaterial({ gradientMap: ramp }));
+  const tip = keep(new MeshToonMaterial({ gradientMap: ramp }));
+  const shells: MeshToonMaterial[] = [];
+  const trims: MeshToonMaterial[] = [];
   const crew = CREW.map((look) => {
-    const shell = keep(new MeshStandardMaterial({ roughness: 0.72, metalness: 0.05, map: panels, bumpMap: panels, bumpScale: 2.5 }));
-    const trim = keep(new MeshStandardMaterial({ roughness: 0.6, metalness: 0.1 }));
+    const shell = keep(new MeshToonMaterial({ gradientMap: ramp, map: panels, bumpMap: panels, bumpScale: 2 }));
+    const trim = keep(new MeshToonMaterial({ gradientMap: ramp }));
     shells.push(shell);
     trims.push(trim);
     const materials: BotMaterials = { shell, dark, trim, visor, eye, tip };
     const bot = keep(makeBot(kit, materials, look));
+    ink(bot.inked, inkMaterial);
     scene.add(bot.root);
-    return { ...look, bot, hands: [new Vector3(), new Vector3()] as const, fit: 0 };
+    return { ...look, bot, hands: [new Vector3(), new Vector3()] as const } satisfies Member;
   });
   const tipGlows = crew.map(() => {
     const sprite = new Sprite(keep(new SpriteMaterial(additive)));
@@ -468,28 +413,28 @@ export async function createHillScene(canvas: HTMLCanvasElement, palette: HillPa
 
   /* You, at the top. */
   knit.repeat.set(3, 3);
-  const skinGrain = keep(grain.clone());
-  skinGrain.repeat.set(2, 2);
-  // Matte clay throughout, on the two shaders the ground's stones and grass already use.
+  // Flat, clean colour for the person, stepped by the same ramp; the features of the face are drawn unlit, as cels are.
   const personMaterials = {
-    sweater: keep(new MeshLambertMaterial({ map: knit, bumpMap: knit, bumpScale: 3 })),
-    skin: keep(new MeshLambertMaterial({ bumpMap: skinGrain, bumpScale: 0.5 })),
-    hair: keep(new MeshLambertMaterial({ bumpMap: skinGrain, bumpScale: 2 })),
-    trousers: keep(new MeshLambertMaterial({ bumpMap: skinGrain, bumpScale: 1 })),
-    shoe: keep(new MeshLambertMaterial()),
-    dark: keep(new MeshLambertMaterial()),
-    screen: keep(new MeshLambertMaterial()),
-    white: keep(new MeshLambertMaterial()),
-    pupil: keep(new MeshLambertMaterial()),
-    lip: keep(new MeshLambertMaterial()),
-    blush: keep(new MeshLambertMaterial()),
+    sweater: keep(new MeshToonMaterial({ gradientMap: ramp, map: knit, bumpMap: knit, bumpScale: 2 })),
+    skin: keep(new MeshToonMaterial({ gradientMap: ramp })),
+    hair: keep(new MeshToonMaterial({ gradientMap: ramp })),
+    trousers: keep(new MeshToonMaterial({ gradientMap: ramp })),
+    shoe: keep(new MeshToonMaterial({ gradientMap: ramp })),
+    dark: keep(new MeshToonMaterial({ gradientMap: ramp })),
+    screen: keep(new MeshToonMaterial({ gradientMap: ramp })),
+    white: keep(new MeshBasicMaterial()),
+    iris: keep(new MeshBasicMaterial()),
+    pupil: keep(new MeshBasicMaterial()),
+    shine: keep(new MeshBasicMaterial()),
+    lip: keep(new MeshBasicMaterial()),
+    blush: keep(new MeshBasicMaterial({ transparent: true, opacity: 0.55, depthWrite: false })),
   };
   const person = keep(makePerson(personMaterials));
-  const personZ = pathZ(PERSON_X) - 0.15;
-  person.root.position.set(PERSON_X, hillSurface(PERSON_X, personZ), personZ);
+  ink(person.inked, inkMaterial);
+  person.root.position.set(PERSON_X, hillSurface(PERSON_X, PERSON_Z), PERSON_Z);
   // Turned down the hill towards the crew, and a little towards us.
   person.root.rotation.y = Math.PI + 0.72;
-  person.root.scale.setScalar(1.07);
+  person.root.scale.setScalar(PERSON_SCALE);
   scene.add(person.root);
   const phoneGlowMaterial = keep(new SpriteMaterial(additive));
   const phoneGlow = new Sprite(phoneGlowMaterial);
@@ -554,12 +499,11 @@ export async function createHillScene(canvas: HTMLCanvasElement, palette: HillPa
     // The sky: clear at the top, where the band shows through, then haze, then the last warm light.
     const glowColor = mixed(mixed(signal, shade, 0.35), accent, 0.22);
     const gradient = skyContext.createLinearGradient(0, 0, 0, 256);
-    gradient.addColorStop(0, rgba(haze, 0));
-    gradient.addColorStop(0.25, rgba(haze, 0.05));
-    gradient.addColorStop(0.44, rgba(mixed(haze, accent, 0.25), 0.3));
-    gradient.addColorStop(0.54, rgba(mixed(glowColor, haze, 0.5), 0.55));
-    gradient.addColorStop(0.61, rgba(glowColor, 0.88));
-    gradient.addColorStop(1, rgba(glowColor, 1));
+    // Haze high up, the horizon's glow low down, and the two mixed between.
+    SKY_STOPS.forEach(([at, strength], index) => {
+      const warmth = [0, 0, 0, 0.5, 1, 1][index]!;
+      gradient.addColorStop(at, rgba(index === 2 ? mixed(haze, accent, 0.25) : mixed(haze, glowColor, warmth), strength));
+    });
     skyContext.clearRect(0, 0, 256, 256);
     skyContext.fillStyle = gradient;
     skyContext.fillRect(0, 0, 256, 256);
@@ -590,27 +534,33 @@ export async function createHillScene(canvas: HTMLCanvasElement, palette: HillPa
     // The crew: pale shells of the illustrations' lavender clay, each a little deeper than the one ahead.
     shells.forEach((material, index) => material.color.copy(mixed(ink, accent, 0.26 + index * 0.13)));
     [next.trim1, next.trim2, next.trim3].forEach((value, index) => trims[index]!.color.copy(c(value)));
+    inkMaterial.color.copy(mixed(dusk, accent, 0.1)).multiplyScalar(0.35);
     dark.color.copy(mixed(dusk, accent, 0.22));
     visor.color.copy(mixed(dusk, accent, 0.06)).multiplyScalar(0.35);
     eye.color.copy(ink);
     eye.emissive.copy(mixed(ink, accent, 0.25));
     eye.emissiveIntensity = 1.6;
+    visor.emissive.set(0x000000);
     tip.color.copy(signal);
     tip.emissive.copy(signal);
     for (const sprite of tipGlows) sprite.material.color.copy(signal);
 
+    const skin = mixed(ink, shade, 0.3);
     personMaterials.sweater.color.copy(mixed(ink, signal, 0.1));
-    personMaterials.skin.color.copy(mixed(ink, shade, 0.42));
-    personMaterials.hair.color.copy(mixed(dusk, shade, 0.4));
-    personMaterials.trousers.color.copy(mixed(dusk2, accent, 0.4));
-    personMaterials.shoe.color.copy(mixed(dusk, shade, 0.25));
+    personMaterials.skin.color.copy(skin);
+    personMaterials.hair.color.copy(mixed(shade, dusk, 0.3));
+    personMaterials.trousers.color.copy(mixed(dusk2, accent, 0.45));
+    personMaterials.shoe.color.copy(mixed(dusk, shade, 0.3));
     personMaterials.dark.color.copy(mixed(dusk, ink, 0.08));
     personMaterials.screen.color.copy(signal);
     personMaterials.screen.emissive.copy(mixed(signal, ink, 0.25));
-    personMaterials.white.color.copy(ink);
-    personMaterials.pupil.color.copy(mixed(dusk, shade, 0.12)).multiplyScalar(0.5);
-    personMaterials.lip.color.copy(mixed(shade, dusk, 0.35));
-    personMaterials.blush.color.copy(mixed(mixed(ink, shade, 0.42), signal, 0.4));
+    // The face is unlit, so it is toned to sit in the dusk with the lit skin around it.
+    personMaterials.white.color.copy(ink).multiplyScalar(0.82);
+    personMaterials.iris.color.copy(mixed(accent, dusk, 0.25)).multiplyScalar(0.85);
+    personMaterials.pupil.color.copy(mixed(dusk, accent, 0.1)).multiplyScalar(0.3);
+    personMaterials.shine.color.copy(ink);
+    personMaterials.lip.color.copy(mixed(shade, dusk, 0.5)).multiplyScalar(0.7);
+    personMaterials.blush.color.copy(mixed(skin, signal, 0.6));
     phoneGlowMaterial.color.copy(signal);
   }
 
@@ -620,56 +570,21 @@ export async function createHillScene(canvas: HTMLCanvasElement, palette: HillPa
   const centre = new Vector3();
   const reach = new Vector3();
   const watch = new Vector3();
-  const tangent = new Vector3();
   const upward = new Vector3();
-  const sideways = new Vector3();
-  const forward = new Vector3();
-  const facing = new Vector3();
-  const basis = new Matrix4();
-  const unroll = new Quaternion();
-
-  /** A point `lift` above the path at x, measured square to the slope. */
-  function onPath(x: number, lift: number, out: Vector3): Vector3 {
-    const [px, py, pz] = pathPoint(x);
-    normal.set(-pathSlope(x), 1, FACE).normalize();
-    return out.set(px, py, pz).addScaledVector(normal, lift);
-  }
-
-  /**
-   * Stands a bot on the path at x: leaning with the slope as far as `lean` says, and turned `about`
-   * radians from facing up the path, round by the camera's side. Leaves `tangent` as the way up the path.
-   */
-  function stand(root: Object3D, x: number, aside: number, lean: number, about: number) {
-    const [px, py, pz] = pathPoint(x);
-    root.position.set(px, py, pz + aside);
-    tangent.set(1, pathSlope(x) * lean, pathTurn(x)).normalize();
-    sideways.crossVectors(tangent, upward.set(0, 1, 0)).normalize();
-    upward.crossVectors(sideways, tangent);
-    forward.copy(tangent).multiplyScalar(Math.cos(about)).addScaledVector(sideways, Math.sin(about));
-    sideways.crossVectors(forward, upward);
-    root.quaternion.setFromRotationMatrix(basis.makeBasis(forward, upward, sideways));
-  }
+  const turned = new Quaternion();
 
   function render(progress: number) {
-    const p = ((progress % 1) + 1) % 1;
-    const turn = p * Math.PI * 2;
-    const seconds = p * IDLE_BEATS;
-    const x = START_X + (TOP_X - START_X) * climb(p);
-    const travelled = pathLength(START_X, x);
-
-    // The call is made: the stone gathers light, lifts, and is gone up a column of it.
-    const charge = band(p, BEATS.charge, BEATS.flash);
-    const gone = band(p, BEATS.flash, BEATS.flash + 0.014);
-    const fading = 1 - band(p, BEATS.flash, BEATS.dark);
+    const score = scoreAt(progress);
+    const { p, turn, seconds, x, charge, gone, cheer } = score;
     // Its light comes up while it is still below the frame, so the loop begins as dark as it ended.
-    const lit = band(p, 0, 0.03) * fading;
+    const lit = band(p, 0, 0.03) * score.fading;
     const pulse = 0.5 + 0.5 * Math.sin(turn * 7);
 
     // The boulder rolls as far as it climbs: its turn is the ground covered over its radius.
-    onPath(x, BOULDER_R * 0.95, centre);
+    placeBoulder(score, centre, turned);
+    boulder.quaternion.copy(turned);
     holder.position.copy(centre);
     holder.position.y += 0.3 * charge * charge + 2.4 * gone;
-    boulder.rotation.set(0, -Math.atan(pathTurn(x)), -travelled / BOULDER_R - 1.2 * charge * charge);
     holder.scale.set(1 - 0.93 * gone, 1 + 1.6 * gone, 1 - 0.93 * gone);
     boulderMaterial.opacity = 1 - gone * gone;
     holder.visible = gone < 0.99;
@@ -679,8 +594,8 @@ export async function createHillScene(canvas: HTMLCanvasElement, palette: HillPa
     halo.scale.setScalar(BOULDER_R * (4.8 + 0.2 * pulse + 2.6 * charge));
     haloMaterial.opacity = (0.6 + 0.3 * charge) * lit;
     ember.position.copy(holder.position);
-    ember.intensity = (16 + 1.5 * pulse + 34 * charge) * lit;
-    onPath(x, 0.03, pool.position);
+    ember.intensity = (16 + 1.5 * pulse + 16 * charge) * lit;
+    onPath(x, 0.03, pool.position, normal);
     pool.quaternion.setFromUnitVectors(upward.set(0, 1, 0), normal);
     pool.scale.set(8.5, 1, 6);
     poolMaterial.opacity = (0.22 + 0.3 * charge) * lit;
@@ -721,60 +636,7 @@ export async function createHillScene(canvas: HTMLCanvasElement, palette: HillPa
     }
 
     // The crew climbs with it, stands back at the top, cheers the call, then turns and walks back down.
-    const push = 1 - band(p, BEATS.top - 0.004, BEATS.top + 0.045);
-    const cheer = band(p, BEATS.flash, BEATS.flash + 0.025) * (1 - band(p, BEATS.turn - 0.03, BEATS.turn));
-    const about = Math.PI * band(p, BEATS.turn, BEATS.turn + 0.035);
-    const walk = band(p, BEATS.descend, BEATS.descend + 0.02);
-    const down = DESCENT * descend(p);
-    boulder.getWorldQuaternion(unroll).invert();
-    crew.forEach((member, index) => {
-      const { bot } = member;
-      // Where the wrists go: on the stone for the first of them, on the pack ahead for the others.
-      const reachOut = () => {
-        for (const hand of [0, 1] as const) {
-          if (index === 0) {
-            bot.shoulder(hand, reach).sub(centre);
-            reach.y += 0.3;
-            reach.normalize();
-            const { dent } = stoneAt(...facing.copy(reach).applyQuaternion(unroll).toArray(), false);
-            member.hands[hand].copy(centre).addScaledVector(reach, BOULDER_R * (1 + dent) + PALM * member.scale);
-          } else {
-            crew[index - 1]!.bot.back(hand, member.hands[hand], facing);
-            member.hands[hand].addScaledVector(facing, PALM * member.scale);
-          }
-        }
-      };
-      // Mostly eyes on the work; now and then one of them looks round at us.
-      const glance = Math.max(0, Math.sin(turn * 3 + index * 2.1)) ** 6;
-      const pose = () =>
-        bot.pose({
-          push,
-          cheer,
-          walk,
-          distance: travelled + down,
-          seconds,
-          hands: member.hands,
-          headTurn: (member.turn + 0.5 * glance) * push + (0.3 + 0.12 * index) * (1 - push) * (1 - walk) + 0.35 * cheer - (0.3 + 0.55 * glance) * walk,
-          headTilt: 0.06 * Math.sin(turn * 4 + index) + (0.32 - 0.05 * index) * (1 - push) * (1 - walk),
-          blink: (seconds / 3.25 + index * 0.37) % 1 < 0.04,
-        });
-      // Stood back from the load once it rests. While it pushes, each one closes up until its hands are on what is ahead.
-      const nominal = x - (member.behind + 0.2 * (1 - push)) * 0.94 - down;
-      for (let settle = 0; settle < (push > 0 ? 3 : 0); settle += 1) {
-        stand(bot.root, nominal + member.fit * push, member.aside, 0.35 + 0.65 * push, about);
-        pose();
-        reachOut();
-        const wrists = reach.copy(member.hands[0]).add(member.hands[1]).multiplyScalar(0.5);
-        const shoulders = bot.shoulder(0, facing).add(bot.shoulder(1, forward)).multiplyScalar(0.5);
-        member.fit += (wrists.sub(shoulders).dot(tangent) - REACH * member.scale) * tangent.x;
-      }
-      stand(bot.root, nominal + member.fit * push, member.aside, 0.35 + 0.65 * push, about);
-      pose();
-      if (push > 0) {
-        reachOut();
-        pose();
-      }
-    });
+    placeCrew(score, crew, centre, turned);
     crew.forEach((member, index) => {
       const sprite = tipGlows[index]!;
       member.bot.tipAt(sprite.position);
@@ -784,15 +646,11 @@ export async function createHillScene(canvas: HTMLCanvasElement, palette: HillPa
     tip.emissiveIntensity = 1.3 + 1.2 * cheer;
 
     // The person reads the question when the card arrives, taps the answer, smiles, and holds it up.
-    const tap = Math.exp(-(((p - BEATS.tap) / 0.012) ** 2));
-    const lowered = 1 - band(p, BEATS.turn - 0.025, BEATS.turn + 0.015);
-    const show = band(p, BEATS.tap + 0.008, BEATS.flash - 0.005) * lowered;
-    const read = band(p, BEATS.top + 0.005, BEATS.top + 0.05) * (1 - band(p, BEATS.tap + 0.008, BEATS.flash - 0.005));
-    const smile = band(p, BEATS.tap - 0.004, BEATS.tap + 0.02) * (1 - band(p, BEATS.turn + 0.02, BEATS.turn + 0.1));
+    const { tap, show, read, smile, joy } = score;
     // They watch the boulder while there is one, then the crew on its way down.
     if (gone < 0.5) watch.copy(holder.position).y -= 0.4;
     else watch.copy(crew[0]!.bot.root.position).y += 0.9;
-    person.pose({ seconds, read, tap, show, smile, watch, blink: (seconds / 4.3333 + 0.2) % 1 < 0.03 });
+    person.pose({ seconds, read, tap, show, smile, joy, watch, blink: (seconds / 4.3333 + 0.2) % 1 < 0.03 });
     const held = Math.max(read, show);
     personMaterials.screen.emissiveIntensity = 0.55 + 1.5 * held + 0.6 * tap;
     person.phoneAt(phoneGlow.position);
@@ -800,8 +658,9 @@ export async function createHillScene(canvas: HTMLCanvasElement, palette: HillPa
     phoneGlowMaterial.opacity = 0.22 + 0.4 * held + 0.3 * tap;
 
     // The camera drifts, slowly, and comes back to where it began as the loop does.
-    camera.position.set(cameraHome.x + 0.34 * Math.sin(turn), cameraHome.y + 0.1 * Math.sin(turn * 2), cameraHome.z - 0.3 * Math.cos(turn));
-    camera.lookAt(reach.set(lookAt.x + 0.12 * Math.sin(turn), lookAt.y, lookAt.z));
+    const view = cameraAt(camera.aspect, turn);
+    camera.position.set(...view.from);
+    camera.lookAt(...view.to);
 
     renderer.render(scene, camera);
   }
@@ -825,12 +684,6 @@ export async function createHillScene(canvas: HTMLCanvasElement, palette: HillPa
     size.height = height;
     renderer.setSize(width, height, false);
     camera.aspect = width / height;
-    // Frame the hill by its width: the slope from the foot to the person at the top always fits.
-    const span = 13.5;
-    const horizontal = 2 * Math.atan(Math.tan((camera.fov * Math.PI) / 360) * camera.aspect);
-    const distance = Math.max(11, span / 2 / Math.tan(horizontal / 2));
-    // From a little above, and from a little up the hill, so the face of the hill and the crew's faces show.
-    cameraHome.set(lookAt.x - distance * 0.05, lookAt.y + distance * 0.22, distance * 0.98);
     camera.updateProjectionMatrix();
   }
 

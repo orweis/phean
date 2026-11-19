@@ -1,4 +1,4 @@
-import { CanvasTexture, DataTexture, LinearFilter, LinearMipmapLinearFilter, NoColorSpace, RepeatWrapping, RGBAFormat, SRGBColorSpace, type Texture } from "three";
+import { CanvasTexture, DataTexture, LinearFilter, LinearMipmapLinearFilter, NearestFilter, NoColorSpace, RepeatWrapping, RGBAFormat, SRGBColorSpace, type Texture } from "three";
 
 import { clamp01, fbm, fbm2, noise3, smooth, worley } from "./noise";
 import { pathZ } from "./terrain";
@@ -298,4 +298,15 @@ export function ringMap(): Texture {
     context.fillStyle = gradient;
     context.fillRect(0, 0, size, size);
   });
+}
+
+/** The steps of cel shading: shadow, half-light, light. A toon material reads how lit a surface is off this, left to right. */
+export function toonRamp(): Texture {
+  const steps = [96, 96, 156, 156, 214, 214, 214, 214];
+  const data = new Uint8Array(steps.flatMap((step) => [step, step, step, 255]));
+  const texture = new DataTexture(data, steps.length, 1, RGBAFormat);
+  texture.minFilter = texture.magFilter = NearestFilter;
+  texture.generateMipmaps = false;
+  texture.needsUpdate = true;
+  return texture;
 }
