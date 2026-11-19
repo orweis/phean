@@ -89,7 +89,8 @@ function Boulder({ x, r, rolls = false }: { x: number; r: number; rolls?: boolea
  * the moment at the top, the call made. Decorative; the figure's caption says it in words.
  *
  * The SVG below is the poster: what shows before the three.js scene (`HillScene`) has painted, and
- * where there is no WebGL. Once the scene is up it takes the drawing's place, in the same box.
+ * where there is no WebGL. Once the scene is up it takes the drawing's place, in the same box: the
+ * hero illustration come to life, with robots for agents and a person at the crest.
  */
 export function BoulderHill() {
   return (
@@ -146,8 +147,16 @@ export function BoulderHill() {
       <span aria-hidden data-hill-clock className="pointer-events-none absolute size-px opacity-0" />
       <HillScene />
 
-      {/* The call the crew stopped for, as the Decisions page shows it. */}
-      <div aria-hidden data-hill-card className="absolute top-[3%] right-[3%] w-[min(19rem,44%)] rounded-lg bg-panel p-3 text-left shadow-lift max-sm:hidden sm:p-4">
+      {/*
+       * The call the crew stopped for, as the Decisions page shows it: in the sky above the person on a wide
+       * screen, on the hill's open face below them on a narrower one, and left out where the figure is
+       * too small to spare either (the scene still shows the call being made).
+       */}
+      <div
+        aria-hidden
+        data-hill-card
+        className="absolute right-[3%] bottom-[5%] w-[min(15rem,40%)] rounded-lg bg-panel p-3 text-left shadow-lift max-md:hidden xl:top-[3%] xl:bottom-auto xl:w-[19rem] xl:p-4"
+      >
         <p className="flex items-center gap-2">
           <Badge tone="warning">
             <Scale />
@@ -155,7 +164,7 @@ export function BoulderHill() {
           </Badge>
           <span className="text-xs text-muted">from 3 agents</span>
         </p>
-        <p className="mt-2 text-sm font-semibold text-ink">The launch is ready. Ship it on Monday?</p>
+        <p className="mt-2 text-xs font-semibold text-ink xl:text-sm">The launch is ready. Ship it on Monday?</p>
         <p className="mt-2 flex gap-1.5">
           <span data-hill-pick className="inline-flex h-7 items-center gap-1 rounded-full bg-accent-tint px-3 text-xs font-semibold text-accent-ink ring-2 ring-accent ring-inset">
             <Check className="size-3.5" />
@@ -166,8 +175,9 @@ export function BoulderHill() {
       </div>
 
       <figcaption className="sr-only">
-        A drawing of three AI agents rolling a boulder up a hill at dusk. At the top they stop and ask the person standing there one question: ship the launch on
-        Monday? The person picks “Ship it”, the boulder is done, and the next boulder is already waiting at the foot of the hill.
+        A scene of three AI agents rolling a boulder up a hill at dusk: three small robots, the boulder glowing like an ember. At the top they stop and ask the
+        person standing there one question: ship the launch on Monday? The person picks “Ship it” on their phone and holds it up, the boulder is done, and the
+        next boulder is already waiting at the foot of the hill.
       </figcaption>
     </figure>
   );

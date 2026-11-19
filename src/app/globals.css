@@ -18,7 +18,7 @@
 /* Hallmark · answered logos (46a) · the agents strip names compatible clients with their makers' marks (Simple Icons CC0, Microsoft Codicons CC BY 4.0, OpenAI's own published mark) and monogram chips where none is usable; it is not a customer logo wall and claims no partnership */
 /* Hallmark · dismissed 41 · here every hue's -ink token is its text colour on light surfaces, as with late-ink and arrive-ink; the label on the brand fill is on-accent, at 4.5:1 or better in every theme (Dusk 7.6:1 in light and 8.9:1 in dark), as tests/themes.test.ts checks */
 /* Hallmark · waive 49b · a real phrase that cannot shorten, two lines at most · an activity line links the sentence that names the goal, and on a 320px phone the goal title wraps with it */
-/* Hallmark · answered motion · the name band's boulder is a three.js scene in the illustrations' clay style (components/marketing/hill-scene.tsx), loaded only near the screen, timed by the hill's CSS clock so the pause and the card stay in step, one still frame under reduced motion, and the SVG drawing as its poster where there is no WebGL */
+/* Hallmark · answered motion · the name band's boulder is a three.js scene after the hero illustration (components/marketing/hill-scene.tsx and hill/): robot agents with visors, LED eyes and antennas push a cracked ember boulder up the path, a person in a knitted sweater makes the call at the crest, every surface textured by maps painted in the browser and tinted by the theme; loaded only near the screen, timed by the hill's CSS clock so the pause and the card stay in step, one still frame under reduced motion, and the SVG drawing as its poster where there is no WebGL or only software WebGL */
 /* Hallmark · dismissed F25 · on phones the first column is pinned, so each agent or workspace stays named while its figures and the revoke action scroll beside it inside the card */
 /* Hallmark · dropped <p>An MCP server for teams of AI agents</p> · the eyebrow announced the head; the lede now says the ledger is served over MCP to a team of AI agents */
 /* Hallmark · dropped <p>This goal is waiting for a decision…</p> · the Proposed chip beside the title and the Approve and Reject buttons already say it */
@@ -833,7 +833,7 @@
 }
 
 /*
- * The clay scene (components/marketing/hill-scene.tsx) over the drawing: the drawing gives way once
+ * The three.js scene (components/marketing/hill-scene.tsx) over the drawing: the drawing gives way once
  * the scene has painted, and the canvas fades into the band at its edges, as the drawing's hill does.
  */
 [data-hill]:has([data-scene="ready"]) > svg {
