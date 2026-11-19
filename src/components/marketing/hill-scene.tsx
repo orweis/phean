@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import { IDLE_PER_MS } from "./hill/cast";
-import { LOOP_MS, momentAt } from "./hill/timeline";
+import { branchAt, LOOP_MS, momentAt, type Choice } from "./hill/timeline";
 import { HILL_ANSWER, HILL_HOLD, type HillAnswer } from "./hill-card";
 import type { HillPalette, HillScene as Scene } from "./hill-scene-three";
 
@@ -115,7 +115,7 @@ export function HillScene() {
     /** While it waits, the idle motion (breathing, blinking) runs on: the time waited, in all and since this hold began. */
     let waited = 0;
     let heldSince = 0;
-    let lastLoop = 1;
+    let choice: Choice = "ship";
     const clocks = () => figure.getAnimations({ subtree: true }).filter((animation) => animation.effect?.getComputedTiming().duration === LOOP_MS);
 
     function hold(time: number) {
@@ -133,8 +133,8 @@ export function HillScene() {
       holding = false;
       answered += 1;
       waited += performance.now() - heldSince;
-      // Either answer is the call made; the card shows which.
-      if ((event as CustomEvent<HillAnswer>).detail === "hold") figure.setAttribute("data-choice", "hold");
+      // Either answer is the call made, and the rest of this loop goes its way (the card shows which, by `data-choice`).
+      choice = (event as CustomEvent<HillAnswer>).detail === "hold" ? "hold" : "ship";
       figure.removeAttribute("data-hold");
       figure.dispatchEvent(new CustomEvent<boolean>(HILL_HOLD, { detail: false }));
       wake();
@@ -151,12 +151,11 @@ export function HillScene() {
       }
       const moment = momentAt(time, answered);
       if (moment.held) hold(moment.time);
-      if (moment.loop !== lastLoop) {
-        lastLoop = moment.loop;
-        figure.removeAttribute("data-choice");
-      }
+      const branch = branchAt(moment.time, answered, choice);
+      if (branch === "hold") figure.setAttribute("data-choice", "hold");
+      else figure.removeAttribute("data-choice");
       const waiting = waited + (holding ? performance.now() - heldSince : 0);
-      scene.render(moment.progress, (moment.time + waiting) * IDLE_PER_MS);
+      scene.render(moment.progress, (moment.time + waiting) * IDLE_PER_MS, branch);
     }
 
     /*

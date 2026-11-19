@@ -33,7 +33,7 @@ import {
 
 import { loadAvatar } from "./hill/avatar-model";
 import { makeBot, makeBotKit, type BotMaterials } from "./hill/bot";
-import { BEATS, BOULDER_R, CREW, LOOP_SECONDS, onPath, placeBoulder, placeCrew, scoreAt, type Member } from "./hill/crew";
+import { BEATS, BOULDER_R, CREW, LOOP_SECONDS, onPath, placeBoulder, placeCrew, scoreAt, type Branch, type Member } from "./hill/crew";
 import { band, clamp01, fbm } from "./hill/noise";
 import { ink, Parts } from "./hill/rig";
 import { hillSurface, pathZ } from "./hill/terrain";
@@ -72,7 +72,7 @@ export interface HillScene {
   setPalette(palette: HillPalette): void;
   /** Draws the loop at `progress` (0..1). */
   /** `idle` is the idle clock, in beats (13 to a loop), for motion that runs on through a hold; left out, it follows the loop. */
-  render(progress: number, idle?: number): void;
+  render(progress: number, idle?: number, branch?: Branch): void;
   resize(width: number, height: number): void;
   /** 1 is the full picture; less draws fewer pixels and a coarser shadow, for a device that cannot keep up. */
   setQuality(scale: number): void;
@@ -547,8 +547,10 @@ export async function createHillScene(canvas: HTMLCanvasElement, palette: HillPa
   const upward = new Vector3();
   const turned = new Quaternion();
 
-  function render(progress: number, idle?: number) {
-    const score = scoreAt(progress, idle);
+  function render(progress: number, idle?: number, branch?: Branch) {
+    const score = scoreAt(progress, idle, branch);
+    // The boulder's leaving in light is the shipped call's; held a week, it rolls away instead.
+    const shipped = score.branch === "ship";
     const { p, turn, seconds, x, charge, gone, cheer } = score;
     // Its light comes up while it is still below the frame, so the loop begins as dark as it ended.
     const lit = band(p, 0, 0.03) * score.fading;
@@ -582,21 +584,21 @@ export async function createHillScene(canvas: HTMLCanvasElement, palette: HillPa
     const struck = band(p, BEATS.flash - 0.008, BEATS.flash + 0.006);
     const thinning = band(p, BEATS.flash + 0.008, BEATS.dark);
     beam.scale.set(BOULDER_R * (0.9 + 1.9 * struck) * (1 - 0.9 * thinning), 15, 1);
-    beamMaterial.opacity = band(p, BEATS.charge + 0.008, BEATS.flash) * (1 - thinning) * (0.5 + 0.5 * struck);
+    beamMaterial.opacity = shipped ? band(p, BEATS.charge + 0.008, BEATS.flash) * (1 - thinning) * (0.5 + 0.5 * struck) : 0;
     beam.visible = beamMaterial.opacity > 0.005;
     flash.position.copy(centre).add(reach.set(0, 0.3, 0.6));
-    flashMaterial.opacity = p < BEATS.flash ? band(p, BEATS.flash - 0.012, BEATS.flash) : 1 - band(p, BEATS.flash, BEATS.flash + 0.04);
+    flashMaterial.opacity = !shipped ? 0 : p < BEATS.flash ? band(p, BEATS.flash - 0.012, BEATS.flash) : 1 - band(p, BEATS.flash, BEATS.flash + 0.04);
     flash.scale.setScalar(BOULDER_R * (3 + 11 * band(p, BEATS.flash - 0.012, BEATS.flash + 0.03)));
     flash.visible = flashMaterial.opacity > 0.005;
     const spread = clamp01((p - BEATS.flash) / 0.055);
     ripple.position.copy(pool.position);
     ripple.quaternion.copy(pool.quaternion);
     ripple.scale.set(1.6 + 9 * Math.sqrt(spread), 1, 1.3 + 7 * Math.sqrt(spread));
-    rippleMaterial.opacity = p < BEATS.flash ? 0 : 0.85 * (1 - spread) ** 1.5;
+    rippleMaterial.opacity = p < BEATS.flash || !shipped ? 0 : 0.85 * (1 - spread) ** 1.5;
     ripple.visible = rippleMaterial.opacity > 0.005;
     // Embers thrown out by the flash drift up and die.
     const since = ((p - BEATS.flash) * LOOP_SECONDS) / 1.5;
-    sparks.visible = since > 0 && since < 1;
+    sparks.visible = shipped && since > 0 && since < 1;
     if (sparks.visible) {
       for (let i = 0; i < SPARKS; i += 1) {
         const [vx, vy, vz, life] = sparkPaths[i]!;
@@ -620,13 +622,13 @@ export async function createHillScene(canvas: HTMLCanvasElement, palette: HillPa
     tip.emissiveIntensity = 1.3 + 1.2 * cheer;
 
     // The person reads the question when the card arrives, taps the answer, smiles, and holds it up.
-    const { tap, show, read, smile, joy } = score;
+    const { tap, show, read, smile, joy, shrug } = score;
     // They watch the boulder while there is one, then the crew on its way down.
     if (gone < 0.5) watch.copy(holder.position).y -= 0.4;
     else watch.copy(crew[0]!.bot.root.position).y += 0.9;
     const held = Math.max(read, show);
     if (person) {
-      person.avatar.pose({ seconds, read, tap, show, smile, joy, watch, blink: (seconds / 4.3333 + 0.2) % 1 < 0.03 });
+      person.avatar.pose({ seconds, read, tap, show, smile, joy, shrug, watch, blink: (seconds / 4.3333 + 0.2) % 1 < 0.03 });
       person.phoneScreen.emissiveIntensity = 0.55 + 1.5 * held + 0.6 * tap;
       person.avatar.phoneAt(phoneGlow.position);
     }

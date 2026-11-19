@@ -48,51 +48,87 @@ export interface Score {
   turn: number;
   /** The idle clock: it wraps with the loop. */
   seconds: number;
+  /** Which way the call went: shipped (the loop's own course), or held a week. */
+  branch: Branch;
   /** The boulder: where on the path, and how much ground it has covered. */
   x: number;
   travelled: number;
+  /** Where the crew has pushed it to, and the ground they covered: the boulder's own, until it rolls back without them. */
+  pushed: number;
+  climbed: number;
   /** 1 as the boulder has gathered all its light; 1 once it has gone; its light, 1 to 0, after. */
   charge: number;
   gone: number;
   fading: number;
-  /** The crew: leaning into the push, arms up, turned about (radians), walking free, and how far back down the path. */
+  /** The crew: leaning into the push, arms up, turned about (radians), walking free, how far back down the path, and how far off it to our side (out of the boulder's way). */
   push: number;
   cheer: number;
   about: number;
   walk: number;
   down: number;
+  aside: number;
   /** The person: reading the question, tapping, holding the answer up, pleased, eyes shut with it. */
   read: number;
   tap: number;
   show: number;
   smile: number;
   joy: number;
+  /** 1 at the top of a shrug: the answer was to wait. */
+  shrug: number;
 }
 
-/** `idle` is the idle clock in beats, for motion that runs on while the loop is held; left out, it follows the loop. */
-export function scoreAt(progress: number, idle?: number): Score {
+/** How the call went. "ship" is also every loop the visitor does not answer. */
+export type Branch = "ship" | "hold";
+
+/**
+ * Held a week, the boulder is not done: it rolls back down the path it came up, slowly and then
+ * fast, as a stone let go does, and out of the frame the way it came in. These are the beats of
+ * that: the crew is out of its way by `clear`, it goes at `go`, and has left by `left`. The crew
+ * turns and follows on the loop's usual beats (BEATS.turn, BEATS.descend).
+ */
+export const ROLLBACK = { clear: BEATS.tap + 0.035, go: BEATS.tap + 0.04, left: 0.76 };
+/** How far the crew steps off the path to let it by, to our side. */
+const STEP_ASIDE = 1.75;
+
+/**
+ * Where everything stands `progress` through the loop. `idle` is the idle clock in beats, for motion
+ * that runs on while the loop is held; left out, it follows the loop. `branch` is the way the call
+ * went, which only matters after the tap.
+ */
+export function scoreAt(progress: number, idle?: number, branch: Branch = "ship"): Score {
   const p = ((progress % 1) + 1) % 1;
-  const x = START_X + (TOP_X - START_X) * climb(p);
-  const answered = band(p, BEATS.tap + 0.008, BEATS.flash - 0.005);
+  const pushed = START_X + (TOP_X - START_X) * climb(p);
+  const held = branch === "hold" && p > BEATS.tap;
+  // Let go, it gathers speed down the hill: the distance grows as the square of the time, a little more gently at first.
+  const fall = clamp01((p - ROLLBACK.go) / (ROLLBACK.left - ROLLBACK.go));
+  const x = held ? pushed - (TOP_X - START_X + 5) * (0.12 * fall + 0.88 * fall * fall) : pushed;
+  const answered = held ? 0 : band(p, BEATS.tap + 0.008, BEATS.flash - 0.005);
+  const lowered = band(p, BEATS.tap + 0.012, BEATS.tap + 0.05);
   return {
     p,
     turn: p * Math.PI * 2,
     seconds: idle ?? p * IDLE_BEATS,
+    branch: held ? "hold" : "ship",
     x,
     travelled: pathLength(START_X, x),
-    charge: band(p, BEATS.charge, BEATS.flash),
-    gone: band(p, BEATS.flash, BEATS.flash + 0.014),
-    fading: 1 - band(p, BEATS.flash, BEATS.dark),
+    pushed,
+    climbed: pathLength(START_X, pushed),
+    charge: held ? 0 : band(p, BEATS.charge, BEATS.flash),
+    gone: held ? 0 : band(p, BEATS.flash, BEATS.flash + 0.014),
+    // Shipped, its light dies where it stood; held, it goes out as the boulder leaves the frame.
+    fading: held ? 1 - band(p, ROLLBACK.left - 0.05, ROLLBACK.left) : 1 - band(p, BEATS.flash, BEATS.dark),
     push: 1 - band(p, BEATS.top - 0.004, BEATS.top + 0.045),
-    cheer: band(p, BEATS.flash, BEATS.flash + 0.025) * (1 - band(p, BEATS.turn - 0.03, BEATS.turn)),
+    cheer: held ? 0 : band(p, BEATS.flash, BEATS.flash + 0.025) * (1 - band(p, BEATS.turn - 0.03, BEATS.turn)),
     about: Math.PI * band(p, BEATS.turn, BEATS.turn + 0.035),
     walk: band(p, BEATS.descend, BEATS.descend + 0.02),
     down: DESCENT * descend(p),
-    read: band(p, BEATS.top + 0.005, BEATS.top + 0.05) * (1 - answered),
+    aside: held ? STEP_ASIDE * band(p, BEATS.tap + 0.004, ROLLBACK.clear) * (1 - band(p, BEATS.descend + 0.03, BEATS.descend + 0.1)) : 0,
+    read: band(p, BEATS.top + 0.005, BEATS.top + 0.05) * (1 - (held ? lowered : answered)),
     tap: Math.exp(-(((p - BEATS.tap) / 0.012) ** 2)),
     show: answered * (1 - band(p, BEATS.turn - 0.025, BEATS.turn + 0.015)),
-    smile: band(p, BEATS.tap - 0.004, BEATS.tap + 0.02) * (1 - band(p, BEATS.turn + 0.02, BEATS.turn + 0.1)),
-    joy: band(p, BEATS.flash - 0.004, BEATS.flash + 0.012) * (1 - band(p, BEATS.dark - 0.02, BEATS.dark + 0.01)),
+    smile: held ? 0 : band(p, BEATS.tap - 0.004, BEATS.tap + 0.02) * (1 - band(p, BEATS.turn + 0.02, BEATS.turn + 0.1)),
+    joy: held ? 0 : band(p, BEATS.flash - 0.004, BEATS.flash + 0.012) * (1 - band(p, BEATS.dark - 0.02, BEATS.dark + 0.01)),
+    shrug: held ? band(p, BEATS.tap + 0.02, BEATS.tap + 0.045) * (1 - band(p, BEATS.tap + 0.075, BEATS.tap + 0.11)) : 0,
   };
 }
 
@@ -173,7 +209,7 @@ export function placeCrew(score: Score, crew: readonly Member[], centre: Vector3
         push: pushing,
         cheer,
         walk,
-        distance: score.travelled + down,
+        distance: score.climbed + down,
         seconds,
         hands: member.hands,
         headTurn: (member.turn + 0.5 * glance) * pushing + (0.3 + 0.12 * index) * (1 - pushing) * (1 - walk) + 0.35 * cheer - (0.3 + 0.55 * glance) * walk,
@@ -208,7 +244,7 @@ export function placeCrew(score: Score, crew: readonly Member[], centre: Vector3
       // Stands it `back` from what it pushes, and says how far the farther wrist is beyond a bent arm's reach of its shoulder.
       const short = (back: number) => {
         if (index === 0) {
-          pushX = score.x - back;
+          pushX = score.pushed - back;
           pushZ = pathZ(pushX) + member.aside;
           const along = pathTurn(pushX);
           pushHeading = Math.min(along + 0.6, Math.max(along - 0.6, (centre.z - pushZ) / Math.max(0.4, centre.x - pushX)));
@@ -237,8 +273,8 @@ export function placeCrew(score: Score, crew: readonly Member[], centre: Vector3
       short(near);
     }
     // Stood back from the load once it rests, on the path again, and off down the hill when the work is done.
-    const restX = score.x - (member.behind + 0.2) * 0.94 - down;
-    const restZ = pathZ(restX) + member.aside;
+    const restX = score.pushed - (member.behind + 0.2) * 0.94 - down;
+    const restZ = pathZ(restX) + member.aside + score.aside * (1 + 0.12 * index);
     const x = restX + (pushX - restX) * push;
     stand(bot.root, x, restZ + (pushZ - restZ) * push, pathTurn(x) + (pushHeading - pathTurn(x)) * push, 0.35 + 0.65 * push, about);
     pose(push);

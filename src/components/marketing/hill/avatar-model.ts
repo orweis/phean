@@ -2,7 +2,7 @@ import { BackSide, Box3, BoxGeometry, Group, Mesh, MeshBasicMaterial, MeshToonMa
 import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
-import { AVATAR_BONES, makeAvatar, type Avatar, type AvatarBone } from "./avatar";
+import { AVATAR_BONES, AVATAR_FINGERS, makeAvatar, type Avatar, type AvatarBone, type AvatarHand } from "./avatar";
 
 /*
  * Fetches the person's model and dresses it for the scene. It is VRoid's AvatarSample_C (see the
@@ -111,6 +111,10 @@ export async function loadAvatar(height: number, ramp: Texture): Promise<AvatarM
     bones[bone] = found;
   }
 
+  const hand = (side: "R" | "L"): AvatarHand =>
+    Object.fromEntries(AVATAR_FINGERS.map((finger) => [finger, [1, 2, 3].map((joint) => model.getObjectByName(`J_Bip_${side}_${finger}${joint}`)).filter((bone): bone is Object3D => Boolean(bone))]));
+  const fingers = { right: hand("R"), left: hand("L") };
+
   // The phone: a dark slab with a lit screen on its +x face.
   const phone = new Group();
   const phoneBody = new MeshToonMaterial({ gradientMap: ramp });
@@ -123,7 +127,7 @@ export async function loadAvatar(height: number, ramp: Texture): Promise<AvatarM
 
   return {
     root,
-    avatar: makeAvatar({ root, bones, faces, phone }),
+    avatar: makeAvatar({ root, bones, fingers, faces, phone }),
     lines,
     phoneBody,
     phoneScreen,
