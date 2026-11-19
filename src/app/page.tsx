@@ -7,6 +7,7 @@ import { ThemePicker } from "@/components/theme-picker";
 import { TimetableLegend } from "@/components/charts/timetable";
 import { Logo, LogoMark } from "@/components/logo";
 import { AGENTS, AgentLink, AgentMark, type AgentGroup } from "@/components/marketing/agent-logo";
+import { InfoTip } from "@/components/ui/info-tip";
 import { Art, artEntry, HeroArt } from "@/components/marketing/art";
 import { AssistantInbox } from "@/components/marketing/assistant-inbox";
 import { BoulderHill } from "@/components/marketing/boulder-hill";
@@ -223,10 +224,12 @@ export default async function LandingPage() {
                 </div>
               ))}
             </div>
-            <p className="mx-auto mt-8 max-w-2xl text-center text-xs text-muted">
-              Phean speaks MCP: any agent or assistant that can reach an MCP server connects, approved in your browser. Each name opens its page in the docs. Names and
-              marks are their makers&apos; trademarks, and no partnership is implied; the VS Code mark is from Microsoft&apos;s Codicons (CC BY 4.0).
-            </p>
+            <div className="mx-auto mt-8 max-w-2xl text-center text-xs text-muted">
+              Phean speaks MCP: any agent or assistant that can reach an MCP server connects, approved in your browser. Each name opens its page in the docs.{" "}
+              <InfoTip about="the names and marks" className="align-middle">
+                Names and marks are their makers&apos; trademarks, and no partnership is implied. The VS Code mark is from Microsoft&apos;s Codicons (CC BY 4.0).
+              </InfoTip>
+            </div>
           </div>
         </section>
 
@@ -295,7 +298,7 @@ export default async function LandingPage() {
                   </li>
                 ))}
               </ul>
-              <p className="mt-10 max-w-xl text-xs text-muted">Assistant names are their makers&apos; trademarks, named for the kind of agent Phean serves; no partnership is implied.</p>
+
             </div>
             <div className="relative">
               <ArtFrame className="aspect-[3/2]">

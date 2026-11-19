@@ -98,31 +98,35 @@
         "path": "/marketing/decisions-800.avif",
         "width": 800,
         "height": 533,
-        "format": "avif"
+        "format": "avif",
+        "bytes": 12497
       },
       {
         "path": "/marketing/decisions-800.webp",
         "width": 800,
         "height": 533,
-        "format": "webp"
+        "format": "webp",
+        "bytes": 17664
       },
       {
         "path": "/marketing/decisions-1536.avif",
         "width": 1536,
         "height": 1024,
-        "format": "avif"
+        "format": "avif",
+        "bytes": 34234
       },
       {
         "path": "/marketing/decisions-1536.webp",
         "width": 1536,
         "height": 1024,
-        "format": "webp"
+        "format": "webp",
+        "bytes": 52624
       }
     ],
-    "alt": "A tall pale figure stands on a dark violet hilltop before a low stone holding three pebbles, the middle one glowing ember; below, three small lavender figures each hold up a glowing orb, waiting for an answer.",
+    "alt": "At dusk on a violet hillside, a person in a bone sweater sits at one lamp-lit desk and holds up a glowing card to choose it, while a fleet of small lavender agents walks in along glowing paths from both sides, each holding up a card of its own.",
     "use": "Decisions section (#decisions, dusk band): 'A fleet of agents needs one place to ask'",
     "ground": "dark",
-    "prompt": "A calm scene at dusk: a single simple stylised person (a tall soft bone-coloured rounded silhouette, no face, no detail) stands at the top of a gentle violet hill, calmly considering three small smooth stones laid on a low flat stone before them, one of which glows ember-amber as it is chosen. Three small abstract agent figures, each one a single clearly separate rounded lavender capsule-orb body with a round head, stand spaced apart in a soft arc further down the slope, each holding up one tiny glowing orb like a question, waiting patiently. Each figure is distinct and not overlapping. Quiet, considered, no hurry. Dark ground: deep indigo-violet dusk background so the image sits on a dark page. Style: cohesive editorial illustration, like a single illustrator's series for a premium software company. Flat and softly modelled simple geometric shapes, smooth soft gradients, fine film grain texture, gentle atmospheric depth. Palette: dusk violets and deep indigos (#2a1f5c, #3b2a7a, #6a4fd0, #9a86e8), pale lavender and warm bone mist (#f3eef8, #efe6dc), and a single warm ember/amber accent (#f0a050, #e8783a) that glows softly. Calm, quiet, unhurried, spacious composition with generous negative space. The AI agents are small friendly abstract figures: smooth rounded capsule-and-orb shapes in violet and lavender with a tiny soft glow, no faces, no eyes, no limbs beyond simple rounded nubs, not robots. Absolutely no text, letters, numbers, words, logos, icons of real apps, UI screenshots, or watermarks. Not photorealistic, not 3D render plastic, not neon, no lens flare, no busy sci-fi circuitry.",
+    "prompt": "A warm, concrete scene at dusk on a gentle violet hilltop: the decision center for a fleet of AI agents. In the middle stands one wide, low, softly lit wooden-and-stone desk with a warm ember lamp glow on its surface. Behind the desk sits ONE person, clearly a human: a soft matte clay figure with a round head, shoulders, two arms and hands, wearing a simple bone-coloured sweater, seated calmly on a chair (no facial features). On the desk in front of them lie a few small glowing cards; the person is holding one card up in one hand, choosing it, and that card glows ember-amber.\nAround the desk, converging from the left, the right and up the slope behind, comes a fleet of nine small friendly AI agents, all the same design: smooth rounded matte clay capsule bodies with a round head and two small rounded arms, in violet and lavender, no faces. Each agent is clearly separate, not overlapping, and each carries or holds up one small pale glowing card toward the desk, some walking along softly glowing paths that lead to the desk, two or three already waiting in a calm queue at the desk's edge. Gentle depth: nearer agents larger, farther ones smaller on the hill.\nDark ground: deep indigo-violet dusk sky with soft distant hills, so the image sits on a dark page. The warm desk glow is the brightest point. Calm, orderly, readable at a glance.\n\nStyle: cohesive editorial illustration, like a single illustrator's series for a premium software company. Flat and softly modelled simple geometric shapes, smooth soft gradients, fine film grain texture, gentle atmospheric depth. Palette: dusk violets and deep indigos (#2a1f5c, #3b2a7a, #6a4fd0, #9a86e8), pale lavender and warm bone mist (#f3eef8, #efe6dc), and a single warm ember/amber accent (#f0a050, #e8783a) that glows softly. Calm, quiet, unhurried, spacious composition with generous negative space. The AI agents are small friendly abstract figures: smooth rounded capsule-and-orb shapes in violet and lavender with a tiny soft glow, no faces, no eyes, no limbs beyond simple rounded nubs, not robots. Absolutely no text, letters, numbers, words, logos, icons of real apps, UI screenshots, or watermarks. Not photorealistic, not 3D render plastic, not neon, no lens flare, no busy sci-fi circuitry.",
     "model": "gpt-image-2.6-sunburst"
   },
   {
