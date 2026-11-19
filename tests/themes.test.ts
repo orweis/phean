@@ -28,6 +28,7 @@ const TEXT: [ColorToken, ColorToken][] = [
   ["on-signal", "signal"],
   ["on-signal", "signal-2"],
   ["signal-ink", "signal-tint"],
+  ["signal-ink", "panel"],
   ["late-ink", "late-tint"],
   ["late-ink", "panel"],
   ["late-ink", "paper"],

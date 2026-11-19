@@ -149,7 +149,7 @@ export function grainMap(): Texture {
 }
 
 /* ---------------------------------------------------------------------------------------------- */
-/* The crew's shells and the person's sweater.                                                     */
+/* The crew's shells.                                                                             */
 
 function canvasTexture(size: number, draw: (context: CanvasRenderingContext2D, size: number) => void): CanvasTexture {
   const canvas = document.createElement("canvas");
@@ -217,29 +217,6 @@ export function panelMap(): Texture {
       context.fill();
     }
     speckle(context, size, 0.14);
-  });
-}
-
-/** Knitting, as the person's sweater in the illustrations: ribs of stitches, each a small chevron. */
-export function knitMap(): Texture {
-  return canvasTexture(128, (context, size) => {
-    const image = context.createImageData(size, size);
-    const ribs = 8;
-    const rows = 12;
-    for (let j = 0; j < size; j += 1) {
-      for (let i = 0; i < size; i += 1) {
-        const u = (i / size) * ribs;
-        const across = Math.abs((u % 1) - 0.5) * 2;
-        const v = (j / size) * rows + across * 0.5;
-        const along = Math.abs((v % 1) - 0.5) * 2;
-        const stitch = 0.62 + 0.38 * Math.cos(across * Math.PI * 0.5) ** 0.7 * (0.72 + 0.28 * (1 - along * along));
-        const value = Math.round(255 * clamp01(stitch));
-        const index = (j * size + i) * 4;
-        image.data[index] = image.data[index + 1] = image.data[index + 2] = value;
-        image.data[index + 3] = 255;
-      }
-    }
-    context.putImageData(image, 0, 0);
   });
 }
 

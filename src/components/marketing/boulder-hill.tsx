@@ -1,10 +1,7 @@
-import { Check, Scale } from "lucide-react";
-
-import { Badge } from "@/components/ui/badge";
-
 import { BOULDER_R, CREW, TOP_X } from "./hill/cast";
 import { hillSurface, pathPoint, pathSlope, pathZ } from "./hill/terrain";
 import { HORIZON, PERSON_HEIGHT, PERSON_X, PERSON_Z, project, RIDGES, ridgeHalf, ridgeTop, SKY, SKY_STOPS, skyline, starAt, STARS } from "./hill/view";
+import { HillCard } from "./hill-card";
 import { HillScene } from "./hill-scene";
 
 /*
@@ -112,47 +109,49 @@ function Bot({ feet, tall, shell, trim, antenna }: (typeof BOTS)[number]) {
 }
 
 /**
- * The person at the crest, as the scene draws them: an anime figure in flat colour with an ink line,
- * one unit tall from the feet, turned down the hill towards the crew.
+ * The person at the crest, as the scene's model stands there (VRoid's AvatarSample_C): dark hair, a
+ * dark jacket with a grey front, dark trousers and boots, in flat colour with an ink line. One unit
+ * tall from the feet, turned down the hill towards the crew. The model's colours are its own, not the
+ * theme's; these are the nearest mixes of the band's tokens, so the drawing still sits in every theme.
  */
 function PersonDrawn() {
   const ink = shaded(mix(token("dusk"), token("accent"), 0.1), 0.35);
-  const skin = shaded(mix(token("dusk-ink"), token("signal-shade"), 0.3), 0.72);
-  const sweater = shaded(mix(token("dusk-ink"), token("signal"), 0.1), 0.7);
-  const trousers = shaded(mix(token("dusk-2"), token("accent"), 0.45), 0.8);
-  const hair = shaded(mix(token("signal-shade"), token("dusk"), 0.3), 0.85);
+  const skin = shaded(mix(token("dusk-ink"), token("signal-shade"), 0.22), 0.74);
+  const jacket = shaded(mix(token("dusk"), token("dusk-ink"), 0.14), 0.55);
+  const front = shaded(mix(token("dusk-ink"), token("dusk"), 0.3), 0.6);
+  const trousers = shaded(mix(token("dusk"), token("dusk-ink"), 0.08), 0.5);
+  const hair = shaded(mix(token("dusk"), token("signal-shade"), 0.14), 0.42);
   return (
     <g transform={`translate(${PERSON_FEET[0]} ${PERSON_FEET[1]}) scale(${round(PERSON_TALL)})`} strokeWidth="0.008" strokeLinejoin="round" style={{ stroke: ink }}>
-      <ellipse cx="-0.045" cy="-0.02" rx="0.06" ry="0.024" style={{ fill: shaded(mix(token("dusk"), token("signal-shade"), 0.3), 0.8) }} />
-      <ellipse cx="0.02" cy="-0.015" rx="0.06" ry="0.024" style={{ fill: shaded(mix(token("dusk"), token("signal-shade"), 0.3), 0.8) }} />
-      <path d="M-0.055 -0.47L-0.075 -0.04H-0.02L0 -0.3L0.01 -0.035H0.06L0.065 -0.47Z" style={{ fill: trousers }} />
-      <path d="M0.03 -0.72Q0.09 -0.7 0.09 -0.56L0.085 -0.46Q0.06 -0.44 0.045 -0.46Z" style={{ fill: sweater }} />
-      <path d="M-0.07 -0.74Q0 -0.77 0.07 -0.74L0.075 -0.45Q0 -0.42 -0.075 -0.45Z" style={{ fill: sweater }} />
+      {/* Boots, trousers, and the jacket: dark sleeves and sides, a grey front. */}
+      <path d="M-0.075 -0.06H-0.02L-0.012 -0.005H-0.1Z" style={{ fill: jacket }} />
+      <path d="M0.005 -0.055H0.06L0.07 0H-0.015Z" style={{ fill: jacket }} />
+      <path d="M-0.06 -0.5L-0.078 -0.05H-0.018L0 -0.33L0.008 -0.045H0.064L0.07 -0.5Z" style={{ fill: trousers }} />
+      <path d="M0.035 -0.8Q0.095 -0.78 0.097 -0.64L0.092 -0.5Q0.07 -0.475 0.05 -0.5Z" style={{ fill: jacket }} />
+      <path d="M-0.075 -0.815Q0 -0.845 0.078 -0.815L0.082 -0.49Q0 -0.46 -0.08 -0.49Z" style={{ fill: jacket }} />
+      <path d="M-0.068 -0.8Q-0.03 -0.825 0.012 -0.815L0.016 -0.485Q-0.03 -0.47 -0.072 -0.49Z" stroke="none" style={{ fill: front }} />
       {/* The arm that holds the phone, low and a little forward. */}
       <g data-idle>
-        <path d="M-0.05 -0.73Q-0.1 -0.7 -0.095 -0.6L-0.135 -0.545L-0.11 -0.515L-0.05 -0.59Z" style={{ fill: sweater }} />
-        <circle cx="-0.13" cy="-0.525" r="0.02" style={{ fill: skin }} />
-        <rect x="-0.158" y="-0.585" width="0.022" height="0.07" rx="0.005" transform="rotate(-25 -0.147 -0.55)" style={{ fill: shaded(token("dusk"), 0.6) }} />
+        <path d="M-0.055 -0.805Q-0.105 -0.77 -0.1 -0.66L-0.14 -0.6L-0.113 -0.57L-0.053 -0.65Z" style={{ fill: jacket }} />
+        <circle cx="-0.135" cy="-0.578" r="0.018" style={{ fill: skin }} />
+        <rect x="-0.162" y="-0.635" width="0.022" height="0.07" rx="0.005" transform="rotate(-25 -0.151 -0.6)" style={{ fill: shaded(token("dusk"), 0.6) }} />
       </g>
-      <rect x="-0.018" y="-0.79" width="0.036" height="0.05" stroke="none" style={{ fill: skin }} />
-      <path d="M-0.04 -0.775Q0 -0.755 0.04 -0.775V-0.745Q0 -0.725 -0.04 -0.745Z" style={{ fill: sweater }} />
-      {/* The head: full cheeks narrowing to a small chin, an ear, and hair in locks. */}
-      <path d="M-0.075 -0.9Q-0.08 -0.83 -0.035 -0.79Q-0.01 -0.775 0.02 -0.795Q0.07 -0.83 0.068 -0.9Q0.06 -0.97 -0.005 -0.97Q-0.07 -0.97 -0.075 -0.9Z" style={{ fill: skin }} />
-      <ellipse cx="0.035" cy="-0.865" rx="0.012" ry="0.02" style={{ fill: skin }} />
+      <rect x="-0.018" y="-0.86" width="0.036" height="0.05" stroke="none" style={{ fill: skin }} />
+      <path d="M-0.045 -0.845Q0 -0.82 0.045 -0.845V-0.805Q0 -0.785 -0.045 -0.805Z" style={{ fill: jacket }} />
+      {/* The head: a soft face narrowing to a small chin, under a dark bob with a fringe. */}
+      <path d="M-0.07 -0.93Q-0.072 -0.87 -0.03 -0.84Q-0.008 -0.828 0.018 -0.845Q0.062 -0.875 0.062 -0.935Q0.055 -0.995 -0.005 -0.995Q-0.065 -0.995 -0.07 -0.93Z" style={{ fill: skin }} />
       <path
-        d="M-0.085 -0.915L-0.07 -0.875L-0.06 -0.925L-0.045 -0.88L-0.03 -0.93L-0.012 -0.885L0.005 -0.93L0.015 -0.84L0.035 -0.9L0.05 -0.82L0.075 -0.87L0.105 -0.8L0.092 -0.9L0.12 -0.89L0.085 -0.96L0.1 -0.99L0.055 -0.985L0.045 -1.02L0.01 -0.99L-0.015 -1.035L-0.03 -0.99L-0.07 -0.975Z"
+        d="M-0.078 -0.925Q-0.085 -1.005 -0.01 -1.012Q0.075 -1.012 0.078 -0.925Q0.08 -0.87 0.058 -0.85L0.04 -0.9Q0.03 -0.94 0.005 -0.955Q-0.02 -0.925 -0.05 -0.93L-0.058 -0.905L-0.066 -0.93Z"
         style={{ fill: hair }}
       />
-      <ellipse cx="-0.048" cy="-0.868" rx="0.009" ry="0.014" stroke="none" style={{ fill: shaded(token("dusk-ink"), 0.82) }} />
-      <ellipse cx="-0.05" cy="-0.867" rx="0.006" ry="0.011" stroke="none" style={{ fill: shaded(mix(token("accent"), token("dusk"), 0.25), 0.85) }} />
-      <path d="M-0.06 -0.882Q-0.048 -0.892 -0.036 -0.88" fill="none" strokeWidth="0.006" />
-      <path d="M-0.062 -0.823H-0.046" fill="none" strokeWidth="0.005" />
+      <ellipse cx="-0.046" cy="-0.905" rx="0.007" ry="0.011" stroke="none" style={{ fill: ink }} />
+      <path d="M-0.06 -0.864H-0.046" fill="none" strokeWidth="0.005" />
       {/* The answer held up, for where the scene never comes and the drawing shows the call. */}
       <g data-call>
-        <path d="M-0.05 -0.735L-0.075 -0.72L-0.19 -0.93L-0.165 -0.955Z" style={{ fill: sweater }} />
-        <circle cx="-0.185" cy="-0.955" r="0.02" style={{ fill: skin }} />
-        <circle cx="-0.19" cy="-1.01" r="0.11" stroke="none" fill="url(#hill-lamp)" opacity="0.6" />
-        <rect x="-0.205" y="-1.05" width="0.03" height="0.075" rx="0.006" style={{ fill: mix(token("signal"), token("dusk-ink"), 0.4) }} />
+        <path d="M-0.055 -0.805L-0.08 -0.79L-0.19 -0.99L-0.165 -1.015Z" style={{ fill: jacket }} />
+        <circle cx="-0.185" cy="-1.012" r="0.018" style={{ fill: skin }} />
+        <circle cx="-0.19" cy="-1.07" r="0.11" stroke="none" fill="url(#hill-lamp)" opacity="0.6" />
+        <rect x="-0.205" y="-1.105" width="0.03" height="0.075" rx="0.006" style={{ fill: mix(token("signal"), token("dusk-ink"), 0.4) }} />
       </g>
     </g>
   );
@@ -165,7 +164,8 @@ function PersonDrawn() {
  * that stands in for it: the scene's first frame, still, which shows while the scene loads and
  * gives way to it with a cross-fade, and which is all there is where there is no WebGL worth using.
  * There, and with motion off, the drawing shows the call instead (`data-call`): the boulder at the
- * top, the crew stood back, the answer held up. Decorative; the figure's caption says it in words.
+ * top, the crew stood back, the answer held up. Decorative, but for the decision card on the loops
+ * where it is the visitor's turn (`HillCard`); the figure's caption says the rest in words.
  * The loop's beats (the top at 42%, the pick at 54.5%) are the card's keyframes in globals.css,
  * which the scene follows.
  */
@@ -260,37 +260,13 @@ export function BoulderHill() {
       <span aria-hidden data-hill-clock className="pointer-events-none absolute size-px opacity-0" />
       <HillScene />
 
-      {/*
-       * The call the crew stopped for, as the Decisions page shows it: in the sky above the person on a wide
-       * screen, on the hill's open face below them on a narrower one, and left out where the figure is
-       * too small to spare either (the scene still shows the call being made).
-       */}
-      <div
-        aria-hidden
-        data-hill-card
-        className="absolute right-[3%] bottom-[5%] w-[min(15rem,40%)] rounded-lg bg-panel p-3 text-left shadow-lift max-md:hidden xl:top-[3%] xl:bottom-auto xl:w-[19rem] xl:p-4"
-      >
-        <p className="flex items-center gap-2">
-          <Badge tone="warning">
-            <Scale />
-            Decision
-          </Badge>
-          <span className="text-xs text-muted">from 3 agents</span>
-        </p>
-        <p className="mt-2 text-xs font-semibold text-ink xl:text-sm">The launch is ready. Ship it on Monday?</p>
-        <p className="mt-2 flex gap-1.5">
-          <span data-hill-pick className="inline-flex h-7 items-center gap-1 rounded-full bg-accent-tint px-3 text-xs font-semibold text-accent-ink ring-2 ring-accent ring-inset">
-            <Check className="size-3.5" />
-            Ship it
-          </span>
-          <span className="inline-flex h-7 items-center rounded-full bg-fill px-3 text-xs font-semibold text-ink-2">Hold a week</span>
-        </p>
-      </div>
+      <HillCard />
 
       <figcaption className="sr-only">
         A scene of three AI agents rolling a boulder up a hill at dusk: three small robots, the boulder glowing like an ember. At the top they stop and ask the
-        person standing there, drawn as an anime character, one question: ship the launch on Monday? The person picks “Ship it” on their phone, smiles and holds
-        it up; the boulder is done and vanishes in a column of light, and the robots cheer, turn and walk back down the hill for the next one.
+        person standing there, an anime character in a dark jacket, one question: ship the launch on Monday? The person picks “Ship it” on their phone, smiles
+        and holds it up; the boulder is done and vanishes in a column of light, and the robots cheer, turn and walk back down the hill for the next one. Every
+        fourth time, the scene waits at the question for you to make the call.
       </figcaption>
     </figure>
   );

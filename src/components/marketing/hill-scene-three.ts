@@ -31,14 +31,14 @@ import {
   WebGLRenderer,
 } from "three";
 
+import { loadAvatar } from "./hill/avatar-model";
 import { makeBot, makeBotKit, type BotMaterials } from "./hill/bot";
 import { BEATS, BOULDER_R, CREW, LOOP_SECONDS, onPath, placeBoulder, placeCrew, scoreAt, type Member } from "./hill/crew";
 import { band, clamp01, fbm } from "./hill/noise";
-import { makePerson } from "./hill/person";
 import { ink, Parts } from "./hill/rig";
 import { hillSurface, pathZ } from "./hill/terrain";
-import { ASPECT, cameraAt, FOV, HORIZON, PERSON_SCALE, PERSON_X, PERSON_Z, RIDGE_DROP, ridgeHalf, RIDGES, ridgeTop, SKY, SKY_STOPS, starAt, STARS } from "./hill/view";
-import { beamMap, boulderMaps, glowMap, grainMap, GRASS_SHADE, GROUND, groundMap, knitMap, panelMap, ringMap, shadowMap, stoneAt, toonRamp } from "./hill/textures";
+import { ASPECT, cameraAt, FOV, HORIZON, PERSON_HEIGHT, PERSON_X, PERSON_Z, RIDGE_DROP, ridgeHalf, RIDGES, ridgeTop, SKY, SKY_STOPS, starAt, STARS } from "./hill/view";
+import { beamMap, boulderMaps, glowMap, grainMap, GRASS_SHADE, GROUND, groundMap, panelMap, ringMap, shadowMap, stoneAt, toonRamp } from "./hill/textures";
 
 /**
  * The name, in clay: the hero illustration, moving. Three robot agents push the ember boulder in
@@ -71,7 +71,8 @@ export interface HillPalette {
 export interface HillScene {
   setPalette(palette: HillPalette): void;
   /** Draws the loop at `progress` (0..1). */
-  render(progress: number): void;
+  /** `idle` is the idle clock, in beats (13 to a loop), for motion that runs on through a hold; left out, it follows the loop. */
+  render(progress: number, idle?: number): void;
   resize(width: number, height: number): void;
   /** 1 is the full picture; less draws fewer pixels and a coarser shadow, for a device that cannot keep up. */
   setQuality(scale: number): void;
@@ -136,7 +137,6 @@ export async function createHillScene(canvas: HTMLCanvasElement, palette: HillPa
   const grain = keep(grainMap());
   const glow = keep(glowMap());
   const panels = keep(panelMap());
-  const knit = keep(knitMap());
   await breathe();
 
   const renderer = new WebGLRenderer({ canvas, antialias: true, alpha: true, powerPreference: "low-power" });
@@ -411,31 +411,15 @@ export async function createHillScene(canvas: HTMLCanvasElement, palette: HillPa
     return sprite;
   });
 
-  /* You, at the top. */
-  knit.repeat.set(3, 3);
-  // Flat, clean colour for the person, stepped by the same ramp; the features of the face are drawn unlit, as cels are.
-  const personMaterials = {
-    sweater: keep(new MeshToonMaterial({ gradientMap: ramp, map: knit, bumpMap: knit, bumpScale: 2 })),
-    skin: keep(new MeshToonMaterial({ gradientMap: ramp })),
-    hair: keep(new MeshToonMaterial({ gradientMap: ramp })),
-    trousers: keep(new MeshToonMaterial({ gradientMap: ramp })),
-    shoe: keep(new MeshToonMaterial({ gradientMap: ramp })),
-    dark: keep(new MeshToonMaterial({ gradientMap: ramp })),
-    screen: keep(new MeshToonMaterial({ gradientMap: ramp })),
-    white: keep(new MeshBasicMaterial()),
-    iris: keep(new MeshBasicMaterial()),
-    pupil: keep(new MeshBasicMaterial()),
-    shine: keep(new MeshBasicMaterial()),
-    lip: keep(new MeshBasicMaterial()),
-    blush: keep(new MeshBasicMaterial({ transparent: true, opacity: 0.55, depthWrite: false })),
-  };
-  const person = keep(makePerson(personMaterials));
-  ink(person.inked, inkMaterial);
-  person.root.position.set(PERSON_X, hillSurface(PERSON_X, PERSON_Z), PERSON_Z);
-  // Turned down the hill towards the crew, and a little towards us.
-  person.root.rotation.y = Math.PI + 0.72;
-  person.root.scale.setScalar(PERSON_SCALE);
-  scene.add(person.root);
+  /* You, at the top: the model is fetched here, and the scene waits for it so that it is whole when it shows. Without it the hill has no person. */
+  const person = await loadAvatar(PERSON_HEIGHT, ramp).catch(() => null);
+  if (person) {
+    keep(person);
+    person.root.position.set(PERSON_X, hillSurface(PERSON_X, PERSON_Z), PERSON_Z);
+    // Turned down the hill towards the crew, and a little towards us.
+    person.root.rotation.y = Math.PI + 0.72;
+    scene.add(person.root, person.phone);
+  }
   const phoneGlowMaterial = keep(new SpriteMaterial(additive));
   const phoneGlow = new Sprite(phoneGlowMaterial);
   scene.add(phoneGlow);
@@ -545,22 +529,12 @@ export async function createHillScene(canvas: HTMLCanvasElement, palette: HillPa
     tip.emissive.copy(signal);
     for (const sprite of tipGlows) sprite.material.color.copy(signal);
 
-    const skin = mixed(ink, shade, 0.3);
-    personMaterials.sweater.color.copy(mixed(ink, signal, 0.1));
-    personMaterials.skin.color.copy(skin);
-    personMaterials.hair.color.copy(mixed(shade, dusk, 0.3));
-    personMaterials.trousers.color.copy(mixed(dusk2, accent, 0.45));
-    personMaterials.shoe.color.copy(mixed(dusk, shade, 0.3));
-    personMaterials.dark.color.copy(mixed(dusk, ink, 0.08));
-    personMaterials.screen.color.copy(signal);
-    personMaterials.screen.emissive.copy(mixed(signal, ink, 0.25));
-    // The face is unlit, so it is toned to sit in the dusk with the lit skin around it.
-    personMaterials.white.color.copy(ink).multiplyScalar(0.82);
-    personMaterials.iris.color.copy(mixed(accent, dusk, 0.25)).multiplyScalar(0.85);
-    personMaterials.pupil.color.copy(mixed(dusk, accent, 0.1)).multiplyScalar(0.3);
-    personMaterials.shine.color.copy(ink);
-    personMaterials.lip.color.copy(mixed(shade, dusk, 0.5)).multiplyScalar(0.7);
-    personMaterials.blush.color.copy(mixed(skin, signal, 0.6));
+    if (person) {
+      for (const line of person.lines) line.color.copy(inkMaterial.color);
+      person.phoneBody.color.copy(mixed(dusk, ink, 0.08));
+      person.phoneScreen.color.copy(signal);
+      person.phoneScreen.emissive.copy(mixed(signal, ink, 0.25));
+    }
     phoneGlowMaterial.color.copy(signal);
   }
 
@@ -573,8 +547,8 @@ export async function createHillScene(canvas: HTMLCanvasElement, palette: HillPa
   const upward = new Vector3();
   const turned = new Quaternion();
 
-  function render(progress: number) {
-    const score = scoreAt(progress);
+  function render(progress: number, idle?: number) {
+    const score = scoreAt(progress, idle);
     const { p, turn, seconds, x, charge, gone, cheer } = score;
     // Its light comes up while it is still below the frame, so the loop begins as dark as it ended.
     const lit = band(p, 0, 0.03) * score.fading;
@@ -650,10 +624,13 @@ export async function createHillScene(canvas: HTMLCanvasElement, palette: HillPa
     // They watch the boulder while there is one, then the crew on its way down.
     if (gone < 0.5) watch.copy(holder.position).y -= 0.4;
     else watch.copy(crew[0]!.bot.root.position).y += 0.9;
-    person.pose({ seconds, read, tap, show, smile, joy, watch, blink: (seconds / 4.3333 + 0.2) % 1 < 0.03 });
     const held = Math.max(read, show);
-    personMaterials.screen.emissiveIntensity = 0.55 + 1.5 * held + 0.6 * tap;
-    person.phoneAt(phoneGlow.position);
+    if (person) {
+      person.avatar.pose({ seconds, read, tap, show, smile, joy, watch, blink: (seconds / 4.3333 + 0.2) % 1 < 0.03 });
+      person.phoneScreen.emissiveIntensity = 0.55 + 1.5 * held + 0.6 * tap;
+      person.avatar.phoneAt(phoneGlow.position);
+    }
+    phoneGlow.visible = Boolean(person);
     phoneGlow.scale.setScalar(0.5 + 0.55 * held + 0.5 * show);
     phoneGlowMaterial.opacity = 0.22 + 0.4 * held + 0.3 * tap;
 

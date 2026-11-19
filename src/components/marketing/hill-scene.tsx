@@ -2,10 +2,12 @@
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
+import { IDLE_PER_MS } from "./hill/cast";
+import { LOOP_MS, momentAt } from "./hill/timeline";
+import { HILL_ANSWER, HILL_HOLD, type HillAnswer } from "./hill-card";
 import type { HillPalette, HillScene as Scene } from "./hill-scene-three";
 
 /** The loop, as `--hill` in globals.css, and where a still frame rests: the call made, the phone held up and the boulder alight, about to go. */
-const LOOP_MS = 18_000;
 const STILL_AT = 0.582;
 /** A frame that takes longer than this cannot keep up; two in a row and the scene draws a lighter picture. */
 const SLOW_MS = 50;
@@ -70,7 +72,7 @@ function never(): () => void {
 /**
  * The boulder scene in three.js, over the drawn hill it replaces once it has painted. three.js loads
  * only when the figure comes near the screen, so it is never part of the page's first load, and the
- * scene paints its own textures as it loads, a step at a time, so it fetches nothing else. Where
+ * scene paints its own textures as it loads, a step at a time, and fetches only the person's model. Where
  * there is no WebGL, or only WebGL drawn in software, the drawing stays and none of it loads. The loop
  * keeps time with the CSS clock beside it (`data-hill-clock`), which the decision card shares and the
  * page's pause control stops; with reduced motion there is no clock, and the scene draws one still
@@ -97,22 +99,64 @@ export function HillScene() {
     let frame = 0;
     let visible = false;
     let disposed = false;
-    const started = performance.now();
 
     const paused = () => document.documentElement.hasAttribute("data-paused");
     const still = () => reduce.matches;
 
-    /** Where the loop is: the CSS clock's own time, so the card above and the pause stay in step. */
-    function progress(): number {
-      if (still()) return STILL_AT;
-      const animation = clock?.getAnimations()[0];
-      const time = animation?.currentTime;
-      const ms = typeof time === "number" ? time : performance.now() - started;
-      return (ms % LOOP_MS) / LOOP_MS;
+    /*
+     * The visitor's turn. The loop plays through three times; the fourth time the crew reaches the top
+     * the clock is stopped at the question (`data-hold` on the figure stops the card's animations with
+     * it), the card is handed over (HILL_HOLD), and the scene idles until they answer. Loops are counted
+     * on the clock, never on frames: if it ran on while nothing was drawn (off screen, a hidden tab),
+     * it is put back to the hold it should have stopped at.
+     */
+    let answered = 0;
+    let holding = false;
+    /** While it waits, the idle motion (breathing, blinking) runs on: the time waited, in all and since this hold began. */
+    let waited = 0;
+    let heldSince = 0;
+    let lastLoop = 1;
+    const clocks = () => figure.getAnimations({ subtree: true }).filter((animation) => animation.effect?.getComputedTiming().duration === LOOP_MS);
+
+    function hold(time: number) {
+      // Back to the moment it should have stopped at, however far the clock ran on unseen.
+      for (const animation of clocks()) if (animation.currentTime !== time) animation.currentTime = time;
+      if (holding) return;
+      holding = true;
+      heldSince = performance.now();
+      figure.setAttribute("data-hold", "");
+      figure.dispatchEvent(new CustomEvent<boolean>(HILL_HOLD, { detail: true }));
     }
 
+    function answer(event: Event) {
+      if (!holding) return;
+      holding = false;
+      answered += 1;
+      waited += performance.now() - heldSince;
+      // Either answer is the call made; the card shows which.
+      if ((event as CustomEvent<HillAnswer>).detail === "hold") figure.setAttribute("data-choice", "hold");
+      figure.removeAttribute("data-hold");
+      figure.dispatchEvent(new CustomEvent<boolean>(HILL_HOLD, { detail: false }));
+      wake();
+    }
+    figure.addEventListener(HILL_ANSWER, answer);
+
+    /** Where the loop is: the CSS clock's own time, so the card above and the pause stay in step. */
     function draw() {
-      scene?.render(progress());
+      if (!scene) return;
+      const time = clock?.getAnimations()[0]?.currentTime;
+      if (still() || typeof time !== "number") {
+        scene.render(STILL_AT);
+        return;
+      }
+      const moment = momentAt(time, answered);
+      if (moment.held) hold(moment.time);
+      if (moment.loop !== lastLoop) {
+        lastLoop = moment.loop;
+        figure.removeAttribute("data-choice");
+      }
+      const waiting = waited + (holding ? performance.now() - heldSince : 0);
+      scene.render(moment.progress, (moment.time + waiting) * IDLE_PER_MS);
     }
 
     /*
@@ -236,6 +280,9 @@ export function HillScene() {
       disposed = true;
       if (frame) cancelAnimationFrame(frame);
       if (rest) window.clearTimeout(rest);
+      figure.removeEventListener(HILL_ANSWER, answer);
+      figure.removeAttribute("data-hold");
+      figure.removeAttribute("data-choice");
       seen.disconnect();
       sized.disconnect();
       look.disconnect();

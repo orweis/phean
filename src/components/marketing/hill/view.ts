@@ -14,11 +14,10 @@ export const FOV = 24;
 const SPAN = 13.5;
 export const LOOK_AT: readonly [number, number, number] = [-0.1, 3.15, 0];
 
-/** Where the person stands, and how tall they are (to the top of the hair). */
+/** Where the person stands, and how tall they are. */
 export const PERSON_X = 5.05;
 export const PERSON_Z = pathZ(PERSON_X) - 0.15;
-export const PERSON_SCALE = 1.07;
-export const PERSON_HEIGHT = 1.93 * PERSON_SCALE;
+export const PERSON_HEIGHT = 1.98;
 
 /** Where the camera rests for a canvas of this shape: a little above, and a little down the hill, so the face of the hill and the crew's faces show. */
 export function cameraHome(aspect: number): [number, number, number] {

@@ -18,7 +18,7 @@
 /* Hallmark · answered logos (46a) · the agents strip names compatible clients with their makers' marks (Simple Icons CC0, Microsoft Codicons CC BY 4.0, OpenAI's own published mark) and monogram chips where none is usable; it is not a customer logo wall and claims no partnership */
 /* Hallmark · dismissed 41 · here every hue's -ink token is its text colour on light surfaces, as with late-ink and arrive-ink; the label on the brand fill is on-accent, at 4.5:1 or better in every theme (Dusk 7.6:1 in light and 8.9:1 in dark), as tests/themes.test.ts checks */
 /* Hallmark · waive 49b · a real phrase that cannot shorten, two lines at most · an activity line links the sentence that names the goal, and on a 320px phone the goal title wraps with it */
-/* Hallmark · answered motion · the name band's boulder is a three.js scene after the hero illustration (components/marketing/hill-scene.tsx and hill/): cel-shaded robot agents with visors, LED eyes and antennas push a cracked ember boulder in from below the frame and up the path, hands on the stone and on each other's packs, placed afresh each frame from the loop's progress alone; an anime person in a knitted sweater makes the call at the crest and smiles; the boulder leaves in a column of light and the crew walks back down, so the 18s loop closes on an empty hill; the painted world is textured by maps made in the browser and tinted by the theme; loaded only near the screen, with a still drawing of its first frame (drawn through the same camera, in the same tokens) in its place until it paints and nothing animating meanwhile; timed by the hill's CSS clock so the pause and the card stay in step, one still frame under reduced motion, and the drawing showing the call where there is no WebGL or only software WebGL */
+/* Hallmark · answered motion · the name band's boulder is a three.js scene after the hero illustration (components/marketing/hill-scene.tsx and hill/): cel-shaded robot agents with visors, LED eyes and antennas push a cracked ember boulder in from below the frame and up the path, hands on the stone and on each other's packs, placed afresh each frame from the loop's progress alone; an anime person (VRoid's AvatarSample_C, cel-shaded like the crew) makes the call at the crest and smiles, and every fourth loop the scene waits there for the visitor to make it on the card; the boulder leaves in a column of light and the crew walks back down, so the 18s loop closes on an empty hill; the painted world is textured by maps made in the browser and tinted by the theme; loaded only near the screen, with a still drawing of its first frame (drawn through the same camera, in the same tokens) in its place until it paints and nothing animating meanwhile; timed by the hill's CSS clock so the pause and the card stay in step, one still frame under reduced motion, and the drawing showing the call where there is no WebGL or only software WebGL */
 /* Hallmark · dismissed F25 · on phones the first column is pinned, so each agent or workspace stays named while its figures and the revoke action scroll beside it inside the card */
 /* Hallmark · dropped <p>An MCP server for teams of AI agents</p> · the eyebrow announced the head; the lede now says the ledger is served over MCP to a team of AI agents */
 /* Hallmark · dropped <p>This goal is waiting for a decision…</p> · the Proposed chip beside the title and the Approve and Reject buttons already say it */
@@ -755,6 +755,28 @@
     animation: hill-pick var(--hill) ease infinite;
   }
 
+  /*
+   * The visitor's turn (hill-scene.tsx): every fourth loop the clock stops at the question, and the
+   * card's own animations stop with it, until they answer. "Ship it" is ringed, and the ring breathes.
+   */
+  [data-hill][data-hold] :is([data-hill-clock], [data-hill-card], [data-hill-pick]) {
+    animation-play-state: paused;
+  }
+
+  [data-hill-card][data-holding] [data-hill-pick] {
+    outline: 2px solid var(--color-signal-ink);
+    outline-offset: 2px;
+  }
+
+  [data-hill-card][data-holding] [data-hill-pick]::after {
+    position: absolute;
+    inset: -6px;
+    border: 2px solid var(--color-signal-ink);
+    border-radius: 9999px;
+    content: "";
+    animation: hill-ring 1.6s var(--ease-out) infinite;
+  }
+
   /* The hero's hill drifts, slowly, as Dusk's photograph does. */
   .hero-scene .art {
     animation: art-drift 48s ease-in-out infinite alternate;
@@ -781,8 +803,33 @@
   }
 }
 
+/* Where the visitor chose to hold a week, that is the answer the card shows picked. */
+[data-hill][data-choice="hold"] [data-hill-pick] {
+  background-color: var(--color-fill);
+  box-shadow: none;
+  color: var(--color-ink-2);
+  animation: none;
+}
+
+[data-hill][data-choice="hold"] [data-hill-other] {
+  background-color: var(--color-accent-tint);
+  box-shadow: inset 0 0 0 2px var(--color-accent);
+  color: var(--color-accent-ink);
+}
+
+@keyframes hill-ring {
+  from {
+    opacity: 0.9;
+    transform: scale(0.97);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.22, 1.5);
+  }
+}
+
 /* "Pause motion" on the site (WCAG 2.2.2): everything that loops stops where it is. */
-[data-paused] :is([data-demo] *, [data-hill] *, [data-glow]::before, [data-drift], [data-drift]::before, .hero-scene .art) {
+[data-paused] :is([data-demo] *, [data-hill] *, [data-hill] [data-hill-pick]::after, [data-glow]::before, [data-drift], [data-drift]::before, .hero-scene .art) {
   animation-play-state: paused !important;
 }
 

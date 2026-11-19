@@ -1,7 +1,7 @@
 import { Euler, Matrix4, Quaternion, Vector3, type Object3D } from "three";
 
 import { PALM, REACH, type Bot } from "./bot";
-import { BOULDER_R, START_X, TOP_X, type CrewLook } from "./cast";
+import { BEATS, BOULDER_R, IDLE_BEATS, START_X, TOP_X, type CrewLook } from "./cast";
 import { band, clamp01 } from "./noise";
 import { FACE, hillSurface, pathLength, pathPoint, pathSlope, pathTurn, pathZ } from "./terrain";
 import { stoneAt } from "./textures";
@@ -13,31 +13,10 @@ import { stoneAt } from "./textures";
  * the running loop would have drawn. tests/hill.test.ts holds it to that.
  */
 
-export { BOULDER_R, CREW, START_X, TOP_X, type CrewLook } from "./cast";
+export { BEATS, BOULDER_R, CREW, LOOP_SECONDS, START_X, TOP_X, type CrewLook } from "./cast";
 
-/** The loop, in seconds: `--hill` in globals.css and LOOP_MS in hill-scene.tsx. */
-export const LOOP_SECONDS = 18;
-/** The loop's beats, as fractions of it. globals.css keys the decision card to the same ones. */
-export const BEATS = {
-  /** The boulder reaches the top, and the card shows. */
-  top: 0.42,
-  /** The person taps the answer. */
-  tap: 0.545,
-  /** The boulder gathers light, */
-  charge: 0.552,
-  /** goes in a flash, */
-  flash: 0.585,
-  /** and its light has died away. */
-  dark: 0.65,
-  /** The crew turns round, */
-  turn: 0.685,
-  /** and sets off down the hill. */
-  descend: 0.7,
-};
 /** How far down the path the crew walks before the loop ends: enough to take the last of them out of the frame. */
 const DESCENT = 9.7;
-/** The idle motion (breathing, blinking, the antennas' sway) runs on a clock of this many beats a loop, so it comes round with it. */
-const IDLE_BEATS = 13;
 
 export interface Member extends CrewLook {
   bot: Bot;
@@ -90,14 +69,15 @@ export interface Score {
   joy: number;
 }
 
-export function scoreAt(progress: number): Score {
+/** `idle` is the idle clock in beats, for motion that runs on while the loop is held; left out, it follows the loop. */
+export function scoreAt(progress: number, idle?: number): Score {
   const p = ((progress % 1) + 1) % 1;
   const x = START_X + (TOP_X - START_X) * climb(p);
   const answered = band(p, BEATS.tap + 0.008, BEATS.flash - 0.005);
   return {
     p,
     turn: p * Math.PI * 2,
-    seconds: p * IDLE_BEATS,
+    seconds: idle ?? p * IDLE_BEATS,
     x,
     travelled: pathLength(START_X, x),
     charge: band(p, BEATS.charge, BEATS.flash),
