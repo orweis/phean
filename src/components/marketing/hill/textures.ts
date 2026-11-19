@@ -267,3 +267,35 @@ export function shadowMap(): Texture {
     context.fillRect(0, 0, size, size);
   });
 }
+
+/** The column of light the boulder leaves by: bright at its foot and its heart, thinning upward and outward, with rays running up it. */
+export function beamMap(): Texture {
+  return canvasTexture(128, (context, size) => {
+    const image = context.createImageData(size, size);
+    for (let j = 0; j < size; j += 1) {
+      const up = 1 - j / (size - 1);
+      const fall = (1 - up) ** 1.5 * Math.min(1, up * 14);
+      for (let i = 0; i < size; i += 1) {
+        const across = Math.sin((Math.PI * i) / (size - 1)) ** 2.4;
+        const ray = 0.6 + 0.4 * fbm2((i / size) * 14, up * 1.5, 41, 2);
+        const index = (j * size + i) * 4;
+        image.data[index] = image.data[index + 1] = image.data[index + 2] = 255;
+        image.data[index + 3] = Math.round(255 * clamp01(fall * across * ray));
+      }
+    }
+    context.putImageData(image, 0, 0);
+  });
+}
+
+/** A ring of light, for the ripple that runs out over the ground. */
+export function ringMap(): Texture {
+  return canvasTexture(128, (context, size) => {
+    const gradient = context.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+    gradient.addColorStop(0, "rgba(255,255,255,0)");
+    gradient.addColorStop(0.6, "rgba(255,255,255,0.05)");
+    gradient.addColorStop(0.84, "rgba(255,255,255,0.9)");
+    gradient.addColorStop(1, "rgba(255,255,255,0)");
+    context.fillStyle = gradient;
+    context.fillRect(0, 0, size, size);
+  });
+}

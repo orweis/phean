@@ -86,7 +86,9 @@ function Boulder({ x, r, rolls = false }: { x: number; r: number; rolls?: boolea
 /**
  * Why the product is called Phean, drawn: a crew of AI agents rolls the boulder up the hill on a
  * loop, stops at the top for a person's call, and starts on the next one. With motion off it shows
- * the moment at the top, the call made. Decorative; the figure's caption says it in words.
+ * the moment at the top, the call made. Decorative; the figure's caption says it in words. The
+ * loop's beats (the top at 42%, the pick at 54.5%) are the keyframes in globals.css, which the
+ * three.js scene follows.
  *
  * The SVG below is the poster: what shows before the three.js scene (`HillScene`) has painted, and
  * where there is no WebGL. Once the scene is up it takes the drawing's place, in the same box: the
@@ -176,8 +178,8 @@ export function BoulderHill() {
 
       <figcaption className="sr-only">
         A scene of three AI agents rolling a boulder up a hill at dusk: three small robots, the boulder glowing like an ember. At the top they stop and ask the
-        person standing there one question: ship the launch on Monday? The person picks “Ship it” on their phone and holds it up, the boulder is done, and the
-        next boulder is already waiting at the foot of the hill.
+        person standing there one question: ship the launch on Monday? The person picks “Ship it” on their phone, smiles and holds it up; the boulder is done and
+        vanishes in a column of light, and the robots cheer, turn and walk back down the hill for the next one.
       </figcaption>
     </figure>
   );
