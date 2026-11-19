@@ -16,7 +16,7 @@ export type BotMaterials = Record<Slot, Material>;
 const HIP = 0.46;
 const NECK = 0.62;
 const UPPER_ARM = 0.22;
-const FOREARM = 0.22;
+const FOREARM = 0.25;
 const THIGH = 0.2;
 const SHIN = 0.2;
 const ANKLE = 0.1;
@@ -26,7 +26,13 @@ const STANCE = 0.6;
 
 const SHOULDER = [v(0.02, 0.42, 0.285), v(0.02, 0.42, -0.285)] as const;
 const HIP_JOINT = [v(0, 0.02, 0.12), v(0, 0.02, -0.12)] as const;
-const BACK = v(-0.33, 0.33, 0);
+/** Where a hand rests on the rear face of the pack, one each side of its trim, and the way that face looks. */
+const PACK = [v(-0.315, 0.3, 0.085), v(-0.315, 0.3, -0.085)] as const;
+const PACK_FACES = v(-1, 0, 0);
+/** From a wrist to the far side of its mitten, in the bot's own units: a wrist held this far off a surface lays the mitten on it. */
+export const PALM = 0.118;
+/** A bent arm's comfortable reach, shoulder to wrist. */
+export const REACH = 0.445;
 
 export interface BotKit {
   torso: Map<Slot, BufferGeometry>;
@@ -125,10 +131,12 @@ export interface BotPose {
   push: number;
   /** 1 with its arms up, the call made. */
   cheer: number;
-  /** Ground covered, in world units: the feet step as far as the bot has come. */
+  /** 1 walking free, arms swinging. */
+  walk: number;
+  /** Ground covered the way it faces, in world units: the feet step as far as the bot has come. */
   distance: number;
   seconds: number;
-  /** Where the hands push, in the world. */
+  /** Where the wrists go when it pushes, in the world. */
   hands: readonly [Vector3, Vector3];
   /** The head's turn towards the camera and its tilt up, in radians. */
   headTurn: number;
@@ -144,8 +152,8 @@ export interface Bot {
   shoulder(index: 0 | 1, out: Vector3): Vector3;
   /** The lit tip of its antenna, in the world. */
   tipAt(out: Vector3): Vector3;
-  /** The middle of its back, in the world: where the bot behind pushes. */
-  back(out: Vector3): Vector3;
+  /** A point on the back of its pack, in the world, and which way the pack faces there: where the bot behind lays a hand. */
+  back(index: 0 | 1, point: Vector3, facing: Vector3): void;
   dispose(): void;
 }
 
@@ -193,16 +201,17 @@ export function makeBot(kit: BotKit, materials: BotMaterials, look: BotLook): Bo
   for (const mesh of [eyes, stem, tip]) mesh.castShadow = false;
 
   function pose(p: BotPose) {
-    const { push, cheer } = p;
+    const { push, cheer, walk } = p;
+    const stride = Math.max(push, walk);
     const walked = p.distance / look.scale / CYCLE;
     const swing = Math.sin(walked * Math.PI * 2);
     const hop = cheer * 0.07 * Math.abs(Math.sin(p.seconds * 7.25 + look.antennaAt * 20));
 
-    body.position.set(0.02 * push, HIP - 0.055 * push + 0.022 * push * Math.abs(swing) + hop, 0);
-    body.rotation.set(0.06 * push * swing, 0, -0.44 * push - 0.03 + 0.1 * cheer);
+    body.position.set(0.02 * push, HIP - 0.055 * push + 0.022 * stride * Math.abs(swing) + hop, 0);
+    body.rotation.set(0.06 * stride * swing, 0, -0.36 * push - 0.03 + 0.1 * cheer + 0.07 * walk);
     body.updateMatrix();
-    head.rotation.set(0, -p.headTurn, p.headTilt + 0.3 * push);
-    antenna.rotation.set(0.1 * swing * push + 0.08 * Math.sin(p.seconds * 2.9 + look.antennaAt * 9), 0, look.antennaLean + 0.32 * push + 0.07 * Math.sin(p.seconds * 3.87 + look.scale * 9));
+    head.rotation.set(0, -p.headTurn, p.headTilt + 0.24 * push);
+    antenna.rotation.set(0.1 * swing * stride + 0.08 * Math.sin(p.seconds * 2.9 + look.antennaAt * 9), 0, look.antennaLean + 0.32 * push + 0.07 * Math.sin(p.seconds * 3.87 + look.scale * 9));
     eyes.scale.y = p.blink ? 0.12 : 1 - 0.35 * cheer;
     tip.scale.setScalar(1 + 0.18 * Math.sin(p.seconds * 4.83 + look.scale * 30) + 0.5 * cheer);
 
@@ -212,7 +221,7 @@ export function makeBot(kit: BotKit, materials: BotMaterials, look: BotLook): Bo
       const arm = arms[i]!;
       shoulderAt.copy(SHOULDER[i]!).applyMatrix4(body.matrix);
       // Hanging at its side, on the load, or up in the air: the hand goes between the three.
-      rest.copy(shoulderAt).add(target.set(0.07, -0.37, sign * 0.06));
+      rest.copy(shoulderAt).add(target.set(0.07 + 0.17 * walk * Math.sin(walked * Math.PI * 2 + i * Math.PI), -0.37 + 0.03 * walk, sign * 0.06));
       root.worldToLocal(target.copy(p.hands[i]!));
       rest.lerp(target, push);
       target.copy(shoulderAt).add(joint.set(0.1 + 0.05 * Math.sin(p.seconds * 7.25 + i), 0.36, sign * 0.16));
@@ -234,13 +243,13 @@ export function makeBot(kit: BotKit, materials: BotMaterials, look: BotLook): Bo
         x = reach * (2 * t * t * (3 - 2 * t) - 1);
         lift = Math.sin(Math.PI * t);
       }
-      target.set((x - 0.2) * push + 0.01 * sign * (1 - push), ANKLE + (0.1 * lift * push) + hop, sign * 0.125);
+      target.set(x * stride - 0.2 * push + 0.01 * sign * (1 - stride), ANKLE + 0.1 * lift * stride + hop, sign * 0.125);
       pole.set(1, 0.3, sign * 0.15);
       bend(hipAt, target, THIGH, SHIN, pole, joint, end);
       span(leg.thigh, hipAt, joint);
       span(leg.shin, joint, end);
       leg.foot.position.copy(end);
-      leg.foot.rotation.z = -0.45 * lift * push - 0.12 * push;
+      leg.foot.rotation.z = -0.45 * lift * stride - 0.12 * push;
     }
   }
 
@@ -254,8 +263,9 @@ export function makeBot(kit: BotKit, materials: BotMaterials, look: BotLook): Bo
     tipAt(out) {
       return tip.getWorldPosition(out);
     },
-    back(out) {
-      return root.localToWorld(out.copy(BACK).applyMatrix4(body.matrix));
+    back(index, point, facing) {
+      root.localToWorld(point.copy(PACK[index]).applyMatrix4(body.matrix));
+      facing.copy(PACK_FACES).transformDirection(body.matrix).transformDirection(root.matrixWorld);
     },
     dispose() {
       stemGeometry.dispose();

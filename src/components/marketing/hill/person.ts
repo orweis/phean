@@ -5,12 +5,13 @@ import { bend, meshes, Parts, span, v } from "./rig";
 
 /*
  * You, at the top: a person in the illustrations' clay, with a person's proportions. A head with
- * hair, a neck, shoulders under a knitted sweater, arms that end in hands, trousers and shoes. No
- * face beyond a nose, as the illustrations draw people. They stand easy, watch the crew climb, read
- * the question on their phone when it arrives, tap, and hold the answer up for the crew to see.
+ * hair, a neck, shoulders under a knitted sweater, arms that end in hands, trousers and shoes. The
+ * face is a few clay shapes: eyes with lids that blink, brows, a nose, cheeks, a jaw, and a mouth
+ * that smiles when the call is made. They stand easy, watch the crew climb, read the question on
+ * their phone when it arrives, tap, and hold the answer up for the crew to see.
  */
 
-type Slot = "sweater" | "skin" | "hair" | "trousers" | "shoe" | "dark" | "screen";
+type Slot = "sweater" | "skin" | "hair" | "trousers" | "shoe" | "dark" | "screen" | "white" | "pupil" | "lip" | "blush";
 export type PersonMaterials = Record<Slot, Material>;
 
 const PELVIS = 0.9;
@@ -24,6 +25,9 @@ const ANKLE = 0.075;
 const SHOULDER = [v(0, 0.47, 0.215), v(0, 0.47, -0.215)] as const;
 const HIP_JOINT = [v(0, -0.06, 0.095), v(0, -0.06, -0.095)] as const;
 const FOOT = [v(0.02, ANKLE, 0.11), v(-0.03, ANKLE, -0.12)] as const;
+
+/** The right eye, in the head's space; the left mirrors it. */
+const EYE = { x: 0.105, y: 0.146, z: 0.044 };
 
 const HANG = [v(0.17, 0.1, 0.23), v(0.04, -0.04, -0.265)] as const;
 const READ = v(0.27, 0.35, 0.08);
@@ -40,6 +44,9 @@ export interface PersonPose {
   tap: number;
   /** 1 holding the answer up. */
   show: number;
+  /** 1 pleased with the call. */
+  smile: number;
+  blink: boolean;
   /** Where to look, in the world. */
   watch: Vector3;
 }
@@ -95,13 +102,45 @@ export function makePerson(materials: PersonMaterials): Person {
     .add("skin", new SphereGeometry(0.125, 24, 18), [0, 0.13, 0], [0, 0, 0], [0.97, 1.12, 0.9])
     .add("skin", new SphereGeometry(0.03, 8, 6), [-0.012, 0.115, 0.112], [0, 0, 0], [0.6, 1, 0.5])
     .add("skin", new SphereGeometry(0.03, 8, 6), [-0.012, 0.115, -0.112], [0, 0, 0], [0.6, 1, 0.5])
-    .add("skin", new SphereGeometry(0.021, 8, 6), [0.121, 0.1, 0], [0, 0, 0], [1, 1.2, 0.9])
+    .add("skin", new SphereGeometry(0.021, 10, 8), [0.121, 0.1, 0], [0, 0, 0], [1, 1.25, 0.9])
+    // A jaw and a chin under the round of the skull, and the round of each cheek.
+    .add("skin", new SphereGeometry(0.085, 16, 12), [0.022, 0.058, 0], [0, 0, 0], [1.02, 0.78, 1.02])
+    .add("skin", new SphereGeometry(0.03, 10, 8), [0.08, 0.022, 0], [0, 0, 0], [0.9, 0.8, 1.2])
+    .add("blush", new SphereGeometry(0.03, 10, 8), [0.092, 0.092, 0.06], [0, 0.5, 0], [0.34, 0.8, 1])
+    .add("blush", new SphereGeometry(0.03, 10, 8), [0.092, 0.092, -0.06], [0, -0.5, 0], [0.34, 0.8, 1])
+    // The eyes: a white set into the face and a dark pupil on it.
+    .add("white", new SphereGeometry(0.025, 12, 10), [EYE.x, EYE.y, EYE.z], [0, 0, 0], [0.5, 1.12, 1])
+    .add("white", new SphereGeometry(0.025, 12, 10), [EYE.x, EYE.y, -EYE.z], [0, 0, 0], [0.5, 1.12, 1])
+    .add("pupil", new SphereGeometry(0.0145, 10, 8), [EYE.x + 0.0085, EYE.y - 0.002, EYE.z - 0.003], [0, 0, 0], [0.5, 1.1, 1])
+    .add("pupil", new SphereGeometry(0.0145, 10, 8), [EYE.x + 0.0085, EYE.y - 0.002, -EYE.z + 0.003], [0, 0, 0], [0.5, 1.1, 1])
     // Hair: a cap swept back from the forehead to the nape, and a fringe across the brow.
     .add("hair", new SphereGeometry(0.136, 24, 14, 0, Math.PI * 2, 0, 1.72), [-0.014, 0.142, 0], [0, 0, 0.5], [0.98, 1.1, 0.93])
     .add("hair", new SphereGeometry(0.075, 14, 10), [0.078, 0.222, 0.012], [0.25, 0, -0.5], [0.75, 0.42, 1.4])
     .add("hair", new SphereGeometry(0.06, 12, 8), [-0.105, 0.09, 0], [0, 0, 0], [0.6, 1, 1.35])
     .build();
   meshes(head, face, materials);
+  // The lids: a cap over each eye that turns down across it to blink. Both turn about the line through the eyes.
+  const lidGeometry = new Parts<"skin">()
+    .add("skin", new SphereGeometry(0.0285, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2), [0, 0, EYE.z], [0, 0, 0], [0.62, 1.12, 1.04])
+    .add("skin", new SphereGeometry(0.0285, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2), [0, 0, -EYE.z], [0, 0, 0], [0.62, 1.12, 1.04])
+    .build()
+    .get("skin")!;
+  const lids = new Mesh(lidGeometry, materials.skin);
+  lids.position.set(EYE.x, EYE.y, 0);
+  const browGeometry = new Parts<"hair">()
+    .add("hair", new CapsuleGeometry(0.0065, 0.036, 3, 6), [0, 0, EYE.z + 0.002], [Math.PI / 2 - 0.16, 0, 0.1])
+    .add("hair", new CapsuleGeometry(0.0065, 0.036, 3, 6), [0, 0, -EYE.z - 0.002], [Math.PI / 2 + 0.16, 0, 0.1])
+    .build()
+    .get("hair")!;
+  const brows = new Mesh(browGeometry, materials.hair);
+  // The mouth: the lower arc of a ring, flat when the face is at rest and deep when it smiles.
+  const mouthGeometry = new Parts<"lip">()
+    .add("lip", new TorusGeometry(0.03, 0.0062, 6, 14, Math.PI * 0.76), [0, 0, 0], [0, Math.PI / 2, Math.PI * 1.12])
+    .build()
+    .get("lip")!;
+  const mouth = new Mesh(mouthGeometry, materials.lip);
+  head.add(lids, brows, mouth);
+  head.scale.setScalar(1.08);
 
   const sleeveUpper = new CapsuleGeometry(0.058, UPPER_ARM - 0.02, 4, 10);
   // The forearm ends in a ribbed cuff.
@@ -158,6 +197,12 @@ export function makePerson(materials: PersonMaterials): Person {
     const towards = Math.max(-0.75, Math.min(0.75, Math.atan2(-local.z, local.x)));
     head.rotation.set(0.03 * shift, towards * (1 - 0.75 * p.read) + 0.12 * p.read, -0.08 - 0.34 * p.read + 0.14 * p.show + 0.015 * breath);
 
+    // The face: eyes lowered to the phone while reading, a blink now and then, and a smile for the call.
+    lids.rotation.z = p.blink ? -1.45 : 0.42 - 0.5 * p.read + 0.12 * p.smile;
+    brows.position.set(EYE.x + 0.004, EYE.y + 0.04 - 0.005 * p.read + 0.009 * p.smile, 0);
+    mouth.position.set(0.107 - 0.004 * p.smile, 0.064 + 0.02 * p.smile, 0);
+    mouth.scale.set(1, 0.3 + 0.75 * p.smile, 0.78 + 0.3 * p.smile);
+
     for (let i = 0; i < 2; i += 1) {
       const sign = i === 0 ? 1 : -1;
       const arm = arms[i]!;
@@ -200,7 +245,7 @@ export function makePerson(materials: PersonMaterials): Person {
       return phone.getWorldPosition(out);
     },
     dispose() {
-      for (const geometry of [...torso.values(), ...face.values(), ...phoneParts.values(), sleeveUpper, sleeveLower, handGeometry, thighGeometry, shinGeometry, shoeGeometry]) geometry.dispose();
+      for (const geometry of [...torso.values(), ...face.values(), ...phoneParts.values(), lidGeometry, browGeometry, mouthGeometry, sleeveUpper, sleeveLower, handGeometry, thighGeometry, shinGeometry, shoeGeometry]) geometry.dispose();
     },
   };
 }

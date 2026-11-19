@@ -4,9 +4,9 @@ import { useEffect, useRef, useState } from "react";
 
 import type { HillPalette, HillScene as Scene } from "./hill-scene-three";
 
-/** The loop, as `--hill` in globals.css, and where a still frame rests: the call made at the top. */
-const LOOP_MS = 13_000;
-const STILL_AT = 0.74;
+/** The loop, as `--hill` in globals.css, and where a still frame rests: the call made, the phone held up and the boulder alight, about to go. */
+const LOOP_MS = 18_000;
+const STILL_AT = 0.582;
 /** A frame that takes longer than this cannot keep up; two in a row and the scene draws a lighter picture. */
 const SLOW_MS = 50;
 const LIGHT = 0.5;
@@ -97,9 +97,7 @@ export function HillScene() {
     }
 
     function draw() {
-      if (!scene) return;
-      const seconds = still() ? 0 : progress() * (LOOP_MS / 1000);
-      scene.render(progress(), seconds);
+      scene?.render(progress());
     }
 
     /*
