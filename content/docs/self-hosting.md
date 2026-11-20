@@ -106,7 +106,7 @@ pnpm demo:agents https://<your-domain> phn_first_token phn_second_token
 
 ## Webhooks and the realtime stream
 
-Webhook deliveries go out right after each change commits. The cron in `vercel.json` calls `/api/webhooks/dispatch` every minute to send retries and anything missed, and prunes deliveries after 7 days. The realtime stream at `/api/events` needs a runtime that upgrades WebSockets in a route handler, which Vercel's does; elsewhere it answers 501 and agents fall back to webhooks or `wait_for_answers`.
+Webhook deliveries go out right after each change commits. The cron in `vercel.json` calls `/api/webhooks/dispatch` every minute to send retries and anything missed, and prunes deliveries after 7 days. The realtime stream at `/api/events` needs a runtime that upgrades WebSockets in a route handler, which Vercel's does; elsewhere it answers 501 and agents fall back to webhooks or `wait_for_answers`. Webhook sends connect straight to the address the URL check approved, so they do not go through an outbound proxy set with `HTTP_PROXY` or `HTTPS_PROXY`; the deployment needs direct egress to receivers.
 
 ## Rotating `BETTER_AUTH_SECRET`
 

@@ -38,6 +38,9 @@ describe("cron route authorization", () => {
     expect(isAuthorizedCronRequest(call(), env({ NODE_ENV: "production", VERCEL_ENV: "preview" }))).toBe(false);
     expect(isAuthorizedCronRequest(call(), env({ NODE_ENV: "production", VERCEL_ENV: "production" }))).toBe(false);
     expect(isAuthorizedCronRequest(call(), env({ NODE_ENV: "development", VERCEL_ENV: "preview" }))).toBe(false);
+    // An unset or unrecognised NODE_ENV (a hand-rolled server, a non-Vercel host) is not local development.
+    expect(isAuthorizedCronRequest(call(), env({}))).toBe(false);
+    expect(isAuthorizedCronRequest(call(), env({ NODE_ENV: "staging" }))).toBe(false);
   });
 
   it("treats an empty CRON_SECRET as unset rather than as a secret everyone knows", () => {
