@@ -28,6 +28,9 @@ export default async function DocsLayout({ children }: LayoutProps<"/docs">) {
             Docs
           </a>
           <nav aria-label="Account" className="ml-auto flex items-center gap-1">
+            <ButtonLink href={routes.blog()} variant="ghost" className="max-sm:hidden">
+              Blog
+            </ButtonLink>
             {session ? (
               <ButtonLink href={routes.workspaces()} variant="ghost">
                 Open Phean

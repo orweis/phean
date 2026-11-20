@@ -136,6 +136,7 @@ export default async function LandingPage() {
               { href: "#decisions", label: "Decisions" },
               { href: "#use-cases", label: "Use cases" },
               { href: routes.docs(), label: "Docs" },
+              { href: routes.blog(), label: "Blog" },
             ].map(({ href, label }) => (
               <ButtonLink key={label} href={href} variant="ghost">
                 {label}
@@ -441,6 +442,11 @@ export default async function LandingPage() {
                     </Link>
                   </li>
                 ))}
+                <li>
+                  <Link href={routes.blog()} className="text-ink-2 link hover:text-ink">
+                    Blog
+                  </Link>
+                </li>
                 <li>
                   <Link href={routes.privacy()} className="text-ink-2 link hover:text-ink">
                     Privacy
