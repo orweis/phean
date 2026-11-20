@@ -7,6 +7,7 @@ import type { Db } from "../db/client";
 import { queryRows } from "../db/raw";
 import { liveAgent } from "../domain/agent-liveness";
 import { agents, events, organization, webhookDeliveries, webhooks, type WebhookRow } from "../db/schema";
+import { createPinnedFetch } from "./pinned-fetch";
 import { assertWebhookUrlSafe, allowPrivateWebhooks, resolveHost, type Resolver } from "./url-safety";
 import { isRoutineFireUrl, ROUTINE_HEADERS, routineBody } from "./routines";
 import { decryptSecret, SIGNATURE_HEADER, signPayload } from "./signing";
@@ -36,13 +37,18 @@ export interface DispatchDeps {
   budgetMs: number;
 }
 
-export const defaultDispatchDeps = (): DispatchDeps => ({
-  fetch: globalThis.fetch,
-  resolve: resolveHost,
-  allowPrivate: allowPrivateWebhooks(),
-  baseUrl: appUrl(),
-  budgetMs: 25_000,
-});
+export const defaultDispatchDeps = (): DispatchDeps => {
+  const allowPrivate = allowPrivateWebhooks();
+  return {
+    // Outside development, connect to the address that was checked, so DNS cannot be rebound
+    // between the check and the connect (see `createPinnedFetch`).
+    fetch: allowPrivate ? globalThis.fetch : createPinnedFetch({ resolve: resolveHost }),
+    resolve: resolveHost,
+    allowPrivate,
+    baseUrl: appUrl(),
+    budgetMs: 25_000,
+  };
+};
 
 export interface DispatchReport {
   batches: number;
