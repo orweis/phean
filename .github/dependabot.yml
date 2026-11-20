@@ -1,0 +1,32 @@
+# Weekly update PRs. Better Auth's packages move in lockstep (AGENTS.md), so they share a group;
+# majors (TypeScript, @types/node beyond the Node 22 runtime) are left for a person to decide.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      better-auth:
+        patterns: ["better-auth", "@better-auth/*", "auth"]
+      next:
+        patterns: ["next", "@next/*", "eslint-config-next"]
+      tooling:
+        dependency-type: development
+        update-types: [minor, patch]
+      runtime:
+        dependency-type: production
+        update-types: [minor, patch]
+    ignore:
+      - dependency-name: "@types/node"
+        update-types: [version-update:semver-major]
+      - dependency-name: typescript
+        update-types: [version-update:semver-major]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]

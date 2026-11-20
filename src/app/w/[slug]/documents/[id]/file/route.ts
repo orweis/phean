@@ -21,7 +21,10 @@ export async function GET(request: Request, context: RouteContext<"/w/[slug]/doc
         "Content-Disposition": `${download ? "attachment" : "inline"}; filename="${name}"`,
         "Content-Length": String(bytes.length),
         "X-Content-Type-Options": "nosniff",
-        "Content-Security-Policy": "sandbox; default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; object-src 'self'",
+        // Only Phean's own document page may embed it (PDFs in an <object>); see next.config.ts.
+        "Content-Security-Policy": "sandbox; default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; object-src 'self'; frame-ancestors 'self'",
+        "X-Frame-Options": "SAMEORIGIN",
+        "Referrer-Policy": "no-referrer",
         "Cache-Control": "private, no-store",
       },
     });

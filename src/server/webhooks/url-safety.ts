@@ -4,9 +4,10 @@ import { isIP } from "node:net";
 /**
  * Webhook URLs come from agents, and Phean's servers call them, so a URL must not reach
  * anything private: loopback, the cloud metadata endpoint, or the internal network. The check
- * runs when a webhook is registered and again before every send, because DNS can change.
- * (A name that resolves differently between the check and the connect can still slip through;
- * redirects are never followed, which closes the easier route.)
+ * runs when a webhook is registered and again before every send, because DNS can change, and
+ * the send itself connects only to the address it checked (`createPinnedFetch`), so a name that
+ * resolves differently between the check and the connect cannot slip through. Redirects are
+ * never followed.
  */
 
 /** Development and the UI tests deliver to a local receiver; production never sets this. */
@@ -48,8 +49,9 @@ export function isPrivateAddress(address: string): boolean {
     return isPrivateV4([high >> 8, high & 255, low >> 8, low & 255].join("."));
   }
   return (
-    lower === "::" ||
-    lower === "::1" ||
+    lower.startsWith("::") || // ::/96 IPv4-compatible and the rest of ::/8 (unspecified, loopback)
+    lower.startsWith("2002:") || // 6to4 wraps an IPv4 address, private ones included
+    /^2001:0{0,4}:/.test(lower) || // 2001::/32 Teredo, likewise
     /^f[cd]/.test(lower) || // fc00::/7 unique local
     /^fe[89ab]/.test(lower) || // fe80::/10 link-local
     /^ff/.test(lower) || // multicast
