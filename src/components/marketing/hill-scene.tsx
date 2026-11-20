@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import { IDLE_PER_MS } from "./hill/cast";
-import { branchAt, LOOP_MS, momentAt, type Choice } from "./hill/timeline";
+import { approach, branchAt, LOOP_MS, momentAt, type Choice } from "./hill/timeline";
 import { HILL_ANSWER, HILL_HOLD, type HillAnswer } from "./hill-card";
 import type { HillPalette, HillScene as Scene } from "./hill-scene-three";
 
@@ -14,6 +14,11 @@ const SLOW_MS = 50;
 const LIGHT = 0.5;
 /** The first frames build shaders and upload textures; they say nothing about the ones after. */
 const WARM_UP = 2;
+/** How much of the figure must be in view before the loop first plays: enough that its first frame is seen. */
+const IN_VIEW = 0.4;
+/** How quickly the crew's attention follows the pointer, and comes and goes: the time to get halfway, in milliseconds. */
+const FOLLOW_MS = 110;
+const ATTEND_MS = 220;
 
 const TOKENS: Record<keyof HillPalette, string> = {
   dusk: "--color-dusk",
@@ -86,6 +91,36 @@ export function HillScene() {
   const able = useSyncExternalStore(never, canDrawOnce, () => true);
   const state = ready ? "ready" : able ? "loading" : "poster";
 
+  /*
+   * The loop plays only while it is watched. Its clock (and the card's animations with it) is held at
+   * its first moment until the figure has come well into view, so the visitor sees the first loop from
+   * its first frame, and stops again whenever the figure is off screen or the tab is hidden: `data-playing`
+   * on the figure is what lets them run (globals.css); until it is set they wait, from the page's first paint.
+   * This is so whether the scene is drawn or the drawing stands in for it.
+   */
+  useEffect(() => {
+    const figure = host.current?.closest("[data-hill]");
+    if (!figure) return;
+    let started = false;
+    let onScreen = false;
+    const play = () => figure.toggleAttribute("data-playing", started && onScreen && !document.hidden);
+    const watched = new IntersectionObserver(
+      ([entry]) => {
+        onScreen = Boolean(entry?.isIntersecting);
+        if (entry && entry.intersectionRatio >= IN_VIEW) started = true;
+        play();
+      },
+      { threshold: [0, IN_VIEW] },
+    );
+    watched.observe(figure);
+    document.addEventListener("visibilitychange", play);
+    return () => {
+      watched.disconnect();
+      document.removeEventListener("visibilitychange", play);
+      figure.removeAttribute("data-playing");
+    };
+  }, []);
+
   useEffect(() => {
     const element = host.current;
     const canvas = canvasRef.current;
@@ -100,12 +135,12 @@ export function HillScene() {
     let visible = false;
     let disposed = false;
 
-    const paused = () => document.documentElement.hasAttribute("data-paused");
+    const paused = () => document.documentElement.hasAttribute("data-paused") || !figure.hasAttribute("data-playing");
     const still = () => reduce.matches;
 
     /*
-     * The visitor's turn. The loop plays through three times; the fourth time the crew reaches the top
-     * the clock is stopped at the question (`data-hold` on the figure stops the card's animations with
+     * The visitor's turn. The loop plays through twice; the third time the crew reaches the top, and
+     * every time after, the clock is stopped at the question (`data-hold` on the figure stops the card's animations with
      * it), the card is handed over (HILL_HOLD), and the scene idles until they answer. Loops are counted
      * on the clock, never on frames: if it ran on while nothing was drawn (off screen, a hidden tab),
      * it is put back to the hold it should have stopped at.
@@ -141,12 +176,62 @@ export function HillScene() {
     }
     figure.addEventListener(HILL_ANSWER, answer);
 
+    /*
+     * While it waits, the crew looks where the visitor points: at the pointer over the figure (the last
+     * touch, on a touch screen), or at the button that has the keyboard's focus. That is an input like
+     * the clock: the scene is told where (as fractions across and down the figure) and how much they
+     * attend, both eased here a step at a time so nothing snaps, and it works the heads out from that.
+     */
+    const pointer = { x: 0.5, y: 0.5, on: false };
+    const focus = { x: 0.5, y: 0.5, on: false };
+    const look = { x: 0.5, y: 0.4, weight: 0 };
+    let lookedAt = 0;
+    const within = (clientX: number, clientY: number) => {
+      const box = canvas.getBoundingClientRect();
+      return { x: (clientX - box.left) / box.width, y: (clientY - box.top) / box.height };
+    };
+    const pointed = (event: Event) => {
+      Object.assign(pointer, within((event as PointerEvent).clientX, (event as PointerEvent).clientY), { on: true });
+    };
+    const unpointed = () => {
+      pointer.on = false;
+    };
+    const focused = (event: Event) => {
+      const box = (event.target as Element).getBoundingClientRect();
+      Object.assign(focus, within(box.left + box.width / 2, box.top + box.height / 2), { on: true });
+    };
+    const unfocused = () => {
+      focus.on = false;
+    };
+    figure.addEventListener("pointermove", pointed);
+    figure.addEventListener("pointerdown", pointed);
+    figure.addEventListener("pointerleave", unpointed);
+    figure.addEventListener("pointercancel", unpointed);
+    figure.addEventListener("focusin", focused);
+    figure.addEventListener("focusout", unfocused);
+    /** Eases the look on by the time since it was last eased. */
+    function attend(now: number) {
+      const elapsed = lookedAt ? Math.min(100, now - lookedAt) : 0;
+      lookedAt = now;
+      // The pointer if it is over the figure, else the focused button; neither, and they look back to the work.
+      const at = pointer.on ? pointer : focus.on ? focus : null;
+      const attending = holding && at !== null;
+      if (at) {
+        // From nothing, straight to where it is; after that, following it.
+        const follow = look.weight < 0.01 ? 0 : FOLLOW_MS;
+        look.x = follow ? approach(look.x, at.x, elapsed, follow) : at.x;
+        look.y = follow ? approach(look.y, at.y, elapsed, follow) : at.y;
+      }
+      look.weight = approach(look.weight, attending ? 1 : 0, elapsed, ATTEND_MS);
+      if (look.weight < 0.001 && !attending) look.weight = 0;
+    }
+
     /** Where the loop is: the CSS clock's own time, so the card above and the pause stay in step. */
     function draw() {
       if (!scene) return;
       const time = clock?.getAnimations()[0]?.currentTime;
       if (still() || typeof time !== "number") {
-        scene.render(STILL_AT);
+        scene.render({ progress: STILL_AT });
         return;
       }
       const moment = momentAt(time, answered);
@@ -154,8 +239,10 @@ export function HillScene() {
       const branch = branchAt(moment.time, answered, choice);
       if (branch === "hold") figure.setAttribute("data-choice", "hold");
       else figure.removeAttribute("data-choice");
-      const waiting = waited + (holding ? performance.now() - heldSince : 0);
-      scene.render(moment.progress, (moment.time + waiting) * IDLE_PER_MS, branch);
+      const now = performance.now();
+      const waiting = waited + (holding ? now - heldSince : 0);
+      attend(now);
+      scene.render({ progress: moment.progress, idle: (moment.time + waiting) * IDLE_PER_MS, branch, loop: moment.loop, look: look.weight > 0 ? look : undefined });
     }
 
     /*
@@ -261,7 +348,7 @@ export function HillScene() {
     sized.observe(canvas);
 
     // The theme and the appearance live on <html>; the pause control too.
-    const look = new MutationObserver((changes) => {
+    const themed = new MutationObserver((changes) => {
       if (changes.some((change) => change.attributeName === "data-theme" || change.attributeName === "data-appearance")) {
         // The new tokens apply on the next style pass.
         requestAnimationFrame(() => {
@@ -271,7 +358,10 @@ export function HillScene() {
       }
       wake();
     });
-    look.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme", "data-appearance", "data-paused"] });
+    themed.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme", "data-appearance", "data-paused"] });
+    // And whether the loop is playing at all (the figure in view, the tab showing) is on the figure.
+    const playing = new MutationObserver(wake);
+    playing.observe(figure, { attributes: true, attributeFilter: ["data-playing"] });
     document.addEventListener("visibilitychange", wake);
     reduce.addEventListener("change", wake);
 
@@ -284,7 +374,14 @@ export function HillScene() {
       figure.removeAttribute("data-choice");
       seen.disconnect();
       sized.disconnect();
-      look.disconnect();
+      themed.disconnect();
+      playing.disconnect();
+      figure.removeEventListener("pointermove", pointed);
+      figure.removeEventListener("pointerdown", pointed);
+      figure.removeEventListener("pointerleave", unpointed);
+      figure.removeEventListener("pointercancel", unpointed);
+      figure.removeEventListener("focusin", focused);
+      figure.removeEventListener("focusout", unfocused);
       document.removeEventListener("visibilitychange", wake);
       reduce.removeEventListener("change", wake);
       scene?.dispose();

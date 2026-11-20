@@ -33,12 +33,13 @@ import {
 
 import { loadAvatar } from "./hill/avatar-model";
 import { makeBot, makeBotKit, type BotMaterials } from "./hill/bot";
+import { BOULDER_PATTERNS } from "./hill/cast";
 import { BEATS, BOULDER_R, CREW, LOOP_SECONDS, onPath, placeBoulder, placeCrew, scoreAt, type Branch, type Member } from "./hill/crew";
 import { band, clamp01, fbm } from "./hill/noise";
 import { ink, Parts } from "./hill/rig";
 import { hillSurface, pathZ } from "./hill/terrain";
-import { ASPECT, cameraAt, FOV, HORIZON, PERSON_HEIGHT, PERSON_X, PERSON_Z, RIDGE_DROP, ridgeHalf, RIDGES, ridgeTop, SKY, SKY_STOPS, starAt, STARS } from "./hill/view";
-import { beamMap, boulderMaps, glowMap, grainMap, GRASS_SHADE, GROUND, groundMap, panelMap, ringMap, shadowMap, stoneAt, toonRamp } from "./hill/textures";
+import { ASPECT, cameraAt, FOV, LOOK_PLANE, pointOn, HORIZON, PERSON_HEIGHT, PERSON_X, PERSON_Z, RIDGE_DROP, ridgeHalf, RIDGES, ridgeTop, SKY, SKY_STOPS, starAt, STARS } from "./hill/view";
+import { beamMap, boulderMaps, type BoulderMaps, glowMap, grainMap, GRASS_SHADE, GROUND, groundMap, panelMap, ringMap, shadowMap, stoneAt, toonRamp } from "./hill/textures";
 
 /**
  * The name, in clay: the hero illustration, moving. Three robot agents push the ember boulder in
@@ -68,11 +69,24 @@ export interface HillPalette {
   trim3: string;
 }
 
+/** One frame: everything it is drawn from. */
+export interface HillFrame {
+  /** 0..1 through the loop. */
+  progress: number;
+  /** The idle clock, in beats (13 to a loop), for motion that runs on through a hold; left out, it follows the loop. */
+  idle?: number;
+  /** How the call went, for the rest of the loop it was made in. */
+  branch?: Branch;
+  /** Which loop this is, from 1: it decides the boulder. */
+  loop?: number;
+  /** Where the crew looks while it waits: a point on the figure (0..1 across and down it), and how much they attend to it (0..1). */
+  look?: { x: number; y: number; weight: number };
+}
+
 export interface HillScene {
   setPalette(palette: HillPalette): void;
   /** Draws the loop at `progress` (0..1). */
-  /** `idle` is the idle clock, in beats (13 to a loop), for motion that runs on through a hold; left out, it follows the loop. */
-  render(progress: number, idle?: number, branch?: Branch): void;
+  render(frame: HillFrame): void;
   resize(width: number, height: number): void;
   /** 1 is the full picture; less draws fewer pixels and a coarser shadow, for a device that cannot keep up. */
   setQuality(scale: number): void;
@@ -82,13 +96,13 @@ export interface HillScene {
 /* ---------------------------------------------------------------------------------------------- */
 
 /** A stone for the crew to push: a sphere dented into plates, split where the cracks of its texture run. */
-function boulderGeometry(): SphereGeometry {
+function boulderGeometry(pattern: number): SphereGeometry {
   const geometry = new SphereGeometry(BOULDER_R, 96, 64);
   const position = geometry.getAttribute("position");
   const point = new Vector3();
   for (let i = 0; i < position.count; i += 1) {
     point.fromBufferAttribute(position, i).normalize();
-    const { dent } = stoneAt(point.x, point.y, point.z, false);
+    const { dent } = stoneAt(point.x, point.y, point.z, false, pattern);
     point.multiplyScalar(BOULDER_R * (1 + dent));
     position.setXYZ(i, point.x, point.y, point.z);
   }
@@ -125,15 +139,18 @@ export async function createHillScene(canvas: HTMLCanvasElement, palette: HillPa
     return item;
   };
 
-  // Painted first, a step at a time: the stone, the ground, then the small maps.
-  const stone = boulderMaps();
-  keep(stone.map);
-  keep(stone.emissiveMap);
-  keep(stone.detail);
-  await breathe();
+  // Painted first, a step at a time: the stones (each loop's boulder is one of a few), the ground, then the small maps.
+  const stones: { maps: BoulderMaps; geometry: SphereGeometry }[] = [];
+  for (let pattern = 0; pattern < BOULDER_PATTERNS; pattern += 1) {
+    const maps = boulderMaps(pattern);
+    keep(maps.map);
+    keep(maps.emissiveMap);
+    keep(maps.detail);
+    stones.push({ maps, geometry: keep(boulderGeometry(pattern)) });
+    await breathe();
+  }
   const ground = keep(groundMap());
   await breathe();
-  const stoneGeometry = keep(boulderGeometry());
   const grain = keep(grainMap());
   const glow = keep(glowMap());
   const panels = keep(panelMap());
@@ -310,17 +327,19 @@ export async function createHillScene(canvas: HTMLCanvasElement, palette: HillPa
   /* The boulder. It is the scene's lamp, so it casts no shadow of its own. */
   const boulderMaterial = keep(
     new MeshStandardMaterial({
-      map: stone.map,
-      emissiveMap: stone.emissiveMap,
-      bumpMap: stone.detail,
+      map: stones[0]!.maps.map,
+      emissiveMap: stones[0]!.maps.emissiveMap,
+      bumpMap: stones[0]!.maps.detail,
       bumpScale: 3.5,
-      roughnessMap: stone.detail,
+      roughnessMap: stones[0]!.maps.detail,
       roughness: 1,
       metalness: 0,
       transparent: true,
     }),
   );
-  const boulder = new Mesh(stoneGeometry, boulderMaterial);
+  const boulder = new Mesh(stones[0]!.geometry, boulderMaterial);
+  // The other stones' maps go to the GPU now, so that changing boulders between loops costs nothing then.
+  for (const stone of stones) for (const map of [stone.maps.map, stone.maps.emissiveMap, stone.maps.detail]) renderer.initTexture(map);
   // It rolls inside a holder, which is what moves and what stretches when it goes: straight up, however the stone lies.
   const holder = new Group();
   holder.add(boulder);
@@ -427,6 +446,9 @@ export async function createHillScene(canvas: HTMLCanvasElement, palette: HillPa
   /* ---------------------------------------------------------------------------------------------- */
 
   const emberColor = new Color();
+  const stoneColor = new Color();
+  const paleColor = new Color();
+  const deepColor = new Color();
   const hotColor = new Color();
 
   function setPalette(next: HillPalette) {
@@ -505,8 +527,10 @@ export async function createHillScene(canvas: HTMLCanvasElement, palette: HillPa
     horizonMaterial.color.copy(glowColor);
     starMaterial.color.copy(mixed(ink, muted, 0.3));
 
-    boulderMaterial.color.copy(mixed(signal, shade, 0.3));
+    stoneColor.copy(mixed(signal, shade, 0.3));
     emberColor.copy(signal);
+    paleColor.copy(mixed(signal, ink, 0.5));
+    deepColor.copy(shade);
     hotColor.copy(mixed(signal, ink, 0.6));
     haloMaterial.color.copy(signal);
     beamMaterial.color.copy(mixed(signal, ink, 0.3));
@@ -546,9 +570,10 @@ export async function createHillScene(canvas: HTMLCanvasElement, palette: HillPa
   const watch = new Vector3();
   const upward = new Vector3();
   const turned = new Quaternion();
+  const gaze = new Vector3();
 
-  function render(progress: number, idle?: number, branch?: Branch) {
-    const score = scoreAt(progress, idle, branch);
+  function render({ progress, idle, branch, loop, look }: HillFrame) {
+    const score = scoreAt(progress, idle, branch, loop);
     // The boulder's leaving in light is the shipped call's; held a week, it rolls away instead.
     const shipped = score.branch === "ship";
     const { p, turn, seconds, x, charge, gone, cheer } = score;
@@ -557,6 +582,17 @@ export async function createHillScene(canvas: HTMLCanvasElement, palette: HillPa
     const pulse = 0.5 + 0.5 * Math.sin(turn * 7);
 
     // The boulder rolls as far as it climbs: its turn is the ground covered over its radius.
+    // This loop's boulder: its stone, its size, and how warm it burns.
+    const { pattern, radius, warmth } = score.boulder;
+    const stone = stones[pattern]!;
+    const size = radius / BOULDER_R;
+    if (boulder.geometry !== stone.geometry) {
+      boulder.geometry = stone.geometry;
+      boulderMaterial.map = stone.maps.map;
+      boulderMaterial.emissiveMap = stone.maps.emissiveMap;
+      boulderMaterial.bumpMap = boulderMaterial.roughnessMap = stone.maps.detail;
+    }
+    boulder.scale.setScalar(size);
     placeBoulder(score, centre, turned);
     boulder.quaternion.copy(turned);
     holder.position.copy(centre);
@@ -564,31 +600,32 @@ export async function createHillScene(canvas: HTMLCanvasElement, palette: HillPa
     holder.scale.set(1 - 0.93 * gone, 1 + 1.6 * gone, 1 - 0.93 * gone);
     boulderMaterial.opacity = 1 - gone * gone;
     holder.visible = gone < 0.99;
-    boulderMaterial.emissive.copy(emberColor).lerp(hotColor, 0.75 * charge);
+    boulderMaterial.color.copy(stoneColor).lerp(warmth > 0 ? paleColor : deepColor, 0.3 * Math.abs(warmth));
+    boulderMaterial.emissive.copy(emberColor).lerp(warmth > 0 ? paleColor : deepColor, 0.3 * Math.abs(warmth)).lerp(hotColor, 0.75 * charge);
     boulderMaterial.emissiveIntensity = 1.2 + 0.08 * pulse + 2.4 * charge * charge;
     halo.position.copy(holder.position).add(reach.set(0, 0, -0.4));
-    halo.scale.setScalar(BOULDER_R * (4.8 + 0.2 * pulse + 2.6 * charge));
+    halo.scale.setScalar(radius * (4.8 + 0.2 * pulse + 2.6 * charge));
     haloMaterial.opacity = (0.6 + 0.3 * charge) * lit;
     ember.position.copy(holder.position);
     ember.intensity = (16 + 1.5 * pulse + 16 * charge) * lit;
     onPath(x, 0.03, pool.position, normal);
     pool.quaternion.setFromUnitVectors(upward.set(0, 1, 0), normal);
-    pool.scale.set(8.5, 1, 6);
+    pool.scale.set(8.5 * size, 1, 6 * size);
     poolMaterial.opacity = (0.22 + 0.3 * charge) * lit;
     onPath(x, 0.04, contact.position);
     contact.quaternion.copy(pool.quaternion);
-    contact.scale.set(1.5, 1, 1.25);
+    contact.scale.set(1.5 * size, 1, 1.25 * size);
     contactMaterial.opacity = 0.5 * (1 - charge);
 
     onPath(x, 0.02, beam.position);
     const struck = band(p, BEATS.flash - 0.008, BEATS.flash + 0.006);
     const thinning = band(p, BEATS.flash + 0.008, BEATS.dark);
-    beam.scale.set(BOULDER_R * (0.9 + 1.9 * struck) * (1 - 0.9 * thinning), 15, 1);
+    beam.scale.set(radius * (0.9 + 1.9 * struck) * (1 - 0.9 * thinning), 15, 1);
     beamMaterial.opacity = shipped ? band(p, BEATS.charge + 0.008, BEATS.flash) * (1 - thinning) * (0.5 + 0.5 * struck) : 0;
     beam.visible = beamMaterial.opacity > 0.005;
     flash.position.copy(centre).add(reach.set(0, 0.3, 0.6));
     flashMaterial.opacity = !shipped ? 0 : p < BEATS.flash ? band(p, BEATS.flash - 0.012, BEATS.flash) : 1 - band(p, BEATS.flash, BEATS.flash + 0.04);
-    flash.scale.setScalar(BOULDER_R * (3 + 11 * band(p, BEATS.flash - 0.012, BEATS.flash + 0.03)));
+    flash.scale.setScalar(radius * (3 + 11 * band(p, BEATS.flash - 0.012, BEATS.flash + 0.03)));
     flash.visible = flashMaterial.opacity > 0.005;
     const spread = clamp01((p - BEATS.flash) / 0.055);
     ripple.position.copy(pool.position);
@@ -612,7 +649,9 @@ export async function createHillScene(canvas: HTMLCanvasElement, palette: HillPa
     }
 
     // The crew climbs with it, stands back at the top, cheers the call, then turns and walks back down.
-    placeCrew(score, crew, centre, turned);
+    // While it waits, the crew looks where the visitor points: a spot in the air a little our side of the path.
+    const attention = look && look.weight > 0.001 ? { point: gaze.set(...pointOn(camera.aspect, turn, look.x, look.y, LOOK_PLANE)), weight: look.weight } : undefined;
+    placeCrew(score, crew, centre, turned, attention);
     crew.forEach((member, index) => {
       const sprite = tipGlows[index]!;
       member.bot.tipAt(sprite.position);

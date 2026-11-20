@@ -35,22 +35,43 @@ export function cameraAt(aspect: number, turn: number): { from: [number, number,
   };
 }
 
-/** The loop's first frame, through the camera: a point in the world as fractions of the canvas (x right, y down) and its distance. */
-export function project(x: number, y: number, z: number): [number, number, number] {
-  const { from, to } = cameraAt(ASPECT, 0);
+/** The camera's eye and its axes (forward, right, up) for a canvas of this shape, `turn` radians through the loop. */
+function sight(aspect: number, turn: number) {
+  const { from, to } = cameraAt(aspect, turn);
   const f = [to[0] - from[0], to[1] - from[1], to[2] - from[2]];
   const length = Math.hypot(f[0]!, f[1]!, f[2]!);
-  const [fx, fy, fz] = [f[0]! / length, f[1]! / length, f[2]! / length];
+  const forward: [number, number, number] = [f[0]! / length, f[1]! / length, f[2]! / length];
   // Right is forward × up; up is right × forward.
-  const flat = Math.hypot(fx, fz);
-  const [rx, rz] = [-fz / flat, fx / flat];
-  const [ux, uy, uz] = [-rz * fy, rz * fx - rx * fz, rx * fy];
+  const flat = Math.hypot(forward[0], forward[2]);
+  const right: [number, number, number] = [-forward[2] / flat, 0, forward[0] / flat];
+  const up: [number, number, number] = [-right[2] * forward[1], right[2] * forward[0] - right[0] * forward[2], right[0] * forward[1]];
+  return { from, forward, right, up, tangent: Math.tan((FOV * Math.PI) / 360) };
+}
+
+/** The loop's first frame, through the camera: a point in the world as fractions of the canvas (x right, y down) and its distance. */
+export function project(x: number, y: number, z: number): [number, number, number] {
+  const { from, forward, right, up, tangent } = sight(ASPECT, 0);
   const [dx, dy, dz] = [x - from[0], y - from[1], z - from[2]];
-  const depth = dx * fx + dy * fy + dz * fz;
-  const tangent = Math.tan((FOV * Math.PI) / 360);
-  const across = (dx * rx + dz * rz) / (depth * tangent * ASPECT);
-  const up = (dx * ux + dy * uy + dz * uz) / (depth * tangent);
-  return [(across + 1) / 2, (1 - up) / 2, depth];
+  const depth = dx * forward[0] + dy * forward[1] + dz * forward[2];
+  const across = (dx * right[0] + dz * right[2]) / (depth * tangent * ASPECT);
+  const rise = (dx * up[0] + dy * up[1] + dz * up[2]) / (depth * tangent);
+  return [(across + 1) / 2, (1 - rise) / 2, depth];
+}
+
+/** How far to our side of the path the crew's attention goes when it follows the pointer: the upright plane z = this. */
+export const LOOK_PLANE = 2.2;
+
+/**
+ * The other way: the point in the world, on the upright plane at `z`, that shows at (x, y) of the
+ * canvas (fractions across and down it), for a canvas of this shape `turn` radians through the loop.
+ */
+export function pointOn(aspect: number, turn: number, x: number, y: number, z: number): [number, number, number] {
+  const { from, forward, right, up, tangent } = sight(aspect, turn);
+  const across = (2 * x - 1) * tangent * aspect;
+  const rise = (1 - 2 * y) * tangent;
+  const ray = [forward[0] + across * right[0] + rise * up[0], forward[1] + rise * up[1], forward[2] + across * right[2] + rise * up[2]];
+  const reach = (z - from[2]) / ray[2]!;
+  return [from[0] + ray[0]! * reach, from[1] + ray[1]! * reach, z];
 }
 
 /** Far hills: ridges one behind another, each paler than the last, as the hero's horizon. */
