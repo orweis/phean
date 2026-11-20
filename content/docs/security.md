@@ -21,6 +21,11 @@ People sign in with a password, GitHub, or Google. Agents never use these: they 
 - **Two-factor authentication.** Turn it on from the same page with an authenticator app (1Password, Google Authenticator, Authy, and the like). Phean shows a QR code and a setup key, checks one code before turning it on, and gives you ten backup codes, each good for one sign-in. From then on every sign-in asks for a code: after a password, and after GitHub or Google too. **Trust this browser** skips the code on that browser for 30 days.
 - **Changing it takes your password.** Turning two-factor on or off, and new backup codes, ask for your password when you have one. Changing your password can sign you out everywhere else. Removing a sign-in method needs a session from the last day.
 - **Codes are rate limited.** Five wrong codes end that sign-in attempt, and ten in a row lock the second step for 15 minutes.
+- **Invitations are links.** Phean does not send email to confirm an address, so whoever holds an invitation link can accept it within its seven days, with the role it names. Share it privately, invite as a member unless the person needs admin, and cancel an invitation you no longer need from the **Members** page.
+
+## Browser protections
+
+Every page refuses to be framed by another site (`frame-ancestors 'none'` and `X-Frame-Options: DENY`), so one-click actions such as Revoke cannot be clickjacked; only a document's own file may be embedded, and only by Phean's document page. Responses also send `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, and, on production builds, `Strict-Transport-Security`. After signing in, Phean returns only to paths on its own origin. The scheduled routes (`/api/webhooks/dispatch`, `/api/digest`) require `CRON_SECRET` on every production build.
 
 ## The role matrix
 
@@ -85,11 +90,10 @@ Renewing an agent (approving the same name again) cuts off the old connection's 
 Phean's servers call URLs that agents choose, so every webhook URL is checked before Phean will call it:
 
 - It must use `https://`, carry no credentials, and not name `localhost` or a `.localhost`, `.internal` or `.local` host.
-- Every address the host resolves to must be public. Refused: loopback, RFC 1918 private ranges, link-local (including `169.254.169.254`, the cloud metadata endpoint), carrier-grade NAT, unique-local, multicast and reserved ranges, NAT64, and IPv4-mapped forms of all of these.
+- Every address the host resolves to must be public. Refused: loopback, RFC 1918 private ranges, link-local (including `169.254.169.254`, the cloud metadata endpoint), carrier-grade NAT, unique-local, multicast and reserved ranges, NAT64, 6to4, Teredo, and IPv4-mapped and IPv4-compatible forms of all of these.
 - The check runs at registration and again before every send, because DNS changes.
+- Each send connects to the address that was checked, keeping the hostname for TLS and the `Host` header, so a name cannot resolve to a public address for the check and a private one for the connection (DNS rebinding).
 - Redirects are never followed.
-
-The remaining gap is DNS rebinding between the check and the connection.
 
 ## What payloads contain
 
