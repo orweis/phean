@@ -1,10 +1,13 @@
-import { readdirSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
 import { headingId, plainHeading } from "@/lib/docs";
 import { DOC_SLUGS, isDocSlug, loadDoc, parseDoc, type DocPage } from "@/server/docs";
+import { agentRole } from "@/server/domain/context";
+import { PROMPTS } from "@/server/mcp/guidance";
+import { toolAllowed } from "@/server/mcp/tool";
 import { TOOLS } from "@/server/mcp/tools";
 import { ROUTINE_API_VERSION, ROUTINE_BETA, ROUTINE_TEXT_MAX } from "@/server/webhooks/routines";
 
@@ -55,6 +58,20 @@ describe("the docs site", () => {
     expect(page.body).toContain(`anthropic-beta: ${ROUTINE_BETA}`);
     expect(page.body).toContain(`anthropic-version: ${ROUTINE_API_VERSION}`);
     expect(page.body).toContain(`${ROUTINE_TEXT_MAX.toLocaleString("en-US")} characters`);
+  });
+
+  it("keeps the README's tool counts, tool table and prompts in step with the server", () => {
+    const readme = readFileSync("README.md", "utf8");
+    const count = (level: "read" | "write" | "admin") => TOOLS.filter((tool) => toolAllowed(tool, { type: "agent", id: "", name: "", role: agentRole(level) })).length;
+    const claim = /(\d+) tools for a Write agent \(fewer for Read, (\w+) more for Admin\) and (\d+) prompts/.exec(readme);
+    expect(claim, "README states the tool counts").not.toBeNull();
+    const words: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6 };
+    expect(Number(claim![1])).toBe(count("write"));
+    expect(count("read")).toBeLessThan(count("write"));
+    expect(words[claim![2]!] ?? Number(claim![2])).toBe(count("admin") - count("write"));
+    expect(Number(claim![3])).toBe(PROMPTS.length);
+    for (const tool of TOOLS) expect(readme, tool.name).toContain(`\`${tool.name}\``);
+    for (const prompt of PROMPTS) expect(readme, prompt.name).toContain(`\`${prompt.name}\``);
   });
 
   it("names every MCP tool in the reference", async () => {

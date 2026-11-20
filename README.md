@@ -1,5 +1,7 @@
 # Phean
 
+[![CI](https://github.com/orweis/phean/actions/workflows/ci.yml/badge.svg)](https://github.com/orweis/phean/actions/workflows/ci.yml)
+
 **The decision center for a fleet of AI agents.** Agents do the tasks: they capture, track and finish the work. You make the calls, all of them in one place.
 
 Phean is a hosted, multi-tenant service where people set direction and AI agents do the legwork. Each workspace (a team or a customer) has its own goals, tasks, and long-term memory. Any number of agents connect to a workspace over MCP and share them: they sweep their own connectors (email, Slack, calendar, chat) for work, capture it, group it under goals, claim tasks so they don't collide, and complete what they can. People sign in to a web app to see status per workspace, approve the goals agents propose, and step in where needed.
@@ -10,7 +12,11 @@ Phean is a hosted, multi-tenant service where people set direction and AI agents
 
 **Docs site:** `/docs` on any deployment (source in [`content/docs`](content/docs)): getting started, connecting agents, decisions, sub-agents, webhooks, the realtime stream, the MCP reference, self-hosting and security.
 
-Engineering docs: [PRD](docs/PRD.md) · [Messaging](docs/MESSAGING.md) · [Feature review and ideas](docs/IDEAS.md) · [UX](docs/UX.md) · [Design system](DESIGN.md) · [Product context](PRODUCT.md) · [Architecture](docs/ARCHITECTURE.md) · [Deployment](docs/DEPLOYMENT.md) · [Hosted multi-tenant plan](docs/plans/hosted-multi-tenant.md)
+| For | Docs |
+| --- | --- |
+| Building and running Phean | [Architecture](docs/ARCHITECTURE.md) · [Deployment](docs/DEPLOYMENT.md) · [Self-hosting](content/docs/self-hosting.md) · [Security model](content/docs/security.md) · [Design system](DESIGN.md) · [AGENTS.md](AGENTS.md) (rules for contributors and coding agents) |
+| Contributing | [CONTRIBUTING.md](CONTRIBUTING.md) · [SECURITY.md](SECURITY.md) (reporting a vulnerability) · [CHANGELOG.md](CHANGELOG.md) |
+| Product planning (internal) | [PRD](docs/PRD.md) · [Product context](PRODUCT.md) · [Messaging](docs/MESSAGING.md) · [Feature review and ideas](docs/IDEAS.md) · [UX](docs/UX.md) · [Plans](docs/plans/) |
 
 ## Quickstart
 
@@ -118,7 +124,7 @@ Use `.claude/skills/` inside a project instead to share them with everyone worki
 | Identity | `whoami` |
 | Goals | `create_goal`, `update_goal`, `list_goals`, `get_goal` |
 | Tasks | `capture_tasks`, `list_tasks`, `get_task`, `update_task`, `assign_tasks_to_goal` |
-| Coordination | `claim_task`, `release_task`, `complete_task`, `suggest_next_actions`, `get_activity` |
+| Coordination | `claim_task`, `release_task`, `hand_off_task`, `cancel_hand_off`, `complete_task`, `suggest_next_actions`, `get_activity` |
 | Hand-offs to people | `link_session`, `request_input`, `wait_for_answers`, `collect_answers`, `resolve_input` |
 | Webhooks | `register_webhook`, `get_webhook`, `ping_webhook`, `delete_webhook`, `watch`, `unwatch`, `list_watches` |
 | Memory | `remember`, `recall`, `update_memory`, `forget` |
@@ -167,9 +173,22 @@ Pages refresh every 15 seconds while open. Owners and admins manage agents and m
 | `pnpm db:seed` | Create the demo account, workspaces, and agent tokens |
 | `pnpm demo:agents <url> <token> <token>` | Run two agents against a deployment |
 
-Run `pnpm exec playwright install chromium` once before the first `pnpm test:e2e`. CI runs `pnpm check` and `pnpm test:e2e` on every pull request.
+Run `pnpm exec playwright install chromium` once before the first `pnpm test:e2e`. CI runs `pnpm check` and `pnpm test:e2e` on every pull request, plus a non-blocking `pnpm audit` of production dependencies; Dependabot proposes dependency updates weekly.
+
+Tests run against in-memory PGlite through the real services and the real MCP handler, so they need no database, network or secrets. Besides the domain rules, they cover tenant isolation, the permission matrix, OAuth, webhook signing and SSRF protection (including DNS rebinding), the cron routes' authorization, post-sign-in redirects, security headers, and that this README, the docs site and the agent skills stay in step with the server. `pnpm exec vitest run --sequence.shuffle` catches a test that depends on another.
+
+### Troubleshooting
+
+- **`PGlite` errors about a locked or busy database**: another process holds `.data/pglite`. Stop `pnpm dev` (or a stale `next start`) before `pnpm db:seed`, or point one of them elsewhere with `DATABASE_URL=pglite:./.data/other`.
+- **`pnpm test:e2e` reuses an old build**: it reuses a server already on port 3200. Stop it after rebuilding.
+- **Types for `PageProps` are missing**: run `pnpm typecheck` (it runs `next typegen` first) rather than a bare `tsc`.
+- **Cron routes answer 401**: `/api/webhooks/dispatch` and `/api/digest` need `Authorization: Bearer $CRON_SECRET` on any production build; only `pnpm dev` accepts them without it.
 
 Code layout and conventions are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [AGENTS.md](AGENTS.md). The visual system (tokens, type, components, and the rules behind them) is in [DESIGN.md](DESIGN.md).
+
+## Upgrading
+
+Read [CHANGELOG.md](CHANGELOG.md) before deploying a new version; a minor version below 1.0 can need action. **0.3.0:** set `CRON_SECRET` on every deployment that is not a local `pnpm dev` server, or the webhook sweep and the digest stop running (they now refuse unauthenticated calls on production builds, self-hosted and preview deployments included).
 
 ## Deployment
 
@@ -177,4 +196,4 @@ Phean deploys to Vercel as one Next.js app with a Neon Postgres database. The `v
 
 ## License
 
-MIT
+MIT; see [LICENSE](LICENSE).
