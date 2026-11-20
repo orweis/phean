@@ -10,7 +10,10 @@ import { cx } from "@/lib/cx";
  * theme and the appearance: the drawings are violet and ember, so neutral themes take them quieter.
  */
 
-export type ArtId = "hero-light" | "hero-dark" | "decisions" | "capture" | "handoffs" | "memory" | "hearback" | "assistants" | "cta-band" | "spot-boulder" | "spot-signal" | "og-card";
+export type ArtId = "hero-light" | "hero-dark" | "decisions" | "capture" | "handoffs" | "memory" | "hearback" | "assistants" | "cta-band" | "spot-boulder" | "spot-signal" | "og-card" | BlogCoverId;
+
+/** The blog's covers, one per post, drawn for it (public/blog/covers). */
+export type BlogCoverId = "blog-launch" | "blog-flip" | "blog-assistants" | "blog-fleets";
 
 interface ArtFile {
   path: string;

@@ -15,6 +15,14 @@ export const routes = {
   home: () => "/",
   /** The public docs site, or one page of it. */
   docs: (slug?: string) => (slug ? `/docs/${slug}` : "/docs"),
+  /** The blog's front page (a later page of its stories with `page`), or one post. */
+  blog: (slug?: string, page?: number) => (slug ? `/blog/${slug}` : withQuery("/blog", { page: page && page > 1 ? String(page) : undefined })),
+  /** The posts carrying one tag. */
+  blogTag: (tag: string) => `/blog/tag/${tag}`,
+  /** One writer's page: their bio and their posts. */
+  blogAuthor: (slug: string) => `/blog/author/${slug}`,
+  /** The blog as an RSS feed. */
+  blogFeed: () => "/blog/rss.xml",
   privacy: () => "/privacy",
   signIn: (next?: string) => withQuery("/sign-in", { next }),
   signUp: (next?: string) => withQuery("/sign-up", { next }),

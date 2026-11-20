@@ -179,3 +179,42 @@ test("social sign-in hands off to the provider with Phean's callback, and says w
   await page.goto("/sign-in?error=access_denied");
   await expect(page.getByRole("alert").filter({ hasText: "cancelled" })).toHaveText("Sign-in was cancelled at the provider. Try again, or use your email.");
 });
+
+test("the site's menus reach every section, on a desktop and on a phone", async ({ browser, page }) => {
+  await page.goto("/blog");
+  const site = page.getByRole("navigation", { name: "Site" });
+  await expect(site.getByRole("link", { name: "Blog" })).toHaveAttribute("aria-current", "page");
+
+  await site.getByRole("button", { name: "Product" }).click();
+  await expect(site.getByRole("button", { name: "Product" })).toHaveAttribute("aria-expanded", "true");
+  await expectAccessible(page);
+  await page.keyboard.press("Escape");
+  await expect(site.getByRole("button", { name: "Product" })).toHaveAttribute("aria-expanded", "false");
+  await expect(site.getByRole("button", { name: "Product" })).toBeFocused();
+
+  await site.getByRole("button", { name: "Use cases" }).click();
+  await site.getByRole("link", { name: /^Software factories/ }).click();
+  await expect(page).toHaveURL("/#use-case-software");
+  await expect(page.getByRole("tab", { name: "Software factories" })).toHaveAttribute("aria-selected", "true");
+
+  await site.getByRole("button", { name: "Agents" }).click();
+  await site.getByRole("link", { name: /^Cursor/ }).click();
+  await expect(page).toHaveURL("/docs/cursor");
+
+  // The footer holds the whole map on every page.
+  const footer = page.getByRole("contentinfo");
+  await expect(footer.getByRole("navigation", { name: "Developers" }).getByRole("link", { name: "MCP reference" })).toHaveAttribute("href", "/docs/mcp-reference");
+
+  const phone = await browser.newContext({ viewport: { width: 375, height: 740 } });
+  const mobile = await phone.newPage();
+  await mobile.goto("/");
+  await expect(mobile.getByRole("navigation", { name: "Site" })).toBeHidden();
+  await mobile.getByRole("button", { name: "Menu" }).click();
+  const sheet = mobile.getByRole("navigation", { name: "Menu" });
+  await expect(sheet).toBeVisible();
+  await expectAccessible(mobile);
+  await sheet.getByRole("link", { name: "Blog", exact: true }).first().click();
+  await expect(mobile).toHaveURL("/blog");
+  await expect(sheet).toBeHidden();
+  await phone.close();
+});

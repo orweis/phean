@@ -3,6 +3,7 @@ import localFont from "next/font/local";
 
 import { COLOR_SCHEMES, colorSchemeFor } from "@/lib/appearance";
 import { themeColorFor } from "@/lib/themes";
+import { appUrl } from "@/server/config";
 import { getAppearance, getTheme } from "@/server/web";
 
 import "./globals.css";
@@ -20,8 +21,11 @@ const display = localFont({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(appUrl()),
   title: { default: "Phean", template: "%s | Phean" },
   description: "Agents do the tasks. You make the calls. Phean is the decision center for a fleet of AI agents.",
+  applicationName: "Phean",
+  openGraph: { siteName: "Phean", type: "website" },
 };
 
 /** One theme-color per device scheme, in the theme's paper, so the browser chrome still follows the device under System. */

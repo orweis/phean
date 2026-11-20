@@ -2,10 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Fragment, type ReactNode } from "react";
 
-import { AppearancePicker } from "@/components/appearance-picker";
-import { ThemePicker } from "@/components/theme-picker";
 import { TimetableLegend } from "@/components/charts/timetable";
-import { Logo, LogoMark } from "@/components/logo";
 import { AGENTS, AgentLink, AgentMark, type AgentGroup } from "@/components/marketing/agent-logo";
 import { InfoTip } from "@/components/ui/info-tip";
 import { Art, artEntry, HeroArt } from "@/components/marketing/art";
@@ -18,6 +15,9 @@ import { HeroDemo } from "@/components/marketing/hero-demo";
 import { MotionToggle } from "@/components/marketing/motion-toggle";
 import { ASSISTANTS } from "@/components/marketing/content";
 import { ProductFrame } from "@/components/marketing/product-frame";
+import { SiteFooter } from "@/components/site/site-footer";
+import { SiteHeader } from "@/components/site/site-header";
+import { JsonLd } from "@/components/site/json-ld";
 import { UseCases } from "@/components/marketing/use-cases";
 import { SampleTimetable } from "@/components/sample-timetable";
 import { ButtonLink } from "@/components/ui/button";
@@ -26,7 +26,7 @@ import { cx } from "@/lib/cx";
 import { routes } from "@/lib/routes";
 import { getSession } from "@/server/auth/session";
 import { appUrl, mcpResourceUrl } from "@/server/config";
-import { getAppearance, getTheme } from "@/server/web";
+import { organizationSchema, softwareSchema, websiteSchema } from "@/server/site-schema";
 
 const TITLE = "Phean: your agents run the tasks, you make the calls";
 const DESCRIPTION =
@@ -38,6 +38,7 @@ export const metadata: Metadata = {
   metadataBase: new URL(appUrl()),
   title: { absolute: TITLE },
   description: DESCRIPTION,
+  alternates: { canonical: "/", types: { "application/rss+xml": routes.blogFeed() } },
   openGraph: { type: "website", siteName: "Phean", title: TITLE, description: DESCRIPTION, url: "/", images: [OG_IMAGE] },
   twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION, images: [OG_IMAGE] },
 };
@@ -80,16 +81,6 @@ const ASSISTANT_POINTS = [
   ["Their night, in one digest", "The morning digest says what your assistants finished overnight, what is late, and what waits on you today."],
 ] as const;
 
-const DOCS = [
-  { title: "Getting started", slug: "getting-started" },
-  { title: "Connect an agent", slug: "connect-an-agent" },
-  { title: "Agents", slug: "agents" },
-  { title: "Decisions", slug: "decisions" },
-  { title: "Webhooks", slug: "webhooks" },
-  { title: "Realtime events", slug: "realtime" },
-  { title: "Self-hosting", slug: "self-hosting" },
-];
-
 /** A section's heading block: the display headline and a lede. */
 function SectionIntro({ id, title, lede, tone = "light", className }: { id: string; title: string; lede: ReactNode; tone?: "light" | "dusk"; className?: string }) {
   return (
@@ -119,47 +110,15 @@ function ConnectCommand({ command }: { command: string }) {
 }
 
 export default async function LandingPage() {
-  const [session, appearance, theme] = await Promise.all([getSession(), getAppearance(), getTheme()]);
+  const session = await getSession();
   const signedIn = Boolean(session);
   const start = signedIn ? { href: routes.workspaces(), label: "Go to your workspaces" } : { href: routes.signUp(), label: "Create a workspace" };
   const connect = `claude mcp add --transport http phean ${mcpResourceUrl()}`;
 
   return (
     <div className="min-h-dvh">
-      <header className="glass-bar text-ink">
-        <div className="mx-auto flex h-16 max-w-7xl items-center gap-2 px-4 sm:px-6">
-          <Logo className="sm:mr-4" />
-          <nav aria-label="Site" className="flex items-center gap-1 max-lg:hidden">
-            {[
-              { href: "#name", label: "The name" },
-              { href: "#assistants", label: "Assistants" },
-              { href: "#decisions", label: "Decisions" },
-              { href: "#use-cases", label: "Use cases" },
-              { href: routes.docs(), label: "Docs" },
-            ].map(({ href, label }) => (
-              <ButtonLink key={label} href={href} variant="ghost">
-                {label}
-              </ButtonLink>
-            ))}
-          </nav>
-          <nav aria-label="Account" className="ml-auto flex items-center gap-1 sm:gap-2">
-            {signedIn ? (
-              <ButtonLink href={routes.workspaces()} variant="primary">
-                Open Phean
-              </ButtonLink>
-            ) : (
-              <>
-                <ButtonLink href={routes.signIn()} variant="ghost">
-                  Sign in
-                </ButtonLink>
-                <ButtonLink href={routes.signUp()} variant="primary">
-                  Get started
-                </ButtonLink>
-              </>
-            )}
-          </nav>
-        </div>
-      </header>
+      <JsonLd data={[organizationSchema(), websiteSchema(), softwareSchema()]} />
+      <SiteHeader current="home" />
 
       <main>
         <section aria-labelledby="hero-heading" className="relative isolate">
@@ -372,7 +331,7 @@ export default async function LandingPage() {
           </div>
         </section>
 
-        <section aria-labelledby="features-heading" className="mx-auto max-w-7xl px-4 py-24 sm:px-6 sm:py-32">
+        <section id="features" aria-labelledby="features-heading" className="scroll-mt-16 mx-auto max-w-7xl px-4 py-24 sm:px-6 sm:py-32">
           <SectionIntro
             id="features-heading"
             title="Built for agents first, readable by people."
@@ -383,7 +342,7 @@ export default async function LandingPage() {
           </div>
         </section>
 
-        <section aria-labelledby="steps-heading" className="mx-auto max-w-7xl px-4 pb-24 sm:px-6 sm:pb-32">
+        <section id="get-started" aria-labelledby="steps-heading" className="scroll-mt-16 mx-auto max-w-7xl px-4 pb-24 sm:px-6 sm:pb-32">
           <h2 id="steps-heading" data-rise className="display text-[clamp(1.875rem,3.4vw,2.75rem)] text-ink">
             Connect your first agent in three steps.
           </h2>
@@ -424,37 +383,7 @@ export default async function LandingPage() {
         </section>
       </main>
 
-      <footer className="border-t border-rule">
-        <div className="mx-auto grid max-w-7xl gap-8 px-4 py-12 sm:px-6 md:grid-cols-[1fr_auto] md:items-end">
-          <div>
-            <p className="flex items-center gap-2 font-display text-md font-bold text-ink">
-              <LogoMark className="size-5" />
-              Phean
-            </p>
-            <p className="mt-2 max-w-sm text-sm text-ink-2">The decision center for your fleet of AI agents.</p>
-            <nav aria-label="Documentation" className="mt-4">
-              <ul className="flex flex-wrap gap-x-5 gap-y-2 text-sm">
-                {DOCS.map(({ title, slug }) => (
-                  <li key={slug}>
-                    <Link href={routes.docs(slug)} className="text-ink-2 link hover:text-ink">
-                      {title}
-                    </Link>
-                  </li>
-                ))}
-                <li>
-                  <Link href={routes.privacy()} className="text-ink-2 link hover:text-ink">
-                    Privacy
-                  </Link>
-                </li>
-              </ul>
-            </nav>
-          </div>
-          <div className="grid w-full gap-4 sm:w-80">
-            <ThemePicker initial={theme} compact />
-            <AppearancePicker initial={appearance} />
-          </div>
-        </div>
-      </footer>
+      <SiteFooter />
     </div>
   );
 }

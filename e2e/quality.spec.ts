@@ -33,6 +33,10 @@ const PAGES = [
   "/docs/security",
   "/docs/agents",
   "/docs/claude-code",
+  "/blog",
+  "/blog/task-management-flipped",
+  "/blog/tag/agents",
+  "/blog/author/or-weis",
   "/privacy",
 ];
 

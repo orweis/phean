@@ -2,6 +2,9 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { DocArticle } from "@/components/doc-article";
+import { JsonLd } from "@/components/site/json-ld";
+import { routes } from "@/lib/routes";
+import { docSchema } from "@/server/site-schema";
 import { DOC_SLUGS, isDocSlug, loadDoc, loadDocIndex } from "@/server/docs";
 
 export const dynamicParams = false;
@@ -14,7 +17,7 @@ export async function generateMetadata({ params }: PageProps<"/docs/[slug]">): P
   const { slug } = await params;
   if (!isDocSlug(slug) || slug === "index") return {};
   const page = await loadDoc(slug);
-  return { title: `${page.title} · Docs`, description: page.description };
+  return { title: `${page.title} · Docs`, description: page.description, alternates: { canonical: routes.docs(slug) } };
 }
 
 /** One page of the docs site, with the pages before and after it in reading order. */
@@ -24,5 +27,10 @@ export default async function DocsPage({ params }: PageProps<"/docs/[slug]">) {
   if (!isDocSlug(slug) || slug === "index") notFound();
   const [page, pages] = await Promise.all([loadDoc(slug), loadDocIndex()]);
   const at = DOC_SLUGS.indexOf(slug);
-  return <DocArticle page={page} previous={pages[at - 1]} next={pages[at + 1]} />;
+  return (
+    <>
+      <JsonLd data={docSchema(page.title, page.description, routes.docs(slug), [{ name: "Docs", path: routes.docs() }])} />
+      <DocArticle page={page} previous={pages[at - 1]} next={pages[at + 1]} />
+    </>
+  );
 }
