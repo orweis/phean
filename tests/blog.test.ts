@@ -1,8 +1,9 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import { artEntry } from "@/components/marketing/art";
 import { isDocSlug } from "@/server/docs";
 import { byRecency, leadPost, loadAuthors, loadPosts, parsePost, relatedPosts, tagsOf, type BlogAuthor } from "@/server/blog";
 
@@ -74,6 +75,16 @@ describe("the blog", () => {
         const docs = /^\/docs(?:\/([a-z-]+))?(?:#.*)?$/.exec(target);
         expect(docs && isDocSlug(docs[1] ?? "index"), `${post.slug} links to ${target}`).toBe(true);
       }
+    }
+  });
+
+  it("gives every post its own cover, with each of its files on disk and a JPEG for link previews", () => {
+    expect(new Set(posts.map((post) => post.cover)).size).toBe(posts.length);
+    for (const post of posts) {
+      const { files, alt } = artEntry(post.cover);
+      expect(alt, post.slug).not.toBe("");
+      expect(files.some((file) => file.format === "jpeg"), post.slug).toBe(true);
+      for (const file of files) expect(existsSync(join(process.cwd(), "public", file.path)), file.path).toBe(true);
     }
   });
 

@@ -422,5 +422,165 @@
     "ground": "dark",
     "prompt": "A wide social card background, no text: a deep dusk violet sky fading to warm amber at the horizon, a long gentle violet hill rising from left to right, with three tiny abstract agent figures (rounded lavender capsule-orbs) rolling a small glowing ember boulder near the crest at the far right. The left two thirds is calm, even, darkish sky with room for a title. Simple, bold, readable at small size. Style: cohesive editorial illustration, like a single illustrator's series for a premium software company. Flat and softly modelled simple geometric shapes, smooth soft gradients, fine film grain texture, gentle atmospheric depth. Palette: dusk violets and deep indigos (#2a1f5c, #3b2a7a, #6a4fd0, #9a86e8), pale lavender and warm bone mist (#f3eef8, #efe6dc), and a single warm ember/amber accent (#f0a050, #e8783a) that glows softly. Calm, quiet, unhurried, spacious composition with generous negative space. The AI agents are small friendly abstract figures: smooth rounded capsule-and-orb shapes in violet and lavender with a tiny soft glow, no faces, no eyes, no limbs beyond simple rounded nubs, not robots. Absolutely no text, letters, numbers, words, logos, icons of real apps, UI screenshots, or watermarks. Not photorealistic, not 3D render plastic, not neon, no lens flare, no busy sci-fi circuitry.",
     "model": "gpt-image-2.6-sunburst"
+  },
+  {
+    "id": "blog-launch",
+    "files": [
+      {
+        "path": "/blog/covers/blog-launch-800.avif",
+        "width": 800,
+        "height": 533,
+        "format": "avif"
+      },
+      {
+        "path": "/blog/covers/blog-launch-800.webp",
+        "width": 800,
+        "height": 533,
+        "format": "webp"
+      },
+      {
+        "path": "/blog/covers/blog-launch-1536.avif",
+        "width": 1536,
+        "height": 1024,
+        "format": "avif"
+      },
+      {
+        "path": "/blog/covers/blog-launch-1536.webp",
+        "width": 1536,
+        "height": 1024,
+        "format": "webp"
+      },
+      {
+        "path": "/blog/covers/blog-launch-1200x630.jpg",
+        "width": 1200,
+        "height": 630,
+        "format": "jpeg"
+      }
+    ],
+    "alt": "Three small lavender figures roll a glowing ember boulder up a winding path on a dark violet hill at dusk, while a figure in a bone-white sweater at the crest holds up a small glowing card.",
+    "use": "Blog cover: Introducing Phean",
+    "ground": "dark",
+    "prompt": "Dusk, deep violet sky fading to amber at the horizon. Three small lavender figures roll a large glowing ember boulder up a long winding path on a violet hillside, almost at the crest. At the crest, one taller figure in a bone-white sweater stands calmly holding a small glowing ember card up, as if making a decision. A few faint stars. Dark-ground scene.\n\nStyle: soft, matte, gently three-dimensional editorial illustration, like smooth clay or felt. Characters are small rounded faceless figures (a round head on a soft pear-shaped body, no facial features), mostly in violet and lavender. Palette: lavender, periwinkle and deep violet, with warm glowing ember and apricot accents as the only warm colour; soft volumetric glow, light haze, smooth gradients, gentle rolling hills. Calm, optimistic, uncluttered composition with clear negative space, wide 3:2 framing. Absolutely no text, letters, numbers, logos, screens with writing, or user interface.",
+    "model": "gpt-image-2"
+  },
+  {
+    "id": "blog-flip",
+    "files": [
+      {
+        "path": "/blog/covers/blog-flip-800.avif",
+        "width": 800,
+        "height": 533,
+        "format": "avif"
+      },
+      {
+        "path": "/blog/covers/blog-flip-800.webp",
+        "width": 800,
+        "height": 533,
+        "format": "webp"
+      },
+      {
+        "path": "/blog/covers/blog-flip-1536.avif",
+        "width": 1536,
+        "height": 1024,
+        "format": "avif"
+      },
+      {
+        "path": "/blog/covers/blog-flip-1536.webp",
+        "width": 1536,
+        "height": 1024,
+        "format": "webp"
+      },
+      {
+        "path": "/blog/covers/blog-flip-1200x630.jpg",
+        "width": 1200,
+        "height": 630,
+        "format": "jpeg"
+      }
+    ],
+    "alt": "A team of small violet figures pulls ropes and levers to flip a huge pale task card over, its underside glowing ember, while a bone-white figure sits on a stool nearby holding one glowing card.",
+    "use": "Blog cover: Task management, flipped on its head",
+    "ground": "light",
+    "prompt": "Pale lavender ground. In the centre, a huge pale task card, like an oversized index card, is being flipped over in mid-air by a team of small violet figures pulling ropes and pushing levers; its underside glows warm ember. Loose slips and envelopes float upward and settle into neat glowing stacks around it. In the foreground, a single bone-white figure sits relaxed on a small stool, holding one glowing card, watching. Light-ground scene.\n\nStyle: soft, matte, gently three-dimensional editorial illustration, like smooth clay or felt. Characters are small rounded faceless figures (a round head on a soft pear-shaped body, no facial features), mostly in violet and lavender. Palette: lavender, periwinkle and deep violet, with warm glowing ember and apricot accents as the only warm colour; soft volumetric glow, light haze, smooth gradients, gentle rolling hills. Calm, optimistic, uncluttered composition with clear negative space, wide 3:2 framing. Absolutely no text, letters, numbers, logos, screens with writing, or user interface.",
+    "model": "gpt-image-2"
+  },
+  {
+    "id": "blog-assistants",
+    "files": [
+      {
+        "path": "/blog/covers/blog-assistants-800.avif",
+        "width": 800,
+        "height": 533,
+        "format": "avif"
+      },
+      {
+        "path": "/blog/covers/blog-assistants-800.webp",
+        "width": 800,
+        "height": 533,
+        "format": "webp"
+      },
+      {
+        "path": "/blog/covers/blog-assistants-1536.avif",
+        "width": 1536,
+        "height": 1024,
+        "format": "avif"
+      },
+      {
+        "path": "/blog/covers/blog-assistants-1536.webp",
+        "width": 1536,
+        "height": 1024,
+        "format": "webp"
+      },
+      {
+        "path": "/blog/covers/blog-assistants-1200x630.jpg",
+        "width": 1200,
+        "height": 630,
+        "format": "jpeg"
+      }
+    ],
+    "alt": "Small violet figures carrying a suitcase, an envelope, a basket, a calendar tile and a gift walk separate paths across pale lavender hills that merge into one glowing path up to a lamp-lit bench, where a bone-white figure holds up a glowing card.",
+    "use": "Blog cover: personal assistants as a team",
+    "ground": "light",
+    "prompt": "Soft pale lavender morning. Five small violet figures, each carrying a different errand (a tiny suitcase, an envelope, a shopping basket, a calendar tile, a gift box), walk along separate winding paths across gentle hills that all merge into one shared glowing path. The path leads to a single lamp-lit bench where one bone-white figure sits and holds up a small glowing ember card. The figures look like a team converging. Light-ground scene.\n\nStyle: soft, matte, gently three-dimensional editorial illustration, like smooth clay or felt. Characters are small rounded faceless figures (a round head on a soft pear-shaped body, no facial features), mostly in violet and lavender. Palette: lavender, periwinkle and deep violet, with warm glowing ember and apricot accents as the only warm colour; soft volumetric glow, light haze, smooth gradients, gentle rolling hills. Calm, optimistic, uncluttered composition with clear negative space, wide 3:2 framing. Absolutely no text, letters, numbers, logos, screens with writing, or user interface.",
+    "model": "gpt-image-2"
+  },
+  {
+    "id": "blog-fleets",
+    "files": [
+      {
+        "path": "/blog/covers/blog-fleets-800.avif",
+        "width": 800,
+        "height": 533,
+        "format": "avif"
+      },
+      {
+        "path": "/blog/covers/blog-fleets-800.webp",
+        "width": 800,
+        "height": 533,
+        "format": "webp"
+      },
+      {
+        "path": "/blog/covers/blog-fleets-1536.avif",
+        "width": 1536,
+        "height": 1024,
+        "format": "avif"
+      },
+      {
+        "path": "/blog/covers/blog-fleets-1536.webp",
+        "width": 1536,
+        "height": 1024,
+        "format": "webp"
+      },
+      {
+        "path": "/blog/covers/blog-fleets-1200x630.jpg",
+        "width": 1200,
+        "height": 630,
+        "format": "jpeg"
+      }
+    ],
+    "alt": "A dusk valley full of tiny violet figures: on one side they carry glowing blocks along terraced paths into a lit workshop, on the other they carry parcels, and every path climbs to one hilltop beacon where a bone-white figure stands.",
+    "use": "Blog cover: managing fleets of agents",
+    "ground": "dark",
+    "prompt": "Wide valley at dusk under a violet sky with a band of amber at the horizon. Many tiny violet figures, a whole fleet, work across terraced hillsides: on one side they carry small glowing blocks along neat parallel conveyor-like paths into a softly lit workshop (a software factory); on the other side they carry parcels and letters. All the paths converge on one hilltop with a single warm ember beacon, where one bone-white figure stands overlooking the valley. Dark-ground scene.\n\nStyle: soft, matte, gently three-dimensional editorial illustration, like smooth clay or felt. Characters are small rounded faceless figures (a round head on a soft pear-shaped body, no facial features), mostly in violet and lavender. Palette: lavender, periwinkle and deep violet, with warm glowing ember and apricot accents as the only warm colour; soft volumetric glow, light haze, smooth gradients, gentle rolling hills. Calm, optimistic, uncluttered composition with clear negative space, wide 3:2 framing. Absolutely no text, letters, numbers, logos, screens with writing, or user interface.",
+    "model": "gpt-image-2"
   }
 ]

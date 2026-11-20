@@ -4,7 +4,7 @@ description: Task trackers were built for people to type in work for other peopl
 date: 2026-11-20
 author: or-weis
 tags: task management, agents
-cover: capture
+cover: blog-flip
 ---
 
 Here's a slightly uncomfortable question: when was the last time your task tracker told you something you didn't already type into it yourself?

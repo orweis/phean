@@ -4,7 +4,7 @@ description: Phean is a decision center for your AI agents and personal assistan
 date: 2026-11-20
 author: or-weis
 tags: announcements, agents, decisions
-cover: og-card
+cover: blog-launch
 featured: true
 ---
 

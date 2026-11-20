@@ -18,10 +18,10 @@ export async function generateStaticParams() {
   return (await loadPosts()).map((post) => ({ slug: post.slug }));
 }
 
-/** The cover's largest WebP, which is what link previews get. */
+/** The image link previews get: the cover's 1200x630 JPEG, or its largest WebP. */
 function coverImage(cover: Parameters<typeof artEntry>[0]) {
   const { files, alt } = artEntry(cover);
-  const image = files.filter((file) => file.format === "webp").at(-1) ?? files.at(-1)!;
+  const image = files.find((file) => file.format === "jpeg") ?? files.filter((file) => file.format === "webp").at(-1) ?? files.at(-1)!;
   return { url: image.path, width: image.width, height: image.height, alt };
 }
 

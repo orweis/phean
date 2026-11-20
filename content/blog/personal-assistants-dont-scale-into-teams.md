@@ -4,7 +4,7 @@ description: Personal AI assistants are going mainstream, one errand at a time. 
 date: 2026-11-20
 author: or-weis
 tags: personal assistants, agents, teams
-cover: assistants
+cover: blog-assistants
 ---
 
 For most of history, having a personal assistant was a perk reserved for executives, celebrities and the occasional very organized dentist. Someone to book the flights, answer the email, keep the calendar sane and remember that you hate the middle seat.

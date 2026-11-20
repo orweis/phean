@@ -4,7 +4,7 @@ description: Running one agent is a chat. Running fifty is operations. What it t
 date: 2026-11-20
 author: or-weis
 tags: agent fleets, software factories, personal assistants
-cover: handoffs
+cover: blog-fleets
 ---
 
 There's a moment every team hits with AI agents. It usually sounds something like: "wait, how many of these do we have running right now?"
