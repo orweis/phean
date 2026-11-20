@@ -43,8 +43,14 @@ export interface Stone {
 
 const stone: Stone = { dent: 0, crack: 0, height: 0, glow: 0, shade: 0, rough: 0 };
 
-/** The stone at a point on the unit sphere; `fine` adds the grain only a texture can show. */
-export function stoneAt(x: number, y: number, z: number, fine: boolean): Stone {
+/**
+ * The stone at a point on the unit sphere; `fine` adds the grain only a texture can show. `pattern`
+ * picks which stone: the same making, cut from another place in the rock.
+ */
+export function stoneAt(px: number, py: number, pz: number, fine: boolean, pattern = 0): Stone {
+  const x = px + pattern * 7.31;
+  const y = py + pattern * 3.17;
+  const z = pz - pattern * 5.03;
   const warpX = noise3(x * 2.4 + 9, y * 2.4, z * 2.4) - 0.5;
   const warpY = noise3(x * 2.4, y * 2.4 + 5, z * 2.4 + 3) - 0.5;
   const plates = worley(x * 2.3 + warpX * 0.9, y * 2.3 + warpY * 0.9, z * 2.3 + warpX * 0.6);
@@ -75,7 +81,7 @@ export interface BoulderMaps {
 }
 
 /** Equirectangular maps, laid out as SphereGeometry lays out its uv, so the cracks sit where the dents are. */
-export function boulderMaps(): BoulderMaps {
+export function boulderMaps(pattern = 0): BoulderMaps {
   const width = 384;
   const height = 192;
   const shade = new Uint8Array(width * height * 4);
@@ -85,7 +91,7 @@ export function boulderMaps(): BoulderMaps {
     const theta = (1 - (j + 0.5) / height) * Math.PI;
     for (let i = 0; i < width; i += 1) {
       const phi = ((i + 0.5) / width) * Math.PI * 2;
-      const s = stoneAt(-Math.cos(phi) * Math.sin(theta), Math.cos(theta), Math.sin(phi) * Math.sin(theta), true);
+      const s = stoneAt(-Math.cos(phi) * Math.sin(theta), Math.cos(theta), Math.sin(phi) * Math.sin(theta), true, pattern);
       const index = (j * width + i) * 4;
       put(shade, index, s.shade, s.shade, s.shade);
       // The stone glows a deep ember; its cracks run hotter, towards white.

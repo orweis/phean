@@ -1,7 +1,7 @@
 import { Euler, Matrix4, Quaternion, Vector3, type Object3D } from "three";
 
 import { PALM, REACH, type Bot } from "./bot";
-import { BEATS, BOULDER_R, IDLE_BEATS, START_X, TOP_X, type CrewLook } from "./cast";
+import { BEATS, BOULDER_R, boulderOf, IDLE_BEATS, START_X, TOP_X, type Boulder, type CrewLook } from "./cast";
 import { band, clamp01 } from "./noise";
 import { FACE, hillSurface, pathLength, pathPoint, pathSlope, pathTurn, pathZ } from "./terrain";
 import { stoneAt } from "./textures";
@@ -50,7 +50,8 @@ export interface Score {
   seconds: number;
   /** Which way the call went: shipped (the loop's own course), or held a week. */
   branch: Branch;
-  /** The boulder: where on the path, and how much ground it has covered. */
+  /** The boulder: which one this loop's is (its size, its stone, its warmth), where on the path, and how much ground it has covered. */
+  boulder: Boulder;
   x: number;
   travelled: number;
   /** Where the crew has pushed it to, and the ground they covered: the boulder's own, until it rolls back without them. */
@@ -93,9 +94,9 @@ const STEP_ASIDE = 1.75;
 /**
  * Where everything stands `progress` through the loop. `idle` is the idle clock in beats, for motion
  * that runs on while the loop is held; left out, it follows the loop. `branch` is the way the call
- * went, which only matters after the tap.
+ * went, which only matters after the tap, and `loop` which loop it is (from 1), which decides the boulder.
  */
-export function scoreAt(progress: number, idle?: number, branch: Branch = "ship"): Score {
+export function scoreAt(progress: number, idle?: number, branch: Branch = "ship", loop = 1): Score {
   const p = ((progress % 1) + 1) % 1;
   const pushed = START_X + (TOP_X - START_X) * climb(p);
   const held = branch === "hold" && p > BEATS.tap;
@@ -109,6 +110,7 @@ export function scoreAt(progress: number, idle?: number, branch: Branch = "ship"
     turn: p * Math.PI * 2,
     seconds: idle ?? p * IDLE_BEATS,
     branch: held ? "hold" : "ship",
+    boulder: boulderOf(loop),
     x,
     travelled: pathLength(START_X, x),
     pushed,
@@ -154,8 +156,8 @@ export function onPath(x: number, lift: number, out: Vector3, square: Vector3 = 
 
 /** The boulder's centre as it rests on the path (before it lifts to go), and how it has turned: as far as it has rolled. */
 export function placeBoulder(score: Score, centre: Vector3, turned: Quaternion) {
-  onPath(score.x, BOULDER_R * 0.95, centre);
-  turned.setFromEuler(roll.set(0, -Math.atan(pathTurn(score.x)), -score.travelled / BOULDER_R - 1.2 * score.charge * score.charge));
+  onPath(score.x, score.boulder.radius * 0.95, centre);
+  turned.setFromEuler(roll.set(0, -Math.atan(pathTurn(score.x)), -score.travelled / score.boulder.radius - 1.2 * score.charge * score.charge));
 }
 
 /**
@@ -177,12 +179,18 @@ const BACK_OFF = 1.3;
 const STEP = 0.1;
 const HALVINGS = 10;
 
+/** Something for the crew to look at, in the world, and how much they attend to it (0..1). */
+export interface Attention {
+  point: Vector3;
+  weight: number;
+}
+
 /**
  * Puts the crew where the score has them, and poses them: pushing the boulder (centre and turn from
  * `placeBoulder`), each with its hands on what is ahead, standing back at the top, cheering, and
- * walking back down.
+ * walking back down. `look`, if given, is something for them to look at: the visitor's pointer, while they wait.
  */
-export function placeCrew(score: Score, crew: readonly Member[], centre: Vector3, turned: Quaternion) {
+export function placeCrew(score: Score, crew: readonly Member[], centre: Vector3, turned: Quaternion, look?: Attention) {
   const { push, cheer, walk, about, down, seconds, turn } = score;
   unroll.copy(turned).invert();
   crew.forEach((member, index) => {
@@ -194,8 +202,8 @@ export function placeCrew(score: Score, crew: readonly Member[], centre: Vector3
           bot.shoulder(hand, reach).sub(centre);
           reach.y += 0.3;
           reach.normalize();
-          const { dent } = stoneAt(...facing.copy(reach).applyQuaternion(unroll).toArray(), false);
-          member.hands[hand].copy(centre).addScaledVector(reach, BOULDER_R * (1 + dent) + PALM * member.scale);
+          const { dent } = stoneAt(...facing.copy(reach).applyQuaternion(unroll).toArray(), false, score.boulder.pattern);
+          member.hands[hand].copy(centre).addScaledVector(reach, score.boulder.radius * (1 + dent) + PALM * member.scale);
         } else {
           crew[index - 1]!.bot.back(hand, member.hands[hand], facing);
           member.hands[hand].addScaledVector(facing, PALM * member.scale);
@@ -204,21 +212,18 @@ export function placeCrew(score: Score, crew: readonly Member[], centre: Vector3
     };
     // Mostly eyes on the work; now and then one of them looks round at us.
     const glance = Math.max(0, Math.sin(turn * 3 + index * 2.1)) ** 6;
-    const pose = (pushing: number) =>
-      bot.pose({
-        push: pushing,
-        cheer,
-        walk,
-        distance: score.climbed + down,
-        seconds,
-        hands: member.hands,
-        headTurn: (member.turn + 0.5 * glance) * pushing + (0.3 + 0.12 * index) * (1 - pushing) * (1 - walk) + 0.35 * cheer - (0.3 + 0.55 * glance) * walk,
-        headTilt: 0.06 * Math.sin(turn * 4 + index) + (0.32 - 0.05 * index) * (1 - pushing) * (1 - walk),
-        blink: (seconds / 3.25 + index * 0.37) % 1 < 0.04,
-      });
+    const pose = (pushing: number) => {
+      let headTurn = (member.turn + 0.5 * glance) * pushing + (0.3 + 0.12 * index) * (1 - pushing) * (1 - walk) + 0.35 * cheer - (0.3 + 0.55 * glance) * walk;
+      let headTilt = 0.06 * Math.sin(turn * 4 + index) + (0.32 - 0.05 * index) * (1 - pushing) * (1 - walk);
+      if (look) {
+        // From where it was looking to the point it is shown, as far as it attends to it: a pure matter of where it stands and the point.
+        const gaze = bot.gaze(look.point);
+        headTurn += (gaze.turn - headTurn) * look.weight;
+        headTilt += (gaze.tilt - headTilt) * look.weight;
+      }
+      bot.pose({ push: pushing, cheer, walk, distance: score.climbed + down, seconds, hands: member.hands, headTurn, headTilt, blink: (seconds / 3.25 + index * 0.37) % 1 < 0.04 });
+    };
 
-    // While it pushes, each one closes up until its hands are on what is ahead: worked out afresh every
-    // frame, from its rough place, so the answer never depends on where it stood the frame before.
     /*
      * While it pushes, each one closes up until its hands are on what is ahead: worked out afresh every
      * frame, never from where it stood the frame before. The first comes up the path, square to the
@@ -259,7 +264,7 @@ export function placeCrew(score: Score, crew: readonly Member[], centre: Vector3
         const far = Math.max(member.hands[0].distanceTo(bot.shoulder(0, shoulders)), member.hands[1].distanceTo(bot.shoulder(1, shoulders)));
         return far - REACH * member.scale;
       };
-      let back = index === 0 ? BOULDER_R + BACK_OFF : BACK_OFF;
+      let back = index === 0 ? score.boulder.radius + BACK_OFF : BACK_OFF;
       let near = back;
       while (near > 0.2 && short(near) > 0) {
         back = near;
@@ -273,7 +278,8 @@ export function placeCrew(score: Score, crew: readonly Member[], centre: Vector3
       short(near);
     }
     // Stood back from the load once it rests, on the path again, and off down the hill when the work is done.
-    const restX = score.pushed - (member.behind + 0.2) * 0.94 - down;
+    // (A bigger boulder, and they stand that much further back.)
+    const restX = score.pushed - (member.behind + 0.2 + score.boulder.radius - BOULDER_R) * 0.94 - down;
     const restZ = pathZ(restX) + member.aside + score.aside * (1 + 0.12 * index);
     const x = restX + (pushX - restX) * push;
     stand(bot.root, x, restZ + (pushZ - restZ) * push, pathTurn(x) + (pushHeading - pathTurn(x)) * push, 0.35 + 0.65 * push, about);

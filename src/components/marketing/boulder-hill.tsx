@@ -108,50 +108,78 @@ function Bot({ feet, tall, shell, trim, antenna }: (typeof BOTS)[number]) {
   );
 }
 
+/*
+ * The person at the crest, traced from the scene's own first frame (VRoid's AvatarSample_C as the
+ * scene stands and poses it: feet apart, the weight on one leg, the phone low in the right hand,
+ * the head turned down the hill). Each shape is a polygon in units of the figure's height, from the
+ * point between its feet; it is placed and sized through the scene's camera (PERSON_FEET,
+ * PERSON_TALL), so it follows the camera if that moves, and needs tracing again only if the pose does.
+ * Matched against the live frame, the drawn figure sat a pixel low at 1440px; the half a percent of its
+ * height taken off below is that.
+ */
+const FIGURE = {
+  bootL: "-0.0741,-0.0977 -0.0204,-0.0977 -0.0171,-0.0163 -0.0464,0.0033 -0.1246,0.0000 -0.1344,-0.0195 -0.0953,-0.0489",
+  bootR: "0.0480,-0.0847 0.0936,-0.0847 0.0871,0.0081 0.0448,0.0244 0.0106,0.0130 0.0122,-0.0081 0.0383,-0.0407",
+  ankleL: "-0.0660,-0.1531 -0.0220,-0.1531 -0.0220,-0.0896 -0.0708,-0.0896",
+  ankleR: "0.0513,-0.1368 0.0920,-0.1368 0.0920,-0.0782 0.0513,-0.0782",
+  legL: "-0.0497,-0.4723 0.0220,-0.4642 0.0057,-0.3094 0.0024,-0.1498 -0.0790,-0.1498 -0.0871,-0.3094 -0.0790,-0.3909",
+  legR: "0.0269,-0.4642 0.1458,-0.4528 0.1197,-0.3094 0.1262,-0.2280 0.1132,-0.1303 0.0383,-0.1384 0.0285,-0.3094",
+  torso: "-0.0204,-0.7997 0.0187,-0.8143 0.1246,-0.8143 0.1621,-0.7899 0.1783,-0.7329 0.1832,-0.6352 0.1767,-0.5049 0.1523,-0.4463 0.1002,-0.4511 -0.0497,-0.4642 -0.0529,-0.5375 -0.0432,-0.6189 -0.0301,-0.7003",
+  front: "-0.0187,-0.7948 0.0220,-0.7866 0.1083,-0.7883 0.1164,-0.7329 0.1050,-0.6352 0.1018,-0.5212 0.0855,-0.4528 -0.0057,-0.4625 -0.0480,-0.4788 -0.0513,-0.5375 -0.0415,-0.6189 -0.0285,-0.7166",
+  stripe: "0.1572,-0.7850 0.1718,-0.7003 0.1767,-0.6026 0.1621,-0.5049 0.1474,-0.4560",
+  collar: "0.0090,-0.8322 0.0269,-0.8436 0.0871,-0.8518 0.1213,-0.8306 0.1311,-0.7948 0.0220,-0.7866 0.0024,-0.8046",
+  handR: "0.0839,-0.4479 0.1083,-0.4625 0.1213,-0.4300 0.0985,-0.3974 0.0806,-0.4072",
+  armL: "-0.0155,-0.8013 -0.0432,-0.7736 -0.0708,-0.7166 -0.0953,-0.6515 -0.1246,-0.5993 -0.1409,-0.5700 -0.1279,-0.5342 -0.0790,-0.5326 -0.0578,-0.5700 -0.0415,-0.6189 -0.0285,-0.6840",
+  handL: "-0.1311,-0.5765 -0.0953,-0.5831 -0.0790,-0.5570 -0.0888,-0.5342 -0.1246,-0.5375",
+  phone: "-0.1474,-0.5831 -0.0757,-0.5603 -0.0790,-0.5440 -0.1507,-0.5651",
+  face: "0.0073,-0.9121 0.0024,-0.8762 0.0138,-0.8502 0.0220,-0.8355 0.0611,-0.8420 0.0855,-0.8616 0.0888,-0.8958 0.0220,-0.9186",
+  ear: "0.0888,-0.8958 0.1034,-0.8990 0.1067,-0.8762 0.0936,-0.8632",
+  hair: "-0.0057,-0.8958 -0.0008,-0.9430 0.0269,-0.9756 0.0757,-0.9870 0.1197,-0.9739 0.1376,-0.9365 0.1393,-0.8762 0.1295,-0.8502 0.1083,-0.8469 0.1034,-0.8762 0.0871,-0.8958 0.0839,-0.8697 0.0676,-0.8599 0.0562,-0.8876 0.0415,-0.8599 0.0285,-0.8925 0.0122,-0.9088 0.0024,-0.8795",
+  eye: "0.0187,-0.8876 0.0301,-0.8909 0.0301,-0.8795 0.0204,-0.8779",
+  armUp: "-0.0187,-0.7980 0.0057,-0.7785 -0.0529,-0.9446 -0.0725,-1.0033 -0.1018,-0.9935 -0.0790,-0.8876",
+  handUp: "-0.1018,-1.0228 -0.0725,-1.0261 -0.0692,-0.9935 -0.0985,-0.9870",
+  phoneUp: "-0.1116,-1.0912 -0.0790,-1.0945 -0.0741,-1.0163 -0.1067,-1.0130",
+};
+
 /**
- * The person at the crest, as the scene's model stands there (VRoid's AvatarSample_C): dark hair, a
- * dark jacket with a grey front, dark trousers and boots, in flat colour with an ink line. One unit
- * tall from the feet, turned down the hill towards the crew. The model's colours are its own, not the
- * theme's; these are the nearest mixes of the band's tokens, so the drawing still sits in every theme.
+ * The person, drawn: flat colour, as the cel shading leaves the model at this size. The model's
+ * colours are its textures' own, not the theme's; these are tones of the band's `dusk-ink`, which is
+ * near white in every theme, so the figure is the same greys everywhere, as the model is.
  */
 function PersonDrawn() {
-  const ink = shaded(mix(token("dusk"), token("accent"), 0.1), 0.35);
-  const skin = shaded(mix(token("dusk-ink"), token("signal-shade"), 0.22), 0.74);
-  const jacket = shaded(mix(token("dusk"), token("dusk-ink"), 0.14), 0.55);
-  const front = shaded(mix(token("dusk-ink"), token("dusk"), 0.3), 0.6);
-  const trousers = shaded(mix(token("dusk"), token("dusk-ink"), 0.08), 0.5);
-  const hair = shaded(mix(token("dusk"), token("signal-shade"), 0.14), 0.42);
+  const tone = (light: number) => shaded(token("dusk-ink"), light);
+  const skin = shaded(mix(token("dusk-ink"), token("signal-shade"), 0.22), 0.42);
+  const hair = shaded(mix(token("dusk-ink"), token("signal-shade"), 0.5), 0.028);
+  const fill = (colour: string) => ({ fill: colour });
   return (
-    <g transform={`translate(${PERSON_FEET[0]} ${PERSON_FEET[1]}) scale(${round(PERSON_TALL)})`} strokeWidth="0.008" strokeLinejoin="round" style={{ stroke: ink }}>
-      {/* Boots, trousers, and the jacket: dark sleeves and sides, a grey front. */}
-      <path d="M-0.075 -0.06H-0.02L-0.012 -0.005H-0.1Z" style={{ fill: jacket }} />
-      <path d="M0.005 -0.055H0.06L0.07 0H-0.015Z" style={{ fill: jacket }} />
-      <path d="M-0.06 -0.5L-0.078 -0.05H-0.018L0 -0.33L0.008 -0.045H0.064L0.07 -0.5Z" style={{ fill: trousers }} />
-      <path d="M0.035 -0.8Q0.095 -0.78 0.097 -0.64L0.092 -0.5Q0.07 -0.475 0.05 -0.5Z" style={{ fill: jacket }} />
-      <path d="M-0.075 -0.815Q0 -0.845 0.078 -0.815L0.082 -0.49Q0 -0.46 -0.08 -0.49Z" style={{ fill: jacket }} />
-      <path d="M-0.068 -0.8Q-0.03 -0.825 0.012 -0.815L0.016 -0.485Q-0.03 -0.47 -0.072 -0.49Z" stroke="none" style={{ fill: front }} />
+    <g transform={`translate(${PERSON_FEET[0]} ${round(PERSON_FEET[1] - 0.005 * PERSON_TALL)}) scale(${round(PERSON_TALL)})`}>
+      <polygon points={FIGURE.bootL} style={fill(tone(0.018))} />
+      <polygon points={FIGURE.bootR} style={fill(tone(0.018))} />
+      <polygon points={FIGURE.ankleL} style={fill(tone(0.008))} />
+      <polygon points={FIGURE.ankleR} style={fill(tone(0.008))} />
+      <polygon points={FIGURE.legL} style={fill(tone(0.011))} />
+      <polygon points={FIGURE.legR} style={fill(tone(0.011))} />
+      <polygon points={FIGURE.torso} style={fill(tone(0.016))} />
+      <polygon points={FIGURE.front} style={fill(shaded(mix(token("dusk-ink"), token("accent"), 0.12), 0.2))} />
+      <polyline points={FIGURE.stripe} fill="none" strokeWidth="0.006" style={{ stroke: tone(0.35) }} />
+      <polygon points={FIGURE.handR} style={fill(skin)} />
       {/* The arm that holds the phone, low and a little forward. */}
       <g data-idle>
-        <path d="M-0.055 -0.805Q-0.105 -0.77 -0.1 -0.66L-0.14 -0.6L-0.113 -0.57L-0.053 -0.65Z" style={{ fill: jacket }} />
-        <circle cx="-0.135" cy="-0.578" r="0.018" style={{ fill: skin }} />
-        <rect x="-0.162" y="-0.635" width="0.022" height="0.07" rx="0.005" transform="rotate(-25 -0.151 -0.6)" style={{ fill: shaded(token("dusk"), 0.6) }} />
+        <polygon points={FIGURE.armL} style={fill(tone(0.02))} />
+        <polygon points={FIGURE.phone} style={fill(tone(0.06))} />
+        <polygon points={FIGURE.handL} style={fill(skin)} />
       </g>
-      <rect x="-0.018" y="-0.86" width="0.036" height="0.05" stroke="none" style={{ fill: skin }} />
-      <path d="M-0.045 -0.845Q0 -0.82 0.045 -0.845V-0.805Q0 -0.785 -0.045 -0.805Z" style={{ fill: jacket }} />
-      {/* The head: a soft face narrowing to a small chin, under a dark bob with a fringe. */}
-      <path d="M-0.07 -0.93Q-0.072 -0.87 -0.03 -0.84Q-0.008 -0.828 0.018 -0.845Q0.062 -0.875 0.062 -0.935Q0.055 -0.995 -0.005 -0.995Q-0.065 -0.995 -0.07 -0.93Z" style={{ fill: skin }} />
-      <path
-        d="M-0.078 -0.925Q-0.085 -1.005 -0.01 -1.012Q0.075 -1.012 0.078 -0.925Q0.08 -0.87 0.058 -0.85L0.04 -0.9Q0.03 -0.94 0.005 -0.955Q-0.02 -0.925 -0.05 -0.93L-0.058 -0.905L-0.066 -0.93Z"
-        style={{ fill: hair }}
-      />
-      <ellipse cx="-0.046" cy="-0.905" rx="0.007" ry="0.011" stroke="none" style={{ fill: ink }} />
-      <path d="M-0.06 -0.864H-0.046" fill="none" strokeWidth="0.005" />
+      <polygon points={FIGURE.face} style={fill(skin)} />
+      <polygon points={FIGURE.ear} style={fill(skin)} />
+      <polygon points={FIGURE.collar} style={fill(tone(0.012))} />
+      <polygon points={FIGURE.hair} style={fill(hair)} />
+      <polygon points={FIGURE.eye} style={fill(tone(0.01))} />
       {/* The answer held up, for where the scene never comes and the drawing shows the call. */}
       <g data-call>
-        <path d="M-0.055 -0.805L-0.08 -0.79L-0.19 -0.99L-0.165 -1.015Z" style={{ fill: jacket }} />
-        <circle cx="-0.185" cy="-1.012" r="0.018" style={{ fill: skin }} />
-        <circle cx="-0.19" cy="-1.07" r="0.11" stroke="none" fill="url(#hill-lamp)" opacity="0.6" />
-        <rect x="-0.205" y="-1.105" width="0.03" height="0.075" rx="0.006" style={{ fill: mix(token("signal"), token("dusk-ink"), 0.4) }} />
+        <polygon points={FIGURE.armUp} style={fill(tone(0.02))} />
+        <circle cx={-0.085} cy={-0.99} r="0.11" fill="url(#hill-lamp)" opacity="0.6" />
+        <polygon points={FIGURE.phoneUp} style={fill(mix(token("signal"), token("dusk-ink"), 0.4))} />
+        <polygon points={FIGURE.handUp} style={fill(skin)} />
       </g>
     </g>
   );
@@ -195,8 +223,8 @@ export function BoulderHill() {
             <stop offset="1" stopOpacity="0" style={{ stopColor: GLOW }} />
           </radialGradient>
           <linearGradient id="hill-ground" gradientUnits="userSpaceOnUse" x1="0" y1={HILL_TOP} x2="0" y2={FLOOR}>
-            <stop offset="0" style={{ stopColor: shaded(mix(HILL, token("dusk-2"), 0.42), 0.3) }} />
-            <stop offset="0.4" style={{ stopColor: shaded(mix(HILL, token("dusk"), 0.55), 0.3) }} />
+            <stop offset="0" style={{ stopColor: shaded(mix(HILL, token("dusk-2"), 0.42), 0.24) }} />
+            <stop offset="0.4" style={{ stopColor: shaded(mix(HILL, token("dusk"), 0.55), 0.24) }} />
             <stop offset="1" style={{ stopColor: shaded(mix(HILL, token("dusk"), 0.72), 0.24) }} />
           </linearGradient>
           <radialGradient id="hill-warmth" gradientUnits="userSpaceOnUse" cx={PERSON_FEET[0] - 30} cy={PERSON_FEET[1] + 20} r="330">
@@ -265,8 +293,8 @@ export function BoulderHill() {
       <figcaption className="sr-only">
         A scene of three AI agents rolling a boulder up a hill at dusk: three small robots, the boulder glowing like an ember. At the top they stop and ask the
         person standing there, an anime character in a dark jacket, one question: ship the launch on Monday? The person picks “Ship it” on their phone, smiles
-        and holds it up; the boulder is done and vanishes in a column of light, and the robots cheer, turn and walk back down the hill for the next one. Every
-        fourth time, the scene waits at the question for you to make the call; hold a week, and the boulder rolls back down the hill with the robots after it.
+        and holds it up; the boulder is done and vanishes in a column of light, and the robots cheer, turn and walk back down the hill for the next one. After
+        the first two times, the scene waits at the question for you to make the call; hold a week, and the boulder rolls back down the hill with the robots after it.
       </figcaption>
     </figure>
   );

@@ -13,8 +13,8 @@ export type HillAnswer = "ship" | "hold";
 /**
  * The call the crew stopped for, as the Decisions page shows it. Most of the time it is part of the
  * picture: it shows as the boulder reaches the top and its answer is picked on the loop's clock
- * (globals.css), and nothing in it can be used. Every fourth loop the scene stops at the question
- * and waits (`HILL_HOLD`): then the card is the visitor's, its buttons work, "Ship it" is ringed and
+ * (globals.css), and nothing in it can be used. From the third loop on, the scene stops at the question
+ * every time and waits (`HILL_HOLD`): then the card is the visitor's, its buttons work, "Ship it" is ringed and
  * a line says it is their call. Either answer is the call made (`HILL_ANSWER`), and the scene goes on:
  * the boulder leaves in light if they ship it, and rolls back down the hill if they hold a week.
  *
@@ -70,7 +70,7 @@ export function HillCard() {
           Hold a week
         </button>
       </p>
-      {holding ? <p className="mt-2.5 text-xs font-semibold text-signal-ink">Your call: tap Ship it.</p> : null}
+      {holding ? <p className="mt-2.5 text-xs font-semibold text-signal-ink">Your call: ship it, or hold a week?</p> : null}
     </div>
   );
 }

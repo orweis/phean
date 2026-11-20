@@ -22,6 +22,9 @@ const SHIN = 0.2;
 const ANKLE = 0.1;
 /** One full walk cycle, in the bot's own units of ground covered. */
 const CYCLE = 0.64;
+/** Where its eyes are above its feet when it stands, and how far its neck turns and tilts to look at something. */
+const EYE_LEVEL = HIP + NECK + 0.2;
+const GAZE = { turn: 1.25, up: 0.75, down: 0.4 };
 const STANCE = 0.6;
 
 const SHOULDER = [v(0.02, 0.42, 0.285), v(0.02, 0.42, -0.285)] as const;
@@ -152,6 +155,11 @@ export interface Bot {
   pose(pose: BotPose): void;
   /** Where a shoulder is in the world, as posed last (0 is the camera's side). */
   shoulder(index: 0 | 1, out: Vector3): Vector3;
+  /** How its head would turn (towards the camera's side) and tilt (up) to look at a point in the world, as it stands now: within what a neck allows. */
+  gaze(target: Vector3): { turn: number; tilt: number };
+  /** Where its eyes are, in the world, and the way its head faces, as posed last. */
+  eyesAt(out: Vector3): Vector3;
+  sightAlong(out: Vector3): Vector3;
   /** The lit tip of its antenna, in the world. */
   tipAt(out: Vector3): Vector3;
   /** A point on the back of its pack, in the world, and which way the pack faces there: where the bot behind lays a hand. */
@@ -214,7 +222,7 @@ export function makeBot(kit: BotKit, materials: BotMaterials, look: BotLook): Bo
     body.rotation.set(0.06 * stride * swing, 0, -0.36 * push - 0.03 + 0.1 * cheer + 0.07 * walk);
     body.updateMatrix();
     head.rotation.set(0, -p.headTurn, p.headTilt + 0.24 * push);
-    antenna.rotation.set(0.1 * swing * stride + 0.08 * Math.sin(p.seconds * 2.9 + look.antennaAt * 9), 0, look.antennaLean + 0.4 * push + 0.07 * Math.sin(p.seconds * 3.87 + look.scale * 9));
+    antenna.rotation.set(0.1 * swing * stride + 0.08 * Math.sin(p.seconds * 2.9 + look.antennaAt * 9), 0, look.antennaLean + 1.35 * push + 0.07 * Math.sin(p.seconds * 3.87 + look.scale * 9));
     eyes.scale.y = p.blink ? 0.12 : 1 - 0.35 * cheer;
     tip.scale.setScalar(1 + 0.18 * Math.sin(p.seconds * 4.83 + look.scale * 30) + 0.5 * cheer);
 
@@ -263,6 +271,23 @@ export function makeBot(kit: BotKit, materials: BotMaterials, look: BotLook): Bo
     pose,
     shoulder(index, out) {
       return root.localToWorld(out.copy(SHOULDER[index]).applyMatrix4(body.matrix));
+    },
+    gaze(point) {
+      root.updateMatrixWorld(true);
+      root.worldToLocal(target.copy(point));
+      const [x, y, z] = [target.x, target.y - EYE_LEVEL, target.z];
+      return {
+        turn: Math.max(-GAZE.turn, Math.min(GAZE.turn, Math.atan2(z, x))),
+        tilt: Math.max(-GAZE.down, Math.min(GAZE.up, Math.atan2(y, Math.hypot(x, z)))),
+      };
+    },
+    eyesAt(out) {
+      root.updateMatrixWorld(true);
+      return head.localToWorld(out.set(0, 0.2, 0));
+    },
+    sightAlong(out) {
+      root.updateMatrixWorld(true);
+      return out.set(1, 0, 0).transformDirection(head.matrixWorld);
     },
     tipAt(out) {
       return tip.getWorldPosition(out);
