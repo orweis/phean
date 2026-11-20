@@ -4,8 +4,8 @@ import path from "node:path";
 import type { Metadata } from "next";
 
 import { MarkdownView } from "@/components/documents/markdown-view";
-import { Logo } from "@/components/logo";
-import { routes } from "@/lib/routes";
+import { SiteFooter } from "@/components/site/site-footer";
+import { SiteHeader } from "@/components/site/site-header";
 
 export const metadata: Metadata = {
   title: "Privacy policy",
@@ -17,14 +17,7 @@ export default async function PrivacyPage() {
   const source = await readFile(path.join(process.cwd(), "content", "legal", "privacy.md"), "utf8");
   return (
     <div className="min-h-dvh">
-      <header className="glass-bar text-ink">
-        <div className="mx-auto flex h-14 max-w-3xl items-center gap-2 px-4 sm:px-6">
-          <Logo className="shrink-0" />
-          <a href={routes.docs()} className="ml-auto text-sm font-semibold text-ink-2 hover:text-ink">
-            Docs
-          </a>
-        </div>
-      </header>
+      <SiteHeader current="legal" />
       <main className="mx-auto max-w-3xl px-4 py-8 sm:px-6 lg:py-10">
         <article className="max-w-[72ch]">
           <header className="border-b border-rule pb-6">
@@ -36,6 +29,7 @@ export default async function PrivacyPage() {
           </div>
         </article>
       </main>
+      <SiteFooter />
     </div>
   );
 }

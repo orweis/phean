@@ -2,9 +2,11 @@ import type { Metadata } from "next";
 
 import { FeaturedPost, Pager, PostGrid, SectionLabel, TagList } from "@/components/blog/blog-parts";
 import { artEntry } from "@/components/marketing/art";
+import { JsonLd } from "@/components/site/json-ld";
 import { routes } from "@/lib/routes";
 import { appUrl } from "@/server/config";
 import { BLOG_PAGE_SIZE, leadPost, loadPosts, tagsOf } from "@/server/blog";
+import { breadcrumbSchema } from "@/server/site-schema";
 
 const TITLE = "The Phean blog";
 const DESCRIPTION = "Notes on running AI agents and personal assistants: task management flipped, agent fleets, and the calls that stay with people.";
@@ -39,6 +41,26 @@ export default async function BlogHome({ searchParams }: PageProps<"/blog">) {
 
   return (
     <main className="mx-auto max-w-7xl px-4 pt-10 pb-24 sm:px-6 lg:pt-16">
+      <JsonLd
+        data={[
+          {
+            "@context": "https://schema.org",
+            "@type": "Blog",
+            name: TITLE,
+            description: DESCRIPTION,
+            url: `${appUrl()}${routes.blog()}`,
+            publisher: { "@id": `${appUrl()}/#organization` },
+            blogPost: posts.map((post) => ({
+              "@type": "BlogPosting",
+              headline: post.title,
+              url: `${appUrl()}${routes.blog(post.slug)}`,
+              datePublished: post.date,
+              author: { "@type": "Person", name: post.author.name },
+            })),
+          },
+          breadcrumbSchema([{ name: "Blog", path: routes.blog() }]),
+        ]}
+      />
       <header className="max-w-3xl">
         <h1 className="display text-[clamp(2.5rem,5vw,4rem)] text-ink">The Phean blog</h1>
         <p className="mt-4 text-lg leading-relaxed text-ink-2">{DESCRIPTION}</p>

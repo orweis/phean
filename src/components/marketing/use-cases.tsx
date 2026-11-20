@@ -1,10 +1,12 @@
 "use client";
 
 import { Bot, Check, Scale } from "lucide-react";
-import { useId, useState, type KeyboardEvent } from "react";
+import { useEffect, useId, useState, type KeyboardEvent } from "react";
 
 import { segment, SEGMENTED } from "@/components/ui/segmented";
 import { cx } from "@/lib/cx";
+
+import { anchorForUseCase } from "@/components/site/site-links";
 
 import { ActivityLog } from "./activity-log";
 import { USE_CASES } from "./content";
@@ -18,6 +20,20 @@ export function UseCases() {
   const id = useId();
   const current = USE_CASES[selected]!;
 
+  // The site's menus link each use case as an anchor (`#use-case-software`): select the tab the address names.
+  useEffect(() => {
+    const fromHash = () => {
+      const index = USE_CASES.findIndex((useCase) => `#${anchorForUseCase(useCase.key)}` === window.location.hash);
+      if (index >= 0) setSelected(index);
+    };
+    const initial = setTimeout(fromHash, 0);
+    window.addEventListener("hashchange", fromHash);
+    return () => {
+      clearTimeout(initial);
+      window.removeEventListener("hashchange", fromHash);
+    };
+  }, []);
+
   // Arrow keys move between tabs, Home and End jump to the ends (the APG tabs pattern).
   const onKeyDown = (event: KeyboardEvent) => {
     const last = USE_CASES.length - 1;
@@ -29,7 +45,11 @@ export function UseCases() {
   };
 
   return (
-    <div>
+    <div className="relative">
+      {/* Where each use case's anchor lands: the top of the tabs, under the sticky bar. */}
+      {USE_CASES.map((useCase) => (
+        <span key={useCase.key} id={anchorForUseCase(useCase.key)} aria-hidden className="absolute -top-24" />
+      ))}
       <div role="tablist" aria-label="Who runs a fleet of agents" onKeyDown={onKeyDown} className={cx(SEGMENTED, "w-fit max-w-full flex-wrap")}>
         {USE_CASES.map((useCase, index) => (
           <button
