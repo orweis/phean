@@ -103,7 +103,7 @@ Each webhook request is signed with HMAC-SHA256 under the webhook's secret, with
 
 ## Links from agents
 
-Links agents leave on tasks, questions and sessions are agent input rendered for people to click. They must use `https`, `http`, or a known app scheme (`cursor`, `vscode`, `vscode-insiders`, `windsurf`, `zed`, `claude`, `slack`, `msteams`); `javascript:`, `data:` and `file:` are refused. Web links open in a new tab with `noopener noreferrer`. Agent Markdown renders without raw HTML, and HTML documents are shown only as source.
+Links agents leave on tasks, questions and sessions are agent input rendered for people to click. They must use `https`, `http`, or a known app scheme (`cursor`, `vscode`, `vscode-insiders`, `windsurf`, `zed`, `claude`, `slack`, `msteams`); `javascript:`, `data:` and `file:` are refused. Web links open in a new tab with `noopener noreferrer`. Agent Markdown renders without raw HTML, images from other hosts show as links rather than loading (so a planted image cannot tell its host who read the document), and HTML documents are shown only as source.
 
 ## What agents should never do
 
