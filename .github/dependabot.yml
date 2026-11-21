@@ -1,23 +1,6 @@
-# Dependency updates for the native apps and the workflows. The web app's own dependencies are
-# updated by hand today; add an "npm" entry for "/" when that changes.
+# Updates for the workflows. The native apps' dependencies are updated in orweis/phean-apps.
 version: 2
 updates:
-  - package-ecosystem: npm
-    directory: /apps/desktop
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 5
-    groups:
-      # Electron ships a major every 8 weeks and supports the latest three: move it as one PR.
-      electron:
-        patterns: ["electron", "electron-builder", "electron-updater", "@electron/*"]
-      tooling:
-        patterns: ["typescript", "eslint*", "@typescript-eslint/*", "vitest", "esbuild", "@playwright/test"]
-  - package-ecosystem: gradle
-    directory: /apps/android
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 3
   - package-ecosystem: github-actions
     directory: /
     schedule:

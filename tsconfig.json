@@ -27,5 +27,5 @@
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts"
   ],
-  "exclude": ["node_modules", ".data", "apps", ".claude"]
+  "exclude": ["node_modules", ".data", ".claude"]
 }

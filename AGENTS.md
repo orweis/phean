@@ -58,10 +58,11 @@ Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) first. The rules below are the
 
 ### Native apps
 
-- The desktop (Electron, `apps/desktop`) and Android (Trusted Web Activity, `apps/android`) apps are shells around the hosted web app; see [docs/apps/PLAN.md](docs/apps/PLAN.md) and [docs/apps/CONTRACTS.md](docs/apps/CONTRACTS.md). Build every new surface in the web app, never natively: a page added here must appear in both apps with no app change, which is why the desktop allows navigation by origin, never by path.
-- A native capability is added only through the shared bridge (`window.pheanDesktop`, typed in `src/lib`), feature-detected, with a web fallback, so the same page works in a browser, on the desktop and on Android. A page tells it runs in a shell only from the bridge or `display-mode: standalone`, to adjust chrome; never fork a layout per platform.
-- The 375px checks in `e2e/quality.spec.ts` are the mobile gate: a page that passes them is the Android app's page. Respect safe-area insets and touch targets.
-- The shells' wire contracts (sign-in handoff, inbox feed, answers from notifications, the push payload) change only additively, because installed apps are older than the server.
+- The desktop (Electron) and Android (Trusted Web Activity) apps are shells around this web app, in their own repository, [orweis/phean-apps](https://github.com/orweis/phean-apps). Its `docs/PLAN.md` is the plan. This repository serves them; see [docs/apps/README.md](docs/apps/README.md).
+- **Build every new surface here, never in the apps.** A page added here must appear in both apps with no app change, which is why the desktop allows navigation by origin, never by path.
+- **A native capability is added only through the shared bridge**: `window.pheanDesktop`, typed in `src/lib/desktop.ts`. It is feature-detected and has a web fallback, so the same page works in a browser, on the desktop and on Android. A page learns it runs in a shell only from the bridge or from `display-mode: standalone`, and uses that only to adjust chrome. Never fork a layout per platform.
+- **The 375px checks in `e2e/quality.spec.ts` are the mobile gate.** A page that passes them is the Android app's page. Respect safe-area insets and touch targets.
+- **The wire contracts change only additively.** They are in [docs/apps/CONTRACTS.md](docs/apps/CONTRACTS.md): the sign-in handoff, the inbox feed, answers from notifications, and the push payload. Installed apps are older than the server. Change the contracts here first, then copy them to phean-apps, whose CI compares the two.
 
 ### UI
 
