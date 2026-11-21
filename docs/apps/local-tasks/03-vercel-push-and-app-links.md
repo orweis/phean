@@ -13,7 +13,7 @@ Steps:
    - `jq -r .privateKey vapid.json | vercel env add PHEAN_VAPID_PRIVATE_KEY production --sensitive` (and `preview`)
    - `vercel env add PHEAN_VAPID_SUBJECT production` with a `mailto:` contact address the owner chooses (and `preview`).
    Then delete the temporary directory (`rm -rf` it). Rotating the pair later invalidates every device's subscription, so keep it only in Vercel.
-4. Android App Links: add `PHEAN_ANDROID_CERT_SHA256` (Production) with the SHA-256 fingerprints, comma-separated, of the Play App Signing certificate (Play Console, Setup, App signing) and of the upload key. These are public values. For previews, add the debug fingerprint from `./gradlew signingReport` in `apps/android`.
+4. Android App Links: add `PHEAN_ANDROID_CERT_SHA256` (Production) with the SHA-256 fingerprints, comma-separated, of the Play App Signing certificate (Play Console, Setup, App signing) and of the upload key. These are public values. Never add a debug key's fingerprint to Production: anyone holding that key could ship an app verified for the domain. For Preview only, you may add your own local debug fingerprint from `./gradlew signingReport` in `apps/android`.
 5. Redeploy production (`vercel deploy --prod` from `main`, or wait for the next merge) and check:
    - `curl https://<domain>/.well-known/assetlinks.json` lists the fingerprints.
    - Google's checker: `https://digitalassetlinks.googleapis.com/v1/statements:list?source.web.site=https://<domain>&relation=delegate_permission/common.handle_all_urls` returns the statement.

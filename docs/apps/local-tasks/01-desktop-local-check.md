@@ -16,7 +16,7 @@ Steps:
    - From a terminal, open a deep link: macOS `open "phean://open/w/acme/decisions"`, Windows `start phean://open/w/acme/decisions`. (Deep links need the packaged app on macOS: run `pnpm --dir apps/desktop package` and launch the built app from `apps/desktop/dist`.) The running app focuses that page; a second launch does not open a second app.
    - Click an outside link inside a task (an agent's link): it opens in your default browser, not in the app.
    - Stop the local server: the app shows its offline page; start the server again: the app comes back by itself.
-   - With the demo agent tokens the seed printed, run `pnpm demo:agents http://localhost:3000 <token1> <token2>` or ask a question with an MCP client; a desktop notification appears within about 30 seconds; clicking an option answers it; clicking the body opens the decision.
+   - With the demo agent tokens the seed printed, run `pnpm demo:agents http://localhost:3000 <token1> <token2>` or ask a question with an MCP client; a desktop notification appears within about 25 seconds (on macOS only with a signed build, see local task 04); clicking an option answers it; clicking the body opens the decision.
    - Switch the OS between light and dark with Phean's appearance on System: the app follows.
 4. If GitHub or Google sign-in is configured locally (`GITHUB_CLIENT_ID`/`GITHUB_CLIENT_SECRET` in `.env.local`; never paste them anywhere), check "Continue with GitHub in your browser": the browser opens, you sign in, confirm, and the app is signed in.
 5. Repeat the sign-in and notification checks with `PHEAN_DESKTOP_ORIGIN` unset (production).
