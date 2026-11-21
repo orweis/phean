@@ -11,9 +11,13 @@ export function proxy(request: NextRequest) {
   if (getSessionCookie(request)) return NextResponse.next();
   // The dialog's server action answers a lost session itself. Redirecting its POST would only break the action call.
   if (request.method !== "GET" && request.nextUrl.pathname.startsWith("/oauth/")) return NextResponse.next();
+  // A notification's answer and Undo are JSON calls: they answer 401 themselves rather than redirect.
+  if (request.method !== "GET" && PUSH_ROUTE.test(request.nextUrl.pathname)) return NextResponse.next();
   const next = `${request.nextUrl.pathname}${request.nextUrl.search}`;
   return NextResponse.redirect(new URL(routes.signIn(next), request.url));
 }
+
+const PUSH_ROUTE = /^\/w\/[^/]+\/push\/(answer|undo)$/;
 
 export const config = {
   matcher: ["/account/:path*", "/workspaces/:path*", "/w/:path*", "/invite/:path*", "/oauth/:path*"],

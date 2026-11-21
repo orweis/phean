@@ -80,6 +80,11 @@ export const routes = {
   nativeAuthorize: (requestId: string) => withQuery("/native/authorize", { request: requestId }),
   /** The form on `nativeAuthorize` posts here; it answers 303 to the app's loopback address. */
   nativeConfirm: () => "/native/authorize/confirm",
+  /** Where a notification's button posts its answer (a request id and an option index), and its Undo. */
+  pushAnswer: (slug: string) => `/w/${slug}/push/answer`,
+  pushUndo: (slug: string) => `/w/${slug}/push/undo`,
+  /** The desktop app's feed of open requests across the person's workspaces. */
+  nativeInbox: () => "/api/native/inbox",
   /** The realtime event stream agents open over a WebSocket. */
   events: () => "/api/events",
 } as const;

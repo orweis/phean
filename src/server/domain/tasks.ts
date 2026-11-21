@@ -748,13 +748,17 @@ export const resolveInput = service(TaskRefInput, async (ctx, { taskId }): Promi
  * A person answers an agent's question from Phean, or marks it answered in the agent's own
  * conversation. A written answer is appended to the task, where the agent reads it next time.
  */
-export const answerInput = service(AnswerInput, async (ctx, { taskId, answer: written, choices }): Promise<Task> => {
+export const answerInput = service(AnswerInput, async (ctx, { taskId, answer: written, choices, requestId }): Promise<Task> => {
   assertCan(ctx, "task:write");
   if (agentIdOf(ctx)) throw invalid("Agents close their own questions with resolve_input.");
 
   return inTransaction(ctx, async (tx) => {
     const current = await findTask(tx, taskId, { lock: true });
     const open = current.inputRequest;
+    // An answer meant for one request (a notification's button) never lands on a newer one.
+    if (requestId !== undefined && open?.id !== requestId) {
+      throw conflict(open ? `${open.agentName} has asked something newer on "${current.title}". Open it in Phean to answer.` : `That question on "${current.title}" was already answered or closed.`);
+    }
     if (!open) {
       if (!written && !choices.length) return current;
       throw conflict(`There is no open question on "${current.title}" any more.`);

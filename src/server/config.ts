@@ -106,3 +106,22 @@ export function emailConfig(): { apiKey: string; from: string } | null {
   const from = process.env.PHEAN_EMAIL_FROM;
   return apiKey && from ? { apiKey, from } : null;
 }
+
+export interface VapidConfig {
+  publicKey: string;
+  privateKey: string;
+  /** A `mailto:` or `https:` contact the push services may use about this sender. */
+  subject: string;
+}
+
+/**
+ * The VAPID key pair Decision notifications are signed with (Web Push). Read when used, never at
+ * import time. Without all three, push is off: nothing is sent, and the Account page says
+ * notifications are not configured.
+ */
+export function vapidConfig(): VapidConfig | null {
+  const publicKey = process.env.PHEAN_VAPID_PUBLIC_KEY?.trim();
+  const privateKey = process.env.PHEAN_VAPID_PRIVATE_KEY?.trim();
+  const subject = process.env.PHEAN_VAPID_SUBJECT?.trim();
+  return publicKey && privateKey && subject ? { publicKey, privateKey, subject } : null;
+}
