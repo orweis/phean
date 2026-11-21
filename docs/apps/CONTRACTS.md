@@ -1,8 +1,8 @@
 # Native apps: contracts between the shells and the server
 
-These are the wire contracts that the desktop shell, the service worker and the server share. [the plan](https://github.com/orweis/phean-apps/blob/main/docs/PLAN.md) §2 and §3 say why. Change them only additively, because installed shells are older than the server (see `minShellVersion` below).
+These are the wire contracts that the desktop shell, the service worker and the server share. §2 and §3 of [the plan](https://github.com/orweis/phean-apps/blob/main/docs/PLAN.md) say why. Change them only additively, because installed shells are older than the server (see `minShellVersion` below).
 
-Every request a shell or the service worker makes carries `Phean-Client: desktop` or `Phean-Client: web`. Because it is a custom header, a cross-origin page cannot send it without a CORS preflight, and Phean answers no preflight. Bodies are JSON (`Content-Type: application/json`). When a browser sends an `Origin`, it must equal the app origin.
+Every request a shell or the service worker makes carries `Phean-Client: desktop` or `Phean-Client: web`. Because it is a custom header, a cross-origin page cannot send it without a CORS preflight, and Phean answers no preflight. Bodies are JSON (`Content-Type: application/json`). When a browser sends an `Origin`, it must equal the app origin. `Sec-Fetch-Site`, when sent, must be `same-origin` or `none`. Electron's `session.fetch` from the desktop's main process sends `none` and no `Origin`; a cross-site page can never send `none`. The handoff's start and exchange are stricter (below): the desktop sends them with Node's `fetch`, which sends neither header and no cookies.
 
 ## Desktop sign-in handoff (loopback, RFC 8252 §7.3)
 
