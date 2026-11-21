@@ -16,6 +16,7 @@ export const MIN_SHELL_VERSION = "0.1.0";
 /** The header every shell and the service worker send. A cross-origin page cannot add it without a preflight, which Phean never answers. */
 export const CLIENT_HEADER = "Phean-Client";
 const CLIENTS = new Set(["desktop", "web"]);
+const FETCH_SITES = new Set(["same-origin", "none"]);
 
 const NO_STORE = { "cache-control": "no-store" };
 
@@ -31,13 +32,16 @@ function refusal(error: unknown): Response {
 
 /**
  * The checks before any session is read, so a cross-site page gets nothing: the Phean-Client
- * header, a JSON body when one is posted, and, when the browser sends an Origin, one of this
- * deployment's.
+ * header, a JSON body when one is posted, an Origin (when sent) of this deployment's, and a
+ * Sec-Fetch-Site (when sent) of `same-origin` or `none`.
  */
 export function clientRequestRefusal(request: Request, origins: readonly string[], { body }: { body: boolean }): Response | null {
   if (!CLIENTS.has(request.headers.get(CLIENT_HEADER) ?? "")) return json(400, { error: "invalid_request", message: `Send ${CLIENT_HEADER}: desktop or web.` });
   const origin = request.headers.get("origin");
   if (origin !== null && !origins.some((allowed) => new URL(allowed).origin === origin)) return json(403, { error: "forbidden", message: "Cross-origin requests are refused." });
+  // The page itself sends same-origin; the desktop's main process sends none. A cross-site page can produce neither.
+  const site = request.headers.get("sec-fetch-site");
+  if (site !== null && !FETCH_SITES.has(site)) return json(403, { error: "forbidden", message: "Cross-site requests are refused." });
   if (body && !(request.headers.get("content-type") ?? "").toLowerCase().startsWith("application/json")) {
     return json(415, { error: "invalid_request", message: "Send JSON." });
   }

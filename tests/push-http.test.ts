@@ -69,6 +69,27 @@ describe("POST /w/<slug>/push/answer", () => {
     expect((await handlePushAnswer(desktop, counting, { origins })).status).toBe(200);
   });
 
+  it("allows Sec-Fetch-Site same-origin (the page) and none (the desktop's main process), and refuses same-site and cross-site", async () => {
+    const body = { answer: "Okafor" };
+    for (const site of ["cross-site", "same-site"]) {
+      const { taskId, requestId } = await ask();
+      expect((await handlePushAnswer(post({ taskId, requestId, ...body }, { "sec-fetch-site": site }), as(ws.human), { origins })).status, site).toBe(403);
+      const undo = new Request(`${ORIGIN}/w/acme/push/undo`, { method: "POST", headers: { "content-type": "application/json", [CLIENT_HEADER]: "web", "sec-fetch-site": site }, body: JSON.stringify({ taskId, requestId }) });
+      expect((await handlePushUndo(undo, as(ws.human), { origins })).status, site).toBe(403);
+    }
+    for (const site of ["same-origin", "none"]) {
+      const { taskId, requestId } = await ask();
+      // The page sends its Origin with same-origin; the desktop sends none and no Origin.
+      const request =
+        site === "none"
+          ? new Request(`${ORIGIN}/w/acme/push/answer`, { method: "POST", headers: { "content-type": "application/json", [CLIENT_HEADER]: "desktop", "sec-fetch-site": site }, body: JSON.stringify({ taskId, requestId, ...body }) })
+          : post({ taskId, requestId, ...body }, { "sec-fetch-site": site });
+      expect((await handlePushAnswer(request, as(ws.human), { origins })).status, site).toBe(200);
+      const undo = new Request(`${ORIGIN}/w/acme/push/undo`, { method: "POST", headers: { "content-type": "application/json", [CLIENT_HEADER]: "desktop", "sec-fetch-site": site }, body: JSON.stringify({ taskId, requestId }) });
+      expect((await handlePushUndo(undo, as(ws.human), { origins })).status, site).toBe(200);
+    }
+  });
+
   it("answers 401 without a session, 409 stale for an answered request, and 400 for a malformed body", async () => {
     const { taskId, requestId } = await ask();
     expect((await handlePushAnswer(post({ taskId, requestId, option: 0 }), as(null), { origins })).status).toBe(401);
@@ -125,6 +146,8 @@ describe("GET /api/native/inbox", () => {
     expect((await handleInbox(get({ [CLIENT_HEADER]: "" }), { db: testDb.db, person: person(), origins })).status).toBe(400);
     expect((await handleInbox(get({ origin: "https://evil.example" }), { db: testDb.db, person: person(), origins })).status).toBe(403);
     expect((await handleInbox(get(), { db: testDb.db, person: null, origins })).status).toBe(401);
+    for (const site of ["cross-site", "same-site"]) expect((await handleInbox(get({ "sec-fetch-site": site }), { db: testDb.db, person: person(), origins })).status, site).toBe(403);
+    for (const site of ["same-origin", "none"]) expect((await handleInbox(get({ "sec-fetch-site": site }), { db: testDb.db, person: person(), origins })).status, site).toBe(200);
   });
 });
 
