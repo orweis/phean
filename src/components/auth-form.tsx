@@ -11,6 +11,7 @@ import { routes } from "@/lib/routes";
 import { PROVIDER_LABELS, ProviderMark, type SocialProvider } from "./provider-mark";
 import { Button } from "./ui/button";
 import { Field, Input } from "./ui/field";
+import { useDesktopShell } from "./use-desktop-shell";
 
 interface AuthFormProps {
   mode: "sign-in" | "sign-up";
@@ -27,6 +28,24 @@ export function AuthForm({ mode, next, providers, initialError = null }: AuthFor
   const [error, setError] = useState<string | null>(initialError);
   const [pending, startTransition] = useTransition();
   const signingUp = mode === "sign-up";
+  // In the desktop app a provider's page never loads in the window: the system browser signs in, then the app reloads.
+  const desktop = useDesktopShell();
+
+  const continueWith = (provider: SocialProvider) =>
+    startTransition(async () => {
+      setError(null);
+      if (desktop) {
+        try {
+          await desktop.signInWithBrowser(provider);
+        } catch {
+          setError(`Signing in with ${PROVIDER_LABELS[provider]} in your browser did not finish. Try again, or use your email.`);
+        }
+        return;
+      }
+      // On success the browser leaves for the provider; a failure stays here and says why.
+      const { error: failure } = await authClient.signIn.social({ provider, callbackURL: next, errorCallbackURL: `${mode === "sign-up" ? routes.signUp(next) : routes.signIn(next)}` });
+      if (failure) setError(failure.message ?? `Could not reach ${PROVIDER_LABELS[provider]}. Try again, or use your email.`);
+    });
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -62,17 +81,11 @@ export function AuthForm({ mode, next, providers, initialError = null }: AuthFor
                 key={provider}
                 className="w-full"
                 disabled={pending}
-                onClick={() =>
-                  startTransition(async () => {
-                    setError(null);
-                    // On success the browser leaves for the provider; a failure stays here and says why.
-                    const { error: failure } = await authClient.signIn.social({ provider, callbackURL: next, errorCallbackURL: `${mode === "sign-up" ? routes.signUp(next) : routes.signIn(next)}` });
-                    if (failure) setError(failure.message ?? `Could not reach ${PROVIDER_LABELS[provider]}. Try again, or use your email.`);
-                  })
-                }
+                onClick={() => continueWith(provider)}
               >
                 <ProviderMark provider={provider} />
                 Continue with {PROVIDER_LABELS[provider]}
+                {desktop && " in your browser"}
               </Button>
             ))}
           </div>
