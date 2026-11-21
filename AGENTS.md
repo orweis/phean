@@ -56,6 +56,13 @@ Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) first. The rules below are the
 - Change the schema in `src/server/db/schema`, then `pnpm db:generate` and commit the SQL in `drizzle/`. Migrations only move forward and run on every Vercel build, so keep them compatible with the previous release.
 - Nothing may open the database at import time; `next build` runs without one. Use `getDb()` inside functions, or `lazyDb` where a handle must exist at module load. `auth` in `server/auth/auth.ts` is a lazy Proxy for the same reason (the OAuth provider writes its resource row when built): import it freely, but build a real instance only with `createAuth(db, baseUrl)`, as the tests and `auth.config.ts` do.
 
+### Native apps
+
+- The desktop (Electron, `apps/desktop`) and Android (Trusted Web Activity, `apps/android`) apps are shells around the hosted web app; see [docs/apps/PLAN.md](docs/apps/PLAN.md) and [docs/apps/CONTRACTS.md](docs/apps/CONTRACTS.md). Build every new surface in the web app, never natively: a page added here must appear in both apps with no app change, which is why the desktop allows navigation by origin, never by path.
+- A native capability is added only through the shared bridge (`window.pheanDesktop`, typed in `src/lib`), feature-detected, with a web fallback, so the same page works in a browser, on the desktop and on Android. A page tells it runs in a shell only from the bridge or `display-mode: standalone`, to adjust chrome; never fork a layout per platform.
+- The 375px checks in `e2e/quality.spec.ts` are the mobile gate: a page that passes them is the Android app's page. Respect safe-area insets and touch targets.
+- The shells' wire contracts (sign-in handoff, inbox feed, answers from notifications, the push payload) change only additively, because installed apps are older than the server.
+
 ### UI
 
 - [DESIGN.md](DESIGN.md) is the visual system; read its Do's and Don'ts before styling anything. Colour and shadow tokens live in `src/lib/theme-tokens.ts`, one light and one dark palette per theme, and `pnpm themes` writes them into `src/app/themes.css` (never edit that file by hand); type, radii, motion and the utilities live in `src/app/globals.css`. Keep DESIGN.md in step when you change any of them.

@@ -6,6 +6,30 @@ Phean people mostly do one thing: answer the Decisions agents are waiting on. Th
 
 The owner uses the **desktop app** and the **Android app**. Those come first and must be excellent. **iOS** comes later and should cost little.
 
+## Governing principle: web-first, native at the edges
+
+The owner's rule: *rely as much as we can on web interfaces, so that new surfaces in the web app easily carry over into the apps.*
+
+- **Every screen people use comes from the hosted web app.** That covers tasks, goals, Decisions, documents, settings and account. There are no native re-implementations. A page added to the web app appears in the desktop and Android apps with no app-side work and no app release.
+  - The desktop allows navigation by **origin**, never by path, and has a test proving it.
+  - The TWA is Chrome on the origin, so it gets this by construction.
+- **Native code covers only what the web cannot do well:**
+  - the system-browser sign-in handoff;
+  - push registration and notification actions;
+  - deep links and App Links;
+  - the tray, badge and global shortcut;
+  - auto-update;
+  - secure storage;
+  - offline and reconnect chrome.
+
+  Each is reached through **one small typed bridge** (`window.pheanDesktop`, [CONTRACTS.md](CONTRACTS.md)). The web app feature-detects it, with a web fallback, so the same page works in a plain browser, on the desktop and on Android. On Android the bridge is the web platform itself: Web Push, the manifest and the service worker.
+- **The web app must be good on small screens and inside a shell.**
+  - The 375px checks in `e2e/quality.spec.ts` are the mobile gate.
+  - Touch targets and safe-area insets (`env(safe-area-inset-*)` with `viewport-fit=cover`) are audited along with M2.
+  - A page knows it runs in a shell only by the bridge's presence (`window.pheanDesktop`) or `display-mode: standalone`. It uses that to adjust chrome, such as hiding "open in app" or offering "Continue in your browser". Layouts are never forked per platform.
+- **This principle helped choose the stack.** The winning options load the hosted origin directly and need the least per-platform code: the TWA needs none beyond its manifest, and the Electron shell needs only the edge features above. Options that need a bundled client, or a bridge every page must code against, lose on this criterion as well as on cost (§1, §8).
+- **It binds contributors.** `AGENTS.md` carries it as a rule: build new surfaces in the web app; add a native capability only through the shared bridge, with a web fallback; treat the 375px checks as the mobile gate.
+
 ## 1. Approach
 
 ### What was checked (2026-11-21, npm registry, re-verified by a reviewer)
@@ -359,7 +383,8 @@ FCM and APNs credentials are not needed for the chosen approach, since Web Push 
 
 | Decision | Chosen | Rejected, and why |
 | --- | --- | --- |
-| Shell or bundled client | A shell around the hosted origin | A bundled client: a second front end and an API, for an app whose value is the existing pages |
+| Shell or bundled client | A shell around the hosted origin, web-first (the governing principle) | A bundled client: a second front end and an API, for an app whose value is the existing pages. It also fails the owner's web-first rule, since every new surface would need app work |
+| Navigation allowlist | By origin, so any present or future page loads | By path: every new page would need a shell release |
 | Desktop | Electron 45 with electron-builder and electron-updater | Tauri: WebKitGTK's performance and version spread, no Playwright, and Rust. Electron Forge: the Squirrel updater has no Linux |
 | Android | A TWA | Capacitor: an embedded-webview sign-in workaround, FCM credentials, and a bridge exposed to a remote origin. Tauri mobile: the same, plus no first-party push |
 | iOS | A home-screen PWA first | Capacitor by default: no Web Push in WKWebView (APNs needed), `server.url` not meant for production, App Store guideline 4.2 risk |
