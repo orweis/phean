@@ -106,3 +106,34 @@ export function emailConfig(): { apiKey: string; from: string } | null {
   const from = process.env.PHEAN_EMAIL_FROM;
   return apiKey && from ? { apiKey, from } : null;
 }
+
+/** The Android app's package when `PHEAN_ANDROID_PACKAGE` is unset (apps/android). */
+export const DEFAULT_ANDROID_PACKAGE = "app.phean";
+
+/** An Android application id: dot-separated segments, each a letter then letters, digits or underscores. */
+const ANDROID_PACKAGE = /^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)+$/;
+
+/** A SHA-256 certificate fingerprint as Play Console and keytool print it: 32 hex bytes, colon-separated. */
+const CERT_SHA256 = /^[0-9A-F]{2}(:[0-9A-F]{2}){31}$/;
+
+/**
+ * Which Android app may open this deployment's links and show its pages full screen: the package
+ * (`PHEAN_ANDROID_PACKAGE`) and the SHA-256 fingerprints of the keys it is signed with
+ * (`PHEAN_ANDROID_CERT_SHA256`, comma-separated: Play App Signing's and the upload key's). Both are
+ * public values. A malformed fingerprint or package is refused and left out, never trusted
+ * half-read; with no valid fingerprint there is no app to trust.
+ */
+export function androidAppLinks(): { packageName: string; fingerprints: string[] } | null {
+  const packageName = process.env.PHEAN_ANDROID_PACKAGE?.trim() || DEFAULT_ANDROID_PACKAGE;
+  const listed = (process.env.PHEAN_ANDROID_CERT_SHA256 ?? "")
+    .split(",")
+    .map((fingerprint) => fingerprint.trim().toUpperCase())
+    .filter(Boolean);
+  const fingerprints = [...new Set(listed.filter((fingerprint) => CERT_SHA256.test(fingerprint)))];
+  if (fingerprints.length < new Set(listed).size) console.warn("PHEAN_ANDROID_CERT_SHA256 has a malformed fingerprint; it is left out of assetlinks.json");
+  if (!ANDROID_PACKAGE.test(packageName)) {
+    console.warn("PHEAN_ANDROID_PACKAGE is not an Android package name; assetlinks.json trusts no app");
+    return null;
+  }
+  return fingerprints.length ? { packageName, fingerprints } : null;
+}

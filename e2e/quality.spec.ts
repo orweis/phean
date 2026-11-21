@@ -38,6 +38,7 @@ const PAGES = [
   "/blog/tag/agents",
   "/blog/author/or-weis",
   "/privacy",
+  "/offline",
 ];
 
 /** Pages that draw a timetable, so the Now marker can be checked against the date labels. */
