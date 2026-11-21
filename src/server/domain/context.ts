@@ -40,6 +40,20 @@ export interface Ctx {
 }
 
 /**
+ * A person acting on their own account rather than in a workspace (their notification devices). It
+ * is built only from a verified session (`personContext`), so no agent ever holds one; anything
+ * about a workspace still goes through a `Ctx`.
+ */
+export interface PersonCtx {
+  db: Db;
+  person: { id: string; name: string };
+}
+
+export function personContext(db: Db, person: { id: string; name: string }): PersonCtx {
+  return { db, person: { id: person.id, name: person.name } };
+}
+
+/**
  * Runs `fn` in one database transaction; the callback receives a context bound to it. Hooks queued
  * with `onCommit` run after the outermost transaction commits, and never if it rolls back.
  */

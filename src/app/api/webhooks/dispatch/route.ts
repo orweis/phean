@@ -1,9 +1,11 @@
 import { getDb } from "@/server/db/client";
+import { prunePushDeliveries, sendDuePushes } from "@/server/push/dispatch";
 import { dispatchDue, pruneDeliveries } from "@/server/webhooks/dispatch";
 
 /**
  * The safety net behind the after-commit kick: Vercel Cron calls this every minute to send
- * retries whose backoff has passed and anything a kick missed, and to prune old deliveries.
+ * retries whose backoff has passed and anything a kick missed, and to prune old deliveries. Decision
+ * notifications ride the same sweep.
  * Vercel sends `Authorization: Bearer $CRON_SECRET`; without CRON_SECRET only non-production
  * deployments accept the call.
  */
@@ -17,5 +19,7 @@ export async function GET(request: Request): Promise<Response> {
   const db = getDb();
   const report = await dispatchDue(db);
   await pruneDeliveries(db);
-  return Response.json(report);
+  const push = await sendDuePushes(db);
+  await prunePushDeliveries(db);
+  return Response.json({ ...report, push });
 }

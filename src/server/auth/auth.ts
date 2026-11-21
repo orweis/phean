@@ -22,7 +22,9 @@ import * as authSchema from "../db/schema/auth";
 import { oauthResource } from "../db/schema/auth";
 import { resolveOAuthAgent } from "../domain/agents";
 import { findTenantBySlug } from "../domain/tenants";
+import { forgetAllDevices } from "../domain/notifications";
 import { pruneUnusedClients } from "./clients";
+import { endSessionDevices } from "./push-devices";
 import { providerSignInChallenge, TRUST_DEVICE_SECONDS, TWO_FACTOR_CHALLENGE_SECONDS } from "./two-factor";
 
 const SEVEN_DAYS_IN_SECONDS = 60 * 60 * 24 * 7;
@@ -86,7 +88,17 @@ export function createAuth(database: Db, baseUrl: string) {
     baseURL: baseUrl,
     trustedOrigins: [...new Set([baseUrl, ...trustedOrigins()])],
     database: drizzleAdapter(database, { provider: "pg", schema: authSchema }),
-    emailAndPassword: { enabled: true, minPasswordLength: LIMITS.passwordMin, maxPasswordLength: LIMITS.passwordMax, autoSignIn: true },
+    emailAndPassword: {
+      enabled: true,
+      minPasswordLength: LIMITS.passwordMin,
+      maxPasswordLength: LIMITS.passwordMax,
+      autoSignIn: true,
+      // A reset is what someone does when they think they lost the account: every session ends, and every notification device with it.
+      revokeSessionsOnPasswordReset: true,
+      onPasswordReset: async ({ user }) => {
+        await forgetAllDevices(database, user.id);
+      },
+    },
     socialProviders: socialProviders(),
     account: {
       // People connect GitHub or Google from their account page while signed in, so the provider's
@@ -99,6 +111,8 @@ export function createAuth(database: Db, baseUrl: string) {
     disabledPaths: ["/oauth2/consent", "/oauth2/create-client", "/token"],
     hooks: {
       before: createAuthMiddleware(async (ctx) => {
+        // Sessions about to end take their notification devices with them (read first: their rows go).
+        await endSessionDevices(database, ctx);
         if (ctx.path === "/oauth2/authorize") {
           // A URL client_id is a CIMD client, which authorize fetches and stores: a moment to clear out unused ones.
           const clientId = ((ctx.query ?? ctx.body) as { client_id?: unknown } | undefined)?.client_id;

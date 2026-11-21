@@ -4,6 +4,8 @@ import type { EventAction } from "@/lib/activity";
 
 import { publicColumns } from "../db/columns";
 import { events, type EventRow } from "../db/schema";
+import { enqueuePushes } from "../push/routing";
+import { schedulePushes } from "../push/trigger";
 import { enqueueDeliveries, trackActorWatches } from "../webhooks/routing";
 import { scheduleDispatch } from "../webhooks/trigger";
 import { inTenant, onCommit, type Ctx } from "./context";
@@ -28,8 +30,9 @@ const activityColumns = publicColumns(events, ["tenantId"]);
 
 /**
  * Appends to the activity log, which is also the source of every webhook. In the same transaction
- * as the change, it records what the acting agent now follows and queues a delivery for every
- * other agent the change concerns; once the transaction commits, the dispatcher is woken.
+ * as the change, it records what the acting agent now follows, queues a delivery for every other
+ * agent the change concerns, and queues Decision notifications for people's devices; once the
+ * transaction commits, the dispatchers are woken.
  */
 export async function recordEvents(ctx: Ctx, inputs: readonly EventInput[]): Promise<void> {
   if (inputs.length === 0) return;
@@ -48,6 +51,7 @@ export async function recordEvents(ctx: Ctx, inputs: readonly EventInput[]): Pro
     .returning({ id: events.id, action: events.action, entityType: events.entityType, entityId: events.entityId, data: events.data });
   await trackActorWatches(ctx, rows);
   if (await enqueueDeliveries(ctx, rows)) onCommit(ctx, scheduleDispatch);
+  if (await enqueuePushes(ctx, rows)) onCommit(ctx, schedulePushes);
 }
 
 export const recordEvent = (ctx: Ctx, input: EventInput) => recordEvents(ctx, [input]);

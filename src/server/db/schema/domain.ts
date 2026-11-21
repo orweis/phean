@@ -34,7 +34,7 @@ import {
   WEBHOOK_TOPICS,
 } from "../../../lib/domain";
 
-import { organization, user } from "./auth";
+import { organization, session, user } from "./auth";
 
 export const taskStatusEnum = pgEnum("task_status", TASK_STATUSES);
 export const goalStatusEnum = pgEnum("goal_status", GOAL_STATUSES);
@@ -519,3 +519,94 @@ export const webhookDeliveries = pgTable(
 export type WatchRow = typeof watches.$inferSelect;
 export type WebhookRow = typeof webhooks.$inferSelect;
 export type WebhookDeliveryRow = typeof webhookDeliveries.$inferSelect;
+
+/**
+ * A browser or installed app a person gets Decision notifications on. Person-level, like `user`:
+ * one device hears every workspace its person is a member of (unless muted there), so this is not
+ * a tenant table. Subscribing again from the same browser moves the row onto the person signed in
+ * now, so a shared browser never notifies the one before. Signing out, revoking the session, a
+ * password reset, or a 404/410 from the push service deletes it; a session's expiry does not.
+ */
+export const pushDevices = pgTable(
+  "push_devices",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    /** The push service's URL for this subscription. */
+    endpoint: text("endpoint").notNull().unique(),
+    /** The subscription's keys (RFC 8291), encrypted with the server's webhook key like webhook secrets. */
+    p256dhCiphertext: text("p256dh_ciphertext").notNull(),
+    authCiphertext: text("auth_ciphertext").notNull(),
+    /** What the person reads on the Account page, e.g. "Chrome on Android". */
+    label: text("label").notNull(),
+    /** Show a request's options as buttons on the notification; a lock screen may show them too. */
+    answerFromNotification: boolean("answer_from_notification").notNull().default(false),
+    /** Say only that a decision waits, and in which workspace: nothing an agent wrote. */
+    private: boolean("private").notNull().default(false),
+    /** The session that turned it on, for display only (signing that session out deletes the device). */
+    sessionId: text("session_id").references(() => session.id, { onDelete: "set null" }),
+    lastSuccessAt: timestampTz("last_success_at"),
+    /** Failed sends in a row; resets on success. */
+    failures: integer("failures").notNull().default(0),
+    ...timestamps,
+  },
+  (t) => [index("push_devices_user_idx").on(t.userId), index("push_devices_session_idx").on(t.sessionId)],
+);
+
+/** A person's "no notifications from this workspace". A tenant table: written and read through `inTenant`. */
+export const pushMutes = pgTable(
+  "push_mutes",
+  {
+    tenantId: tenantId(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    createdAt: timestampTz("created_at").notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.tenantId, t.userId] })],
+);
+
+/**
+ * The push outbox, like `webhook_deliveries`: one row per (device, event), written by
+ * `recordEvents` in the caller's transaction. A `request` row tells a device an agent asked; a
+ * `resolved` row replaces that notification once the request is closed elsewhere. The payload is
+ * built at send time, from the task as it is then, and never stored.
+ */
+export const pushDeliveries = pgTable(
+  "push_deliveries",
+  {
+    id: bigint("id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+    tenantId: tenantId(),
+    deviceId: text("device_id")
+      .notNull()
+      .references(() => pushDevices.id, { onDelete: "cascade" }),
+    eventId: bigint("event_id", { mode: "number" })
+      .notNull()
+      .references(() => events.id, { onDelete: "cascade" }),
+    kind: text("kind", { enum: ["request", "resolved"] }).notNull(),
+    taskId: text("task_id").notNull(),
+    requestId: text("request_id").notNull(),
+    status: text("status", { enum: ["pending", "sent", "dead"] }).notNull().default("pending"),
+    attempts: integer("attempts").notNull().default(0),
+    /** Earliest time the dispatcher may send it (backoff after a failure). */
+    nextAttemptAt: timestampTz("next_attempt_at").notNull().defaultNow(),
+    /** Held by the dispatcher sending it, so two never send the same row. */
+    leaseUntil: timestampTz("lease_until"),
+    lastError: text("last_error"),
+    /** On a `request` row: when its request was answered or closed, so it is resolved only once. */
+    closedAt: timestampTz("closed_at"),
+    createdAt: timestampTz("created_at").notNull().defaultNow(),
+    sentAt: timestampTz("sent_at"),
+  },
+  (t) => [
+    unique("push_deliveries_event_uq").on(t.deviceId, t.eventId),
+    index("push_deliveries_due_idx").on(t.status, t.nextAttemptAt),
+    // Closing a request finds the devices that were told about it.
+    index("push_deliveries_task_idx").on(t.tenantId, t.taskId),
+  ],
+);
+
+export type PushDeviceRow = typeof pushDevices.$inferSelect;
+export type PushDeliveryRow = typeof pushDeliveries.$inferSelect;
