@@ -4,6 +4,7 @@ import type { Metadata } from "next";
 import { AppHeader } from "@/components/app-header";
 import { AutoRefresh } from "@/components/auto-refresh";
 import { FaviconBadge } from "@/components/favicon-badge";
+import { RememberWorkspace } from "@/components/remember-workspace";
 import { SearchShortcut } from "@/components/search-shortcut";
 import { SkipLink } from "@/components/skip-link";
 import { StatusRegion } from "@/components/ui/status-region";
@@ -39,6 +40,7 @@ export default async function WorkspaceLayout({ children, peek, params }: Layout
       <AutoRefresh waiting={stats.waitingOnYou} />
       <FaviconBadge count={stats.waitingOnYou + stats.inbox} />
       <SearchShortcut slug={slug} />
+      <RememberWorkspace slug={slug} />
       <main id="content" tabIndex={-1} className="mx-auto max-w-7xl px-4 py-6 outline-none sm:px-6 sm:py-8">
         {children}
       </main>
