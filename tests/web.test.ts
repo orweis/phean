@@ -39,6 +39,11 @@ describe("routes", () => {
     expect(safeNextPath("//evil.example")).toBe("/workspaces");
     expect(safeNextPath("/\\evil.example")).toBe("/workspaces");
     expect(safeNextPath("https://evil.example")).toBe("/workspaces");
+    // Browsers drop tabs and newlines while parsing, which turns these into "//evil.example".
+    expect(safeNextPath("/\t/evil.example")).toBe("/workspaces");
+    expect(safeNextPath("/\n/evil.example")).toBe("/workspaces");
+    expect(safeNextPath("/\r\\evil.example")).toBe("/workspaces");
+    expect(safeNextPath("/w/acme?next=%2F%2Fevil.example")).toBe("/w/acme?next=%2F%2Fevil.example");
     expect(safeNextPath(null, "/")).toBe("/");
   });
 });

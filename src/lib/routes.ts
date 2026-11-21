@@ -93,8 +93,20 @@ export function queryStringOf(params: Record<string, string | string[] | undefin
   return query.toString();
 }
 
-/** Only same-origin relative paths are honored as post-login redirects. */
+/** Any host: only the parsed origin is compared, so this never names a real site. */
+const SAME_ORIGIN_PROBE = "https://phean.invalid";
+
+/**
+ * Only same-origin relative paths are honored as post-login redirects. "//host" and "/\\host" are
+ * protocol-relative URLs to another origin in browsers, and URL parsing drops tabs and newlines
+ * anywhere, so "/\t/host" is one too: refuse control characters, then check what a browser would
+ * actually resolve the path to.
+ */
 export function safeNextPath(next: string | null | undefined, fallback: string = routes.workspaces()): string {
-  // "//host" and "/\host" are protocol-relative URLs to another origin in browsers.
-  return next && /^\/(?![/\\])/.test(next) ? next : fallback;
+  if (!next || !/^\/(?![/\\])/.test(next) || /[\u0000-\u001f\u007f]/.test(next)) return fallback;
+  try {
+    return new URL(next, SAME_ORIGIN_PROBE).origin === SAME_ORIGIN_PROBE ? next : fallback;
+  } catch {
+    return fallback;
+  }
 }
