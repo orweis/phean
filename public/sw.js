@@ -29,7 +29,7 @@ function pathOf(slug, id) {
 "./push": function (exports, require) {
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.UNDO_ACTION = exports.optionAction = exports.PUSH_CLIENT_HEADERS = exports.OFFLINE_CACHE = exports.NOTIFICATION_ACTIONS_MAX = exports.PUSH_PAYLOAD_VERSION = void 0;
+exports.requestTitle = exports.UNDO_ACTION = exports.optionAction = exports.PUSH_CLIENT_HEADERS = exports.OFFLINE_CACHE = exports.NOTIFICATION_ACTIONS_MAX = exports.PUSH_MAX_DEVICES = exports.PUSH_PAYLOAD_VERSION = void 0;
 exports.parsePushPayload = parsePushPayload;
 exports.readNotificationData = readNotificationData;
 exports.optionIndexOf = optionIndexOf;
@@ -50,10 +50,12 @@ exports.isOfflineAsset = isOfflineAsset;
 const links_1 = require("./links");
 const routes_1 = require("./routes");
 exports.PUSH_PAYLOAD_VERSION = 1;
+exports.PUSH_MAX_DEVICES = 20;
 exports.NOTIFICATION_ACTIONS_MAX = 2;
 exports.OFFLINE_CACHE = "phean-offline-v1";
 exports.PUSH_CLIENT_HEADERS = { "Content-Type": "application/json", "Phean-Client": "web" };
 const NOTIFICATION_ICON = routes_1.routes.appIcon(routes_1.APP_ICON_SIZES[0]);
+const RESOLVED_REASONS = ["answered", "replaced", "closed"];
 const isRecord = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
 const isText = (value) => typeof value === "string" && value.length > 0;
 function isPathSegment(value) {
@@ -72,8 +74,10 @@ function parsePushPayload(text) {
     if (!isRecord(raw) || raw.v !== exports.PUSH_PAYLOAD_VERSION || !isPathSegment(raw.slug) || !isRequestId(raw.requestId))
         return null;
     const { slug, requestId } = raw;
-    if (raw.type === "resolved")
-        return { type: "resolved", slug, requestId, by: isText(raw.by) ? raw.by : null };
+    if (raw.type === "resolved") {
+        const reason = typeof raw.reason === "string" && RESOLVED_REASONS.includes(raw.reason) ? raw.reason : null;
+        return { type: "resolved", slug, requestId, reason, by: isText(raw.by) ? raw.by : null, closedBy: isText(raw.closedBy) ? raw.closedBy : null };
+    }
     if (raw.type !== "request" || !isTaskId(raw.taskId) || !isText(raw.workspaceName))
         return null;
     const base = { type: "request", slug, requestId, taskId: raw.taskId, workspaceName: raw.workspaceName };
@@ -106,17 +110,26 @@ function optionIndexOf(action) {
     const index = match ? Number(match[1]) : NaN;
     return index < exports.NOTIFICATION_ACTIONS_MAX ? index : null;
 }
+const requestTitle = (push) => `${push.agentName} asks · ${push.workspaceName}`;
+exports.requestTitle = requestTitle;
 function requestNotification(push) {
     const data = { slug: push.slug, requestId: push.requestId, taskId: push.taskId, request: push };
     const actions = push.answerable ? push.options.map((title, index) => ({ action: (0, exports.optionAction)(index), title })) : [];
-    return spec(push.requestId, `${push.agentName} in ${push.workspaceName}`, data, { body: push.question, actions });
+    return spec(push.requestId, (0, exports.requestTitle)(push), data, { body: push.question, actions });
+}
+function resolvedTitle(push) {
+    if (push.reason === "replaced")
+        return "Replaced by a new question";
+    if (push.reason === "closed")
+        return push.closedBy ? `Closed by ${push.closedBy}` : "Closed";
+    return push.by ? `Answered by ${push.by}` : "Answered elsewhere";
 }
 function notificationFor(push, previous = null) {
     if (!push)
         return spec("phean", "Phean", null, { body: "Something changed in Phean." });
     if (push.type === "resolved") {
         const data = { slug: push.slug, requestId: push.requestId, taskId: previous?.taskId ?? null, request: null };
-        return spec(push.requestId, push.by ? `Answered by ${push.by}` : "Answered elsewhere", data, { body: previous?.request?.question, silent: true });
+        return spec(push.requestId, resolvedTitle(push), data, { body: previous?.request?.question, silent: true });
     }
     if (push.private) {
         return spec(push.requestId, `A decision is waiting in ${push.workspaceName}`, { slug: push.slug, requestId: push.requestId, taskId: push.taskId, request: null });
@@ -138,15 +151,15 @@ function isSameOrigin(url, origin) {
         return false;
     }
 }
-function answerCall(data, option) {
+function answerCall(data, option, endpoint) {
     if (!data?.taskId || !data.request || option < 0 || option >= data.request.options.length)
         return null;
-    return { path: routes_1.routes.pushAnswer(data.slug), body: { taskId: data.taskId, requestId: data.requestId, option } };
+    return { path: routes_1.routes.pushAnswer(data.slug), body: { taskId: data.taskId, requestId: data.requestId, option, ...(endpoint && { endpoint }) } };
 }
-function undoCall(data) {
+function undoCall(data, endpoint) {
     if (!data?.taskId)
         return null;
-    return { path: routes_1.routes.pushUndo(data.slug), body: { taskId: data.taskId, requestId: data.requestId } };
+    return { path: routes_1.routes.pushUndo(data.slug), body: { taskId: data.taskId, requestId: data.requestId, ...(endpoint && { endpoint }) } };
 }
 function parseAnswerResult(raw) {
     if (!isRecord(raw) || !isText(raw.answer) || !isText(raw.agentName))
@@ -333,8 +346,16 @@ function installServiceWorker(scope) {
         return { status: response.status, body };
     }
     const messageOf = (body) => typeof body === "object" && body !== null && "message" in body && typeof body.message === "string" ? body.message : undefined;
+    async function ownEndpoint() {
+        try {
+            return (await scope.registration.pushManager?.getSubscription())?.endpoint ?? null;
+        }
+        catch {
+            return null;
+        }
+    }
     async function answer(data, option) {
-        const call = (0, push_1.answerCall)(data, option);
+        const call = (0, push_1.answerCall)(data, option, await ownEndpoint());
         if (!call)
             return open(data);
         const reply = await post(call).catch(() => ({ status: 0, body: null }));
@@ -342,7 +363,7 @@ function installServiceWorker(scope) {
         await show(result ? (0, push_1.answeredNotification)(data, result) : (0, push_1.answerFailedNotification)(data, reply.status, messageOf(reply.body)));
     }
     async function undo(data) {
-        const call = (0, push_1.undoCall)(data);
+        const call = (0, push_1.undoCall)(data, await ownEndpoint());
         if (!call)
             return open(data);
         const reply = await post(call).catch(() => ({ status: 0, body: null }));

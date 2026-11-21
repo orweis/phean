@@ -523,9 +523,10 @@ export type WebhookDeliveryRow = typeof webhookDeliveries.$inferSelect;
 /**
  * A browser or installed app a person gets Decision notifications on. Person-level, like `user`:
  * one device hears every workspace its person is a member of (unless muted there), so this is not
- * a tenant table. Subscribing again from the same browser moves the row onto the person signed in
- * now, so a shared browser never notifies the one before. Signing out, revoking the session, a
- * password reset, or a 404/410 from the push service deletes it; a session's expiry does not.
+ * a tenant table. Subscribing again from the same browser (its keys, not only its endpoint) moves
+ * the row onto the person signed in now, so a shared browser never notifies the one before.
+ * Signing out, revoking the session, a password reset, or the push service refusing it (401, 403,
+ * 404, 410, or `PUSH_MAX_FAILURES` failures in a row) deletes it; a session's expiry does not.
  */
 export const pushDevices = pgTable(
   "push_devices",
@@ -548,11 +549,13 @@ export const pushDevices = pgTable(
     /** The session that turned it on, for display only (signing that session out deletes the device). */
     sessionId: text("session_id").references(() => session.id, { onDelete: "set null" }),
     lastSuccessAt: timestampTz("last_success_at"),
-    /** Failed sends in a row; resets on success. */
+    /** Failed sends in a row; resets on success, and the device goes after `PUSH_MAX_FAILURES`. */
     failures: integer("failures").notNull().default(0),
+    /** When the browser last turned it on: the person's oldest goes past `PUSH_MAX_DEVICES`, and recent ones count against the rate limit. */
+    registeredAt: timestampTz("registered_at").notNull().defaultNow(),
     ...timestamps,
   },
-  (t) => [index("push_devices_user_idx").on(t.userId), index("push_devices_session_idx").on(t.sessionId)],
+  (t) => [index("push_devices_user_idx").on(t.userId, t.registeredAt), index("push_devices_session_idx").on(t.sessionId)],
 );
 
 /** A person's "no notifications from this workspace". A tenant table: written and read through `inTenant`. */
@@ -569,10 +572,11 @@ export const pushMutes = pgTable(
 );
 
 /**
- * The push outbox, like `webhook_deliveries`: one row per (device, event), written by
+ * The push outbox, like `webhook_deliveries`: one row per (device, event, kind), written by
  * `recordEvents` in the caller's transaction. A `request` row tells a device an agent asked; a
- * `resolved` row replaces that notification once the request is closed elsewhere. The payload is
- * built at send time, from the task as it is then, and never stored.
+ * `resolved` row replaces that notification once the request is closed elsewhere. An agent asking
+ * again on the same task does both in one event (the old request resolved, the new one asked), hence
+ * the kind in the key. The payload is built at send time, from the task as it is then, and never stored.
  */
 export const pushDeliveries = pgTable(
   "push_deliveries",
@@ -594,6 +598,8 @@ export const pushDeliveries = pgTable(
     nextAttemptAt: timestampTz("next_attempt_at").notNull().defaultNow(),
     /** Held by the dispatcher sending it, so two never send the same row. */
     leaseUntil: timestampTz("lease_until"),
+    /** Names the sender holding the lease: it renews before sending and writes the outcome only while it still holds it. */
+    leaseToken: text("lease_token"),
     lastError: text("last_error"),
     /** On a `request` row: when its request was answered or closed, so it is resolved only once. */
     closedAt: timestampTz("closed_at"),
@@ -601,7 +607,7 @@ export const pushDeliveries = pgTable(
     sentAt: timestampTz("sent_at"),
   },
   (t) => [
-    unique("push_deliveries_event_uq").on(t.deviceId, t.eventId),
+    unique("push_deliveries_event_uq").on(t.deviceId, t.eventId, t.kind),
     index("push_deliveries_due_idx").on(t.status, t.nextAttemptAt),
     // Closing a request finds the devices that were told about it.
     index("push_deliveries_task_idx").on(t.tenantId, t.taskId),

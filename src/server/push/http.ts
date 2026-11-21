@@ -3,8 +3,7 @@ import { createHash } from "node:crypto";
 import type { Db } from "../db/client";
 import type { Ctx } from "../domain/context";
 import { isDomainError, type DomainErrorCode } from "../domain/errors";
-import { answerFromNotification, INBOX_LIMIT, openDecisions, type InboxItem } from "../domain/notifications";
-import { retractAnswer } from "../domain/tasks";
+import { answerFromNotification, INBOX_LIMIT, openDecisions, undoFromNotification, type InboxItem } from "../domain/notifications";
 import { listMemberships, userContext } from "../domain/tenants";
 
 /**
@@ -75,10 +74,11 @@ export async function handlePushAnswer(request: Request, workspace: WorkspaceRes
   if (!ctx) return json(401, { error: "unauthorized", message: "Sign in to Phean again." });
   const body = await jsonBody(request);
   if (!body || typeof body !== "object") return json(400, { error: "invalid", message: "Send a JSON object." });
-  // Only these fields: a label, a URL or anything else in the body is never read.
-  const { taskId, requestId, option, answer } = body as Record<string, unknown>;
+  // Only these fields: a label, a URL or anything else in the body is never read. The endpoint
+  // names the answering device among the person's own, so only their other devices are told.
+  const { taskId, requestId, option, answer, endpoint } = body as Record<string, unknown>;
   try {
-    return json(200, await answerFromNotification(ctx, { taskId, requestId, option, answer } as Parameters<typeof answerFromNotification>[1]));
+    return json(200, await answerFromNotification(ctx, { taskId, requestId, option, answer, endpoint } as Parameters<typeof answerFromNotification>[1]));
   } catch (error) {
     return refusal(error);
   }
@@ -92,9 +92,10 @@ export async function handlePushUndo(request: Request, workspace: WorkspaceResol
   if (!ctx) return json(401, { error: "unauthorized", message: "Sign in to Phean again." });
   const body = await jsonBody(request);
   if (!body || typeof body !== "object") return json(400, { error: "invalid", message: "Send a JSON object." });
-  const { taskId, requestId } = body as Record<string, unknown>;
+  const { taskId, requestId, endpoint } = body as Record<string, unknown>;
   try {
-    await retractAnswer(ctx, { taskId, requestId } as Parameters<typeof retractAnswer>[1]);
+    await undoFromNotification(ctx, { taskId, requestId, endpoint } as Parameters<typeof undoFromNotification>[1]);
+
     return json(200, {});
   } catch (error) {
     return refusal(error);

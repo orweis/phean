@@ -11,6 +11,9 @@ import { APP_ICON_SIZES, routes } from "./routes";
 /** The payload versions this worker understands. */
 export const PUSH_PAYLOAD_VERSION = 1;
 
+/** Devices one person may have notifications on; turning on another forgets the one turned on longest ago. */
+export const PUSH_MAX_DEVICES = 20;
+
 /** A notification carries at most this many option buttons (Chrome shows two). */
 export const NOTIFICATION_ACTIONS_MAX = 2;
 
@@ -47,12 +50,21 @@ export interface PrivatePush {
   taskId: string;
 }
 
+/** Why a request's notification is replaced; null from a server older than the reason. */
+export type ResolvedReason = "answered" | "replaced" | "closed";
+
+const RESOLVED_REASONS: readonly string[] = ["answered", "replaced", "closed"] satisfies ResolvedReason[];
+
 /** The request was answered or closed elsewhere; the notification with its tag is replaced. */
 export interface ResolvedPush {
   type: "resolved";
   slug: string;
   requestId: string;
+  reason: ResolvedReason | null;
+  /** The person who answered. */
   by: string | null;
+  /** Who closed it, when it was not answered. */
+  closedBy: string | null;
 }
 
 export type PushPayload = RequestPush | PrivatePush | ResolvedPush;
@@ -117,7 +129,10 @@ export function parsePushPayload(text: string | null | undefined): PushPayload |
   }
   if (!isRecord(raw) || raw.v !== PUSH_PAYLOAD_VERSION || !isPathSegment(raw.slug) || !isRequestId(raw.requestId)) return null;
   const { slug, requestId } = raw;
-  if (raw.type === "resolved") return { type: "resolved", slug, requestId, by: isText(raw.by) ? raw.by : null };
+  if (raw.type === "resolved") {
+    const reason = typeof raw.reason === "string" && RESOLVED_REASONS.includes(raw.reason) ? (raw.reason as ResolvedReason) : null;
+    return { type: "resolved", slug, requestId, reason, by: isText(raw.by) ? raw.by : null, closedBy: isText(raw.closedBy) ? raw.closedBy : null };
+  }
   if (raw.type !== "request" || !isTaskId(raw.taskId) || !isText(raw.workspaceName)) return null;
   const base = { type: "request" as const, slug, requestId, taskId: raw.taskId, workspaceName: raw.workspaceName };
   if (raw.private === true) return { ...base, private: true };
@@ -152,11 +167,21 @@ export function optionIndexOf(action: string | null | undefined): number | null 
   return index < NOTIFICATION_ACTIONS_MAX ? index : null;
 }
 
+/** The title of a request's notification, plainly an agent's words: "Scout asks · Acme". */
+export const requestTitle = (push: Pick<RequestPush, "agentName" | "workspaceName">) => `${push.agentName} asks · ${push.workspaceName}`;
+
 /** A request as a notification: its question, who asks and where, and its option buttons when the device may answer. */
 export function requestNotification(push: RequestPush): NotificationSpec {
   const data: NotificationData = { slug: push.slug, requestId: push.requestId, taskId: push.taskId, request: push };
   const actions = push.answerable ? push.options.map((title, index) => ({ action: optionAction(index), title })) : [];
-  return spec(push.requestId, `${push.agentName} in ${push.workspaceName}`, data, { body: push.question, actions });
+  return spec(push.requestId, requestTitle(push), data, { body: push.question, actions });
+}
+
+/** What replaced a request says happened to it. Only a person ever "answered" it. */
+function resolvedTitle(push: ResolvedPush): string {
+  if (push.reason === "replaced") return "Replaced by a new question";
+  if (push.reason === "closed") return push.closedBy ? `Closed by ${push.closedBy}` : "Closed";
+  return push.by ? `Answered by ${push.by}` : "Answered elsewhere";
 }
 
 /**
@@ -168,7 +193,7 @@ export function notificationFor(push: PushPayload | null, previous: Notification
   if (!push) return spec("phean", "Phean", null, { body: "Something changed in Phean." });
   if (push.type === "resolved") {
     const data: NotificationData = { slug: push.slug, requestId: push.requestId, taskId: previous?.taskId ?? null, request: null };
-    return spec(push.requestId, push.by ? `Answered by ${push.by}` : "Answered elsewhere", data, { body: previous?.request?.question, silent: true });
+    return spec(push.requestId, resolvedTitle(push), data, { body: previous?.request?.question, silent: true });
   }
   if (push.private) {
     return spec(push.requestId, `A decision is waiting in ${push.workspaceName}`, { slug: push.slug, requestId: push.requestId, taskId: push.taskId, request: null });
@@ -193,16 +218,21 @@ export function isSameOrigin(url: string, origin: string): boolean {
   }
 }
 
-/** The answer an option button posts: the option's index, never its label, which the server reads from the request. */
-export function answerCall(data: NotificationData | null, option: number): PushCall | null {
+/**
+ * The answer an option button posts: the option's index, never its label, which the server reads
+ * from the request, and this device's push endpoint when it has one, so only the person's other
+ * devices have their notification replaced.
+ */
+export function answerCall(data: NotificationData | null, option: number, endpoint?: string | null): PushCall | null {
   if (!data?.taskId || !data.request || option < 0 || option >= data.request.options.length) return null;
-  return { path: routes.pushAnswer(data.slug), body: { taskId: data.taskId, requestId: data.requestId, option } };
+  return { path: routes.pushAnswer(data.slug), body: { taskId: data.taskId, requestId: data.requestId, option, ...(endpoint && { endpoint }) } };
 }
 
-export function undoCall(data: NotificationData | null): PushCall | null {
+export function undoCall(data: NotificationData | null, endpoint?: string | null): PushCall | null {
   if (!data?.taskId) return null;
-  return { path: routes.pushUndo(data.slug), body: { taskId: data.taskId, requestId: data.requestId } };
+  return { path: routes.pushUndo(data.slug), body: { taskId: data.taskId, requestId: data.requestId, ...(endpoint && { endpoint }) } };
 }
+
 
 /** The server's word on an answer (CONTRACTS.md): the label it recorded, the task, and the agent that gets it. */
 export interface AnswerResult {

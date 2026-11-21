@@ -73,6 +73,8 @@ export interface WorkerScope {
     showNotification(title: string, options: NotificationSpec["options"]): Promise<void>;
     getNotifications(filter: { tag: string }): Promise<ShownNotification[]>;
     navigationPreload?: { enable(): Promise<void> };
+    /** Absent where the browser has no Push API (and in tests that do not need it). */
+    pushManager?: { getSubscription(): Promise<{ endpoint: string } | null> };
   };
   clients: {
     matchAll(options: { type: "window"; includeUncontrolled: boolean }): Promise<WindowClient[]>;
@@ -143,8 +145,17 @@ export function installServiceWorker(scope: WorkerScope): void {
   const messageOf = (body: unknown) =>
     typeof body === "object" && body !== null && "message" in body && typeof body.message === "string" ? body.message : undefined;
 
+  /** This device's push endpoint, which names it among its person's devices; null when it has none. */
+  async function ownEndpoint(): Promise<string | null> {
+    try {
+      return (await scope.registration.pushManager?.getSubscription())?.endpoint ?? null;
+    } catch {
+      return null;
+    }
+  }
+
   async function answer(data: NotificationData, option: number) {
-    const call = answerCall(data, option);
+    const call = answerCall(data, option, await ownEndpoint());
     if (!call) return open(data);
     const reply = await post(call).catch(() => ({ status: 0, body: null }));
     const result = reply.status === 200 ? parseAnswerResult(reply.body) : null;
@@ -152,7 +163,7 @@ export function installServiceWorker(scope: WorkerScope): void {
   }
 
   async function undo(data: NotificationData) {
-    const call = undoCall(data);
+    const call = undoCall(data, await ownEndpoint());
     if (!call) return open(data);
     const reply = await post(call).catch(() => ({ status: 0, body: null }));
     await show(reply.status === 200 ? undoneNotification(data) : undoFailedNotification(data, reply.status));

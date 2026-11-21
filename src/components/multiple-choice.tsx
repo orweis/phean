@@ -27,6 +27,8 @@ export function MultipleChoice({ taskId, slug, request, title }: { taskId: strin
       className="flex flex-wrap items-center gap-x-1.5 gap-y-2"
     >
       <input type="hidden" name="taskId" value={taskId} />
+      {/* Positions mean this request's options: a newer question refuses them instead of reading them as its own. */}
+      <input type="hidden" name="requestId" value={request.id} />
       <fieldset
         className="contents"
         onChange={(event) => setTicked(event.currentTarget.querySelectorAll("input[name=choices]:checked").length)}

@@ -552,6 +552,11 @@ export const RegisterDeviceInput = z.object({
 
 export const DeviceRefInput = z.object({ deviceId: z.string().trim().min(1).max(LIMITS.ref) });
 
+/** A push subscription's endpoint: how a browser (or its service worker) names its own device. */
+const pushEndpoint = z.string().trim().min(1).max(LIMITS.url);
+
+export const DeviceEndpointInput = z.object({ endpoint: pushEndpoint });
+
 /** A checkbox posts "true" or "false"; code passes booleans. */
 const flag = z.union([z.boolean(), z.stringbool()]);
 
@@ -567,5 +572,14 @@ export const NotificationAnswerInput = z
     requestId: z.string().trim().min(1).max(LIMITS.ref),
     option: z.number().int().min(0).max(MAX_OPTIONS - 1).optional(),
     answer: z.string().trim().min(1).max(LIMITS.note).optional(),
+    /** The answering device's own endpoint: every other device has its notification replaced. */
+    endpoint: pushEndpoint.optional(),
   })
   .refine((input) => (input.option === undefined) !== (input.answer === undefined), "Send an option or an answer, not both.");
+
+/** Undo from a notification, with the device's endpoint as for an answer. */
+export const NotificationUndoInput = z.object({
+  taskId,
+  requestId: z.string().trim().min(1).max(LIMITS.ref),
+  endpoint: pushEndpoint.optional(),
+});

@@ -84,6 +84,8 @@ export interface InputAnswer extends InputRequest {
   /** The options a person ticked on a request that takes several. */
   choices?: string[];
   answeredByName: string | null;
+  /** The person who answered, on answers recorded since Phean keeps it: only they may take the answer back. */
+  answeredByUserId?: string;
   /** ISO timestamp the request closed. */
   closedAt: string;
   /** Whether the asking agent has collected it. Only a person's answer waits to be collected. */

@@ -25,7 +25,7 @@ import { findTenantBySlug } from "../domain/tenants";
 import { forgetAllDevices } from "../domain/notifications";
 import { pruneUnusedClients } from "./clients";
 import { nativeSignIn } from "./native";
-import { endSessionDevices } from "./push-devices";
+import { pushDeviceSessions } from "./push-devices";
 import { providerSignInChallenge, TRUST_DEVICE_SECONDS, TWO_FACTOR_CHALLENGE_SECONDS } from "./two-factor";
 
 const SEVEN_DAYS_IN_SECONDS = 60 * 60 * 24 * 7;
@@ -112,8 +112,6 @@ export function createAuth(database: Db, baseUrl: string) {
     disabledPaths: ["/oauth2/consent", "/oauth2/create-client", "/token"],
     hooks: {
       before: createAuthMiddleware(async (ctx) => {
-        // Sessions about to end take their notification devices with them (read first: their rows go).
-        await endSessionDevices(database, ctx);
         if (ctx.path === "/oauth2/authorize") {
           // A URL client_id is a CIMD client, which authorize fetches and stores: a moment to clear out unused ones.
           const clientId = ((ctx.query ?? ctx.body) as { client_id?: unknown } | undefined)?.client_id;
@@ -180,6 +178,8 @@ export function createAuth(database: Db, baseUrl: string) {
       cimd({ fetchClientMetadataResource, metadataProfile: "mcp-2026-07-28" }),
       // The desktop app's sign-in through the system browser; see native.ts.
       nativeSignIn(),
+      // Notification devices end with their sessions and follow one Better Auth replaces; see push-devices.ts.
+      pushDeviceSessions(database),
       // Must be last: lets server actions set auth cookies.
       nextCookies(),
     ],

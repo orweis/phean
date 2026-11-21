@@ -12,7 +12,7 @@ import { createGoal, findGoal, listGoals, updateGoal, type Goal } from "@/server
 import { attachDocument, deleteDocument, getDocument, listDocuments, updateDocument } from "@/server/domain/documents";
 import { countMemoryKinds, forget, recall, remember, type Memory } from "@/server/domain/memory";
 import { getWorkflow, saveWorkflow } from "@/server/domain/workflow";
-import { answerFromNotification, muteWorkspace, openDecisions } from "@/server/domain/notifications";
+import { answerFromNotification, muteWorkspace, openDecisions, undoFromNotification } from "@/server/domain/notifications";
 import { sendDuePushes } from "@/server/push/dispatch";
 import { handlePushAnswer, inboxFeed } from "@/server/push/http";
 import { browseTasks, getBoard, getGoalDetail, getStatusSummary } from "@/server/domain/overview";
@@ -374,6 +374,13 @@ describe("tenant isolation", () => {
     expect((await inboxFeed(testDb.db, dana)).items.map((item) => [item.slug, item.requestId])).toEqual([[acme.tenant.slug, requestId]]);
     await muteWorkspace(globexOwner, {});
     await expect(openDecisions(acmeOwner, {})).resolves.toMatchObject({ muted: false });
+
+    // Answering with a device's endpoint settles only that person's push in this workspace, and
+    // the answer is taken back only by the person who gave it, never from another workspace.
+    await answerFromNotification(acmeOwner, { taskId: acmeTask.id, requestId, option: 0, endpoint: eliDevice.endpoint });
+    expect(await deliveriesOf(testDb.db, eliDevice.id)).toEqual([]);
+    await expect(undoFromNotification(globexOwner, { taskId: acmeTask.id, requestId, endpoint: eliDevice.endpoint })).rejects.toMatchObject({ code: "not_found" });
+    await expect(undoFromNotification(acmeOwner, { taskId: acmeTask.id, requestId, endpoint: danaDevice.endpoint })).resolves.toBeUndefined();
   });
 
   it("sends no Decision notification to a platform admin or someone who left the workspace", async () => {

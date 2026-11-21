@@ -12,7 +12,7 @@ import { auth } from "@/server/auth/auth";
 import { getSession } from "@/server/auth/session";
 import { getDb } from "@/server/db/client";
 import { personContext } from "@/server/domain/context";
-import { forgetDevice, registerDevice, setDeviceOptions } from "@/server/domain/notifications";
+import { forgetBrowserDevice, forgetDevice, registerDevice, setDeviceOptions, tieDevice } from "@/server/domain/notifications";
 
 export type SetPasswordResult = { ok: true } | { ok: false; message: string };
 
@@ -49,6 +49,24 @@ export async function registerDeviceAction(input: unknown): Promise<RegisterDevi
   if (!result.ok) return { ok: false, message: result.state.message ?? "Could not turn on notifications." };
   revalidatePath(routes.account());
   return { ok: true, deviceId: result.value.id, label: result.value.label };
+}
+
+/**
+ * Ties this browser's device, named by its push endpoint, to the session this request arrived on,
+ * when the app loads: a device whose session expired or was replaced ends with this one again.
+ * Quiet: nothing to report, and nothing happens without a session or for someone else's device.
+ */
+export async function tieDeviceAction(endpoint: string): Promise<void> {
+  const signedIn = await getSession();
+  if (!signedIn) return;
+  await attempt(() => tieDevice(personContext(getDb(), signedIn.user), { endpoint }, { sessionId: signedIn.session.id }));
+}
+
+/** Signing out of this browser: its device goes, whatever session it was tied to. */
+export async function forgetBrowserDeviceAction(endpoint: string): Promise<void> {
+  const signedIn = await getSession();
+  if (!signedIn) return;
+  await attempt(() => forgetBrowserDevice(personContext(getDb(), signedIn.user), { endpoint }));
 }
 
 export const forgetDeviceAction = personAction(forgetDevice);

@@ -62,11 +62,12 @@ Items are the open requests, newest first, at most 50. The desktop notifies for 
 **`POST /w/<slug>/push/answer`** (`routes.pushAnswer(slug)`). The body is `{ "taskId": "t_...", "requestId": "q_...", "option": 0 }`, or, for a text reply, `{ "taskId", "requestId", "answer": "free text" }`.
 
 - `option` is an index into the open request's options. The server reads the label from the request and never takes it from the client.
+- `endpoint` (optional) is the answering device's own push subscription endpoint, as the service worker reads it from `registration.pushManager.getSubscription()`. Every other device of everyone told about the request, the person's own included, has its notification replaced by a `resolved` push; the device named here does not, since it shows the answer it sent. Without it (the desktop, a web answer) every device is told. An endpoint that is not one of the person's own devices is ignored.
 - `200 { "answer": "Okafor", "taskTitle": "Pick the auditor", "agentName": "Scout" }` on success.
 - `409 { "error": "stale", "message": "…" }` when the request was already answered or replaced.
 - `401` for no session, and `404` for a workspace the person is not in.
 
-**`POST /w/<slug>/push/undo`**. The body is `{ "taskId", "requestId" }`. It runs `retractAnswer` and answers `200 {}`, or `409` once the agent has collected the answer.
+**`POST /w/<slug>/push/undo`**. The body is `{ "taskId", "requestId" }`, with the same optional `endpoint`. It runs `retractAnswer` and answers `200 {}`, `403` when someone else gave the answer (only the person who answered takes it back), or `409` once the agent has collected the answer. The request is open again on every device but the one named by `endpoint`, which shows it again itself.
 
 ## Web Push payload (service worker)
 
@@ -78,9 +79,14 @@ The payload is JSON, at most 3 KB. The notification `tag` is always the `request
   "answerable": true }
 ```
 
-- `options` holds at most the first two options. It is empty when the request takes several answers, or when the device has not turned on "Answer from notifications" (`answerable: false`).
+- `options` holds at most the first two options, each in full: an option is never cut. It is empty, with `answerable: false`, when the request takes several answers, when the device has not turned on "Answer from notifications", or when either of the first two options is longer than 80 characters (the person opens the request instead).
+- The service worker titles a request "Scout asks · Acme", so what follows reads as the agent's words.
 - A device marked private gets `{ "v": 1, "type": "request", "private": true, "slug", "workspaceName", "requestId", "taskId" }`, shown as "A decision is waiting in Acme".
-- When the request is closed elsewhere, the device gets `{ "v": 1, "type": "resolved", "slug", "requestId", "by": "Dana" }`. It replaces the notification with the same tag, for example "Answered by Dana".
+- When the request is closed elsewhere, the device gets `{ "v": 1, "type": "resolved", "slug", "requestId", "reason": "answered", "by": "Dana" }`. It replaces the notification with the same tag, for example "Answered by Dana".
+  - `reason` is `answered` (a person answered it), `replaced` (its agent asked a new question on the same task, which arrives as its own `request` push) or `closed` (its agent closed it, or the task was completed, released or moved on). A worker that does not know a reason treats it as a payload without one.
+  - `by` is optional, and only ever the person who answered: it is sent only with `answered`. With `closed`, the optional `closedBy` names who closed it ("Closed by Scout"); `replaced` names no one ("Replaced by a new question"). A worker that reads only `by` therefore never says an agent answered.
+  - A private device gets no `by` or `closedBy`.
+
 - A click opens `routes.request(slug, requestId)`, built from the ids and never from a URL in the payload. An action button posts `/w/<slug>/push/answer` with `option` set to the button's index. On success it shows "Sent “Okafor” to Scout" with an Undo action, which posts `/w/<slug>/push/undo`.
 - The service worker is `/sw.js` with scope `/`. Its pure logic lives in `src/lib/push.ts`.
 

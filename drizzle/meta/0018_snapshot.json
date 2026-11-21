@@ -1,5 +1,5 @@
 {
-  "id": "6c6ee85a-dbcd-4a5a-a8d3-0d231ee29d37",
+  "id": "cbe16e71-e423-449e-9cb9-5348d871b9ed",
   "prevId": "d6506f0d-bb47-4dd2-9728-f285f8bae592",
   "version": "7",
   "dialect": "postgresql",
@@ -3247,6 +3247,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "lease_token": {
+          "name": "lease_token",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "last_error": {
           "name": "last_error",
           "type": "text",
@@ -3365,7 +3371,8 @@
           "nullsNotDistinct": false,
           "columns": [
             "device_id",
-            "event_id"
+            "event_id",
+            "kind"
           ]
         }
       },
@@ -3446,6 +3453,13 @@
           "notNull": true,
           "default": 0
         },
+        "registered_at": {
+          "name": "registered_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -3467,6 +3481,12 @@
           "columns": [
             {
               "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "registered_at",
               "isExpression": false,
               "asc": true,
               "nulls": "last"

@@ -1,7 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { events, pushDeliveries, pushDevices } from "@/server/db/schema";
+import { events, pushDeliveries, pushDevices, tasks } from "@/server/db/schema";
 import { personContext, type Ctx } from "@/server/domain/context";
 import {
   answerFromNotification,
@@ -9,14 +9,17 @@ import {
   listDevices,
   muteWorkspace,
   openDecisions,
+  PUSH_MAX_DEVICES,
+  PUSH_REGISTRATIONS_PER_MINUTE,
   registerDevice,
   setDeviceOptions,
+  undoFromNotification,
   unmuteWorkspace,
 } from "@/server/domain/notifications";
 import { answerInput, captureTasks, collectAnswers, completeTask, requestInput, resolveInput, retractAnswer } from "@/server/domain/tasks";
-import { PUSH_GIVE_UP_MS, sendDuePushes } from "@/server/push/dispatch";
+import { PUSH_GIVE_UP_MS, PUSH_MAX_FAILURES, sendDuePushes } from "@/server/push/dispatch";
 import { isPushServiceHost } from "@/server/push/endpoints";
-import { PUSH_PAYLOAD_MAX_BYTES, requestPayload } from "@/server/push/payload";
+import { PUSH_OPTION_CHARS, PUSH_PAYLOAD_MAX_BYTES, requestPayload } from "@/server/push/payload";
 import { setPushScheduler } from "@/server/push/trigger";
 import type { InputRequest } from "@/lib/agent-sessions";
 
@@ -83,7 +86,9 @@ describe("devices", () => {
 
   it("moves a browser subscribed again onto the person signed in now, with its options reset and nothing queued for the one before", async () => {
     const shared = subscription();
-    const before = await deviceFor(testDb.db, dana, { endpoint: shared.endpoint, answerFromNotification: true, private: true });
+    const danaCtx = personContext(testDb.db, dana);
+    const registered = await registerDevice(danaCtx, { ...shared, label: "Chrome on Android" }, { resolve: publicResolver });
+    const before = await setDeviceOptions(danaCtx, { deviceId: registered.id, answerFromNotification: true, private: true });
     await ask();
     // Dana's device has a request queued (Scout asked; Dana did not).
     expect(await deliveriesOf(testDb.db, before.id)).toHaveLength(1);
@@ -93,6 +98,40 @@ describe("devices", () => {
     expect(after).toMatchObject({ answerFromNotification: false, private: false, label: "Shared laptop" });
     expect(await listDevices(personContext(testDb.db, dana))).toEqual([]);
     expect(await deliveriesOf(testDb.db, before.id)).toEqual([]);
+  });
+
+  it("refuses to move a device to someone posting its endpoint without its keys", async () => {
+    const theirs = await deviceFor(testDb.db, dana);
+    // Sam learned the endpoint (a log, a shoulder) but not the browser's keys.
+    await expect(registerDevice(personContext(testDb.db, sam), { ...subscription(theirs.endpoint), label: "Mine now" }, { resolve: publicResolver })).rejects.toMatchObject({ code: "forbidden" });
+    const [row] = await testDb.db.select().from(pushDevices).where(eq(pushDevices.id, theirs.id));
+    expect(row).toMatchObject({ userId: dana.id, label: "Chrome on Android" });
+    // The same person subscribing again with new keys (the browser renewed it) is fine.
+    await expect(registerDevice(personContext(testDb.db, dana), { ...subscription(theirs.endpoint), label: "Renewed" }, { resolve: publicResolver })).resolves.toMatchObject({ id: theirs.id, label: "Renewed" });
+  });
+
+  it(`keeps at most ${PUSH_MAX_DEVICES} devices a person, dropping the one turned on longest ago`, async () => {
+    const ids: string[] = [];
+    for (let index = 0; index < PUSH_MAX_DEVICES + 1; index++) {
+      ids.push((await deviceFor(testDb.db, dana, { label: `Browser ${index}` })).id);
+      // Spread over time, so the rate limit does not apply and the order is clear.
+      await testDb.db.update(pushDevices).set({ registeredAt: new Date(Date.now() - (PUSH_MAX_DEVICES + 1 - index) * 120_000) }).where(eq(pushDevices.id, ids.at(-1)!));
+    }
+    const left = (await listDevices(personContext(testDb.db, dana))).map((device) => device.id).sort();
+    expect(left).toHaveLength(PUSH_MAX_DEVICES);
+    expect(left).toEqual(ids.slice(1).sort());
+  });
+
+  it(`turns on at most ${PUSH_REGISTRATIONS_PER_MINUTE} different devices a minute, while one subscribing again always may`, async () => {
+    const devices = [];
+    for (let index = 0; index < PUSH_REGISTRATIONS_PER_MINUTE; index++) devices.push(await deviceFor(testDb.db, dana));
+    await expect(deviceFor(testDb.db, dana)).rejects.toMatchObject({ code: "invalid" });
+    const again = subscription(devices[0]!.endpoint);
+    await expect(registerDevice(personContext(testDb.db, dana), { ...again, label: "Again" }, { resolve: publicResolver })).resolves.toMatchObject({ id: devices[0]!.id });
+    // Someone else's limit is their own.
+    await expect(deviceFor(testDb.db, sam)).resolves.toMatchObject({ label: "Chrome on Android" });
+    await testDb.db.update(pushDevices).set({ registeredAt: new Date(Date.now() - 61_000) }).where(eq(pushDevices.userId, dana.id));
+    await expect(deviceFor(testDb.db, dana)).resolves.toMatchObject({ label: "Chrome on Android" });
   });
 
   it("forgets and changes only the person's own devices", async () => {
@@ -141,7 +180,7 @@ describe("routing", () => {
     }
   });
 
-  it("replaces the notification on the other devices once a person answers, and drops it where it was never sent", async () => {
+  it("replaces the notification on every device once a person answers on the web, and drops it where it was never sent", async () => {
     const push = fakePushService();
     const danaDevice = await deviceFor(testDb.db, dana);
     const samDevice = await deviceFor(testDb.db, sam);
@@ -150,16 +189,16 @@ describe("routing", () => {
     expect(push.sent.map((message) => message.body.type)).toEqual(["request", "request"]);
 
     await answerInput(ws.human, { taskId, answer: "Okafor" });
-    // Dana answered: only Sam's device is told, and by whom.
-    expect((await deliveriesOf(testDb.db, danaDevice.id)).map((row) => row.kind)).toEqual(["request"]);
+    // Dana answered on the web: her own devices are cleared too, and every device is told by whom.
+    expect((await deliveriesOf(testDb.db, danaDevice.id)).map((row) => row.kind)).toEqual(["request", "resolved"]);
     expect((await deliveriesOf(testDb.db, samDevice.id)).map((row) => row.kind)).toEqual(["request", "resolved"]);
     await sendDuePushes(testDb.db, push.deps);
-    expect(push.sent.at(-1)).toMatchObject({ topic: requestId, body: { v: 1, type: "resolved", slug: ws.tenant.slug, requestId, by: "Dana" } });
+    expect(push.sent.at(-1)).toMatchObject({ topic: requestId, body: { v: 1, type: "resolved", slug: ws.tenant.slug, requestId, reason: "answered", by: "Dana" } });
 
-    // Dana takes the answer back: the request is open again, and Sam's device hears of it again.
+    // Dana takes the answer back: the request is open again, and every device hears of it again.
     await retractAnswer(ws.human, { taskId, requestId });
     expect((await deliveriesOf(testDb.db, samDevice.id)).map((row) => row.kind)).toEqual(["request", "resolved", "request"]);
-    expect(await deliveriesOf(testDb.db, danaDevice.id)).toHaveLength(1);
+    expect((await deliveriesOf(testDb.db, danaDevice.id)).map((row) => row.kind)).toEqual(["request", "resolved", "request"]);
     // Sam answers before that push went out: it is dropped, with nothing to replace.
     await answerInput(samCtx, { taskId, answer: "Lindqvist" });
     const rows = await deliveriesOf(testDb.db, samDevice.id);
@@ -168,7 +207,60 @@ describe("routing", () => {
       ["resolved", "sent"],
       ["request", "dead"],
     ]);
-    expect(await deliveriesOf(testDb.db, danaDevice.id)).toHaveLength(1);
+  });
+
+  it("replaces the notification on every device but the one that answered from it", async () => {
+    const push = fakePushService();
+    const phone = await deviceFor(testDb.db, dana, { answerFromNotification: true });
+    const laptop = await deviceFor(testDb.db, dana, { label: "Firefox on Linux" });
+    const samDevice = await deviceFor(testDb.db, sam);
+    const { taskId, requestId } = await ask();
+    await sendDuePushes(testDb.db, push.deps);
+
+    await answerFromNotification(ws.human, { taskId, requestId, option: 0, endpoint: phone.endpoint });
+    // The phone shows "Sent", with Undo; Dana's laptop and Sam's device have theirs replaced.
+    expect((await deliveriesOf(testDb.db, phone.id)).map((row) => [row.kind, row.status])).toEqual([
+      ["request", "sent"],
+      ["resolved", "dead"],
+    ]);
+    for (const device of [laptop, samDevice]) expect((await deliveriesOf(testDb.db, device.id)).map((row) => [row.kind, row.status])).toEqual([["request", "sent"], ["resolved", "pending"]]);
+
+    // Undo from the phone: the request is open again everywhere, and the phone, which shows it already, is not sent it.
+    await undoFromNotification(ws.human, { taskId, requestId, endpoint: phone.endpoint });
+    expect((await deliveriesOf(testDb.db, phone.id)).at(-1)).toMatchObject({ kind: "request", status: "sent" });
+    await sendDuePushes(testDb.db, push.deps);
+    expect(push.sent.filter((message) => message.endpoint === phone.endpoint).map((message) => message.body.type)).toEqual(["request"]);
+    expect(push.sent.filter((message) => message.endpoint === laptop.endpoint).map((message) => message.body.type)).toEqual(["request", "resolved", "request"]);
+
+    // Someone else answers now: the phone's notification (the request again) is replaced too.
+    await answerInput(samCtx, { taskId, answer: "Lindqvist" });
+    expect((await deliveriesOf(testDb.db, phone.id)).at(-1)).toMatchObject({ kind: "resolved", status: "pending" });
+
+    // Another person's endpoint names nothing of Dana's: a web answer, or a stranger's endpoint, clears every device.
+    const second = await ask("Which bank?");
+    await sendDuePushes(testDb.db, push.deps);
+    await answerFromNotification(ws.human, { ...second, option: 0, endpoint: samDevice.endpoint });
+    for (const device of [phone, laptop, samDevice]) expect((await deliveriesOf(testDb.db, device.id)).at(-1)).toMatchObject({ kind: "resolved", requestId: second.requestId, status: "pending" });
+  });
+
+  it("pushes an agent's new question on the same task, and says the old one was replaced, not answered", async () => {
+    const push = fakePushService();
+    const device = await deviceFor(testDb.db, dana);
+    const first = await ask();
+    await sendDuePushes(testDb.db, push.deps);
+    const again = await requestInput(ws.scout.ctx, { taskId: first.taskId, kind: "decision", question: "Okafor or Brandt?", options: ["Okafor", "Brandt"] });
+    const newer = again.inputRequest!.id;
+    expect((await deliveriesOf(testDb.db, device.id)).map((row) => [row.kind, row.requestId])).toEqual([
+      ["request", first.requestId],
+      ["resolved", first.requestId],
+      ["request", newer],
+    ]);
+    await sendDuePushes(testDb.db, push.deps);
+    expect(push.sent.map((message) => message.body)).toEqual([
+      expect.objectContaining({ type: "request", requestId: first.requestId }),
+      { v: 1, type: "resolved", slug: ws.tenant.slug, requestId: first.requestId, reason: "replaced" },
+      expect.objectContaining({ type: "request", requestId: newer, question: "Okafor or Brandt?" }),
+    ]);
   });
 
   it("resolves the push when the agent closes its question or the task is completed", async () => {
@@ -183,15 +275,32 @@ describe("routing", () => {
     await completeTask(ws.scout.ctx, { taskId: second.taskId });
     await sendDuePushes(testDb.db, push.deps);
 
-    expect(push.sent.map((message) => [message.body.type, message.body.requestId, message.body.by ?? null])).toEqual([
-      ["request", first.requestId, null],
-      ["resolved", first.requestId, "Scout"],
-      ["request", second.requestId, null],
-      ["resolved", second.requestId, "Scout"],
+    // Closed by the agent, never "answered" by it: `by` is only ever a person who answered.
+    expect(push.sent.map((message) => [message.body.type, message.body.requestId, message.body.reason ?? null, message.body.by ?? null, message.body.closedBy ?? null])).toEqual([
+      ["request", first.requestId, null, null, null],
+      ["resolved", first.requestId, "closed", null, "Scout"],
+      ["request", second.requestId, null, null, null],
+      ["resolved", second.requestId, "closed", null, "Scout"],
     ]);
     // Each request is resolved once, however many changes follow.
     await captureTasks(ws.scout.ctx, { tasks: [{ title: "Unrelated" }] });
     expect((await deliveriesOf(testDb.db, device.id)).filter((row) => row.kind === "resolved")).toHaveLength(2);
+  });
+
+  it("names no one to a private device when a request closes", async () => {
+    const push = fakePushService();
+    await deviceFor(testDb.db, sam, { private: true });
+    const first = await ask();
+    await sendDuePushes(testDb.db, push.deps);
+    await answerInput(ws.human, { taskId: first.taskId, answer: "Okafor" });
+    const second = await ask("Which bank?");
+    await sendDuePushes(testDb.db, push.deps);
+    await resolveInput(ws.scout.ctx, { taskId: second.taskId });
+    await sendDuePushes(testDb.db, push.deps);
+    expect(push.sent.filter((message) => message.body.type === "resolved").map((message) => message.body)).toEqual([
+      { v: 1, type: "resolved", slug: ws.tenant.slug, requestId: first.requestId, reason: "answered" },
+      { v: 1, type: "resolved", slug: ws.tenant.slug, requestId: second.requestId, reason: "closed" },
+    ]);
   });
 });
 
@@ -223,6 +332,36 @@ describe("answering", () => {
     await expect(answerInput(ws.human, { taskId, answer: "Brandt", requestId: newer.inputRequest!.id })).rejects.toMatchObject({ code: "conflict" });
     const answered = await testDb.db.select({ data: events.data }).from(events).where(and(eq(events.entityId, taskId), eq(events.action, "task.input_answered")));
     expect(answered.map((row) => row.data.answer)).toEqual(["Brandt"]);
+  });
+
+  it("never applies ticked positions, posted for one request, to a newer one's options", async () => {
+    // What the Decisions page's multiple-choice form posts: the positions, with the request it showed.
+    const shown = await ask("Which channels?", ["Slack", "Email", "Blog"], { multiple: true });
+    await requestInput(ws.scout.ctx, { taskId: shown.taskId, kind: "decision", question: "Which regions?", options: ["EU", "US", "APAC"], multiple: true });
+    await expect(answerInput(ws.human, { taskId: shown.taskId, requestId: shown.requestId, choices: ["0", "2"] } as never)).rejects.toMatchObject({ code: "conflict" });
+    await expect(answerInput(ws.human, { taskId: shown.taskId, requestId: shown.requestId, answer: "Slack" })).rejects.toMatchObject({ code: "conflict" });
+    expect(await collectAnswers(ws.scout.ctx, {})).toEqual([]);
+  });
+
+  it("lets only the person who answered take the answer back", async () => {
+    const { taskId, requestId } = await ask();
+    await answerInput(samCtx, { taskId, answer: "Okafor", requestId });
+    await expect(retractAnswer(ws.human, { taskId, requestId })).rejects.toMatchObject({ code: "forbidden" });
+    await expect(undoFromNotification(ws.human, { taskId, requestId })).rejects.toMatchObject({ code: "forbidden" });
+    await expect(retractAnswer(samCtx, { taskId, requestId })).resolves.toMatchObject({ inputRequest: { id: requestId } });
+  });
+
+  it("lets anyone in the workspace take back an answer recorded before Phean kept who gave it", async () => {
+    const { taskId, requestId } = await ask();
+    const answered = await answerInput(samCtx, { taskId, answer: "Okafor", requestId });
+    // An answer from before: no `answeredByUserId` on the record.
+    const legacy = answered.inputAnswers.map((entry) => {
+      const copy = { ...entry };
+      delete copy.answeredByUserId;
+      return copy;
+    });
+    await testDb.db.update(tasks).set({ inputAnswers: legacy }).where(eq(tasks.id, taskId));
+    await expect(retractAnswer(ws.human, { taskId, requestId })).resolves.toMatchObject({ inputRequest: { id: requestId } });
   });
 });
 
@@ -280,12 +419,22 @@ describe("payload", () => {
   });
 
   it("never carries the context, links or anything past 3 KB, however long the agent wrote", () => {
-    const long = { ...request, question: "\u0001🪨".repeat(1000), options: ["\"".repeat(200), "é".repeat(200)], agentName: "x".repeat(80), viaAgentName: "🪨".repeat(80) };
+    const heaviest = ["\u0001".repeat(PUSH_OPTION_CHARS), "🪨".repeat(PUSH_OPTION_CHARS / 2)];
+    const long = { ...request, question: "\u0001🪨".repeat(1000), options: heaviest, agentName: "x".repeat(80), viaAgentName: "🪨".repeat(80) };
     const payload = requestPayload({ slug: "a".repeat(40), name: "🪨".repeat(80) }, "t_1", long, { answerFromNotification: true, private: false });
     const bytes = Buffer.byteLength(JSON.stringify(payload));
     expect(bytes).toBeLessThanOrEqual(PUSH_PAYLOAD_MAX_BYTES);
-    expect(payload).toMatchObject({ type: "request", answerable: true });
+    // The question is cut to fit; the buttons never are.
+    expect(payload).toMatchObject({ type: "request", answerable: true, options: heaviest });
     expect(JSON.stringify(requestPayload(workspace, "t_1", request, { answerFromNotification: true, private: false }))).not.toMatch(/Secret|example\.com|url/);
+  });
+
+  it("sends no buttons when an option is longer than a button shows, rather than a cut label", () => {
+    const wordy = { ...request, options: ["Okafor", `Lindqvist, but only if ${"they agree to the fixed fee and the March start ".repeat(2)}`] };
+    expect(wordy.options[1]!.length).toBeGreaterThan(PUSH_OPTION_CHARS);
+    expect(requestPayload(workspace, "t_1", wordy, { answerFromNotification: true, private: false })).toMatchObject({ options: [], answerable: false, question: "Which auditor?" });
+    // An option past the two buttons changes nothing.
+    expect(requestPayload(workspace, "t_1", { ...request, options: ["Okafor", "Lindqvist", "x".repeat(200)] }, { answerFromNotification: true, private: false })).toMatchObject({ options: ["Okafor", "Lindqvist"], answerable: true });
   });
 });
 
@@ -318,7 +467,7 @@ describe("dispatch", () => {
     }
   });
 
-  it("backs off after a failure and gives up after a day", async () => {
+  it("backs off after a failure, and gives up once the next try would be more than a day after the push", async () => {
     const push = fakePushService(() => 503);
     const device = await deviceFor(testDb.db, dana);
     await ask();
@@ -329,10 +478,92 @@ describe("dispatch", () => {
     // Not due yet: nothing is sent.
     await expect(sendDuePushes(testDb.db, push.deps)).resolves.toMatchObject({ failed: 0 });
 
-    await testDb.db.update(pushDeliveries).set({ createdAt: new Date(Date.now() - PUSH_GIVE_UP_MS - 1000), nextAttemptAt: new Date() }).where(eq(pushDeliveries.id, row!.id));
+    // Due again, 23 hours in, after five tries: the next would wait six hours, past the day, so this try is the last.
+    await testDb.db
+      .update(pushDeliveries)
+      .set({ createdAt: new Date(Date.now() - PUSH_GIVE_UP_MS + 60 * 60 * 1000), nextAttemptAt: new Date(), attempts: 5 })
+      .where(eq(pushDeliveries.id, row!.id));
+    await expect(sendDuePushes(testDb.db, push.deps)).resolves.toMatchObject({ failed: 1 });
+    expect(await deliveriesOf(testDb.db, device.id)).toEqual([expect.objectContaining({ status: "dead", attempts: 6, lastError: "HTTP 503" })]);
+    expect(push.sent).toHaveLength(2);
+  });
+
+  it("expires a push still queued a day on, without trying it", async () => {
+    const push = fakePushService(() => 503);
+    const device = await deviceFor(testDb.db, dana);
+    await ask();
+    await testDb.db.update(pushDeliveries).set({ createdAt: new Date(Date.now() - PUSH_GIVE_UP_MS - 1000) }).where(eq(pushDeliveries.deviceId, device.id));
+    await expect(sendDuePushes(testDb.db, push.deps)).resolves.toEqual({ sent: 0, failed: 0, dropped: 0 });
+    expect(await deliveriesOf(testDb.db, device.id)).toEqual([expect.objectContaining({ status: "dead", lastError: "expired", attempts: 0 })]);
+    expect(push.sent).toEqual([]);
+  });
+
+  it("deletes a device the push service refuses this server for, and keeps one it asks to wait", async () => {
+    for (const status of [401, 403]) {
+      const device = await deviceFor(testDb.db, dana);
+      await ask();
+      await sendDuePushes(testDb.db, fakePushService(() => status).deps);
+      expect(await testDb.db.select().from(pushDevices).where(eq(pushDevices.id, device.id)), String(status)).toEqual([]);
+    }
+    for (const status of [429, 500, 503]) {
+      const device = await deviceFor(testDb.db, sam);
+      await ask();
+      await sendDuePushes(testDb.db, fakePushService(() => status).deps);
+      expect(await deliveriesOf(testDb.db, device.id), String(status)).toEqual([expect.objectContaining({ status: "pending", attempts: 1 })]);
+      await testDb.db.delete(pushDevices).where(eq(pushDevices.id, device.id));
+    }
+  });
+
+  it(`deletes a device after ${PUSH_MAX_FAILURES} failed sends in a row`, async () => {
+    const push = fakePushService(() => 503);
+    const device = await deviceFor(testDb.db, dana);
+    await testDb.db.update(pushDevices).set({ failures: PUSH_MAX_FAILURES - 2 }).where(eq(pushDevices.id, device.id));
+    await ask();
     await sendDuePushes(testDb.db, push.deps);
-    expect(await deliveriesOf(testDb.db, device.id)).toEqual([expect.objectContaining({ status: "dead", lastError: "expired" })]);
-    expect(push.sent).toHaveLength(1);
+    expect(await testDb.db.select({ failures: pushDevices.failures }).from(pushDevices).where(eq(pushDevices.id, device.id))).toEqual([{ failures: PUSH_MAX_FAILURES - 1 }]);
+    await ask("Which bank?");
+    await sendDuePushes(testDb.db, push.deps);
+    expect(await testDb.db.select().from(pushDevices).where(eq(pushDevices.id, device.id))).toEqual([]);
+  });
+
+  it("never sends a row twice when a slow send lets another sender take over the rows after it", async () => {
+    const device = await deviceFor(testDb.db, dana);
+    await ask("Which auditor?");
+    await ask("Which bank?");
+    const [first, second] = await deliveriesOf(testDb.db, device.id);
+    const other = fakePushService();
+    let slow = true;
+    // The first send takes longer than the lease: by its end the second row's lease has run out, and another sweep takes it.
+    const push = fakePushService(() => 201);
+    const slowSend: typeof push.send = async (message) => {
+      if (slow) {
+        slow = false;
+        await testDb.db.update(pushDeliveries).set({ leaseUntil: new Date(Date.now() - 1000) }).where(eq(pushDeliveries.id, second!.id));
+        await expect(sendDuePushes(testDb.db, other.deps)).resolves.toEqual({ sent: 1, failed: 0, dropped: 0 });
+      }
+      return push.send(message);
+    };
+    await expect(sendDuePushes(testDb.db, { send: slowSend, budgetMs: 5_000 })).resolves.toEqual({ sent: 1, failed: 0, dropped: 0 });
+    expect(push.sent.map((message) => message.body.question)).toEqual(["Which auditor?"]);
+    expect(other.sent.map((message) => message.body.question)).toEqual(["Which bank?"]);
+    expect((await deliveriesOf(testDb.db, device.id)).map((row) => [row.id, row.status, row.attempts])).toEqual([
+      [first!.id, "sent", 1],
+      [second!.id, "sent", 1],
+    ]);
+  });
+
+  it("leaves a row's outcome to the sender that took it over", async () => {
+    const device = await deviceFor(testDb.db, dana);
+    await ask();
+    const [row] = await deliveriesOf(testDb.db, device.id);
+    const push = fakePushService();
+    const send: typeof push.send = async (message) => {
+      // Another sender took this row over (its lease ran out mid-send) and holds it now.
+      await testDb.db.update(pushDeliveries).set({ leaseToken: "another-sender", leaseUntil: new Date(Date.now() + 60_000) }).where(eq(pushDeliveries.id, row!.id));
+      return push.send(message);
+    };
+    await sendDuePushes(testDb.db, { send, budgetMs: 1_000 });
+    expect(await deliveriesOf(testDb.db, device.id)).toEqual([expect.objectContaining({ status: "pending", attempts: 0, leaseToken: "another-sender" })]);
   });
 
   it("sends nothing without VAPID keys, and drops a push whose request closed before it went out", async () => {

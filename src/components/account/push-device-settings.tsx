@@ -4,8 +4,9 @@ import { BellRing } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
-import { forgetDeviceAction, registerDeviceAction, setDeviceOptionsAction } from "@/app/account/actions";
+import { forgetDeviceAction, registerDeviceAction, setDeviceOptionsAction, tieDeviceAction } from "@/app/account/actions";
 import { deviceLabel } from "@/lib/device-label";
+import { PUSH_MAX_DEVICES } from "@/lib/push";
 
 import { ActionButton } from "../ui/action-button";
 import { ActionForm } from "../ui/action-form";
@@ -122,12 +123,13 @@ export function PushDeviceSettings({ publicKey, devices, canSubscribe }: PushDev
   const here = endpoint ? devices.find((device) => device.endpoint === endpoint) : undefined;
   const others = devices.filter((device) => device !== here);
 
-  // This device was turned on in a session that has since ended (a password change, say): tie it to this one.
+  // This device was turned on in a session that has since ended (it expired, say): tie it to this one.
+  // Every page load does this too (`ServiceWorker`); here the list then shows it.
   const refreshing = useRef(false);
   useEffect(() => {
-    if (!here || here.signedIn || !subscription.current || refreshing.current) return;
+    if (!here || here.signedIn || refreshing.current) return;
     refreshing.current = true;
-    void registerDeviceAction({ ...subscription.current.toJSON(), label: here.label }).then(() => router.refresh());
+    void tieDeviceAction(here.endpoint).then(() => router.refresh());
   }, [here, router]);
 
   async function turnOn() {
@@ -210,7 +212,9 @@ export function PushDeviceSettings({ publicKey, devices, canSubscribe }: PushDev
         </div>
       ) : (
         <div className="space-y-3">
-          {note("Get a notification the moment an agent asks you to decide something, from every workspace you are in.")}
+          {note(
+            `Get a notification the moment an agent asks you to decide something, from every workspace you are in. Up to ${PUSH_MAX_DEVICES} devices at once: turning on another forgets the one turned on longest ago.`,
+          )}
           {error && (
             <p role="alert" className="rounded-md border border-late/30 bg-late-tint px-3 py-2 text-sm text-late-ink">
               {error}

@@ -3,10 +3,13 @@ import { randomBytes } from "node:crypto";
 import { asc, eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { totpCode } from "../e2e/support/totp";
 import { createAuth, type Auth } from "@/server/auth/auth";
 import { pushDevices, session, verification } from "@/server/db/schema";
+import { personContext } from "@/server/domain/context";
+import { forgetBrowserDevice, tieDevice } from "@/server/domain/notifications";
 
-import { addMember, createTestDb, seedTenant, type TestDb } from "./support/db";
+import { addMember, createTestDb, seedTenant, seedUser, type TestDb } from "./support/db";
 import { jsonPost, OAUTH_BASE } from "./support/oauth";
 import { deviceFor } from "./support/push";
 
@@ -112,5 +115,110 @@ describe("devices end with their sessions", () => {
     expect(reset.status).toBe(200);
     expect(await devicesLeft(userId)).toEqual([]);
     expect(await testDb.db.select().from(session).where(eq(session.userId, userId))).toEqual([]);
+  });
+});
+
+/** A browser's cookies across requests: each response's Set-Cookie replaces or expires what it names. */
+class Jar {
+  private cookies = new Map<string, string>();
+
+  take(response: Response): Response {
+    for (const line of response.headers.getSetCookie()) {
+      const [pair = "", ...attributes] = line.split(";");
+      const [name = "", ...value] = pair.split("=");
+      const expired = attributes.some((attribute) => /^\s*max-age=0\s*$/i.test(attribute));
+      if (expired || value.join("=") === "") this.cookies.delete(name.trim());
+      else this.cookies.set(name.trim(), value.join("="));
+    }
+    return response;
+  }
+
+  get header(): string {
+    return [...this.cookies].map(([name, value]) => `${name}=${value}`).join("; ");
+  }
+}
+
+/** One signed-in browser with a device turned on in its session, whose cookies follow every rotation. */
+async function browserWithDevice() {
+  const jar = new Jar();
+  const send = async (path: string, body: unknown = {}) => jar.take(await post(path, jar.header, body));
+  const email = `${randomBytes(6).toString("hex")}@example.com`;
+  const signUp = await send("/sign-up/email", { name: "Dana", email, password: PASSWORD });
+  const { user: person } = (await signUp.json()) as { user: { id: string } };
+  await addMember(testDb.db, await seedTenant(testDb.db, `acme-${randomBytes(3).toString("hex")}`), { id: person.id, name: "Dana", email }, "owner");
+  const sessionNow = async () => (await testDb.db.select({ id: session.id }).from(session).where(eq(session.userId, person.id)).orderBy(asc(session.createdAt))).map((row) => row.id);
+  const [sessionId] = await sessionNow();
+  const device = await deviceFor(testDb.db, { id: person.id, name: "Dana" }, { sessionId });
+  const deviceSession = async () => (await testDb.db.select({ sessionId: pushDevices.sessionId }).from(pushDevices).where(eq(pushDevices.id, device.id)))[0]?.sessionId;
+  return { userId: person.id, email, device, send, sessionNow, deviceSession };
+}
+
+describe("devices follow their browser's session when it rotates", () => {
+  it("sign out after change-password with revokeOtherSessions removes the device", async () => {
+    const browser = await browserWithDevice();
+    const changed = await browser.send("/change-password", { currentPassword: PASSWORD, newPassword: "another-horse-battery", revokeOtherSessions: true });
+    expect(changed.status).toBe(200);
+    const sessions = await browser.sessionNow();
+    expect(sessions).toHaveLength(1);
+    expect(await browser.deviceSession()).toBe(sessions[0]);
+    expect((await browser.send("/sign-out")).status).toBe(200);
+    expect(await devicesLeft(browser.userId)).toEqual([]);
+  });
+
+  it("a failed password change deletes no device", async () => {
+    const { userId, browsers } = await signedInTwice();
+    const refused = await post("/change-password", browsers[0]!.cookie, { currentPassword: "not-the-password", newPassword: "another-horse-battery", revokeOtherSessions: true });
+    expect(refused.status).toBe(400);
+    expect(await devicesLeft(userId)).toEqual(browsers.map((browser) => browser.deviceId).sort());
+  });
+
+  it("turning two-factor on keeps the device with this browser's session", async () => {
+    const browser = await browserWithDevice();
+    const enabled = await browser.send("/two-factor/enable", { password: PASSWORD });
+    const { totpURI } = (await enabled.json()) as { totpURI: string };
+    expect((await browser.send("/two-factor/verify-totp", { code: totpCode(totpURI) })).status).toBe(200);
+    const sessions = await browser.sessionNow();
+    expect(sessions).toHaveLength(1);
+    expect(await browser.deviceSession()).toBe(sessions[0]);
+    expect((await browser.send("/sign-out")).status).toBe(200);
+    expect(await devicesLeft(browser.userId)).toEqual([]);
+  });
+
+  it("turning two-factor off keeps the device with this browser's session", async () => {
+    const browser = await browserWithDevice();
+    const enabled = await browser.send("/two-factor/enable", { password: PASSWORD });
+    const { totpURI } = (await enabled.json()) as { totpURI: string };
+    expect((await browser.send("/two-factor/verify-totp", { code: totpCode(totpURI) })).status).toBe(200);
+    expect((await browser.send("/two-factor/disable", { password: PASSWORD })).status).toBe(200);
+    const sessions = await browser.sessionNow();
+    expect(sessions).toHaveLength(1);
+    expect(await browser.deviceSession()).toBe(sessions[0]);
+    expect((await browser.send("/sign-out")).status).toBe(200);
+    expect(await devicesLeft(browser.userId)).toEqual([]);
+  });
+
+  it("a device whose session expired is tied again on load, and goes when that browser signs out", async () => {
+    const browser = await browserWithDevice();
+    // The session expired and its row went; the browser signs in again.
+    await testDb.db.delete(session).where(eq(session.userId, browser.userId));
+    expect(await browser.deviceSession()).toBeNull();
+    expect((await browser.send("/sign-in/email", { email: browser.email, password: PASSWORD })).status).toBe(200);
+    const [fresh] = await browser.sessionNow();
+    const person = personContext(testDb.db, { id: browser.userId, name: "Dana" });
+    await expect(tieDevice(person, { endpoint: browser.device.endpoint }, { sessionId: fresh! })).resolves.toEqual({ tied: true });
+    expect(await browser.deviceSession()).toBe(fresh);
+    expect((await browser.send("/sign-out")).status).toBe(200);
+    expect(await devicesLeft(browser.userId)).toEqual([]);
+  });
+
+  it("signing out forgets this browser's device by its endpoint, whatever session it was tied to", async () => {
+    const browser = await browserWithDevice();
+    await testDb.db.update(pushDevices).set({ sessionId: null }).where(eq(pushDevices.id, browser.device.id));
+    const stranger = await seedUser(testDb.db, "Stranger");
+    // Only the person's own device: another person's endpoint is left alone, and so is a tie to it.
+    await expect(forgetBrowserDevice(personContext(testDb.db, stranger), { endpoint: browser.device.endpoint })).resolves.toEqual({ forgotten: false });
+    await expect(tieDevice(personContext(testDb.db, stranger), { endpoint: browser.device.endpoint }, { sessionId: null })).resolves.toEqual({ tied: false });
+    await expect(forgetBrowserDevice(personContext(testDb.db, { id: browser.userId, name: "Dana" }), { endpoint: browser.device.endpoint })).resolves.toEqual({ forgotten: true });
+    expect(await devicesLeft(browser.userId)).toEqual([]);
   });
 });

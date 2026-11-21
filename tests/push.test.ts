@@ -49,7 +49,17 @@ describe("parsePushPayload", () => {
       requestId: "q_abc123",
       taskId: "t_def456",
     });
-    expect(parsed({ v: 1, type: "resolved", slug: "acme", requestId: "q_abc123", by: "Dana" })).toEqual({ type: "resolved", slug: "acme", requestId: "q_abc123", by: "Dana" });
+    expect(parsed({ v: 1, type: "resolved", slug: "acme", requestId: "q_abc123", reason: "answered", by: "Dana" })).toEqual({
+      type: "resolved",
+      slug: "acme",
+      requestId: "q_abc123",
+      reason: "answered",
+      by: "Dana",
+      closedBy: null,
+    });
+    // From a server older than the reason, and with a reason this worker does not know.
+    expect(parsed({ v: 1, type: "resolved", slug: "acme", requestId: "q_abc123", by: "Dana" })).toMatchObject({ reason: null, by: "Dana" });
+    expect(parsed({ v: 1, type: "resolved", slug: "acme", requestId: "q_abc123", reason: "exploded" })).toMatchObject({ reason: null, by: null });
   });
 
   it("keeps at most two options, and refuses what it cannot trust", () => {
@@ -70,7 +80,8 @@ describe("parsePushPayload", () => {
 describe("notificationFor", () => {
   it("shows a request with its question, tagged with the request id, and buttons when answerable", () => {
     const { title, options } = notificationFor(request());
-    expect(title).toBe("Scout in Acme");
+    // Plainly the agent's words, whatever they say.
+    expect(title).toBe("Scout asks · Acme");
     expect(options).toMatchObject({ tag: "q_abc123", body: "Which auditor?", actions: [{ action: "option-0", title: "Okafor" }, { action: "option-1", title: "Lindqvist" }] });
     expect(options.data).toMatchObject({ slug: "acme", requestId: "q_abc123", taskId: "t_def456" });
   });
@@ -93,6 +104,17 @@ describe("notificationFor", () => {
     const shown = notificationFor(parsed({ v: 1, type: "resolved", slug: "acme", requestId: "q_abc123", by: "Dana" }), previous);
     expect(shown).toMatchObject({ title: "Answered by Dana", options: { tag: "q_abc123", body: "Which auditor?", actions: [], silent: true } });
     expect(notificationFor(parsed({ v: 1, type: "resolved", slug: "acme", requestId: "q_abc123" })).title).toBe("Answered elsewhere");
+  });
+
+  it("never says an agent answered: its new question replaced the old one, or it closed it", () => {
+    const previous = notificationFor(request()).options.data;
+    const resolved = (extra: object) => notificationFor(parsed({ v: 1, type: "resolved", slug: "acme", requestId: "q_abc123", ...extra }), previous);
+    expect(resolved({ reason: "replaced" })).toMatchObject({ title: "Replaced by a new question", options: { body: "Which auditor?", silent: true } });
+    expect(resolved({ reason: "closed", closedBy: "Scout" }).title).toBe("Closed by Scout");
+    expect(resolved({ reason: "closed" }).title).toBe("Closed");
+    expect(resolved({ reason: "answered", by: "Dana" }).title).toBe("Answered by Dana");
+    // A `by` is only a person's: even sent with another reason, it is not read as one.
+    expect(resolved({ reason: "replaced", by: "Scout" }).title).toBe("Replaced by a new question");
   });
 
   it("still shows something for a payload it cannot read, as Chrome requires", () => {
@@ -123,7 +145,14 @@ describe("answering from a notification", () => {
     expect(answerCall(data(), 1)).toEqual({ path: routes.pushAnswer("acme"), body: { taskId: "t_def456", requestId: "q_abc123", option: 1 } });
     expect(answerCall(data(), 2)).toBeNull();
     expect(answerCall({ ...data(), request: null }, 0)).toBeNull();
+    // With this device's endpoint, so only the person's other devices are told.
+    expect(answerCall(data(), 0, "https://fcm.googleapis.com/fcm/send/abc")).toEqual({
+      path: routes.pushAnswer("acme"),
+      body: { taskId: "t_def456", requestId: "q_abc123", option: 0, endpoint: "https://fcm.googleapis.com/fcm/send/abc" },
+    });
+    expect(undoCall(data(), "https://fcm.googleapis.com/fcm/send/abc")?.body).toMatchObject({ endpoint: "https://fcm.googleapis.com/fcm/send/abc" });
   });
+
 
   it("says what it sent and to whom, with Undo", () => {
     const sent = answeredNotification(data(), { answer: "Okafor", taskTitle: "Pick the auditor", agentName: "Scout" });

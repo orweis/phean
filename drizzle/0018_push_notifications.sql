@@ -10,11 +10,12 @@ CREATE TABLE "push_deliveries" (
 	"attempts" integer DEFAULT 0 NOT NULL,
 	"next_attempt_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"lease_until" timestamp with time zone,
+	"lease_token" text,
 	"last_error" text,
 	"closed_at" timestamp with time zone,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"sent_at" timestamp with time zone,
-	CONSTRAINT "push_deliveries_event_uq" UNIQUE("device_id","event_id")
+	CONSTRAINT "push_deliveries_event_uq" UNIQUE("device_id","event_id","kind")
 );
 --> statement-breakpoint
 CREATE TABLE "push_devices" (
@@ -29,6 +30,7 @@ CREATE TABLE "push_devices" (
 	"session_id" text,
 	"last_success_at" timestamp with time zone,
 	"failures" integer DEFAULT 0 NOT NULL,
+	"registered_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "push_devices_endpoint_unique" UNIQUE("endpoint")
@@ -50,5 +52,5 @@ ALTER TABLE "push_mutes" ADD CONSTRAINT "push_mutes_tenant_id_organization_id_fk
 ALTER TABLE "push_mutes" ADD CONSTRAINT "push_mutes_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "push_deliveries_due_idx" ON "push_deliveries" USING btree ("status","next_attempt_at");--> statement-breakpoint
 CREATE INDEX "push_deliveries_task_idx" ON "push_deliveries" USING btree ("tenant_id","task_id");--> statement-breakpoint
-CREATE INDEX "push_devices_user_idx" ON "push_devices" USING btree ("user_id");--> statement-breakpoint
+CREATE INDEX "push_devices_user_idx" ON "push_devices" USING btree ("user_id","registered_at");--> statement-breakpoint
 CREATE INDEX "push_devices_session_idx" ON "push_devices" USING btree ("session_id");

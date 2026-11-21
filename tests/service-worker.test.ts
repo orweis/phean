@@ -45,7 +45,7 @@ function response({ status, body = "", type = "basic", redirected = false }: Rep
 }
 
 /** Runs the committed `public/sw.js` in a sandbox with a fake worker scope, and records what it does. */
-function worker(network: (url: string, init?: RequestInit) => Reply | "offline" = () => ({ status: 200, body: "<p>page</p>" })) {
+function worker(network: (url: string, init?: RequestInit) => Reply | "offline" = () => ({ status: 200, body: "<p>page</p>" }), { endpoint }: { endpoint?: string } = {}) {
   const listeners = new Map<string, Listener>();
   const caches = new Map<string, Map<string, Response>>();
   const fetches: { url: string; init?: RequestInit }[] = [];
@@ -78,6 +78,7 @@ function worker(network: (url: string, init?: RequestInit) => Reply | "offline" 
     registration: {
       showNotification: async (title: string, options: Record<string, unknown>) => void shown.push({ title, options: JSON.parse(JSON.stringify(options)) }),
       getNotifications: async ({ tag }: { tag: string }) => shown.filter((item) => item.options.tag === tag).slice(-1).map((item) => ({ data: item.options.data, close() {} })),
+      ...(endpoint && { pushManager: { getSubscription: async () => ({ endpoint }) } }),
     },
     clients: {
       matchAll: async () => windows,
@@ -179,7 +180,7 @@ describe("public/sw.js", () => {
     await sw.push(PUSH);
     expect(sw.shown).toHaveLength(1);
     expect(sw.shown[0]).toMatchObject({
-      title: "Scout in Acme",
+      title: "Scout asks · Acme",
       options: { tag: "q_abc123", body: "Which auditor?", actions: [{ action: "option-0", title: "Okafor" }, { action: "option-1", title: "Lindqvist" }] },
     });
   });
@@ -221,7 +222,22 @@ describe("public/sw.js", () => {
     expect(sw.opened).toEqual([]);
   });
 
+  it("names its own device by its push endpoint when it answers and undoes", async () => {
+    const endpoint = "https://fcm.googleapis.com/fcm/send/this-phone";
+    const sw = worker(
+      (url) => (url === routes.pushAnswer("acme") ? { status: 200, body: { answer: "Okafor", taskTitle: "Pick the auditor", agentName: "Scout" } } : { status: 200, body: {} }),
+      { endpoint },
+    );
+    await sw.push(PUSH);
+    await sw.click(sw.shown[0]!.options.data, "option-0");
+    await sw.click(sw.shown.at(-1)!.options.data, "undo");
+    const body = (path: string) => JSON.parse(sw.fetches.find((item) => item.url === path)!.init!.body as string);
+    expect(body(routes.pushAnswer("acme"))).toEqual({ taskId: "t_def456", requestId: "q_abc123", option: 0, endpoint });
+    expect(body(routes.pushUndo("acme"))).toEqual({ taskId: "t_def456", requestId: "q_abc123", endpoint });
+  });
+
   it("says so when the request was already answered", async () => {
+
     const sw = worker(() => ({ status: 409, body: { error: "stale", message: "Dana answered this first." } }));
     await sw.push(PUSH);
     await sw.click(sw.shown[0]!.options.data, "option-0");
@@ -238,7 +254,7 @@ describe("public/sw.js", () => {
     const call = sw.fetches.find((item) => item.url === routes.pushUndo("acme"))!;
     expect(call.init).toMatchObject({ method: "POST", headers: PUSH_CLIENT_HEADERS });
     expect(JSON.parse(call.init!.body as string)).toEqual({ taskId: "t_def456", requestId: "q_abc123" });
-    expect(sw.shown.at(-1)).toMatchObject({ title: "Scout in Acme", options: { actions: [{ title: "Okafor" }, { title: "Lindqvist" }] } });
+    expect(sw.shown.at(-1)).toMatchObject({ title: "Scout asks · Acme", options: { actions: [{ title: "Okafor" }, { title: "Lindqvist" }] } });
   });
 
   it("does nothing when a notification is dismissed", async () => {

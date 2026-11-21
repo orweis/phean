@@ -1,21 +1,29 @@
-import { and, count, desc, eq, inArray, ne, sql } from "drizzle-orm";
+import { timingSafeEqual } from "node:crypto";
+
+import { and, count, desc, eq, gt, inArray, ne, notInArray, sql } from "drizzle-orm";
 
 import { askerName, type RequestKind } from "@/lib/agent-sessions";
 import { roleCan } from "@/lib/permissions";
+import { PUSH_MAX_DEVICES } from "@/lib/push";
+
 
 import { newId } from "../db/ids";
 import type { Db } from "../db/client";
 import { pushDeliveries, pushDevices, pushMutes, session, tasks } from "../db/schema";
 import { assertPushEndpointSafe, UnsafePushEndpoint } from "../push/endpoints";
-import { encryptSecret } from "../webhooks/signing";
+import { decryptSecret, encryptSecret } from "../webhooks/signing";
 import type { Resolver } from "../webhooks/url-safety";
-import { inTenant, type Ctx, type PersonCtx } from "./context";
+import { inTenant, inTransaction, type Ctx, type PersonCtx } from "./context";
 import { forbidden, invalid, notFound } from "./errors";
 import { assertCan } from "./policy";
-import { DeviceOptionsInput, DeviceRefInput, Empty, NotificationAnswerInput, RegisterDeviceInput } from "./schemas";
+import { DeviceEndpointInput, DeviceOptionsInput, DeviceRefInput, Empty, NotificationAnswerInput, NotificationUndoInput, RegisterDeviceInput } from "./schemas";
 import { personService, service } from "./service";
-import { answerInput, findTask, isAwaitingInput } from "./tasks";
+import { answerInput, findTask, isAwaitingInput, retractAnswer } from "./tasks";
 import { listMemberships } from "./tenants";
+
+export { PUSH_MAX_DEVICES };
+/** Different devices one person may turn on in a minute. */
+export const PUSH_REGISTRATIONS_PER_MINUTE = 5;
 
 /** A device as its person sees it on the Account page. */
 export interface PushDevice {
@@ -51,16 +59,38 @@ export interface RegisterContext {
 
 const DEFAULT_LABEL = "This browser";
 
+/** Whether a stored key (encrypted) is the one posted. A key the server can no longer read matches anything: that row can never be sent to again. */
+function sameKey(ciphertext: string, posted: string): boolean {
+  let stored: Buffer;
+  try {
+    stored = Buffer.from(decryptSecret(ciphertext), "base64url");
+  } catch {
+    return true;
+  }
+  const sent = Buffer.from(posted, "base64url");
+  return stored.length === sent.length && timingSafeEqual(stored, sent);
+}
+
 /**
  * Turns on Decision notifications for this browser: its push subscription, for the person signed in.
  * Subscribing again from the same browser moves the device onto that person (with its options
  * reset and anything still queued for the one before dropped), so a shared browser never shows the
- * previous person's decisions. The person must be a member somewhere: notifications are a member's.
+ * previous person's decisions; only the browser holding the subscription's keys can, so knowing an
+ * endpoint is not enough to take someone's device. The person must be a member somewhere:
+ * notifications are a member's. A person keeps at most `PUSH_MAX_DEVICES` (the oldest goes) and
+ * turns on at most `PUSH_REGISTRATIONS_PER_MINUTE` different ones a minute.
  */
 export const registerDevice = personService(RegisterDeviceInput, async (ctx: PersonCtx, input, extra?: RegisterContext): Promise<PushDevice> => {
   const memberships = await listMemberships(ctx.db, ctx.person.id);
   if (!memberships.some((membership) => roleCan(membership.role, "notify:subscribe"))) {
     throw forbidden("Join a workspace first: notifications are for the decisions waiting on you there.");
+  }
+  const [recent] = await ctx.db
+    .select({ n: count() })
+    .from(pushDevices)
+    .where(and(eq(pushDevices.userId, ctx.person.id), ne(pushDevices.endpoint, input.endpoint), gt(pushDevices.registeredAt, sql`now() - interval '1 minute'`)));
+  if ((recent?.n ?? 0) >= PUSH_REGISTRATIONS_PER_MINUTE) {
+    throw invalid("You turned notifications on for several devices just now. Wait a minute, then try again.");
   }
   try {
     await assertPushEndpointSafe(input.endpoint, { resolve: extra?.resolve });
@@ -73,23 +103,64 @@ export const registerDevice = personService(RegisterDeviceInput, async (ctx: Per
   const sessionId = extra?.sessionId ?? null;
 
   return ctx.db.transaction(async (tx) => {
-    const [previous] = await tx.select({ id: pushDevices.id, userId: pushDevices.userId }).from(pushDevices).where(eq(pushDevices.endpoint, input.endpoint)).for("update");
-    if (previous && previous.userId !== ctx.person.id) {
+    const [previous] = await tx
+      .select({ id: pushDevices.id, userId: pushDevices.userId, p256dh: pushDevices.p256dhCiphertext, auth: pushDevices.authCiphertext })
+      .from(pushDevices)
+      .where(eq(pushDevices.endpoint, input.endpoint))
+      .for("update");
+    const moved = previous && previous.userId !== ctx.person.id;
+    if (moved) {
+      if (!sameKey(previous.p256dh, input.keys.p256dh) || !sameKey(previous.auth, input.keys.auth)) {
+        throw forbidden("This browser's notifications belong to someone else. Turn them off there first, or subscribe again from this browser.");
+      }
       await tx.delete(pushDeliveries).where(and(eq(pushDeliveries.deviceId, previous.id), eq(pushDeliveries.status, "pending")));
     }
-    const moved = previous && previous.userId !== ctx.person.id;
+    const registeredAt = new Date();
     const [device] = previous
       ? await tx
           .update(pushDevices)
-          .set({ userId: ctx.person.id, ...keys, label, sessionId, failures: 0, ...(moved && { answerFromNotification: false, private: false, lastSuccessAt: null }) })
+          .set({ userId: ctx.person.id, ...keys, label, sessionId, failures: 0, registeredAt, ...(moved && { answerFromNotification: false, private: false, lastSuccessAt: null }) })
           .where(eq(pushDevices.id, previous.id))
           .returning(deviceColumns)
       : await tx
           .insert(pushDevices)
-          .values({ id: newId("pd"), userId: ctx.person.id, endpoint: input.endpoint, ...keys, label, sessionId })
+          .values({ id: newId("pd"), userId: ctx.person.id, endpoint: input.endpoint, ...keys, label, sessionId, registeredAt })
           .returning(deviceColumns);
+    // The newest `PUSH_MAX_DEVICES` stay; a device left behind long ago goes first.
+    const kept = tx
+      .select({ id: pushDevices.id })
+      .from(pushDevices)
+      .where(eq(pushDevices.userId, ctx.person.id))
+      .orderBy(desc(pushDevices.registeredAt), desc(pushDevices.id))
+      .limit(PUSH_MAX_DEVICES);
+    await tx.delete(pushDevices).where(and(eq(pushDevices.userId, ctx.person.id), notInArray(pushDevices.id, kept)));
     return { ...device!, signedIn: sessionId !== null };
   });
+});
+
+/**
+ * Ties this browser's device to the session it is signed in with now, when the app loads: a device
+ * whose session expired or was replaced then ends with this one. Only the person's own device; an
+ * endpoint of anyone else's is left alone.
+ */
+export const tieDevice = personService(DeviceEndpointInput, async (ctx, { endpoint }, extra?: { sessionId: string | null }): Promise<{ tied: boolean }> => {
+  const sessionId = extra?.sessionId ?? null;
+  if (!sessionId) return { tied: false };
+  const [own] = await ctx.db
+    .update(pushDevices)
+    .set({ sessionId })
+    .where(and(eq(pushDevices.endpoint, endpoint), eq(pushDevices.userId, ctx.person.id), sql`${pushDevices.sessionId} is distinct from ${sessionId}`))
+    .returning({ id: pushDevices.id });
+  return { tied: Boolean(own) };
+});
+
+/** Signing out of this browser forgets its device by endpoint, whatever session it was tied to. */
+export const forgetBrowserDevice = personService(DeviceEndpointInput, async (ctx, { endpoint }): Promise<{ forgotten: boolean }> => {
+  const gone = await ctx.db
+    .delete(pushDevices)
+    .where(and(eq(pushDevices.endpoint, endpoint), eq(pushDevices.userId, ctx.person.id)))
+    .returning({ id: pushDevices.id });
+  return { forgotten: gone.length > 0 };
 });
 
 /** The person's devices, newest first. */
@@ -128,6 +199,25 @@ export async function forgetSessionDevices(db: Db, sessionIds: readonly string[]
   if (sessionIds.length === 0) return 0;
   const gone = await db.delete(pushDevices).where(inArray(pushDevices.sessionId, [...sessionIds])).returning({ id: pushDevices.id });
   return gone.length;
+}
+
+/** The devices turned on in these sessions. */
+export async function devicesOfSessions(db: Db, sessionIds: readonly string[]): Promise<string[]> {
+  if (sessionIds.length === 0) return [];
+  const rows = await db.select({ id: pushDevices.id }).from(pushDevices).where(inArray(pushDevices.sessionId, [...sessionIds]));
+  return rows.map((row) => row.id);
+}
+
+/** Deletes these devices of the person, read before their sessions went. */
+export async function forgetDevicesById(db: Db, userId: string, deviceIds: readonly string[]): Promise<void> {
+  if (deviceIds.length === 0) return;
+  await db.delete(pushDevices).where(and(eq(pushDevices.userId, userId), inArray(pushDevices.id, [...deviceIds])));
+}
+
+/** A session Better Auth replaced with a new one: its devices now end with the new one. */
+export async function moveDevicesToSession(db: Db, userId: string, deviceIds: readonly string[], sessionId: string): Promise<void> {
+  if (deviceIds.length === 0) return;
+  await db.update(pushDevices).set({ sessionId }).where(and(eq(pushDevices.userId, userId), inArray(pushDevices.id, [...deviceIds])));
 }
 
 /** A password reset ends every device of the person, whatever session turned it on. */
@@ -262,20 +352,61 @@ export interface NotificationAnswer {
  * so the label always comes from the request, never from the device. Only that request is answered
  * (`answerInput` refuses a stale one). A request that takes several answers has no buttons.
  */
-export const answerFromNotification = service(NotificationAnswerInput, async (ctx, { taskId, requestId, option, answer: written }): Promise<NotificationAnswer> => {
+export const answerFromNotification = service(NotificationAnswerInput, async (ctx, { taskId, requestId, option, answer: written, endpoint }): Promise<NotificationAnswer> => {
   assertCan(ctx, "task:write");
   personOf(ctx);
-  const current = await findTask(ctx, taskId);
-  const open = current.inputRequest;
-  let answer = written;
-  if (option !== undefined) {
-    if (open && open.id === requestId) {
-      if (open.multiple) throw invalid(`${open.agentName} asked for several answers. Open the decision in Phean to pick them.`);
-      answer = open.options[option];
-      if (answer === undefined) throw invalid("That option is not on the request.");
+  return inTransaction(ctx, async (tx) => {
+    const current = await findTask(tx, taskId, { lock: true });
+    const open = current.inputRequest;
+    let answer = written;
+    if (option !== undefined) {
+      if (open && open.id === requestId) {
+        if (open.multiple) throw invalid(`${open.agentName} asked for several answers. Open the decision in Phean to pick them.`);
+        answer = open.options[option];
+        if (answer === undefined) throw invalid("That option is not on the request.");
+      }
     }
-  }
-  // A stale request id, or none open, is refused by answerInput itself (conflict).
-  await answerInput(ctx, { taskId, requestId, answer: answer ?? "" });
-  return { answer: answer ?? "", taskTitle: current.title, agentName: open ? askerName(open) : "" };
+    // A stale request id, or none open, is refused by answerInput itself (conflict).
+    await answerInput(tx, { taskId, requestId, answer: answer ?? "" });
+    // The answering device shows "Sent", with Undo: only the others have theirs replaced.
+    if (endpoint) await settleOnDevice(tx, endpoint, requestId, "resolved");
+    return { answer: answer ?? "", taskTitle: current.title, agentName: open ? askerName(open) : "" };
+  });
 });
+
+/**
+ * Undo from a notification: `retractAnswer`, and the request is open again on every device but the
+ * one that undid it, which shows the request itself.
+ */
+export const undoFromNotification = service(NotificationUndoInput, async (ctx, { taskId, requestId, endpoint }): Promise<void> => {
+  assertCan(ctx, "task:write");
+  personOf(ctx);
+  await inTransaction(ctx, async (tx) => {
+    await retractAnswer(tx, { taskId, requestId });
+    if (endpoint) await settleOnDevice(tx, endpoint, requestId, "request");
+  });
+});
+
+/**
+ * The push the acting device needs no more, queued in this transaction (the sender starts after
+ * commit): its own `resolved` is dropped, and its `request` counts as shown, so a later answer
+ * elsewhere still replaces it. Only the acting person's own device, named by its endpoint.
+ */
+async function settleOnDevice(tx: Ctx, endpoint: string, requestId: string, kind: "request" | "resolved"): Promise<void> {
+  const own = tx.db
+    .select({ id: pushDevices.id })
+    .from(pushDevices)
+    .where(and(eq(pushDevices.endpoint, endpoint), eq(pushDevices.userId, personOf(tx))));
+  await tx.db
+    .update(pushDeliveries)
+    .set(kind === "resolved" ? { status: "dead", lastError: "answered_here" } : { status: "sent", sentAt: new Date(), lastError: null })
+    .where(
+      and(
+        inTenant(tx, pushDeliveries),
+        eq(pushDeliveries.requestId, requestId),
+        eq(pushDeliveries.kind, kind),
+        eq(pushDeliveries.status, "pending"),
+        inArray(pushDeliveries.deviceId, own),
+      ),
+    );
+}
