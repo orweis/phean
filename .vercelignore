@@ -1,0 +1,2 @@
+# The native apps build in their own CI jobs, never on Vercel.
+apps/
