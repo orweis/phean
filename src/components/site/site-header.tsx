@@ -94,7 +94,7 @@ function SheetGroup({ group }: { group: SiteGroup }) {
  */
 export async function SiteHeader({ current, wide = true }: { current: SiteSection; wide?: boolean }) {
   const session = await getSession();
-  const start = session ? { href: routes.workspaces(), label: "Open Phean" } : { href: routes.signUp(), label: "Get started" };
+  const start = session ? { href: routes.app(), label: "Open Phean" } : { href: routes.signUp(), label: "Get started" };
 
   return (
     <header className="glass-bar text-ink">
