@@ -1,0 +1,19 @@
+// The Phean Android app: a Trusted Web Activity on android-browser-helper (see README.md).
+pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+dependencyResolutionManagement {
+    repositoriesMode = RepositoriesMode.FAIL_ON_PROJECT_REPOS
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+rootProject.name = "phean-android"
+include ":app"

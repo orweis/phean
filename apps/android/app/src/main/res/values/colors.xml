@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+        Dusk's paper in each appearance: THEME_PAPER.dusk in orweis/phean's src/lib/themes.ts, the
+        colours the web app's manifest and theme-color metas use. Keep them in step.
+    -->
+    <color name="paper">#F3EFEA</color>
+    <color name="paperDark">#0E1017</color>
+
+    <!-- The app icon's dusk tile and mark, the sRGB of the dark-appearance tokens (src/app/icon.svg). -->
+    <color name="tileTop">#3B296B</color>
+    <color name="tileBottom">#211541</color>
+    <color name="hill">#8D71E6</color>
+    <color name="boulderShade">#D96533</color>
+    <color name="boulderLit">#FA934E</color>
+</resources>

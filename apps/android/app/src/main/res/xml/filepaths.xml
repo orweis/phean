@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The splash image android-browser-helper writes for Chrome to show while Phean loads. -->
+<paths>
+    <files-path name="twa_splash" path="twa_splash/" />
+</paths>

@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The splash image while Chrome opens Phean: the app icon's rounded dusk tile (src/app/icon.svg). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="144dp"
+    android:height="144dp"
+    android:viewportWidth="32"
+    android:viewportHeight="32">
+    <group>
+    <clip-path android:pathData="M7.5,0H24.5A7.5,7.5 0,0 1,32 7.5V24.5A7.5,7.5 0,0 1,24.5 32H7.5A7.5,7.5 0,0 1,0 24.5V7.5A7.5,7.5 0,0 1,7.5 0Z" />
+    <path android:pathData="M0,0h32v32h-32z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:endColor="@color/tileBottom"
+                android:endX="0"
+                android:endY="32"
+                android:startColor="@color/tileTop"
+                android:startX="0"
+                android:startY="0"
+                android:type="linear" />
+        </aapt:attr>
+    </path>
+    <path
+        android:fillColor="@color/hill"
+        android:pathData="M-1,30.05L1,30C13,29.5 23,22 31,5L32.5,1.8V33H-1Z" />
+    <path
+        android:fillColor="@color/boulderShade"
+        android:pathData="M6.25,19.17a6.4,6.4 0,1 0,12.8 0a6.4,6.4 0,1 0,-12.8 0Z" />
+    <path
+        android:fillColor="@color/boulderLit"
+        android:pathData="M6.4,20.53A6.4,6.4 0,0 1,15.71 13.55A5.9,5.9 0,1 1,6.4 20.53Z" />
+    </group>
+</vector>

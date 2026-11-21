@@ -1,0 +1,107 @@
+plugins {
+    id "com.android.application"
+}
+
+// The deployment the app opens (gradle.properties, or -Pphean.host=...): a bare host name.
+def pheanHost = providers.gradleProperty("phean.host").get()
+if (!(pheanHost ==~ /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/)) {
+    throw new GradleException("phean.host must be a host name such as phean.example, not '${pheanHost}'")
+}
+
+// versionCode = major * 10000 + minor * 100 + patch, from phean.version (PLAN.md §5).
+def pheanVersion = providers.gradleProperty("phean.version").get()
+def versionParts = (pheanVersion =~ /^(\d+)\.(\d+)\.(\d+)$/)
+if (!versionParts.matches()) throw new GradleException("phean.version must be major.minor.patch, not '${pheanVersion}'")
+def (major, minor, patch) = (1..3).collect { versionParts.group(it) as int }
+if (minor > 99 || patch > 99) throw new GradleException("phean.version's minor and patch must be below 100")
+
+// Release signing comes only from the environment (a CI secret, or the owner's machine); there is
+// no keystore in the repository. Without these variables a release build is left unsigned.
+def releaseKeystore = System.getenv("PHEAN_ANDROID_KEYSTORE")
+
+android {
+    namespace = "app.phean"
+    compileSdk = 36
+
+    buildFeatures {
+        // The asset statement below names the host, which is a build property.
+        resValues = true
+    }
+
+    defaultConfig {
+        applicationId = "app.phean"
+        minSdk = 26
+        targetSdk = 36
+        versionCode = major * 10000 + minor * 100 + patch
+        versionName = pheanVersion
+
+        // The manifest's App Links host and launch URL.
+        manifestPlaceholders = [hostName: pheanHost]
+
+        // The app's half of Digital Asset Links: it trusts this origin. Phean's
+        // /.well-known/assetlinks.json is the other half.
+        resValue("string", "assetStatements",
+            '[{\\"relation\\": [\\"delegate_permission/common.handle_all_urls\\"], \\"target\\": {\\"namespace\\": \\"web\\", \\"site\\": \\"https://' + pheanHost + '\\"}}]')
+        resValue("string", "providerAuthority", "app.phean.fileprovider")
+    }
+
+    signingConfigs {
+        if (releaseKeystore) {
+            release {
+                storeFile = file(releaseKeystore)
+                storePassword = System.getenv("PHEAN_ANDROID_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("PHEAN_ANDROID_KEY_ALIAS")
+                keyPassword = System.getenv("PHEAN_ANDROID_KEY_PASSWORD")
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
+            if (releaseKeystore) signingConfig = signingConfigs.release
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    lint {
+        abortOnError = true
+        checkReleaseBuilds = true
+    }
+}
+
+dependencies {
+    implementation "com.google.androidbrowserhelper:androidbrowserhelper:2.7.4"
+}
+
+// Fail unless the exported components, permissions, cleartext and backup settings are the ones
+// README.md lists, in the source manifest and in the manifest merged with the libraries'.
+// The script sits beside this project (scripts/) or, in the apps repository, at its root (../scripts/).
+def manifestScript = [rootProject.file("scripts/check-manifest.mjs"), rootProject.file("../scripts/check-manifest.mjs")].find { it.exists() }
+def resDir = file("src/main/res")
+
+tasks.register("checkSourceManifest", Exec) {
+    group = "verification"
+    def manifest = file("src/main/AndroidManifest.xml")
+    inputs.files(manifestScript, manifest)
+    commandLine "node", manifestScript, manifest, "--res", resDir
+}
+
+tasks.register("checkMergedManifest", Exec) {
+    group = "verification"
+    dependsOn "processDebugMainManifest"
+    def merged = layout.buildDirectory.file("intermediates/merged_manifest/debug/processDebugMainManifest/AndroidManifest.xml")
+    inputs.files(manifestScript, merged)
+    commandLine "node", manifestScript, merged.get().asFile, "--res", resDir, "--host", pheanHost
+}
+
+tasks.register("checkManifest") {
+    group = "verification"
+    description = "Checks the source and merged manifests against the security checklist (README.md)."
+    dependsOn "checkSourceManifest", "checkMergedManifest"
+}
