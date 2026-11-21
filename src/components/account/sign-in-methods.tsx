@@ -17,6 +17,7 @@ import { Button } from "../ui/button";
 import { Field, Input } from "../ui/field";
 import { Popover, PopoverCancel, usePopover } from "../ui/popover";
 import { useStatus } from "../ui/status-region";
+import { useDesktopShell } from "../use-desktop-shell";
 
 export interface ProviderMethod {
   id: SocialProvider;
@@ -167,8 +168,20 @@ export function SignInMethods({ email, password, providers }: SignInMethodsProps
   const connectedCount = (password.connectedAt ? 1 : 0) + providers.filter((provider) => provider.connectedAt).length;
   const onlyOne = connectedCount <= 1;
 
+  // The desktop app never shows a provider's page, so connecting one happens on this page in the system browser.
+  const desktop = useDesktopShell();
+
   const connect = (provider: SocialProvider) =>
     startTransition(async () => {
+      if (desktop) {
+        try {
+          await desktop.openInBrowser(routes.account());
+          report(`Opened your account in your browser: connect ${PROVIDER_LABELS[provider]} there`);
+        } catch {
+          report(`Could not open your browser. Connect ${PROVIDER_LABELS[provider]} from ${routes.account()} in a browser.`, "error");
+        }
+        return;
+      }
       // On success the browser leaves for the provider and comes back to this page.
       const { error } = await authClient.linkSocial({ provider, callbackURL: `${routes.account()}?connected=${provider}`, errorCallbackURL: routes.account() });
       if (error) report(authErrorMessage(error, `Could not reach ${PROVIDER_LABELS[provider]}. Try again.`), "error");
@@ -241,7 +254,7 @@ export function SignInMethods({ email, password, providers }: SignInMethodsProps
               </Button>
             ) : (
               provider.available && (
-                <Button size="sm" variant="tinted" disabled={pending} aria-label={`Connect ${name}`} onClick={() => connect(provider.id)}>
+                <Button size="sm" variant="tinted" disabled={pending} aria-label={desktop ? `Connect ${name} in your browser` : `Connect ${name}`} onClick={() => connect(provider.id)}>
                   Connect
                 </Button>
               )
