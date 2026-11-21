@@ -275,8 +275,16 @@ function queryStringOf(params) {
             query.append(key, item);
     return query.toString();
 }
+const SAME_ORIGIN_PROBE = "https://phean.invalid";
 function safeNextPath(next, fallback = exports.routes.workspaces()) {
-    return next && /^\/(?![/\\])/.test(next) ? next : fallback;
+    if (!next || !/^\/(?![/\\])/.test(next) || /[\u0000-\u001f\u007f]/.test(next))
+        return fallback;
+    try {
+        return new URL(next, SAME_ORIGIN_PROBE).origin === SAME_ORIGIN_PROBE ? next : fallback;
+    }
+    catch {
+        return fallback;
+    }
 }
 },
 "./service-worker": function (exports, require) {

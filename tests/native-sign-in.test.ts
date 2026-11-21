@@ -7,7 +7,7 @@ import { totpCode } from "../e2e/support/totp";
 import nextConfig from "../next.config";
 import { routes } from "@/lib/routes";
 import { createAuth, type Auth } from "@/server/auth/auth";
-import { decideNativeRequest, findNativeRequest, isLoopbackCallback, NATIVE_CODE_SECONDS, NATIVE_EXCHANGE_LIMIT, NATIVE_START_LIMIT, nativeConfirmRoute } from "@/server/auth/native";
+import { decideNativeRequest, findNativeRequest, isLoopbackCallback, NATIVE_CODE_SECONDS, NATIVE_EXCHANGE_LIMIT, NATIVE_REQUEST_SECONDS, NATIVE_START_LIMIT, nativeConfirmRoute } from "@/server/auth/native";
 import { session as sessionTable } from "@/server/db/schema/auth";
 
 import { createTestDb, type TestDb } from "./support/db";
@@ -106,7 +106,7 @@ describe("the desktop's browser sign-in", () => {
     const person = await signedUp();
     const { requestId, confirmation, expiresAt, verifier } = await started();
     expect(confirmation).toMatch(/^[A-Z2-9]{4}$/);
-    expect(new Date(expiresAt).getTime() - Date.now()).toBeLessThanOrEqual(120_000);
+    expect(new Date(expiresAt).getTime() - Date.now()).toBeLessThanOrEqual(NATIVE_REQUEST_SECONDS * 1000);
     expect(await findNativeRequest(auth, requestId)).toEqual({ confirmation });
 
     const code = await confirmed(person.jar, requestId);
@@ -131,7 +131,7 @@ describe("the desktop's browser sign-in", () => {
     expect(await findNativeRequest(auth, requestId)).toBeNull();
   });
 
-  it("refuses a request it does not know, one already used, and one past its two minutes", async () => {
+  it("refuses a request it does not know, one already used, and one past its lifetime", async () => {
     const person = await signedUp();
     const unknown = randomBytes(32).toString("base64url");
     expect(await findNativeRequest(auth, unknown)).toBeNull();
@@ -146,7 +146,7 @@ describe("the desktop's browser sign-in", () => {
 
     const stale = await started();
     vi.useFakeTimers({ toFake: ["Date"] });
-    vi.setSystemTime(Date.now() + 121_000);
+    vi.setSystemTime(Date.now() + (NATIVE_REQUEST_SECONDS + 1) * 1000);
     try {
       expect(await findNativeRequest(auth, stale.requestId)).toBeNull();
       expect(await decideNativeRequest(auth, { requestId: stale.requestId, userId: person.id, allow: true })).toBeNull();
@@ -226,7 +226,8 @@ describe("the desktop's browser sign-in", () => {
       { ...DESKTOP, "phean-client": "web" },
       { ...DESKTOP, origin: BASE },
       { ...DESKTOP, "sec-fetch-site": "same-origin" },
-      { ...DESKTOP, "sec-fetch-site": "none" },
+      { ...DESKTOP, "sec-fetch-site": "cross-site" },
+      { ...DESKTOP, "sec-fetch-site": "none", origin: BASE },
       { ...DESKTOP, "content-type": "text/plain" },
       { ...DESKTOP, cookie: header(person.jar) },
     ]) {
@@ -237,8 +238,10 @@ describe("the desktop's browser sign-in", () => {
     for (const headers of [{ "content-type": "application/json" }, { ...DESKTOP, origin: BASE }, { ...DESKTOP, "sec-fetch-site": "cross-site" }]) {
       expect((await start({}, headers)).response.status, JSON.stringify(headers)).toBe(400);
     }
+    // Electron's network stack sends Sec-Fetch-Site: none and no Origin; a page never can.
+    expect((await start({}, { ...DESKTOP, "sec-fetch-site": "none" })).response.status).toBe(200);
     // None of those used the code up, and a cookie that is not a session's is no obstacle.
-    const response = await exchange(body, { ...DESKTOP, cookie: "phean-theme=dusk" });
+    const response = await exchange(body, { ...DESKTOP, "sec-fetch-site": "none", cookie: "phean-theme=dusk" });
     expect(response.status).toBe(200);
     // Only the one session from the exchange was minted for the desktop.
     const sessions = await testDb.db.select().from(sessionTable).where(eq(sessionTable.userId, person.id));

@@ -36,7 +36,7 @@ export default async function NativeAuthorizePage({ searchParams }: PageProps<"/
     return (
       <DialogPage title="This sign-in request has expired">
         <p className="mt-1 text-sm text-ink-2">
-          It was already used, or it is more than two minutes old, or it did not come from the Phean desktop app. Nothing was signed in. Start again from the app.
+          It was already used, or it is more than ten minutes old, or it did not come from the Phean desktop app. Nothing was signed in. Start again from the app.
         </p>
       </DialogPage>
     );

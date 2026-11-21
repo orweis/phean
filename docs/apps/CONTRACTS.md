@@ -2,21 +2,21 @@
 
 These are the wire contracts that the desktop shell, the service worker and the server share. §2 and §3 of [the plan](https://github.com/orweis/phean-apps/blob/main/docs/PLAN.md) say why. Change them only additively, because installed shells are older than the server (see `minShellVersion` below).
 
-Every request a shell or the service worker makes carries `Phean-Client: desktop` or `Phean-Client: web`. Because it is a custom header, a cross-origin page cannot send it without a CORS preflight, and Phean answers no preflight. Bodies are JSON (`Content-Type: application/json`). When a browser sends an `Origin`, it must equal the app origin. `Sec-Fetch-Site`, when sent, must be `same-origin` or `none`. Electron's `session.fetch` from the desktop's main process sends `none` and no `Origin`; a cross-site page can never send `none`. The handoff's start and exchange are stricter (below): the desktop sends them with Node's `fetch`, which sends neither header and no cookies.
+Every request a shell or the service worker makes carries `Phean-Client: desktop` or `Phean-Client: web`. Because it is a custom header, a cross-origin page cannot send it without a CORS preflight, and Phean answers no preflight. Bodies are JSON (`Content-Type: application/json`). When a browser sends an `Origin`, it must equal the app origin. `Sec-Fetch-Site`, when sent, must be `same-origin` or `none`. Electron's `session.fetch` from the desktop's main process sends `none` and no `Origin`; a cross-site page can never send `none`. The handoff's start and exchange are stricter (below): no `Origin` at all, and the desktop sends them with `credentials: "omit"`.
 
 ## Desktop sign-in handoff (loopback, RFC 8252 §7.3)
 
 1. **`POST /api/auth/native/start`**. The body is `{ "client": "desktop", "codeChallenge": "<base64url(sha256(verifier))>", "redirectUri": "http://127.0.0.1:<port>/callback", "state": "<random>" }`.
-   - The request needs `Phean-Client: desktop`, and is refused if it carries `Origin` or `Sec-Fetch-Site`.
+   - The request needs `Phean-Client: desktop`, and is refused if it carries `Origin`, or a `Sec-Fetch-Site` other than `none` (what Electron's `session.fetch` sends; no page can).
    - The redirect URI must be `http://127.0.0.1:<port>/callback` with a port from 1024 to 65535.
-   - It answers `200 { "requestId": "<id>", "confirmation": "K7QM", "expiresAt": "<ISO>" }`. The request lives for 2 minutes and is rate limited per address.
+   - It answers `200 { "requestId": "<id>", "confirmation": "K7QM", "expiresAt": "<ISO>" }`. The request lives for 10 minutes, long enough to sign in from scratch in the browser, and is rate limited per address.
 2. **The browser opens `GET /native/authorize?request=<requestId>`** (`routes.nativeAuthorize(requestId)`).
    - Without a full session it sends the person to sign in, with `next` set back to this page.
    - A pending two-factor challenge is not a session.
    - The page shows the account, the confirmation code and one button: "Sign in to Phean desktop". It also has a way to decline.
 3. **Confirming** stores a one-time code: 32 random bytes, hashed, single use, bound to the request, the user and the challenge, with a 2-minute life. The browser is then sent **303** to `<redirectUri>?code=<code>&state=<state>`. Declining sends it 303 to `<redirectUri>?error=access_denied&state=<state>`.
 4. **`POST /api/auth/native/exchange`**. The body is `{ "requestId": "<id>", "code": "<code>", "codeVerifier": "<verifier>" }`.
-   - The request needs `Phean-Client: desktop`. It is refused if it carries `Origin` or `Sec-Fetch-Site`, or a Phean session cookie.
+   - The request needs `Phean-Client: desktop`. It is refused if it carries `Origin`, a `Sec-Fetch-Site` other than `none`, or a Phean session cookie.
    - It answers `200 { "user": { "id", "name", "email" } }` with the Better Auth session cookies in `Set-Cookie`. The session's user agent is `Phean desktop`.
    - The desktop reads `response.headers.getSetCookie()` and applies each cookie to the `persist:phean` partition with `session.cookies.set`.
    - Errors are `400 { "error": "invalid_request" | "invalid_grant" }`.

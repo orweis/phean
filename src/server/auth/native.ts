@@ -23,7 +23,8 @@ import type { Auth } from "./auth";
  */
 
 /** How long a registered request may wait to be confirmed, and how long its code may wait to be traded. */
-export const NATIVE_REQUEST_SECONDS = 120;
+/** Long enough to sign in from scratch in the browser (a password and a code); the code itself still lasts two minutes. */
+export const NATIVE_REQUEST_SECONDS = 600;
 export const NATIVE_CODE_SECONDS = 120;
 /** The session's user agent, which `/account`'s session list shows. */
 export const NATIVE_USER_AGENT = "Phean desktop";
@@ -115,12 +116,15 @@ const later = (seconds: number) => new Date(Date.now() + seconds * 1000);
 /**
  * Why a request to the app-only endpoints is refused, or null. Only the desktop's main process may
  * call them: it sends `Phean-Client: desktop` and JSON, and no browser headers. A page cannot send the
- * custom header cross-origin without a preflight, which Phean never answers, and a browser always
- * adds `Origin` or `Sec-Fetch-Site` to what a page sends.
+ * custom header cross-origin without a preflight, which Phean never answers, and a browser adds
+ * `Origin`, or a `Sec-Fetch-Site` other than `none`, to what a page sends. Electron's own network
+ * stack (`session.fetch` from main, which honours the system proxy and certificate store) sends
+ * `Sec-Fetch-Site: none` and no `Origin`; no page can send `none`.
  */
 function appOnlyRefusal(headers: Headers): string | null {
   if (headers.get("phean-client") !== "desktop") return "Phean-Client: desktop is required";
-  if (headers.has("origin") || headers.has("sec-fetch-site")) return "browser requests are refused";
+  const site = headers.get("sec-fetch-site");
+  if (headers.has("origin") || (site !== null && site !== "none")) return "browser requests are refused";
   if (!/^application\/json(;|$)/i.test(headers.get("content-type") ?? "")) return "the body must be JSON";
   return null;
 }
