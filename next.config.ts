@@ -6,16 +6,15 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ["@electric-sql/pglite", "ws"],
   // The docs site reads its Markdown from content/docs at request time.
   outputFileTracingIncludes: { "/docs": ["./content/docs/**"], "/docs/[slug]": ["./content/docs/**"], "/llms.txt": ["./content/docs/**"], "/llms-full.txt": ["./content/docs/**"], "/privacy": ["./content/legal/**"] },
-  // A framed dialog could trick someone into clicking Allow. Both headers, for browsers that read only one.
-  headers: async () => [
-    {
-      source: "/oauth/:path*",
+  // A framed dialog could trick someone into clicking Allow (or the desktop app's sign-in). Both headers, for browsers that read only one.
+  headers: async () =>
+    ["/oauth/:path*", "/native/:path*"].map((source) => ({
+      source,
       headers: [
         { key: "X-Frame-Options", value: "DENY" },
         { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
       ],
-    },
-  ],
+    })),
 };
 
 export default nextConfig;

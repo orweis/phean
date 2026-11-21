@@ -23,6 +23,7 @@ import { oauthResource } from "../db/schema/auth";
 import { resolveOAuthAgent } from "../domain/agents";
 import { findTenantBySlug } from "../domain/tenants";
 import { pruneUnusedClients } from "./clients";
+import { nativeSignIn } from "./native";
 import { providerSignInChallenge, TRUST_DEVICE_SECONDS, TWO_FACTOR_CHALLENGE_SECONDS } from "./two-factor";
 
 const SEVEN_DAYS_IN_SECONDS = 60 * 60 * 24 * 7;
@@ -163,6 +164,8 @@ export function createAuth(database: Db, baseUrl: string) {
         },
       }),
       cimd({ fetchClientMetadataResource, metadataProfile: "mcp-2026-07-28" }),
+      // The desktop app's sign-in through the system browser; see native.ts.
+      nativeSignIn(),
       // Must be last: lets server actions set auth cookies.
       nextCookies(),
     ],

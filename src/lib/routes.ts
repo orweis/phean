@@ -76,6 +76,10 @@ export const routes = {
   mcp: (slug?: string) => (slug === undefined ? "/mcp" : `/mcp/w/${slug}`),
   /** The dialog for connecting an MCP client, on the signed query the OAuth provider sent it. */
   oauthApprove: (oauthQuery: string) => `/oauth/approve?${oauthQuery}`,
+  /** Where the desktop app's browser sign-in asks the person to confirm, for a request the app registered. */
+  nativeAuthorize: (requestId: string) => withQuery("/native/authorize", { request: requestId }),
+  /** The form on `nativeAuthorize` posts here; it answers 303 to the app's loopback address. */
+  nativeConfirm: () => "/native/authorize/confirm",
   /** The realtime event stream agents open over a WebSocket. */
   events: () => "/api/events",
 } as const;
