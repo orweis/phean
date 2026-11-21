@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 
+import { ServiceWorker } from "@/components/service-worker";
 import { COLOR_SCHEMES, colorSchemeFor } from "@/lib/appearance";
 import { themeColorFor } from "@/lib/themes";
 import { appUrl } from "@/server/config";
@@ -41,7 +42,10 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
   const [appearance, theme] = await Promise.all([getAppearance(), getTheme()]);
   return (
     <html lang="en" data-appearance={appearance} data-theme={theme} className={display.variable}>
-      <body className="min-h-dvh">{children}</body>
+      <body className="min-h-dvh">
+        {children}
+        <ServiceWorker />
+      </body>
     </html>
   );
 }

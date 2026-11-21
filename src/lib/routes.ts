@@ -10,6 +10,9 @@ function withQuery(path: string, query: Query = {}): string {
   return search ? `${path}?${search}` : path;
 }
 
+/** The square sizes the app icon is drawn in (`routes.appIcon`), for the web app manifest and notifications. */
+export const APP_ICON_SIZES = [192, 512] as const;
+
 /** Every in-app path, built in one place so pages, redirects, and MCP links agree. */
 export const routes = {
   home: () => "/",
@@ -87,6 +90,12 @@ export const routes = {
   nativeInbox: () => "/api/native/inbox",
   /** The realtime event stream agents open over a WebSocket. */
   events: () => "/api/events",
+  /** The static page the service worker shows when a navigation cannot reach Phean. */
+  offline: () => "/offline",
+  /** The service worker, at the root so its scope is the whole origin. */
+  serviceWorker: () => "/sw.js",
+  /** The app icon as a square PNG, for the web app manifest and notifications (`APP_ICON_SIZES`). */
+  appIcon: (size: number) => `/icons/${size}.png`,
 } as const;
 
 /** A single non-empty search param value; Next passes repeated keys as arrays. */

@@ -273,10 +273,14 @@ describe("the desktop's browser sign-in", () => {
     expect((await start({ state: "" })).response.status).toBe(400);
   });
 
-  it("refuses frames on the confirmation page, the two ways browsers read it", async () => {
-    const rule = (await nextConfig.headers!()).find(({ source }) => source === "/native/:path*");
-    const headers = Object.fromEntries(rule!.headers.map(({ key, value }) => [key.toLowerCase(), value]));
-    expect(headers).toMatchObject({ "x-frame-options": "DENY", "content-security-policy": "frame-ancestors 'none'" });
+  it.each(["/native/:path*", "/oauth/:path*"])("refuses frames on %s, the two ways browsers read it, with no form-action", async (path) => {
+    const rules = (await nextConfig.headers!()).filter(({ source }) => source === path);
+    expect(rules).toHaveLength(1);
+    const headers = Object.fromEntries(rules[0]!.headers.map(({ key, value }) => [key.toLowerCase(), value]));
+    expect(headers["x-frame-options"]).toBe("DENY");
+    expect(headers["content-security-policy"]).toContain("frame-ancestors 'none'");
+    // form-action would also apply to the 303 to the app's loopback address and to OAuth client redirects.
+    expect(headers["content-security-policy"]).not.toContain("form-action");
   });
 
   it("is rate limited per address at both ends", () => {
