@@ -18,6 +18,9 @@ export async function expectNothingCutOff(page: Page) {
     };
     const offenders = [...document.body.querySelectorAll("*")]
       .filter((element) => {
+        // A closed <details> (a menu or popover panel) never renders its content, but Chromium can
+        // still report the box it had at an earlier viewport width; nothing there is on screen.
+        if (element.closest("details:not([open]) > :not(summary)")) return false;
         const box = element.getBoundingClientRect();
         return box.width > 0 && (box.right > width + 1 || box.left < -1) && !contained(element);
       })
