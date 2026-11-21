@@ -106,3 +106,53 @@ export function emailConfig(): { apiKey: string; from: string } | null {
   const from = process.env.PHEAN_EMAIL_FROM;
   return apiKey && from ? { apiKey, from } : null;
 }
+
+export interface VapidConfig {
+  publicKey: string;
+  privateKey: string;
+  /** A `mailto:` or `https:` contact the push services may use about this sender. */
+  subject: string;
+}
+
+/**
+ * The VAPID key pair Decision notifications are signed with (Web Push). Read when used, never at
+ * import time. Without all three, push is off: nothing is sent, and the Account page says
+ * notifications are not configured.
+ */
+export function vapidConfig(): VapidConfig | null {
+  const publicKey = process.env.PHEAN_VAPID_PUBLIC_KEY?.trim();
+  const privateKey = process.env.PHEAN_VAPID_PRIVATE_KEY?.trim();
+  const subject = process.env.PHEAN_VAPID_SUBJECT?.trim();
+  return publicKey && privateKey && subject ? { publicKey, privateKey, subject } : null;
+}
+
+/** The Android app's package when `PHEAN_ANDROID_PACKAGE` is unset (orweis/phean-apps, android/). */
+export const DEFAULT_ANDROID_PACKAGE = "app.phean";
+
+/** An Android application id: dot-separated segments, each a letter then letters, digits or underscores. */
+const ANDROID_PACKAGE = /^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)+$/;
+
+/** A SHA-256 certificate fingerprint as Play Console and keytool print it: 32 hex bytes, colon-separated. */
+const CERT_SHA256 = /^[0-9A-F]{2}(:[0-9A-F]{2}){31}$/;
+
+/**
+ * Which Android app may open this deployment's links and show its pages full screen: the package
+ * (`PHEAN_ANDROID_PACKAGE`) and the SHA-256 fingerprints of the keys it is signed with
+ * (`PHEAN_ANDROID_CERT_SHA256`, comma-separated: Play App Signing's and the upload key's). Both are
+ * public values. A malformed fingerprint or package is refused and left out, never trusted
+ * half-read; with no valid fingerprint there is no app to trust.
+ */
+export function androidAppLinks(): { packageName: string; fingerprints: string[] } | null {
+  const packageName = process.env.PHEAN_ANDROID_PACKAGE?.trim() || DEFAULT_ANDROID_PACKAGE;
+  const listed = (process.env.PHEAN_ANDROID_CERT_SHA256 ?? "")
+    .split(",")
+    .map((fingerprint) => fingerprint.trim().toUpperCase())
+    .filter(Boolean);
+  const fingerprints = [...new Set(listed.filter((fingerprint) => CERT_SHA256.test(fingerprint)))];
+  if (fingerprints.length < new Set(listed).size) console.warn("PHEAN_ANDROID_CERT_SHA256 has a malformed fingerprint; it is left out of assetlinks.json");
+  if (!ANDROID_PACKAGE.test(packageName)) {
+    console.warn("PHEAN_ANDROID_PACKAGE is not an Android package name; assetlinks.json trusts no app");
+    return null;
+  }
+  return fingerprints.length ? { packageName, fingerprints } : null;
+}

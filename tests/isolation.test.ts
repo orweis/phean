@@ -1,8 +1,9 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
-import { agents, tasks } from "@/server/db/schema";
+import { routes } from "@/lib/routes";
+import { agents, member, tasks } from "@/server/db/schema";
 import { approveAgent, authenticateAgentToken, findRenewableAgent, resolveOAuthAgent, revokeAgent } from "@/server/domain/agents";
 import type { Ctx } from "@/server/domain/context";
 import { listActivity } from "@/server/domain/events";
@@ -11,6 +12,9 @@ import { createGoal, findGoal, listGoals, updateGoal, type Goal } from "@/server
 import { attachDocument, deleteDocument, getDocument, listDocuments, updateDocument } from "@/server/domain/documents";
 import { countMemoryKinds, forget, recall, remember, type Memory } from "@/server/domain/memory";
 import { getWorkflow, saveWorkflow } from "@/server/domain/workflow";
+import { answerFromNotification, muteWorkspace, openDecisions, undoFromNotification } from "@/server/domain/notifications";
+import { sendDuePushes } from "@/server/push/dispatch";
+import { handlePushAnswer, inboxFeed } from "@/server/push/http";
 import { browseTasks, getBoard, getGoalDetail, getStatusSummary } from "@/server/domain/overview";
 import { search, suggest } from "@/server/domain/search";
 import {
@@ -19,6 +23,7 @@ import {
   captureTasks,
   claimTask,
   collectAnswers,
+  findTask,
   getTask,
   linkSession,
   listDecisions,
@@ -33,9 +38,10 @@ import { getWorkspaceOverviews, listMemberships } from "@/server/domain/tenants"
 import { createPheanMcpHandler } from "@/server/mcp/handler";
 import { deleteWebhook, watch } from "@/server/domain/webhooks";
 
-import { createTestDb, seedWorkspace, type TestDb, type Workspace } from "./support/db";
+import { addMember, createTestDb, seedUser, seedWorkspace, type TestDb, type Workspace } from "./support/db";
 import { connectMcpClient, dataOf, textOf } from "./support/mcp";
 import { connectOAuthAgent, createOAuthServer, OAUTH_BASE, OAUTH_RESOURCE } from "./support/oauth";
+import { deliveriesOf, deviceFor, fakePushService } from "./support/push";
 
 let testDb: TestDb;
 let acme: Workspace;
@@ -336,5 +342,65 @@ describe("tenant isolation", () => {
 
     const [overview] = await getWorkspaceOverviews(testDb.db, memberships);
     expect(overview).toMatchObject({ openTasks: 1, inbox: 1, activeGoals: 1, agents: 2 });
+  });
+
+  it("keeps Decision notifications, the inbox feed and answers from a notification inside their workspace", async () => {
+    const dana = { id: acmeOwner.actor.id, name: acmeOwner.actor.name };
+    const eli = { id: globexOwner.actor.id, name: globexOwner.actor.name };
+    const [danaDevice, eliDevice] = [await deviceFor(testDb.db, dana), await deviceFor(testDb.db, eli)];
+    const asked = await requestInput(acme.scout.ctx, { taskId: acmeTask.id, kind: "decision", question: "Bluebird or Robin?", options: ["Bluebird", "Robin"] });
+    const requestId = asked.inputRequest!.id;
+
+    // Acme's question reaches Acme's member only.
+    expect(await deliveriesOf(testDb.db, danaDevice.id)).toEqual([expect.objectContaining({ kind: "request", requestId })]);
+    expect(await deliveriesOf(testDb.db, eliDevice.id)).toEqual([]);
+
+    // Globex's member cannot answer it, through the service or through Globex's own answer URL.
+    await expect(answerFromNotification(globexOwner, { taskId: acmeTask.id, requestId, option: 0 })).rejects.toMatchObject({ code: "not_found" });
+    const viaGlobex = await handlePushAnswer(
+      new Request(`https://phean.test${routes.pushAnswer(globex.tenant.slug)}`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "phean-client": "web" },
+        body: JSON.stringify({ taskId: acmeTask.id, requestId, option: 0 }),
+      }),
+      async () => globexOwner,
+      { origins: ["https://phean.test"] },
+    );
+    expect(viaGlobex.status).toBe(404);
+    expect((await findTask(acmeOwner, acmeTask.id)).inputRequest?.id).toBe(requestId);
+
+    // Each person's feed shows only their own workspaces, and a mute stays in its workspace.
+    expect((await inboxFeed(testDb.db, eli)).items).toEqual([]);
+    expect((await inboxFeed(testDb.db, dana)).items.map((item) => [item.slug, item.requestId])).toEqual([[acme.tenant.slug, requestId]]);
+    await muteWorkspace(globexOwner, {});
+    await expect(openDecisions(acmeOwner, {})).resolves.toMatchObject({ muted: false });
+
+    // Answering with a device's endpoint settles only that person's push in this workspace, and
+    // the answer is taken back only by the person who gave it, never from another workspace.
+    await answerFromNotification(acmeOwner, { taskId: acmeTask.id, requestId, option: 0, endpoint: eliDevice.endpoint });
+    expect(await deliveriesOf(testDb.db, eliDevice.id)).toEqual([]);
+    await expect(undoFromNotification(globexOwner, { taskId: acmeTask.id, requestId, endpoint: eliDevice.endpoint })).rejects.toMatchObject({ code: "not_found" });
+    await expect(undoFromNotification(acmeOwner, { taskId: acmeTask.id, requestId, endpoint: danaDevice.endpoint })).resolves.toBeUndefined();
+  });
+
+  it("sends no Decision notification to a platform admin or someone who left the workspace", async () => {
+    const sam = await seedUser(testDb.db, "Sam");
+    await addMember(testDb.db, acme.tenant, sam, "member");
+    // An operator with read-only access to every workspace, and a workspace of their own.
+    const operator = await seedUser(testDb.db, "Operator");
+    await addMember(testDb.db, globex.tenant, operator, "member");
+    const [samDevice, operatorDevice] = [await deviceFor(testDb.db, sam), await deviceFor(testDb.db, operator)];
+
+    await requestInput(acme.scout.ctx, { taskId: acmeTask.id, question: "Is the memo ready?" });
+    expect(await deliveriesOf(testDb.db, operatorDevice.id)).toEqual([]);
+    expect(await deliveriesOf(testDb.db, samDevice.id)).toHaveLength(1);
+    expect((await inboxFeed(testDb.db, operator)).items).toEqual([]);
+
+    // Sam leaves before the push goes out: it is dropped, and the push service never hears of it.
+    await testDb.db.delete(member).where(and(eq(member.organizationId, acme.tenant.id), eq(member.userId, sam.id)));
+    const push = fakePushService();
+    await sendDuePushes(testDb.db, push.deps);
+    expect(push.sent.filter((message) => message.endpoint === samDevice.endpoint)).toEqual([]);
+    expect(await deliveriesOf(testDb.db, samDevice.id)).toEqual([expect.objectContaining({ status: "dead", lastError: "not_member" })]);
   });
 });

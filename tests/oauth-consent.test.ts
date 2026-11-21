@@ -178,7 +178,9 @@ describe("framing", () => {
     const rule = rules.find(({ source }) => source === "/oauth/:path*");
     const headers = Object.fromEntries(rule!.headers.map(({ key, value }) => [key.toLowerCase(), value]));
     expect(headers["x-frame-options"]).toBe("DENY");
-    expect(headers["content-security-policy"]).toBe("frame-ancestors 'none'");
+    expect(headers["content-security-policy"]).toContain("frame-ancestors 'none'");
+    // The dialog redirects to cursor://, vscode:// and loopback clients after its form post.
+    expect(headers["content-security-policy"]).not.toContain("form-action");
   });
 });
 

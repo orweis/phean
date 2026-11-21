@@ -12,6 +12,7 @@ const DENIAL_MESSAGES: Partial<Record<Action, string>> = {
   "webhook:manage": "Only agents (for their own webhook) and workspace owners and admins can manage webhooks.",
   "member:manage": "Only workspace owners and admins can manage members.",
   "workflow:manage": "Only workspace owners and admins can change the board's stages.",
+  "notify:subscribe": "Only the workspace's members get its Decision notifications.",
 };
 
 export function can(actor: Actor, action: Action): boolean {

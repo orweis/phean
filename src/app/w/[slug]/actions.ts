@@ -9,6 +9,7 @@ import { saveDigestSubscription, stopDigestSubscription } from "@/server/domain/
 import { attachDocument, deleteDocument, updateDocument } from "@/server/domain/documents";
 import { createGoal, setGoalStatus, updateGoal } from "@/server/domain/goals";
 import { forget, remember, updateMemory } from "@/server/domain/memory";
+import { muteWorkspace, unmuteWorkspace } from "@/server/domain/notifications";
 import { deleteWebhook } from "@/server/domain/webhooks";
 import { saveWorkflow } from "@/server/domain/workflow";
 import {
@@ -92,4 +93,8 @@ export const cancelInvitationAction = tenantAction(cancelInvitation, { success: 
 export const removeMemberAction = tenantAction(removeMember, { success: "Member removed." });
 
 export const saveDigestAction = tenantAction(saveDigestSubscription);
+
+// Decision notifications
+export const muteWorkspaceAction = tenantAction(muteWorkspace);
+export const unmuteWorkspaceAction = tenantAction(unmuteWorkspace);
 export const stopDigestAction = tenantAction(stopDigestSubscription);

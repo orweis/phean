@@ -48,6 +48,8 @@ function OtherAnswer({ taskId, slug, request }: { taskId: string; slug: string; 
     >
       <ActionForm action={answerInputAction} workspace={slug} className="space-y-3" notice={`Sent your answer to ${request.agentName}`} undo={takeBack(taskId, request)} closeOnSuccess>
         <input type="hidden" name="taskId" value={taskId} />
+        {/* Pinned to this request: a newer question on the task refuses the answer instead of taking it. */}
+        <input type="hidden" name="requestId" value={request.id} />
         <p className="line-clamp-2 border-l-2 border-wait pl-2.5 text-xs text-ink-2">{request.question}</p>
         <Field label={decision ? "Decision" : "Answer"} htmlFor={field} hint={`${request.agentName} gets this right away.`}>
           <CountedTextarea id={field} name="answer" required maxLength={LIMITS.note} />
@@ -70,7 +72,7 @@ function MoreAnswers({ taskId, slug, request, title }: { taskId: string; slug: s
       <ActionButton
         action={answerInputAction}
         workspace={slug}
-        fields={{ taskId }}
+        fields={{ taskId, requestId: request.id }}
         confirm={`Mark ${request.agentName}'s question answered? Do this only if you answered it in their conversation.`}
         notice={`Marked ${request.agentName}'s question answered`}
         undo={takeBack(taskId, request)}
@@ -96,7 +98,7 @@ function OptionButtons({ taskId, slug, request }: { taskId: string; slug: string
       key={option}
       action={answerInputAction}
       workspace={slug}
-      fields={{ taskId, answer: option }}
+      fields={{ taskId, requestId: request.id, answer: option }}
       notice={sent(option, request)}
       undo={takeBack(taskId, request)}
       data-option={index < 9 ? String(index + 1) : undefined}

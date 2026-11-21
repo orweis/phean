@@ -37,7 +37,7 @@ export interface OAuthTestClient {
 }
 
 /** Listens on a free loopback port for the one callback, the way a command-line client does. */
-async function loopbackReceiver() {
+export async function loopbackReceiver() {
   let deliver!: (url: URL) => void;
   const received = new Promise<URL>((resolve) => (deliver = resolve));
   const server: Server = createServer((request, response) => {

@@ -3,6 +3,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { DEFAULT_THEME, THEME_COOKIE, THEMES } from "../src/lib/themes";
 import { expectAccessible, expectNothingCutOff, expectNowClearOfDates } from "./support/checks";
 import { BASE_URL, DEMO_SESSION } from "./support/env";
+import { desktopSignIn } from "./support/desktop-client";
 import { card, entryKind, popover } from "./support/locators";
 import { oauthClient } from "./support/oauth-client";
 
@@ -38,6 +39,7 @@ const PAGES = [
   "/blog/tag/agents",
   "/blog/author/or-weis",
   "/privacy",
+  "/offline",
 ];
 
 /** Pages that draw a timetable, so the Now marker can be checked against the date labels. */
@@ -95,6 +97,19 @@ test.describe("signed in", () => {
 
   test("the approval dialog has no detectable accessibility violations", async ({ page }) => {
     await openApprovalDialog(page);
+    await expectAccessible(page);
+  });
+
+  /** The desktop sign-in confirmation is not in PAGES either: it needs a request the app registered. */
+  async function openDesktopConfirmation(page: Page) {
+    const desktop = await desktopSignIn(BASE_URL);
+    await page.goto(desktop.authorizePath);
+    await expect(page.getByRole("button", { name: "Sign in to Phean desktop" })).toBeVisible();
+    desktop.close();
+  }
+
+  test("the desktop sign-in confirmation has no detectable accessibility violations", async ({ page }) => {
+    await openDesktopConfirmation(page);
     await expectAccessible(page);
   });
 
@@ -293,6 +308,11 @@ test.describe("signed in", () => {
 
     test("the approval dialog keeps everything inside the screen", async ({ page }) => {
       await openApprovalDialog(page);
+      await expectNothingCutOff(page);
+    });
+
+    test("the desktop sign-in confirmation keeps everything inside the screen", async ({ page }) => {
+      await openDesktopConfirmation(page);
       await expectNothingCutOff(page);
     });
 

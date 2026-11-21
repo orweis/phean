@@ -8,10 +8,11 @@ import type { z } from "zod";
 import type { ActionState } from "@/lib/action-state";
 import { routes } from "@/lib/routes";
 
-import { requireWorkspace } from "./auth/session";
-import type { Ctx } from "./domain/context";
+import { getViewer, requireWorkspace } from "./auth/session";
+import { getDb } from "./db/client";
+import { personContext, type Ctx } from "./domain/context";
 import { isDomainError } from "./domain/errors";
-import type { ServiceFn } from "./domain/service";
+import type { PersonServiceFn, ServiceFn } from "./domain/service";
 import { formToInput } from "./forms";
 
 /** A user-facing message for expected failures; anything else propagates to the error boundary. */
@@ -60,5 +61,20 @@ export function tenantAction<S extends z.ZodObject, O>(service: ServiceFn<S, O>,
     if (options.redirectTo) redirect(options.redirectTo(output, ctx));
     const message = typeof options.success === "function" ? options.success(output) : options.success;
     return { status: "success", message, data: options.data?.(output), at: Date.now() };
+  };
+}
+
+/**
+ * `tenantAction` for a service on the signed-in person's own account (their notification devices):
+ * the person comes from the session, the fields from the form, and the Account page is refreshed.
+ */
+export function personAction<S extends z.ZodObject, O>(service: PersonServiceFn<S, O>, options: { success?: string | ((output: O) => string) } = {}) {
+  return async (_previous: ActionState, formData: FormData): Promise<ActionState> => {
+    const { user } = await getViewer();
+    const result = await attempt(() => service(personContext(getDb(), user), formToInput(formData, service.schema) as z.input<S>));
+    if (!result.ok) return result.state;
+    revalidatePath(routes.account());
+    const message = typeof options.success === "function" ? options.success(result.value) : options.success;
+    return { status: "success", message, at: Date.now() };
   };
 }

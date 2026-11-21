@@ -1,0 +1,8 @@
+# Updates for the workflows. The native apps' dependencies are updated in orweis/phean-apps.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
