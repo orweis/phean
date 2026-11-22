@@ -31,7 +31,7 @@ const DESCRIPTION_TONES: Record<PanelTone, string> = {
 };
 
 export function Card({ className, tone = "plain", ...props }: ComponentProps<"section"> & { tone?: PanelTone }) {
-  return <section data-tone={tone} className={cx("surface rounded-lg border", PANEL_TONES[tone], className)} {...props} />;
+  return <section data-tone={tone} className={cx("surface min-w-0 rounded-lg border", PANEL_TONES[tone], className)} {...props} />;
 }
 
 interface CardHeaderProps {

@@ -838,8 +838,8 @@ export const snoozeRequest = service(SnoozeRequestInput, async (ctx, { taskId, r
     const open = current.inputRequest;
     if (!open || open.id !== requestId) throw conflict(`That request on "${current.title}" is no longer waiting.`);
     if (undo && !open.snoozedAt) return current;
-    const { snoozedAt: _previous, ...rest } = open;
-    const request: InputRequest = undo ? rest : { ...rest, snoozedAt: new Date().toISOString() };
+    const request: InputRequest = { ...open, snoozedAt: new Date().toISOString() };
+    if (undo) delete request.snoozedAt;
     const [task] = await tx.db.update(tasks).set({ inputRequest: request }).where(tenantRow(tx, tasks, taskId)).returning(taskColumns);
     await recordEvent(tx, {
       action: "task.input_snoozed",

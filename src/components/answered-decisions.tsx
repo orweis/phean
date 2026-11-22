@@ -144,7 +144,7 @@ function AnsweredList({ records, slug, focus }: { records: readonly DecisionReco
                 </p>
                 {request.options.length > 0 && <OfferedOptions request={request} chosen={chosen} />}
                 {request.answer && written && (
-                  <p className="mt-2 rounded-md bg-fill px-3 py-2 text-sm whitespace-pre-line text-ink">
+                  <p className="mt-2 rounded-md bg-fill px-3 py-2 text-sm whitespace-pre-line wrap-anywhere text-ink">
                     <span className="font-semibold">{request.answeredByName ?? "Answer"}:</span> {request.answer}
                   </p>
                 )}
