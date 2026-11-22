@@ -24,6 +24,9 @@ export const routes = {
   /** The blog as an RSS feed. */
   blogFeed: () => "/blog/rss.xml",
   privacy: () => "/privacy",
+  terms: () => "/terms",
+  /** How to get help, report a problem or a security issue. */
+  support: () => "/support",
   signIn: (next?: string) => withQuery("/sign-in", { next }),
   signUp: (next?: string) => withQuery("/sign-up", { next }),
   /** The second step of a sign-in, for people with two-factor on: their authenticator code or a backup code. */

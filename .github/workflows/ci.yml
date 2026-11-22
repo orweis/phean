@@ -21,6 +21,9 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
+      # The same checks Anthropic's plugin directory runs before a submission (a subset of them).
+      - name: Validate the Claude plugin
+        run: npx --yes @anthropic-ai/claude-code@2.1.330 plugin validate plugin --strict --profile directory
 
   ui:
     runs-on: ubuntu-latest

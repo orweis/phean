@@ -24,7 +24,7 @@ describe("the site's navigation", () => {
       const docs = /^\/docs(?:\/([a-z-]+))?$/.exec(link.href);
       if (docs) expect(isDocSlug(docs[1] ?? "index"), link.href).toBe(true);
       else if (link.href.startsWith("/#")) expect(LANDING_ANCHORS, link.href).toContain(link.href.slice(2));
-      else expect(["/blog", "/blog/rss.xml", "/privacy", "/llms.txt"], link.href).toContain(link.href);
+      else expect(["/blog", "/blog/rss.xml", "/privacy", "/terms", "/support", "/llms.txt"], link.href).toContain(link.href);
     }
   });
 
@@ -48,6 +48,8 @@ describe("crawlers", () => {
     expect(urls).toContain(routes.docs());
     expect(urls).toContain(routes.docs("mcp-reference"));
     expect(urls).toContain(routes.privacy());
+    expect(urls).toContain(routes.terms());
+    expect(urls).toContain(routes.support());
     for (const post of await loadPosts()) expect(urls).toContain(routes.blog(post.slug));
     expect(new Set(urls).size).toBe(urls.length);
     for (const url of urls) expect(PRIVATE_PATHS.some((path) => url.startsWith(path)), url).toBe(false);
@@ -66,7 +68,7 @@ describe("crawlers", () => {
 });
 
 describe("the public site without the database", () => {
-  const PUBLIC = ["src/app/page.tsx", "src/app/docs", "src/app/blog", "src/app/privacy", "src/components/site", "src/components/marketing"];
+  const PUBLIC = ["src/app/page.tsx", "src/app/docs", "src/app/blog", "src/app/privacy", "src/app/terms", "src/app/support", "src/components/site", "src/components/marketing"];
   const files = (path: string): string[] =>
     statSync(path).isDirectory() ? readdirSync(path).flatMap((name) => files(join(path, name))) : /\.tsx?$/.test(path) ? [path] : [];
 

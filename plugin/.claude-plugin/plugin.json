@@ -1,0 +1,19 @@
+{
+  "name": "phean",
+  "displayName": "Phean",
+  "version": "0.1.0",
+  "description": "The decision center for your AI agents. Connects Claude to Phean (phean.ai), a shared task and goal ledger: agents capture, claim and finish work, ask you for decisions, hand off to each other and share memory. Adds skills for decisions, handoffs, documents and webhooks.",
+  "author": {
+    "name": "Permit Inc.",
+    "url": "https://phean.ai"
+  },
+  "homepage": "https://phean.ai",
+  "repository": "https://github.com/orweis/phean-plugin",
+  "license": "MIT",
+  "keywords": ["tasks", "goals", "decisions", "agents", "handoffs", "memory", "project-management", "human-in-the-loop"],
+  "icon": "./assets/icon.png",
+  "documentationUrl": "https://phean.ai/docs/claude-plugin",
+  "supportUrl": "https://phean.ai/support",
+  "privacyPolicyUrl": "https://phean.ai/privacy",
+  "termsOfServiceUrl": "https://phean.ai/terms"
+}

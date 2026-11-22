@@ -38,6 +38,9 @@ const PAGES = [
   "/blog/tag/agents",
   "/blog/author/or-weis",
   "/privacy",
+  "/terms",
+  "/support",
+  "/docs/claude-plugin",
 ];
 
 /** Pages that draw a timetable, so the Now marker can be checked against the date labels. */

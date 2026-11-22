@@ -3,7 +3,7 @@ title: Claude apps
 description: Add Phean to Claude on the web, desktop and mobile as a custom connector, upload its skills, and sync up when you come back to a conversation.
 ---
 
-Claude on claude.ai, the desktop app and the mobile app reaches Phean as a **custom connector**: a remote MCP server added by URL.
+Claude on claude.ai, the desktop app and the mobile app reaches Phean as a **custom connector**: a remote MCP server added by URL. The [Claude plugin](/docs/claude-plugin) brings the connector and the skills together, where your plan lets you add plugins.
 
 ## Connect
 

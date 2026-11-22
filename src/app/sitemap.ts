@@ -8,7 +8,7 @@ import { DOC_SLUGS } from "@/server/docs";
 // Read per request, so the addresses are the deployment's own rather than the build machine's.
 export const dynamic = "force-dynamic";
 
-/** Every public page: the landing page, each docs page, the blog with its posts, tags and writers, and the privacy policy. */
+/** Every public page: the landing page, each docs page, the blog with its posts, tags and writers, and the support, privacy and terms pages. */
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const base = appUrl();
   const [posts, authors] = await Promise.all([loadPosts(), loadAuthors()]);
@@ -21,6 +21,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ...posts.map((post) => ({ url: at(routes.blog(post.slug)), lastModified: post.date, changeFrequency: "monthly" as const, priority: 0.7 })),
     ...tagsOf(posts).map((tag) => ({ url: at(routes.blogTag(tag.slug)), changeFrequency: "weekly" as const, priority: 0.4 })),
     ...authors.map((author) => ({ url: at(routes.blogAuthor(author.slug)), changeFrequency: "monthly" as const, priority: 0.4 })),
+    { url: at(routes.support()), changeFrequency: "yearly", priority: 0.3 },
     { url: at(routes.privacy()), changeFrequency: "yearly", priority: 0.2 },
+    { url: at(routes.terms()), changeFrequency: "yearly", priority: 0.2 },
   ];
 }

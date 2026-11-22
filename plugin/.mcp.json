@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "phean": {
+      "type": "http",
+      "url": "https://phean.ai/mcp"
+    }
+  }
+}

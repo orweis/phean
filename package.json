@@ -20,6 +20,7 @@
     "test:watch": "vitest",
     "check": "pnpm typecheck && pnpm lint && pnpm test",
     "themes": "tsx scripts/themes.ts",
+    "plugin": "tsx scripts/plugin.tsx",
     "test:e2e": "next build && playwright test",
     "e2e:serve": "rm -rf .data/e2e && pnpm db:seed && next start --port 3200",
     "db:generate": "drizzle-kit generate",
