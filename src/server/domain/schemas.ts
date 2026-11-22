@@ -420,7 +420,14 @@ export const ApproveAgentInput = z.object({
   lifetimeDays: z.coerce.number().pipe(z.literal(AGENT_LIFETIME_DAYS)),
   oauthClientId: z.string().trim().min(1).max(LIMITS.url),
 });
+/** Reconnecting one of the person's own agents, chosen by id rather than by typing its name. */
+export const ReconnectAgentInput = ApproveAgentInput.omit({ name: true }).extend({ agentId: z.string().trim().min(1).max(LIMITS.ref) });
 export const AgentRefInput = z.object({ agentId: z.string().trim().min(1) });
+/** A person hands every open claim one agent (and its sub-agents) holds to another agent. */
+export const TransferClaimsInput = z.object({
+  fromAgentId: z.string().trim().min(1).max(LIMITS.ref),
+  toAgentId: z.string().trim().min(1).max(LIMITS.ref),
+});
 export const CreateSubagentInput = z.object({
   name,
   purpose: z.string().trim().max(LIMITS.brief).default("").describe("What it does for you, in a line: 'Researches vendors'"),

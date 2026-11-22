@@ -101,6 +101,51 @@ export function renewalKey(workspaceSlug: string, name: string): string {
   return `${workspaceSlug}/${name.trim()}`;
 }
 
+/** The dialog's choice of agent when the person connects a new one rather than reconnecting their own. */
+export const NEW_AGENT = "new";
+
+/** One of the person's own agents in a workspace, as the dialog shows it. Its id is checked again on the server. */
+export interface ConsentAgent {
+  id: string;
+  name: string;
+  /** It was last approved for the client asking now. */
+  sameClient: boolean;
+  /** Its access has lapsed; reconnecting renews it. */
+  expired: boolean;
+  /** Its live sub-agents' names. */
+  subagents: readonly string[];
+  /** Open tasks it or its sub-agents have claimed. */
+  openClaims: number;
+}
+
+/** Names as people read them: case and runs of spaces do not matter. */
+const looseName = (name: string) => name.replace(/\s+/g, " ").trim().toLowerCase();
+
+/**
+ * What a typed name for a new agent runs into among the person's own agents: the agent that already
+ * has it (approving renews that one, as the server's index compares names exactly), and the agents
+ * one of whose sub-agents goes by it.
+ */
+export function nameConflicts<A extends Pick<ConsentAgent, "name" | "subagents">>(agents: readonly A[], typed: string): { agent: A | undefined; parentsOf: A[] } {
+  const name = typed.trim();
+  if (!name) return { agent: undefined, parentsOf: [] };
+  return {
+    agent: agents.find((agent) => agent.name === name),
+    parentsOf: agents.filter((agent) => agent.subagents.some((sub) => looseName(sub) === looseName(name))),
+  };
+}
+
+/** What the dialog says about one of the person's agents: its sub-agents, its claims, and where it last connected from. */
+export function consentAgentDetails(agent: ConsentAgent): string {
+  const parts = [
+    agent.subagents.length ? `Sub-agent${agent.subagents.length === 1 ? "" : "s"}: ${agent.subagents.join(", ")}` : "No sub-agents",
+    agent.openClaims === 1 ? "1 open claim" : `${agent.openClaims} open claims`,
+    agent.sameClient ? "last connected from this client" : "last connected from another client",
+    ...(agent.expired ? ["access ended"] : []),
+  ];
+  return parts.join(" · ");
+}
+
 /** The form field for one workspace's access level. Each row is its own radio group, so arrow keys stay in it. */
 export function levelField(workspaceSlug: string): string {
   return `level:${workspaceSlug}`;
