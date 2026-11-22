@@ -246,4 +246,15 @@ test("a person snoozes a request to the back of the queue, and undoes it", async
   await entries.nth(1).focus();
   await page.keyboard.press("s");
   await expect.poll(order).toEqual(["Book the venue", "Send the invites", "Choose the caterer"]);
+
+  // The ⋯ menu is as wide as its row: the icon and the whole label show, nothing runs past its edge.
+  await page.locator('summary[aria-label="More for Book the venue"]').click();
+  const row = page.getByRole("button", { name: "Answered in the conversation" });
+  await expect(row).toBeVisible();
+  const fit = await row.evaluate((button) => {
+    const panel = button.closest("details")!.querySelector<HTMLElement>(":scope > div")!;
+    return { overflow: panel.scrollWidth - panel.clientWidth, icon: button.querySelector("svg")!.getBoundingClientRect().width };
+  });
+  expect(fit.overflow).toBeLessThanOrEqual(0);
+  expect(fit.icon).toBeGreaterThan(0);
 });

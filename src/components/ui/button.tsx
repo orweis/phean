@@ -28,7 +28,7 @@ const SIZES: Record<ButtonSize, string> = {
   /** The marketing site's calls to action, 48px tall. */
   lg: "h-12 justify-center gap-2 rounded-full px-6 text-md [&_svg]:size-4",
   /** A row of a menu panel: full width, its label at the start, 36px tall. */
-  menu: "h-9 w-full justify-start gap-2 rounded-md px-2.5 text-sm [&_svg]:size-4 [&_svg]:text-muted",
+  menu: "h-9 w-full justify-start gap-2 rounded-md px-2.5 text-sm [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:text-muted",
   /**
    * An answer an agent wrote (a decision's option): 36px tall on one line, and when the words are
    * longer than the row it wraps inside its container instead of running out of it.
