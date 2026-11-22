@@ -9,6 +9,7 @@ import { AGENT_ROLES, type Actor, type Ctx, type Role } from "@/server/domain/co
 import { grantableLevels } from "@/lib/domain";
 import { PERMISSIONS, roleCan } from "@/lib/permissions";
 import { createGoal, setGoalStatus } from "@/server/domain/goals";
+import { answerFromNotification, muteWorkspace, openDecisions, unmuteWorkspace } from "@/server/domain/notifications";
 import { ACTIONS, can, type Action } from "@/server/domain/policy";
 import { captureTasks, transferClaims } from "@/server/domain/tasks";
 import { listPendingInvitations } from "@/server/domain/tenants";
@@ -21,7 +22,7 @@ const AGENT_WRITE: readonly Action[] = [...CONTRIBUTE, "agent:delegate", "webhoo
 const EXPECTED: Record<Role, readonly Action[]> = {
   owner: ACTIONS,
   admin: ACTIONS,
-  member: ["workspace:read", "goal:write", "goal:decide", "task:write", "memory:write", "document:write", "agent:connect", "digest:subscribe"],
+  member: ["workspace:read", "goal:write", "goal:decide", "task:write", "memory:write", "document:write", "agent:connect", "digest:subscribe", "notify:subscribe"],
   agent_read: ["workspace:read"],
   agent_write: AGENT_WRITE,
   agent_admin: ["workspace:read", "goal:write", "task:write", "memory:write", "document:write", "agent:manage", "agent:delegate", "webhook:manage"],
@@ -58,6 +59,10 @@ describe("policy matrix", () => {
     // The digest is mail to a person: no agent, and no read-only platform admin, subscribes.
     for (const role of AGENT_ROLES) expect(can(agent(role), "digest:subscribe")).toBe(false);
     expect(can(person("platform_admin"), "digest:subscribe")).toBe(false);
+    // Decision notifications are a member's: no agent and no platform admin subscribes, every member role does.
+    for (const role of AGENT_ROLES) expect(can(agent(role), "notify:subscribe")).toBe(false);
+    expect(can(person("platform_admin"), "notify:subscribe")).toBe(false);
+    for (const role of ["owner", "admin", "member"] as const) expect(can(person(role), "notify:subscribe")).toBe(true);
     expect(can(person("member"), "agent:connect")).toBe(true);
     expect(can(person("member"), "agent:issue_key")).toBe(false);
     expect(can(person("admin"), "agent:issue_key")).toBe(true);
@@ -132,6 +137,22 @@ describe("policy enforcement in services", () => {
     );
     await expect(attachDocument(member, { title: "Notes", content: "# Notes" })).resolves.toMatchObject({ createdByName: "Member" });
     await expect(attachDocument(platformAdmin, { title: "Notes", content: "x" })).rejects.toMatchObject({ code: "forbidden" });
+  });
+
+  it("lets members, not platform admins or agents, mute and read a workspace's notifications", async () => {
+    const { db } = testDb;
+    const { scout } = await seedWorkspace(db);
+    for (const person of [owner, member]) {
+      await expect(muteWorkspace(person, {})).resolves.toEqual({ muted: true });
+      await expect(openDecisions(person, {})).resolves.toMatchObject({ muted: true, pending: 0 });
+      await expect(unmuteWorkspace(person, {})).resolves.toEqual({ muted: false });
+    }
+    for (const outsider of [platformAdmin, scout.ctx]) {
+      await expect(muteWorkspace(outsider, {})).rejects.toMatchObject({ code: "forbidden" });
+      await expect(unmuteWorkspace(outsider, {})).rejects.toMatchObject({ code: "forbidden" });
+      await expect(openDecisions(outsider, {})).rejects.toMatchObject({ code: "forbidden" });
+    }
+    await expect(answerFromNotification(platformAdmin, { taskId: "t_any", requestId: "q_any", option: 0 })).rejects.toMatchObject({ code: "forbidden" });
   });
 
   it("keeps platform admins read-only", async () => {

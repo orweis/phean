@@ -4,9 +4,12 @@ import { auth, workspaceResourceMetadata } from "./auth/auth";
 import { visibleWorkspaces, type Viewer } from "./auth/session";
 import { getDb } from "./db/client";
 import { sendDueDigests, type DigestRunReport } from "./digest/send";
+import { personContext, type PersonCtx } from "./domain/context";
 import { getWorkspaceOverviews, findInvitation, type InvitationView, type WorkspaceOverview } from "./domain/tenants";
 import { createPheanMcpHandler } from "./mcp/handler";
 import { pingDatabase } from "./db/health";
+import { prunePushDeliveries, sendDuePushes } from "./push/dispatch";
+import { handleInbox } from "./push/http";
 import { dispatchDue, pruneDeliveries, type DispatchReport } from "./webhooks/dispatch";
 
 /**
@@ -40,6 +43,21 @@ export async function dispatchWebhooksNow(): Promise<DispatchReport> {
 
 /** The MCP endpoint's handler, on the shared connection. */
 export const mcpHandler = () => createPheanMcpHandler({ getDb });
+
+/** The cron run that sends due Decision notifications and prunes old ones. */
+export async function dispatchPushesNow(): Promise<Awaited<ReturnType<typeof sendDuePushes>>> {
+  const db = getDb();
+  const report = await sendDuePushes(db);
+  await prunePushDeliveries(db);
+  return report;
+}
+
+/** A signed-in person's context on the shared connection, for the services under /account. */
+export const personCtx = (person: { id: string; name: string }): PersonCtx => personContext(getDb(), person);
+
+/** The native apps' inbox feed, on the shared connection. */
+export const nativeInbox = (request: Request, options: Omit<Parameters<typeof handleInbox>[1], "db">): Promise<Response> =>
+  handleInbox(request, { ...options, db: getDb() });
 
 /** A workspace MCP URL's protected-resource metadata. */
 export const workspaceMcpMetadata = () => workspaceResourceMetadata(auth, getDb);

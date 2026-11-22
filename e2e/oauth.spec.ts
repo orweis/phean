@@ -45,7 +45,7 @@ test.describe("with the demo account", () => {
     const client = await oauthClient(BASE_URL);
     const response = await page.goto(client.authorizationUrl);
     expect(response!.headers()["x-frame-options"]).toBe("DENY");
-    expect(response!.headers()["content-security-policy"]).toBe("frame-ancestors 'none'");
+    expect(response!.headers()["content-security-policy"]).toContain("frame-ancestors 'none'");
     await expect(page.getByText("127.0.0.1", { exact: true })).toBeVisible();
     await expect(page.getByText("is the name this client gave itself")).toBeVisible();
     await expect(page.getByText("A client's name proves nothing")).toBeVisible();

@@ -26,7 +26,7 @@ import { agents, goals, member, tasks, user, watches, type TaskRow } from "../db
 import { liveAgent } from "./agent-liveness";
 import { assertCanTransferClaims } from "./agents";
 import { createdByFields, inTenant, inTransaction, tenantRow, type Ctx } from "./context";
-import { conflict, invalid, notFound } from "./errors";
+import { conflict, forbidden, invalid, notFound } from "./errors";
 import { recordEvent, recordEvents, taskActivity, type Activity } from "./events";
 import { assertGoalsExist, findGoal } from "./goals";
 import { assertCan } from "./policy";
@@ -259,16 +259,18 @@ interface Closing {
   answer?: string;
   choices?: string[];
   answeredByName?: string | null;
+  answeredByUserId?: string;
 }
 
 /** A request as it is kept once closed. Only what a person decided waits for the agent to collect. */
-function closed(request: InputRequest, { outcome, answer = "", choices, answeredByName = null }: Closing): InputAnswer {
+function closed(request: InputRequest, { outcome, answer = "", choices, answeredByName = null, answeredByUserId }: Closing): InputAnswer {
   return {
     ...request,
     outcome,
     answer,
     ...(choices && { choices }),
     answeredByName,
+    ...(answeredByUserId && { answeredByUserId }),
     closedAt: new Date().toISOString(),
     collected: !DELIVERED_OUTCOMES.includes(outcome),
   };
@@ -783,13 +785,17 @@ export const resolveInput = service(TaskRefInput, async (ctx, { taskId }): Promi
  * A person answers an agent's question from Phean, or marks it answered in the agent's own
  * conversation. A written answer is appended to the task, where the agent reads it next time.
  */
-export const answerInput = service(AnswerInput, async (ctx, { taskId, answer: written, choices }): Promise<Task> => {
+export const answerInput = service(AnswerInput, async (ctx, { taskId, answer: written, choices, requestId }): Promise<Task> => {
   assertCan(ctx, "task:write");
   if (agentIdOf(ctx)) throw invalid("Agents close their own questions with resolve_input.");
 
   return inTransaction(ctx, async (tx) => {
     const current = await findTask(tx, taskId, { lock: true });
     const open = current.inputRequest;
+    // An answer meant for one request (a notification's button) never lands on a newer one.
+    if (requestId !== undefined && open?.id !== requestId) {
+      throw conflict(open ? `${open.agentName} has asked something newer on "${current.title}". Open it in Phean to answer.` : `That question on "${current.title}" was already answered or closed.`);
+    }
     if (!open) {
       if (!written && !choices.length) return current;
       throw conflict(`There is no open question on "${current.title}" any more.`);
@@ -798,7 +804,7 @@ export const answerInput = service(AnswerInput, async (ctx, { taskId, answer: wr
     // Ticked options read as one answer, with anything written after them.
     const answer = picked ? [...picked, ...(written ? [written] : [])].join("; ") : written;
     const description = answer ? `${current.description}\n\n${answerNote(open, answer, ctx.actor.name)}`.trim() : current.description;
-    const record = closed(open, { outcome: answer ? "answered" : "answered_elsewhere", answer, choices: picked, answeredByName: ctx.actor.name });
+    const record = closed(open, { outcome: answer ? "answered" : "answered_elsewhere", answer, choices: picked, answeredByName: ctx.actor.name, answeredByUserId: ctx.actor.id });
     const [task] = await tx.db
       .update(tasks)
       .set({ inputRequest: null, inputAnswers: withAnswer(current.inputAnswers, record), description })
@@ -842,7 +848,12 @@ export const retractAnswer = service(RetractAnswerInput, async (ctx, { taskId, r
     const current = await findTask(tx, taskId, { lock: true });
     const record = current.inputAnswers.find((entry) => entry.id === requestId);
     if (!record || !DELIVERED_OUTCOMES.includes(record.outcome)) throw notFound("answer", requestId);
+    // Only the person who answered takes it back. Answers recorded before Phean kept who gave them are anyone's.
+    if (record.answeredByUserId && record.answeredByUserId !== ctx.actor.id) {
+      throw forbidden(`Only ${record.answeredByName ?? "the person who answered"} can take that answer back.`);
+    }
     if (record.collected) throw conflict(`${record.agentName} already has that answer. Tell them in their conversation if it changed.`);
+
     if (current.inputRequest) throw conflict(`"${current.title}" has a newer question open, so the earlier answer stays.`);
     if (!isOpenTaskStatus(current.status)) throw conflict(`"${current.title}" has moved on, so its question stays answered.`);
 

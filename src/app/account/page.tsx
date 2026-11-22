@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 
+import { PushDeviceSettings } from "@/components/account/push-device-settings";
 import { SignInMethods, type ProviderMethod } from "@/components/account/sign-in-methods";
 import { TwoFactorSettings } from "@/components/account/two-factor-settings";
 import { AppHeader } from "@/components/app-header";
@@ -12,11 +13,14 @@ import { ThemePicker } from "@/components/theme-picker";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { StatusRegion } from "@/components/ui/status-region";
 import { callbackErrorMessage } from "@/lib/auth-errors";
+import { roleCan } from "@/lib/permissions";
 import { queryParam } from "@/lib/routes";
 import { auth } from "@/server/auth/auth";
 import { getViewer } from "@/server/auth/session";
-import { oauthProviders } from "@/server/config";
+import { oauthProviders, vapidConfig } from "@/server/config";
+import { listDevices } from "@/server/domain/notifications";
 import { getAppearance, getTheme } from "@/server/web";
+import { personCtx } from "@/server/entry";
 
 export const metadata: Metadata = { title: "Account" };
 
@@ -43,7 +47,8 @@ export default async function AccountPage({ searchParams }: PageProps<"/account"
   const connected = queryParam(params.connected);
   const failed = callbackErrorMessage(queryParam(params.error));
   const twoFactorEnabled = Boolean((viewer.user as { twoFactorEnabled?: boolean | null }).twoFactorEnabled);
-  const [appearance, theme] = await Promise.all([getAppearance(), getTheme()]);
+  const [appearance, theme, devices] = await Promise.all([getAppearance(), getTheme(), listDevices(personCtx(viewer.user))]);
+  const canSubscribe = viewer.memberships.some((membership) => roleCan(membership.role, "notify:subscribe"));
 
   return (
     <StatusRegion>
@@ -74,6 +79,19 @@ export default async function AccountPage({ searchParams }: PageProps<"/account"
           />
           <CardBody>
             <TwoFactorSettings enabled={twoFactorEnabled} hasPassword={Boolean(password.connectedAt)} />
+          </CardBody>
+        </Card>
+        <Card id="notifications">
+          <CardHeader
+            title="Notifications on this device"
+            description="A notification the moment an agent asks you to decide something, from every workspace you are a member of. Turn it on in each browser or app you use; mute a workspace from its Decisions page."
+          />
+          <CardBody>
+            <PushDeviceSettings
+              publicKey={vapidConfig()?.publicKey ?? null}
+              canSubscribe={canSubscribe}
+              devices={devices.map(({ id, label, endpoint, answerFromNotification, private: isPrivate, signedIn }) => ({ id, label, endpoint, answerFromNotification, private: isPrivate, signedIn }))}
+            />
           </CardBody>
         </Card>
         <Card>

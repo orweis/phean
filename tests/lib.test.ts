@@ -12,6 +12,7 @@ import {
   type AgentSession,
 } from "@/lib/agent-sessions";
 import { appearanceCookie, colorSchemeFor, parseAppearance } from "@/lib/appearance";
+import { deviceLabel } from "@/lib/device-label";
 import { addDays, dayOf, daysBetween, isoDate, isoDayFromToday, isPastDue, startOfUtcDay, todayIso } from "@/lib/dates";
 import { faviconBadgeText } from "@/lib/favicon";
 import { isWorkspaceSlug, lastWorkspaceCookie } from "@/lib/last-workspace";
@@ -328,6 +329,20 @@ describe("the board's swimlanes", () => {
     // A person working on it, or a handoff to a person, is people's work whoever captured it.
     expect(swimlaneOf({ inputRequest: null, claimedByAgentId: null, operatorUserId: "u_1", delegateToUserId: null, createdByType: "agent" })).toBe("people");
     expect(swimlaneOf({ inputRequest: null, claimedByAgentId: "ag_1", operatorUserId: null, delegateToUserId: "u_1", createdByType: "agent" })).toBe("people");
+  });
+});
+
+describe("deviceLabel", () => {
+  it("names the browser and the system a person turned notifications on in", () => {
+    const cases: [string, string][] = [
+      ["Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36", "Chrome on Android"],
+      ["Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0", "Edge on Windows"],
+      ["Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15", "Safari on Mac"],
+      ["Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:132.0) Gecko/20100101 Firefox/132.0", "Firefox on Linux"],
+      ["Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1", "Safari on iPhone"],
+      ["curl/8.0", "This browser"],
+    ];
+    for (const [userAgent, label] of cases) expect(deviceLabel(userAgent), userAgent).toBe(label);
   });
 });
 

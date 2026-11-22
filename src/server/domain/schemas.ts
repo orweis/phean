@@ -219,6 +219,13 @@ export const AnswerInput = z.object({
     .max(MAX_OPTIONS)
     .default([])
     .describe("For a request that takes several options: the positions of the options picked"),
+  requestId: z
+    .string()
+    .trim()
+    .min(1)
+    .max(LIMITS.ref)
+    .optional()
+    .describe("The request being answered; when it is no longer the open one, the answer is refused rather than given to a newer question"),
 });
 
 export const RetractAnswerInput = z.object({
@@ -528,4 +535,58 @@ function isTimeZone(zone: string): boolean {
 export const SaveDigestInput = z.object({
   hour: z.coerce.number().int().min(0).max(23),
   timeZone: z.string().min(1).max(64).refine(isTimeZone, "Unknown time zone."),
+});
+
+// Decision notifications
+const base64url = (bytes: number) =>
+  z
+    .string()
+    .trim()
+    .regex(/^[A-Za-z0-9_-]+={0,2}$/, "Expected base64url.")
+    .refine((value) => Buffer.from(value, "base64url").length === bytes, `Expected a ${bytes}-byte key.`);
+
+/** A browser's PushSubscription, as `subscription.toJSON()` gives it, and the name the person sees for it. */
+export const RegisterDeviceInput = z.object({
+  endpoint: z.string().trim().min(1).max(LIMITS.url),
+  keys: z.object({
+    /** The browser's P-256 public key, uncompressed (RFC 8291). */
+    p256dh: base64url(65),
+    /** The 16-byte authentication secret. */
+    auth: base64url(16),
+  }),
+  label: z.string().trim().max(LIMITS.name).default(""),
+});
+
+export const DeviceRefInput = z.object({ deviceId: z.string().trim().min(1).max(LIMITS.ref) });
+
+/** A push subscription's endpoint: how a browser (or its service worker) names its own device. */
+const pushEndpoint = z.string().trim().min(1).max(LIMITS.url);
+
+export const DeviceEndpointInput = z.object({ endpoint: pushEndpoint });
+
+/** A checkbox posts "true" or "false"; code passes booleans. */
+const flag = z.union([z.boolean(), z.stringbool()]);
+
+export const DeviceOptionsInput = DeviceRefInput.extend({
+  answerFromNotification: flag.optional(),
+  private: flag.optional(),
+});
+
+/** An answer from a notification's button (`option`, an index into the open request's options) or its text reply. */
+export const NotificationAnswerInput = z
+  .object({
+    taskId,
+    requestId: z.string().trim().min(1).max(LIMITS.ref),
+    option: z.number().int().min(0).max(MAX_OPTIONS - 1).optional(),
+    answer: z.string().trim().min(1).max(LIMITS.note).optional(),
+    /** The answering device's own endpoint: every other device has its notification replaced. */
+    endpoint: pushEndpoint.optional(),
+  })
+  .refine((input) => (input.option === undefined) !== (input.answer === undefined), "Send an option or an answer, not both.");
+
+/** Undo from a notification, with the device's endpoint as for an answer. */
+export const NotificationUndoInput = z.object({
+  taskId,
+  requestId: z.string().trim().min(1).max(LIMITS.ref),
+  endpoint: pushEndpoint.optional(),
 });

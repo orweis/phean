@@ -24,5 +24,5 @@ export default defineConfig([
       ],
     },
   },
-  globalIgnores([".next/**", "out/**", ".data/**", "drizzle/**", "next-env.d.ts"]),
+  globalIgnores(["public/sw.js", ".next/**", "out/**", ".data/**", "drizzle/**", "next-env.d.ts", ".claude/**"]),
 ]);

@@ -10,6 +10,9 @@ function withQuery(path: string, query: Query = {}): string {
   return search ? `${path}?${search}` : path;
 }
 
+/** The square sizes the app icon is drawn in (`routes.appIcon`), for the web app manifest and notifications. */
+export const APP_ICON_SIZES = [192, 512] as const;
+
 /** Every in-app path, built in one place so pages, redirects, and MCP links agree. */
 export const routes = {
   home: () => "/",
@@ -78,8 +81,23 @@ export const routes = {
   mcp: (slug?: string) => (slug === undefined ? "/mcp" : `/mcp/w/${slug}`),
   /** The dialog for connecting an MCP client, on the signed query the OAuth provider sent it. */
   oauthApprove: (oauthQuery: string) => `/oauth/approve?${oauthQuery}`,
+  /** Where the desktop app's browser sign-in asks the person to confirm, for a request the app registered. */
+  nativeAuthorize: (requestId: string) => withQuery("/native/authorize", { request: requestId }),
+  /** The form on `nativeAuthorize` posts here; it answers 303 to the app's loopback address. */
+  nativeConfirm: () => "/native/authorize/confirm",
+  /** Where a notification's button posts its answer (a request id and an option index), and its Undo. */
+  pushAnswer: (slug: string) => `/w/${slug}/push/answer`,
+  pushUndo: (slug: string) => `/w/${slug}/push/undo`,
+  /** The desktop app's feed of open requests across the person's workspaces. */
+  nativeInbox: () => "/api/native/inbox",
   /** The realtime event stream agents open over a WebSocket. */
   events: () => "/api/events",
+  /** The static page the service worker shows when a navigation cannot reach Phean. */
+  offline: () => "/offline",
+  /** The service worker, at the root so its scope is the whole origin. */
+  serviceWorker: () => "/sw.js",
+  /** The app icon as a square PNG, for the web app manifest and notifications (`APP_ICON_SIZES`). */
+  appIcon: (size: number) => `/icons/${size}.png`,
 } as const;
 
 /** A single non-empty search param value; Next passes repeated keys as arrays. */
@@ -95,8 +113,20 @@ export function queryStringOf(params: Record<string, string | string[] | undefin
   return query.toString();
 }
 
-/** Only same-origin relative paths are honored as post-login redirects. */
+/** Any host: only the parsed origin is compared, so this never names a real site. */
+const SAME_ORIGIN_PROBE = "https://phean.invalid";
+
+/**
+ * Only same-origin relative paths are honored as post-login redirects. "//host" and "/\\host" are
+ * protocol-relative URLs to another origin in browsers, and URL parsing drops tabs and newlines
+ * anywhere, so "/\t/host" is one too: refuse control characters, then check what a browser would
+ * actually resolve the path to.
+ */
 export function safeNextPath(next: string | null | undefined, fallback: string = routes.workspaces()): string {
-  // "//host" and "/\host" are protocol-relative URLs to another origin in browsers.
-  return next && /^\/(?![/\\])/.test(next) ? next : fallback;
+  if (!next || !/^\/(?![/\\])/.test(next) || /[\u0000-\u001f\u007f]/.test(next)) return fallback;
+  try {
+    return new URL(next, SAME_ORIGIN_PROBE).origin === SAME_ORIGIN_PROBE ? next : fallback;
+  } catch {
+    return fallback;
+  }
 }

@@ -20,6 +20,7 @@
     "test:watch": "vitest",
     "check": "pnpm typecheck && pnpm lint && pnpm test",
     "themes": "tsx scripts/themes.ts",
+    "sw": "tsx scripts/service-worker.ts",
     "test:e2e": "next build && playwright test",
     "e2e:serve": "rm -rf .data/e2e && pnpm db:seed && next start --port 3200",
     "db:generate": "drizzle-kit generate",
@@ -52,6 +53,7 @@
     "server-only": "^0.0.1",
     "three": "0.187.0",
     "uqr": "0.1.3",
+    "web-push": "4.0.0",
     "ws": "^8.22.1",
     "zod": "^4.6.7"
   },

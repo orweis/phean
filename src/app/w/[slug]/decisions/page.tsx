@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import { AnsweredDecisions } from "@/components/answered-decisions";
+import { NotificationMute } from "@/components/notification-mute";
 import { OpenQuestions } from "@/components/open-questions";
 import { PageHeader } from "@/components/page-header";
 import { PendingApprovals } from "@/components/pending-approvals";
@@ -12,6 +13,7 @@ import { pluralize } from "@/lib/format";
 import { queryParam } from "@/lib/routes";
 import { requireWorkspace } from "@/server/auth/session";
 import { listGoals } from "@/server/domain/goals";
+import { isWorkspaceMuted } from "@/server/domain/notifications";
 import { can } from "@/server/domain/policy";
 import { findRequest, listDecisions, type DecisionRecord } from "@/server/domain/tasks";
 
@@ -31,11 +33,13 @@ export default async function DecisionsPage({ params, searchParams }: PageProps<
   const { slug } = await params;
   const focus = queryParam((await searchParams).focus);
   const { ctx } = await requireWorkspace(slug);
-  const [{ open, closed }, goals, linked] = await Promise.all([
+  const [{ open, closed }, goals, linked, muted] = await Promise.all([
     listDecisions(ctx, {}),
     listGoals(ctx, {}),
     // A link to one request: found wherever it is, even past the answers this page lists.
     focus ? findRequest(ctx, { requestId: focus }).catch(() => null) : null,
+    // Only members get notifications, so only they have a mute.
+    can(ctx.actor, "notify:subscribe") ? isWorkspaceMuted(ctx, {}) : null,
   ]);
   const linkedElsewhere = linked?.record && !closed.some(({ request }) => request.id === focus) ? linked.record : null;
   const canAnswer = can(ctx.actor, "task:write");
@@ -46,7 +50,8 @@ export default async function DecisionsPage({ params, searchParams }: PageProps<
     <>
       <PageHeader
         title="Decisions"
-        description="Everything agents asked you to decide, answer or approve. Pick an option or write your answer; an agent that is waiting picks it up at once, others the next time they check in. With a request focused, number keys pick its options and J and K move between requests."
+        description="Everything agents asked you to decide, answer or approve. Pick an option or write your answer; an agent that is waiting picks it up at once, others the next time they check in. With a request focused, number keys pick its options and J and K move between requests. Notifications for new requests are turned on per device from your Account page; muting stops this workspace's on all of them."
+        actions={muted === null ? undefined : <NotificationMute slug={slug} workspaceName={ctx.tenant.name} muted={muted} />}
       />
       <FocusOnLoad id={focus} />
       <div className="space-y-6">

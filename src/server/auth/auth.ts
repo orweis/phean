@@ -22,7 +22,10 @@ import * as authSchema from "../db/schema/auth";
 import { oauthResource } from "../db/schema/auth";
 import { resolveOAuthAgent } from "../domain/agents";
 import { findTenantBySlug } from "../domain/tenants";
+import { forgetAllDevices } from "../domain/notifications";
 import { pruneUnusedClients } from "./clients";
+import { nativeSignIn } from "./native";
+import { pushDeviceSessions } from "./push-devices";
 import { providerSignInChallenge, TRUST_DEVICE_SECONDS, TWO_FACTOR_CHALLENGE_SECONDS } from "./two-factor";
 
 const SEVEN_DAYS_IN_SECONDS = 60 * 60 * 24 * 7;
@@ -86,7 +89,17 @@ export function createAuth(database: Db, baseUrl: string) {
     baseURL: baseUrl,
     trustedOrigins: [...new Set([baseUrl, ...trustedOrigins()])],
     database: drizzleAdapter(database, { provider: "pg", schema: authSchema }),
-    emailAndPassword: { enabled: true, minPasswordLength: LIMITS.passwordMin, maxPasswordLength: LIMITS.passwordMax, autoSignIn: true },
+    emailAndPassword: {
+      enabled: true,
+      minPasswordLength: LIMITS.passwordMin,
+      maxPasswordLength: LIMITS.passwordMax,
+      autoSignIn: true,
+      // A reset is what someone does when they think they lost the account: every session ends, and every notification device with it.
+      revokeSessionsOnPasswordReset: true,
+      onPasswordReset: async ({ user }) => {
+        await forgetAllDevices(database, user.id);
+      },
+    },
     socialProviders: socialProviders(),
     account: {
       // People connect GitHub or Google from their account page while signed in, so the provider's
@@ -163,6 +176,10 @@ export function createAuth(database: Db, baseUrl: string) {
         },
       }),
       cimd({ fetchClientMetadataResource, metadataProfile: "mcp-2026-07-28" }),
+      // The desktop app's sign-in through the system browser; see native.ts.
+      nativeSignIn(),
+      // Notification devices end with their sessions and follow one Better Auth replaces; see push-devices.ts.
+      pushDeviceSessions(database),
       // Must be last: lets server actions set auth cookies.
       nextCookies(),
     ],
