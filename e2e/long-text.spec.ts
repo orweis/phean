@@ -17,6 +17,8 @@ const LONG_OPTIONS = [
   "Hold; not a priority now",
 ];
 
+const LONG_URL = "https://docs.google.com/presentation/d/1AbCdEfGhIjKlMnOpQrStUvWxYz0123456789abcdefghijk/edit#slide=id.p1";
+
 /** Every option of every request, and every answered option, stays inside the card it belongs to. */
 async function expectOptionsInsideCards(page: Page) {
   const escapes = await page.evaluate(() =>
@@ -41,11 +43,15 @@ test("long options wrap inside their card on the overview and the Decisions page
       tasks: [{ title: "Set SFS conversion Vercel env var so form submits can record" }, { title: "Announce the conversion tracking launch" }],
     });
     const [envVars, announce] = created as [Task, Task];
+    // Context, links and documents an agent writes can hold a long URL or a name with no spaces.
+    await agent.call("attach_document", { taskId: envVars.id, title: "DRAFT Q3 2026 board deck (v2): 9 slides, runway, FedEx, M&A, sweep findings", format: "markdown", content: "# Deck" });
     await agent.call("request_input", {
       taskId: envVars.id,
       kind: "decision",
       question: "I can't reach the Vercel team from my scheduled runs. How should the SFS conversion env vars get set?",
+      context: `Slides: ${LONG_URL}\nThe variable is GOOGLE_ADS_CONVERSION_ACTION_ID_AND_DATA_MANAGER_OAUTH_CLIENT_SECRET.`,
       options: LONG_OPTIONS,
+      links: [{ url: LONG_URL, title: "Board_deck_Q3_2026_v2_FINAL_for_review_session_011U2E25t3zSqf8i8CACe5Fs.pptx", kind: "doc" }],
     });
     await agent.call("request_input", {
       taskId: announce.id,

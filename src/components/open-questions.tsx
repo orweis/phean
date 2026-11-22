@@ -216,7 +216,7 @@ export function OpenQuestions({
                 </>
               )}
             </p>
-            <blockquote className="mt-2 border-l-2 border-wait pl-3 text-sm text-ink">{request.question}</blockquote>
+            <blockquote className="mt-2 border-l-2 border-wait pl-3 text-sm wrap-anywhere text-ink">{request.question}</blockquote>
             {options ? (
               <>
                 <div
@@ -237,13 +237,13 @@ export function OpenQuestions({
                   <MoreAnswers taskId={task.id} slug={slug} request={request} title={task.title} />
                   <CopyLinkButton path={routes.request(slug, request.id)} subject={`link to the request on ${task.title}`} compact />
                 </div>
-                {request.context && <p className="mt-2.5 text-sm whitespace-pre-line text-ink-2">{request.context}</p>}
+                {request.context && <p className="mt-2.5 text-sm whitespace-pre-line wrap-anywhere text-ink-2">{request.context}</p>}
                 <TaskLinks links={request.links} className="mt-2.5" />
                 <DocumentChips documents={task.documents} slug={slug} className="mt-2" />
               </>
             ) : (
               <>
-                {request.context && <p className="mt-2 text-sm whitespace-pre-line text-ink-2">{request.context}</p>}
+                {request.context && <p className="mt-2 text-sm whitespace-pre-line wrap-anywhere text-ink-2">{request.context}</p>}
                 <TaskLinks links={request.links} className="mt-2.5" />
                 <DocumentChips documents={task.documents} slug={slug} className="mt-2" />
                 <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-2">

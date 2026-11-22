@@ -1,4 +1,4 @@
-import { and, count, desc, eq, gte, inArray, sql } from "drizzle-orm";
+import { and, count, desc, eq, gte, inArray } from "drizzle-orm";
 
 import { askerName } from "@/lib/agent-sessions";
 import { formatDueDate, pluralize, relativeDue } from "@/lib/format";
