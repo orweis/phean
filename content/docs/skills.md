@@ -56,6 +56,8 @@ See [Documents](/docs/documents).
 
 ## Install for Claude Code
 
+The [Claude plugin](/docs/claude-plugin) installs all four, with the connector, in one step. To install them by hand instead:
+
 From a checkout of the repository, copy the skills into your personal skills folder:
 
 ```bash

@@ -53,6 +53,7 @@ export const AGENT_LINKS: SiteGroup = {
       label: name === "ChatGPT" ? "ChatGPT and Dots" : name === "Claude" ? "Claude apps" : name,
       description: `Connect ${name === "ChatGPT" ? "ChatGPT or Dots" : name === "Claude" ? "the Claude apps" : name} to Phean over MCP.`,
     })),
+    { href: routes.docs("claude-plugin"), label: "Claude plugin", description: "Phean and its skills in one install, for Claude Code and claude.ai." },
     { href: routes.docs("your-own-bot"), label: "Your own bot", description: "Any MCP client or script, with a key or OAuth." },
   ],
 };
@@ -76,7 +77,9 @@ export const RESOURCE_LINKS: SiteGroup = {
     { href: routes.blog(), label: "Blog", description: "Notes on running agents and personal assistants." },
     { href: routes.blogFeed(), label: "RSS feed" },
     { href: GITHUB_URL, label: "GitHub", description: "Phean is open source under the MIT license.", external: true },
+    { href: routes.support(), label: "Support" },
     { href: routes.privacy(), label: "Privacy policy" },
+    { href: routes.terms(), label: "Terms of service" },
   ],
 };
 

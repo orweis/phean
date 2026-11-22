@@ -74,6 +74,8 @@ src/
 │   └── web.ts                   # Page helpers (orNotFound, absoluteUrl)
 └── proxy.ts                     # Optimistic sign-in redirect (Next 16 "proxy")
 drizzle/                         # Generated SQL migrations (committed)
+skills/                          # The installable Agent Skills (source of truth)
+plugin/                          # The Claude plugin: connector + copies of skills/ (pnpm plugin); see docs/plugin/PLAN.md
 scripts/                         # migrate, seed, demo-agents, mcp-agent (env.ts loads .env files the way Next does)
 tests/                           # Vitest suites on in-memory PGlite
 e2e/                             # Playwright UI tests against a production build

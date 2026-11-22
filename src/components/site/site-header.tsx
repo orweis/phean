@@ -15,7 +15,9 @@ import { AGENT_LINKS, DEVELOPER_LINKS, GITHUB_URL, PRODUCT, RESOURCE_LINKS, USE_
 
 /** An agent's mark beside its link in the Agents menu, where it has one. */
 function markFor(link: SiteLink) {
-  const agent = AGENTS.find((candidate) => link.href === routes.docs(candidate.docs));
+  // The Claude plugin is Claude's too, so it takes Claude's mark.
+  const docs = link.href === routes.docs("claude-plugin") ? routes.docs("claude-apps") : link.href;
+  const agent = AGENTS.find((candidate) => docs === routes.docs(candidate.docs));
   // An agent without a mark of its own, and your own bot, take the generic bot so every label lines up.
   return agent?.mark ? <AgentMark mark={agent.mark} name={agent.name} className="size-4 text-ink-2" /> : <Bot aria-hidden className="size-4 text-ink-2" />;
 }

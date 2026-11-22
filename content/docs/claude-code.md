@@ -5,6 +5,8 @@ description: Connect Claude Code to a workspace, install Phean's skills, sync up
 
 Claude Code is the most complete Phean client: it signs in with OAuth, runs Agent Skills, shows MCP prompts as slash commands, and can run headless on a schedule.
 
+The quickest start is the [Claude plugin](/docs/claude-plugin), which installs the connector and the skills together. The steps below set them up by hand, which you need for a workspace's own URL.
+
 ## Connect
 
 Add the workspace's MCP URL. Name the server after the workspace, so one Claude Code can hold several:
