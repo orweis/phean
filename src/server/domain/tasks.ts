@@ -34,6 +34,7 @@ import { loadWorkflow } from "./workflow";
 import {
   AnswerInput,
   RetractAnswerInput,
+  SnoozeRequestInput,
   AskInput,
   AssignTasksInput,
   CaptureTasksInput,
@@ -154,6 +155,9 @@ export const isDueWithinWeek = and(
   sql`${tasks.dueDate} between current_date and current_date + 7`,
 )!;
 export const isAwaitingInput = and(isOpenTask, isNotNull(tasks.inputRequest))!;
+
+/** The queue of open requests, longest waiting first: a snoozed one waits from when it was snoozed (`queuedAt`). */
+export const requestQueueOrder = sql`coalesce(${tasks.inputRequest}->>'snoozedAt', ${tasks.inputRequest}->>'askedAt')`;
 
 const parentTask = alias(tasks, "parent_task");
 const operatorUser = alias(user, "operator_user");
@@ -821,6 +825,33 @@ export const answerInput = service(AnswerInput, async (ctx, { taskId, answer: wr
   });
 });
 
+/**
+ * A person sends an open request to the back of the queue, to come back to it after the others; or,
+ * with `undo`, puts it back where it was. The agent's request is otherwise untouched, and it is told.
+ */
+export const snoozeRequest = service(SnoozeRequestInput, async (ctx, { taskId, requestId, undo }): Promise<Task> => {
+  assertCan(ctx, "task:write");
+  if (agentIdOf(ctx)) throw invalid("People snooze requests on the Decisions page.");
+
+  return inTransaction(ctx, async (tx) => {
+    const current = await findTask(tx, taskId, { lock: true });
+    const open = current.inputRequest;
+    if (!open || open.id !== requestId) throw conflict(`That request on "${current.title}" is no longer waiting.`);
+    if (undo && !open.snoozedAt) return current;
+    const { snoozedAt: _previous, ...rest } = open;
+    const request: InputRequest = undo ? rest : { ...rest, snoozedAt: new Date().toISOString() };
+    const [task] = await tx.db.update(tasks).set({ inputRequest: request }).where(tenantRow(tx, tasks, taskId)).returning(taskColumns);
+    await recordEvent(tx, {
+      action: "task.input_snoozed",
+      entityType: "task",
+      entityId: taskId,
+      summary: undo ? `brought back ${open.agentName}'s request on "${current.title}"` : `snoozed ${open.agentName}'s request on "${current.title}"`,
+      data: { goalId: current.goalId, agentId: open.agentId, requestId: open.id, kind: open.kind, snoozed: !undo },
+    });
+    return task!;
+  });
+});
+
 /** The options ticked on a request that takes several, in the order the agent gave them. */
 function pickedOptions(request: InputRequest, positions: readonly number[]): string[] | undefined {
   if (!positions.length) return undefined;
@@ -1303,7 +1334,7 @@ export const findRequest = service(RequestRefInput, async (ctx, { requestId }): 
 export const listDecisions = service(DecisionsInput, async (ctx, { limit }): Promise<Decisions> => {
   assertCan(ctx, "workspace:read");
   const [open, withHistory] = await Promise.all([
-    selectTaskViews(ctx, isAwaitingInput).orderBy(sql`${tasks.inputRequest}->>'askedAt'`),
+    selectTaskViews(ctx, isAwaitingInput).orderBy(requestQueueOrder),
     selectTaskViews(ctx, sql`jsonb_array_length(${tasks.inputAnswers}) > 0`),
   ]);
   const closedRecords = withHistory

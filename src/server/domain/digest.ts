@@ -10,7 +10,7 @@ import { forbidden } from "./errors";
 import { assertCan } from "./policy";
 import { DigestInput, Empty, SaveDigestInput } from "./schemas";
 import { service } from "./service";
-import { isAwaitingInput, isOverdue, selectTaskViews } from "./tasks";
+import { isAwaitingInput, isOverdue, requestQueueOrder, selectTaskViews } from "./tasks";
 
 /** One line of a digest: what it is, a few words of why, and where it leads (a path in the app). */
 export interface DigestItem {
@@ -58,7 +58,7 @@ export const getDigest = service(DigestInput, async (ctx, input): Promise<Digest
   const slug = ctx.tenant.slug;
 
   const [asked, proposed, late, finished, [captured]] = await Promise.all([
-    selectTaskViews(ctx, isAwaitingInput).orderBy(sql`${tasks.inputRequest}->>'askedAt'`),
+    selectTaskViews(ctx, isAwaitingInput).orderBy(requestQueueOrder),
     ctx.db
       .select({ id: goals.id, title: goals.title, createdByName: goals.createdByName })
       .from(goals)

@@ -76,7 +76,7 @@ export default async function DecisionsPage({ params, searchParams }: PageProps<
               title={open.length ? `${pluralize(open.length, "request")} waiting on you` : "Nothing waiting on you"}
               description={
                 open.length
-                  ? `${[decisions && pluralize(decisions, "decision"), open.length - decisions && pluralize(open.length - decisions, "question")].filter(Boolean).join(" and ")}, longest waiting first.`
+                  ? `${[decisions && pluralize(decisions, "decision"), open.length - decisions && pluralize(open.length - decisions, "question")].filter(Boolean).join(" and ")}, longest waiting first; snoozed ones wait at the back.`
                   : undefined
               }
             />

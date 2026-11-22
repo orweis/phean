@@ -1,7 +1,7 @@
-import { Bot, Check, Ellipsis } from "lucide-react";
+import { AlarmClock, Bot, Check, Ellipsis } from "lucide-react";
 import Link from "next/link";
 
-import { answerInputAction, retractAnswerAction } from "@/app/w/[slug]/actions";
+import { answerInputAction, retractAnswerAction, snoozeRequestAction } from "@/app/w/[slug]/actions";
 import { askedInApp, askerName, sessionOfAsker, type AgentSession, type InputRequest } from "@/lib/agent-sessions";
 import { LIMITS, REQUEST_KIND_META } from "@/lib/domain";
 import { cx } from "@/lib/cx";
@@ -62,6 +62,31 @@ function OtherAnswer({ taskId, slug, request }: { taskId: string; slug: string; 
         </div>
       </ActionForm>
     </Popover>
+  );
+}
+
+/**
+ * Sends the request to the back of the queue, to answer after the others; S does the same for the
+ * selected request. Undo puts it back where it was.
+ */
+function Snooze({ taskId, slug, request, title }: { taskId: string; slug: string; request: InputRequest; title: string }) {
+  return (
+    <ActionButton
+      action={snoozeRequestAction}
+      workspace={slug}
+      fields={{ taskId, requestId: request.id }}
+      notice={`Snoozed “${truncate(title, 60)}” to the back of the queue`}
+      undo={{ action: snoozeRequestAction, fields: { taskId, requestId: request.id, undo: "true" }, done: `“${truncate(title, 60)}” is back in its place.` }}
+      data-snooze=""
+      aria-keyshortcuts="S"
+      aria-label={`Snooze ${title}`}
+      title="Snooze: move to the back of the queue (S)"
+      variant="ghost"
+      size="sm"
+    >
+      <AlarmClock aria-hidden />
+      Snooze
+    </ActionButton>
   );
 }
 
@@ -178,6 +203,12 @@ export function OpenQuestions({
               <Bot className="size-3" aria-hidden />
               {askerName(request)} asked {timeAgo(request.askedAt)}
               {askedInApp(request, session?.app) && ` in ${askedInApp(request, session?.app)}`}
+              {request.snoozedAt && (
+                <>
+                  <span aria-hidden> · </span>
+                  <span data-snoozed>snoozed {timeAgo(request.snoozedAt)}</span>
+                </>
+              )}
               {showGoal && task.goalId && task.goalTitle && (
                 <>
                   <span aria-hidden> · </span>
@@ -199,6 +230,7 @@ export function OpenQuestions({
                     <OptionButtons taskId={task.id} slug={slug} request={request} />
                   )}
                   <OtherAnswer taskId={task.id} slug={slug} request={request} />
+                  <Snooze taskId={task.id} slug={slug} request={request} title={task.title} />
                   <span className="ml-1.5">
                     <Resume session={session} prominent={false} />
                   </span>
@@ -217,6 +249,7 @@ export function OpenQuestions({
                 <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-2">
                   <Resume session={session} prominent />
                   {canAnswer && <OtherAnswer taskId={task.id} slug={slug} request={request} />}
+                  {canAnswer && <Snooze taskId={task.id} slug={slug} request={request} title={task.title} />}
                   {canAnswer && <MoreAnswers taskId={task.id} slug={slug} request={request} title={task.title} />}
                   <CopyLinkButton path={routes.request(slug, request.id)} subject={`link to the request on ${task.title}`} compact />
                 </div>

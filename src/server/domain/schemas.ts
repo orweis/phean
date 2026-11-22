@@ -228,6 +228,13 @@ export const AnswerInput = z.object({
     .describe("The request being answered; when it is no longer the open one, the answer is refused rather than given to a newer question"),
 });
 
+export const SnoozeRequestInput = z.object({
+  taskId,
+  requestId: z.string().trim().min(1).max(LIMITS.ref).describe("The id of the open request to snooze"),
+  /** Undo: put it back where it was in the queue. */
+  undo: z.preprocess((value) => value === true || value === "true", z.boolean()).default(false),
+});
+
 export const RetractAnswerInput = z.object({
   taskId,
   requestId: z.string().trim().min(1).max(LIMITS.ref).describe("The id of the request whose answer is taken back"),

@@ -22,6 +22,7 @@ import {
   handOffTaskByChoice,
   releaseTask,
   retractAnswer,
+  snoozeRequest,
   takeTask,
   unarchiveTask,
   updateTask,
@@ -53,6 +54,7 @@ export const archiveDoneTasksAction = tenantAction(archiveDoneTasks, {
 });
 export const answerInputAction = tenantAction(answerInput, { success: "Answered." });
 export const retractAnswerAction = tenantAction(retractAnswer, { success: "Answer taken back." });
+export const snoozeRequestAction = tenantAction(snoozeRequest, { success: "Snoozed." });
 
 // Memory
 export const rememberAction = tenantAction(remember, { success: "Saved to memory." });

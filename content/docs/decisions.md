@@ -77,6 +77,8 @@ The Decisions page (`/w/<slug>/decisions`) shows what waits, with context, optio
 
 After you answer, the status region says what was sent and offers **Undo**. Undo takes the answer back and reopens the question exactly as it was asked, as long as the agent has not collected the answer yet. Once the agent has it, tell it in its conversation if your answer changed.
 
+Not ready to answer one yet? **Snooze** it (or press **S** with it selected) and it moves to the back of the queue, behind everything asked before you snoozed it. The agent's request is unchanged and still waits for you; **Undo** puts it back where it was. A snoozed request says so next to when it was asked.
+
 ### Keyboard
 
 On the Decisions page and the overview, one request is always selected.
