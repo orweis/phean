@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 
 import { AnsweredDecisions } from "@/components/answered-decisions";
 import { NotificationMute } from "@/components/notification-mute";
+import { NotificationsPrompt } from "@/components/notifications-prompt";
 import { OpenQuestions } from "@/components/open-questions";
 import { PageHeader } from "@/components/page-header";
 import { PendingApprovals } from "@/components/pending-approvals";
@@ -12,6 +13,7 @@ import { DELIVERED_OUTCOMES } from "@/lib/agent-sessions";
 import { pluralize } from "@/lib/format";
 import { queryParam } from "@/lib/routes";
 import { requireWorkspace } from "@/server/auth/session";
+import { vapidConfig } from "@/server/config";
 import { listGoals } from "@/server/domain/goals";
 import { isWorkspaceMuted } from "@/server/domain/notifications";
 import { can } from "@/server/domain/policy";
@@ -50,11 +52,12 @@ export default async function DecisionsPage({ params, searchParams }: PageProps<
     <>
       <PageHeader
         title="Decisions"
-        description="Everything agents asked you to decide, answer or approve. Pick an option or write your answer; an agent that is waiting picks it up at once, others the next time they check in. With a request focused, number keys pick its options and J and K move between requests. Notifications for new requests are turned on per device from your Account page; muting stops this workspace's on all of them."
+        description="Everything agents asked you to decide, answer or approve. Pick an option or write your answer; an agent that is waiting picks it up at once, others the next time they check in. With a request focused, number keys pick its options and J and K move between requests. Notifications for new requests are turned on per device, here or from your Account page; muting stops this workspace's on all of them."
         actions={muted === null ? undefined : <NotificationMute slug={slug} workspaceName={ctx.tenant.name} muted={muted} />}
       />
       <FocusOnLoad id={focus} />
       <div className="space-y-6">
+        {muted !== null && <NotificationsPrompt publicKey={vapidConfig()?.publicKey ?? null} member />}
         {focus && !linked && (
           <p role="status" className="surface rounded-lg border border-rule px-4 py-3 text-sm text-ink-2">
             That question or decision is not in this workspace. It may have been in a task that was deleted, or the link is mistyped.
