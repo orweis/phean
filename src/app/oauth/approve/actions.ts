@@ -9,12 +9,10 @@ import { authorizeRetryPath, consentScope, levelField, renewalKey, type ConsentO
 import { attempt } from "@/server/actions";
 import { auth, completeConsent } from "@/server/auth/auth";
 import { readConsentRequest } from "@/server/auth/consent";
-import { getSession } from "@/server/auth/session";
-import { getDb } from "@/server/db/client";
+import { getSession, ownMemberships, personContext } from "@/server/auth/session";
 import { approveAgentThen, findRenewableAgent } from "@/server/domain/agents";
 import { invalid } from "@/server/domain/errors";
 import { ApproveAgentInput } from "@/server/domain/schemas";
-import { listMemberships, userContext } from "@/server/domain/tenants";
 import { formToInput } from "@/server/forms";
 
 /**
@@ -48,9 +46,9 @@ export async function decideConsentAction(_previous: ActionState, formData: Form
   const slug = String(formData.get("workspace") ?? "");
   // A client on a workspace's own URL gets a token only for that workspace, so the agent must work there.
   if (request.workspace !== null && slug !== request.workspace) return { status: "error", message: "This client connects to another workspace's address.", at: Date.now() };
-  const membership = (await listMemberships(getDb(), session.user.id)).find(({ tenant }) => tenant.slug === slug);
+  const membership = (await ownMemberships(session.user)).find(({ tenant }) => tenant.slug === slug);
   if (!membership) return { status: "error", message: "Choose one of your workspaces.", at: Date.now() };
-  const ctx = userContext(getDb(), membership, session.user);
+  const ctx = personContext(membership, session.user);
 
   const name = String(formData.get("name") ?? "");
   const key = renewalKey(slug, name);

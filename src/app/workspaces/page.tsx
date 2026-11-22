@@ -16,9 +16,9 @@ import { OPEN_TASK_STATUSES, ROLE_META } from "@/lib/domain";
 import { cx } from "@/lib/cx";
 import { timeAgo } from "@/lib/format";
 import { routes } from "@/lib/routes";
-import { getViewer, visibleWorkspaces } from "@/server/auth/session";
-import { getDb } from "@/server/db/client";
-import { getWorkspaceOverviews, type WorkspaceOverview } from "@/server/domain/tenants";
+import { getViewer } from "@/server/auth/session";
+import type { WorkspaceOverview } from "@/server/domain/tenants";
+import { workspaceOverviews } from "@/server/entry";
 
 export const metadata: Metadata = { title: "Workspaces" };
 
@@ -48,7 +48,7 @@ function sum(rows: readonly WorkspaceOverview[], pick: (row: WorkspaceOverview) 
 
 export default async function WorkspacesPage() {
   const viewer = await getViewer();
-  const rows = await getWorkspaceOverviews(getDb(), await visibleWorkspaces(viewer));
+  const rows = await workspaceOverviews(viewer);
   const late = sum(rows, (row) => row.overdue);
 
   return (
