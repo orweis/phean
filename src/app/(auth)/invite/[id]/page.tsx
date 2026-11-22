@@ -10,8 +10,7 @@ import { ButtonLink } from "@/components/ui/button";
 import { ROLE_META } from "@/lib/domain";
 import { routes } from "@/lib/routes";
 import { getViewer } from "@/server/auth/session";
-import { getDb } from "@/server/db/client";
-import { findInvitation } from "@/server/domain/tenants";
+import { invitationById } from "@/server/entry";
 
 export const metadata: Metadata = { title: "Invitation" };
 
@@ -26,7 +25,7 @@ function Message({ title, children }: { title: string; children: ReactNode }) {
 
 export default async function InvitePage({ params }: PageProps<"/invite/[id]">) {
   const { id } = await params;
-  const [viewer, invitation] = await Promise.all([getViewer(), findInvitation(getDb(), id)]);
+  const [viewer, invitation] = await Promise.all([getViewer(), invitationById(id)]);
   if (!invitation) notFound();
   const { tenant } = invitation;
 

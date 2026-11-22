@@ -40,6 +40,16 @@ export async function getSessionIfReachable(): Promise<Awaited<ReturnType<typeof
   }
 }
 
+/** The workspaces this person belongs to (not a platform admin's extra view). */
+export async function ownMemberships(user: SessionUser): Promise<Membership[]> {
+  return listMemberships(getDb(), user.id);
+}
+
+/** The context a person acts in within one of their workspaces. */
+export function personContext(membership: Membership, user: SessionUser): Ctx {
+  return userContext(getDb(), membership, user);
+}
+
 export async function requireUser(): Promise<SessionUser> {
   const session = await getSession();
   if (!session) redirect(routes.signIn());
