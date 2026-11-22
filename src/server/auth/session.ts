@@ -1,5 +1,6 @@
 import "server-only";
 
+import { getSessionCookie } from "better-auth/cookies";
 import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { cache } from "react";
@@ -19,6 +20,25 @@ export const getSession = cache(async () => {
   const requestHeaders = await headers();
   return auth.api.getSession({ headers: requestHeaders });
 });
+
+/**
+ * Whether the visitor carries a session cookie, read without touching the database. For public
+ * pages (the landing page, docs, blog), which must render while the database is down: they only
+ * choose between "Open Phean" and "Get started", and the app checks the session itself.
+ */
+export async function hasSessionCookie(): Promise<boolean> {
+  return Boolean(getSessionCookie(await headers()));
+}
+
+/** The session, or null when there is none or the database cannot be reached to check it. */
+export async function getSessionIfReachable(): Promise<Awaited<ReturnType<typeof getSession>>> {
+  try {
+    return await getSession();
+  } catch (error) {
+    console.error("Could not read the session", error);
+    return null;
+  }
+}
 
 export async function requireUser(): Promise<SessionUser> {
   const session = await getSession();

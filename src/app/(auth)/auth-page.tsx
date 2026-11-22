@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { AuthForm, type SocialProvider } from "@/components/auth-form";
 import { authorizeRetryPath } from "@/lib/oauth-consent";
 import { queryParam, queryStringOf, routes, safeNextPath } from "@/lib/routes";
-import { getSession } from "@/server/auth/session";
+import { getSessionIfReachable } from "@/server/auth/session";
 import { oauthProviders } from "@/server/config";
 
 interface AuthPageProps {
@@ -29,7 +29,7 @@ export async function AuthPage({ mode, searchParams }: AuthPageProps) {
   const params = await searchParams;
   // The OAuth provider sends people here with its signed query and no `next`: signing in runs authorize again, which checks it all.
   const next = params.sig ? authorizeRetryPath(queryStringOf(params)) : safeNextPath(queryParam(params.next));
-  if (await getSession()) redirect(next);
+  if (await getSessionIfReachable()) redirect(next);
 
   const configured = oauthProviders();
   const providers = (Object.keys(configured) as SocialProvider[]).filter((provider) => configured[provider]);
