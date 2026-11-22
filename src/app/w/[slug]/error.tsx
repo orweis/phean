@@ -1,12 +1,12 @@
 "use client";
 
-import { ErrorNotice } from "@/components/error-notice";
+import { ErrorNotice, errorDigest } from "@/components/error-notice";
 
 /** Keeps the workspace header and tabs on screen when one tab fails. */
-export default function WorkspaceError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
+export default function WorkspaceError({ error, retry }: { error: unknown; retry: () => void }) {
   return (
     <div className="py-16">
-      <ErrorNotice digest={error.digest} reset={reset} />
+      <ErrorNotice digest={errorDigest(error)} retry={retry} />
     </div>
   );
 }
