@@ -10,6 +10,7 @@ import { LINK_KINDS, REQUEST_KINDS } from "@/lib/agent-sessions";
 import { DOCUMENT_FORMATS } from "@/lib/documents";
 import { DELEGATION_STATES } from "@/lib/domain";
 import { AskInput, AttachDocumentInput, HandOffInput, ListTasksInput, MAX_WAIT_SECONDS, RegisterWebhookInput, WaitForAnswersInput } from "@/server/domain/schemas";
+import { SERVER_INSTRUCTIONS } from "@/server/mcp/guidance";
 import { TOOLS } from "@/server/mcp/tools";
 import { AGENT_INACTIVE, backoffSeconds, MAX_CONSECUTIVE_FAILURES, REQUEST_TIMEOUT_MS } from "@/server/webhooks/dispatch";
 import { SIGNATURE_HEADER, signPayload, verifySignature } from "@/server/webhooks/signing";
@@ -80,6 +81,14 @@ describe("the phean-handoffs skill", () => {
     expect(ListTasksInput.shape.claimed.parse("handed_off_by_me")).toBe("handed_off_by_me");
     expect(SKILL).toContain("`handed_off_by_me`");
     expect(SKILL).toContain("`handed_off_by_you`");
+  });
+
+  it("teaches family claims and claim transfers, as the server's guidance does", () => {
+    for (const text of [SKILL, SERVER_INSTRUCTIONS]) {
+      expect(text).toContain("task.claim_transferred");
+      expect(text).toContain("collect_answers");
+      expect(text).toMatch(/family shares its claims/);
+    }
   });
 
   it("carries an example handoff the server would accept", () => {

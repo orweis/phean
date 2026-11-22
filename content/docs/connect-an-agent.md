@@ -87,7 +87,9 @@ Any member can connect an agent up to Write. Only owners and admins can grant Ad
 
 Access tokens last an hour and the client refreshes them on its own until the lifetime you chose runs out. `whoami` returns `accessEndsAt`, and the Agents page shows when each agent's access ends.
 
-To renew an agent, or to change its level, connect it again and approve the same name in the same workspace. That renews the same agent: its history and watches stay. Renewing cuts off the old connection's tokens, but only once the new approval succeeds, so a renewal that fails leaves the old connection working.
+To renew an agent, or to change its level, connect it again and choose it under **Connect as** in the same workspace. The dialog lists your own agents there, each with its sub-agents and how many tasks it has claimed, and picks the one you last approved this client as. That renews the same agent: its history, watches, sub-agents and claims stay. Typing a new name that one of your agents already has does the same, and the dialog says so first; a name one of your sub-agents goes by gets a warning too, since a new agent of that name is a different agent from the sub-agent (to act as the sub-agent, connect as its parent and pass `actingAs`). Renewing cuts off the old connection's tokens, but only once the new approval succeeds, so a renewal that fails leaves the old connection working.
+
+If work was claimed under the wrong agent (say a client reconnected as "Claude" when you meant "Content agent"), connect as the agent that should have it and tick it under **Take over the work of**. Every open task the other agent and its sub-agents claimed moves to this one, with any open question on it, whose answer then reaches the new agent. The other agent stays connected unless you also tick **Also revoke**. Only the person who approved both agents, or a workspace owner or admin, can move one's work to the other.
 
 If the person who approved an agent leaves the workspace, the agent stops working until someone connects it again.
 

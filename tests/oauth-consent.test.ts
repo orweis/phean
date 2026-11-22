@@ -1,7 +1,20 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { grantableLevels, LIMITS, lifetimeLabel } from "@/lib/domain";
-import { authorizeRetryPath, clientDisplayName, consentLeavingText, consentScope, issuableLevels, levelField, redirectTarget, renewalKey, requestedLevels } from "@/lib/oauth-consent";
+import {
+  authorizeRetryPath,
+  clientDisplayName,
+  consentAgentDetails,
+  consentLeavingText,
+  consentScope,
+  issuableLevels,
+  levelField,
+  nameConflicts,
+  redirectTarget,
+  renewalKey,
+  requestedLevels,
+  type ConsentAgent,
+} from "@/lib/oauth-consent";
 import { safeNextPath } from "@/lib/routes";
 import { completeConsent } from "@/server/auth/auth";
 import { readConsentRequest } from "@/server/auth/consent";
@@ -308,5 +321,29 @@ describe("the signed request behind the dialog", () => {
     expect(tokens.scope).toBe("phean:read offline_access");
     const claims = JSON.parse(Buffer.from(tokens.access_token.split(".")[1]!, "base64url").toString()) as { aud: string | string[] };
     expect(claims.aud).toContain(OAUTH_RESOURCE);
+  });
+});
+
+describe("the agents a typed name runs into", () => {
+  const agent = (name: string, subagents: string[] = [], rest: Partial<ConsentAgent> = {}): ConsentAgent => ({ id: `ag_${name}`, name, sameClient: false, expired: false, subagents, openClaims: 0, ...rest });
+  const claude = agent("Claude", ["Deck writer"]);
+  const content = agent("Claude Content Agent", ["deck  WRITER", "Researcher"]);
+
+  it("finds the agent with exactly that name, as the server's index compares it", () => {
+    expect(nameConflicts([claude, content], " Claude ").agent).toBe(claude);
+    expect(nameConflicts([claude, content], "claude").agent).toBeUndefined();
+    expect(nameConflicts([claude, content], "").agent).toBeUndefined();
+  });
+
+  it("finds every agent with a sub-agent of that name, case and spacing aside", () => {
+    expect(nameConflicts([claude, content], "Deck Writer").parentsOf).toEqual([claude, content]);
+    expect(nameConflicts([claude, content], "Researcher").parentsOf).toEqual([content]);
+    expect(nameConflicts([claude, content], "Claude").parentsOf).toEqual([]);
+  });
+
+  it("describes an agent by its sub-agents, claims and client", () => {
+    expect(consentAgentDetails(claude)).toBe("Sub-agent: Deck writer · 0 open claims · last connected from another client");
+    expect(consentAgentDetails(agent("Bare", [], { openClaims: 1, sameClient: true, expired: true }))).toBe("No sub-agents · 1 open claim · last connected from this client · access ended");
+    expect(consentAgentDetails(content)).toContain("Sub-agents: deck  WRITER, Researcher");
   });
 });

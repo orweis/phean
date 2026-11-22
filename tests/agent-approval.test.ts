@@ -5,24 +5,28 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 
 import { DAY_MS } from "@/lib/dates";
 import { agentStatus } from "@/lib/domain";
-import { agents, events, member, oauthClient, oauthRefreshToken, user } from "@/server/db/schema";
+import { agents, events, member, oauthClient, oauthRefreshToken, tasks, user } from "@/server/db/schema";
 import {
   agentContext,
   approveAgent,
+  approveAgentThen,
   archiveAgent,
   authenticateAgentToken,
   canRevoke,
   createAgent,
   createSubagent,
   findLastApprovedAgent,
+  findReconnectableAgent,
   findRenewableAgent,
   listAgents,
+  listOwnAgents,
   resolveNamedSubagent,
   resolveOAuthAgent,
   revokeAgent,
 } from "@/server/domain/agents";
 import type { Ctx } from "@/server/domain/context";
 import { getAgentWorkload } from "@/server/domain/overview";
+import { captureTasks, claimTask } from "@/server/domain/tasks";
 
 import { addMember, asUser, createTestDb, seedUser, seedWorkspace, type TestDb, type TestUser, type Workspace } from "./support/db";
 
@@ -619,5 +623,96 @@ describe("the agent last approved for a client", () => {
     const other = await seedWorkspace(testDb.db);
     await addMember(testDb.db, other.tenant, mia, "member");
     expect(await findLastApprovedAgent(asUser(testDb.db, other.tenant, mia, "member"), "client_1")).toBeNull();
+  });
+});
+
+describe("reconnecting an agent chosen by id", () => {
+  const reconnect = (ctx: Ctx, agentId: string, issue = vi.fn(async (id: string) => id)) =>
+    approveAgentThen(ctx, { agentId, level: "write", lifetimeDays: 90, oauthClientId: "client_2" }, issue);
+
+  it("renews that row, whatever name the client gives, and keeps its sub-agents and claims", async () => {
+    const { agent } = await approveAgent(miaCtx, { name: "Claude", ...grant });
+    const parent = await signedIn(agent.id);
+    const { agent: worker } = await createSubagent(parent, { name: "Deck writer" });
+    const [task] = (await captureTasks(owner, { tasks: [{ title: "Build Q3 2026 board deck", source: "manual", sourceRef: "deck" }] })).created;
+    await claimTask(parent, { taskId: task!.id });
+    await seedRefreshToken(agent.id, mia);
+
+    const issue = vi.fn(async (id: string) => `code for ${id}`);
+    const { agent: renewed, renewed: wasRenewed, issued } = await reconnect(miaCtx, agent.id, issue);
+    expect(issue).toHaveBeenCalledWith(agent.id);
+    expect(issued).toBe(`code for ${agent.id}`);
+    expect(wasRenewed).toBe(true);
+    expect(renewed).toMatchObject({ id: agent.id, name: "Claude", oauthClientId: "client_2", accessLevel: "write" });
+    expect(renewed.tokensNotBefore).not.toBeNull();
+    expect(await refreshTokensOf(agent.id)).toBe(0);
+    expect(await eventsOf(agent.id)).toEqual(["agent.created", "agent.renewed"]);
+    expect((await rowOf(worker.id)).parentAgentId).toBe(agent.id);
+    const [held] = await testDb.db.select({ claimedBy: tasks.claimedByAgentId }).from(tasks).where(eq(tasks.id, task!.id));
+    expect(held!.claimedBy).toBe(agent.id);
+  });
+
+  it("renews an expired agent", async () => {
+    const { agent } = await approveAgent(miaCtx, { name: "Claude", ...grant });
+    await expire(agent.id);
+    expect(await findReconnectableAgent(miaCtx, agent.id)).toMatchObject({ id: agent.id });
+    const { agent: renewed } = await reconnect(miaCtx, agent.id);
+    expect(renewed.accessExpiresAt!.getTime()).toBeGreaterThan(Date.now());
+  });
+
+  it("refuses another person's agent, another workspace's, a revoked one, a sub-agent and a fixed key, and issues nothing", async () => {
+    const { agent: owners } = await approveAgent(owner, { name: "Owner's Claude", ...grant });
+    const { agent: revoked } = await approveAgent(miaCtx, { name: "Gone", ...grant });
+    await revokeAgent(miaCtx, { agentId: revoked.id });
+    const { agent: mine } = await approveAgent(miaCtx, { name: "Mine", ...grant });
+    const { agent: sub } = await createSubagent(await signedIn(mine.id), { name: "Worker" });
+    const { agent: ownersSub } = await createAgent(owner, { name: "Owner's worker", parentAgentId: owners.id });
+    const other = await seedWorkspace(testDb.db);
+    await addMember(testDb.db, other.tenant, mia, "member");
+    const { agent: elsewhere } = await approveAgent(asUser(testDb.db, other.tenant, mia, "member"), { name: "Elsewhere", ...grant });
+
+    const cases: [Ctx, string][] = [
+      [miaCtx, owners.id],
+      [miaCtx, elsewhere.id],
+      [miaCtx, revoked.id],
+      [miaCtx, sub.id],
+      [owner, ownersSub.id],
+      [owner, ws.scout.agentId],
+      [miaCtx, "ag_unknown"],
+    ];
+    for (const [ctx, agentId] of cases) {
+      const issue = vi.fn(async () => "code");
+      await expect(reconnect(ctx, agentId, issue), agentId).rejects.toMatchObject({ code: "not_found" });
+      expect(issue).not.toHaveBeenCalled();
+      expect(await findReconnectableAgent(ctx, agentId)).toBeNull();
+    }
+    expect((await rowOf(owners.id)).oauthClientId).toBe("client_1");
+    expect((await rowOf(elsewhere.id)).tokensNotBefore).toBeNull();
+  });
+
+  it("still holds the level to what the person may grant", async () => {
+    const { agent } = await approveAgent(miaCtx, { name: "Claude", ...grant });
+    const issue = vi.fn(async () => "code");
+    await expect(approveAgentThen(miaCtx, { agentId: agent.id, level: "admin", lifetimeDays: 30, oauthClientId: "client_1" }, issue)).rejects.toMatchObject({ code: "forbidden" });
+    expect(issue).not.toHaveBeenCalled();
+  });
+
+  it("lists the person's own agents there, with their sub-agents and open claims", async () => {
+    const { agent: claude } = await approveAgent(miaCtx, { name: "Claude", ...grant });
+    const { agent: content } = await approveAgent(miaCtx, { name: "Claude Content Agent", ...grant, oauthClientId: "client_2" });
+    const { agent: gone } = await approveAgent(miaCtx, { name: "Gone", ...grant });
+    await revokeAgent(miaCtx, { agentId: gone.id });
+    await approveAgent(owner, { name: "Owner's", ...grant });
+    await expire(content.id);
+    const parent = await signedIn(claude.id);
+    await createSubagent(parent, { name: "Deck writer" });
+    const [task] = (await captureTasks(owner, { tasks: [{ title: "Deck", source: "manual", sourceRef: "deck" }] })).created;
+    await claimTask(parent, { taskId: task!.id });
+
+    expect(await listOwnAgents(miaCtx)).toEqual([
+      { id: claude.id, name: "Claude", oauthClientId: "client_1", expired: false, subagents: ["Deck writer"], openClaims: 1 },
+      { id: content.id, name: "Claude Content Agent", oauthClientId: "client_2", expired: true, subagents: [], openClaims: 0 },
+    ]);
+    expect(await listOwnAgents(ws.scout.ctx)).toEqual([]);
   });
 });
