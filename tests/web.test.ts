@@ -40,6 +40,23 @@ describe("routes", () => {
     expect(safeNextPath("/\\evil.example")).toBe("/workspaces");
     expect(safeNextPath("https://evil.example")).toBe("/workspaces");
     expect(safeNextPath(null, "/")).toBe("/");
+    expect(safeNextPath("", "/")).toBe("/");
+  });
+
+  it("refuses paths a browser would turn into another origin", () => {
+    // Browsers drop tabs and newlines from URLs, so each of these becomes "//evil.example".
+    for (const sneaky of ["/\t/evil.example", "/\n/evil.example", "/\r/evil.example", "/\r\\evil.example", "/\t\\evil.example"]) {
+      expect(new URL(sneaky, "https://phean.app/sign-in").origin).not.toBe("https://phean.app");
+      expect(safeNextPath(sneaky)).toBe("/workspaces");
+    }
+    expect(safeNextPath("/w/acme\u0000")).toBe("/workspaces");
+    expect(safeNextPath(" /w/acme")).toBe("/workspaces");
+    expect(safeNextPath("/\u00a0/evil.example")).toBe("/workspaces");
+  });
+
+  it("keeps same-origin paths with queries and fragments intact", () => {
+    expect(safeNextPath("/w/acme/tasks?status=todo&q=a%20b#top")).toBe("/w/acme/tasks?status=todo&q=a%20b#top");
+    expect(safeNextPath("/w/acme/..//evil.example")).toBe("/w/acme/..//evil.example");
   });
 });
 

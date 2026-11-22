@@ -46,10 +46,31 @@ function MarkdownLink({ href, children }: { href?: string; children?: ReactNode 
   );
 }
 
+/** Only images on Phean's own origin load inline. */
+function isSameOriginImage(src: string): boolean {
+  return /^\/(?![/\\])/.test(src);
+}
+
+/**
+ * An image in agent-written Markdown. Loading one from another host would tell that host who read
+ * the document and when (an agent that was prompt-injected could plant a tracking pixel), so an
+ * outside image is shown as a link the reader can choose to open instead.
+ */
+function MarkdownImage({ src, alt }: { src?: string | Blob; alt?: string }) {
+  if (typeof src !== "string" || !src) return alt ? <span>{alt}</span> : null;
+  // eslint-disable-next-line @next/next/no-img-element -- agent content on Phean's origin, sized by the prose styles
+  if (isSameOriginImage(src)) return <img src={src} alt={alt ?? ""} />;
+  return (
+    <span data-external-image>
+      Image: <MarkdownLink href={src}>{alt || src}</MarkdownLink>
+    </span>
+  );
+}
+
 /**
  * Markdown as Phean shows it: GitHub-flavoured (tables, task lists, strikethrough), with ```mermaid
  * blocks drawn as diagrams. Raw HTML is not rendered and unsafe link schemes are dropped, since
- * agents write these documents; web links open in a new tab.
+ * agents write these documents; web links open in a new tab, and images from other hosts become links.
  */
 export function MarkdownView({ source, headings = "shifted", agentMarks = false }: { source: string; headings?: "shifted" | "anchored"; agentMarks?: boolean }) {
   const anchored = headings === "anchored";
@@ -97,6 +118,7 @@ export function MarkdownView({ source, headings = "shifted", agentMarks = false 
               return isDiagram ? <>{children}</> : <pre tabIndex={0}>{children}</pre>;
             },
             a: MarkdownLink,
+            img: MarkdownImage,
             td: Cell,
           }}
         >

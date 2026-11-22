@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
+
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { grantableLevels, LIMITS, lifetimeLabel } from "@/lib/domain";
@@ -172,6 +175,9 @@ describe("consentLeavingText", () => {
   });
 });
 
+/** The matcher Next applies to `headers()` sources. */
+const { pathToRegexp } = createRequire(import.meta.url)("next/dist/compiled/path-to-regexp") as { pathToRegexp: (source: string, keys: unknown[]) => RegExp };
+
 describe("framing", () => {
   it("refuses frames on every /oauth page, the two ways browsers read it", async () => {
     const rules = await nextConfig.headers!();
@@ -179,6 +185,30 @@ describe("framing", () => {
     const headers = Object.fromEntries(rule!.headers.map(({ key, value }) => [key.toLowerCase(), value]));
     expect(headers["x-frame-options"]).toBe("DENY");
     expect(headers["content-security-policy"]).toBe("frame-ancestors 'none'");
+  });
+
+  it("refuses frames and sniffing on every other page too", async () => {
+    const rules = await nextConfig.headers!();
+    const rule = rules.find(({ source }) => source.startsWith("/:path("));
+    const headers = Object.fromEntries(rule!.headers.map(({ key, value }) => [key.toLowerCase(), value]));
+    expect(headers["x-frame-options"]).toBe("DENY");
+    expect(headers["content-security-policy"]).toBe("frame-ancestors 'none'");
+    expect(headers["x-content-type-options"]).toBe("nosniff");
+    expect(headers["referrer-policy"]).toBe("strict-origin-when-cross-origin");
+    // Matched the way Next matches `source`.
+    const pattern = pathToRegexp(rule!.source, []);
+    for (const path of ["/", "/w/acme", "/w/acme/tasks", "/w/acme/documents/doc_1", "/account", "/oauth/approve", "/sign-in"]) {
+      expect(pattern.test(path), path).toBe(true);
+    }
+    // The document page embeds a document's file (PDFs), so that route allows its own origin instead.
+    expect(pattern.test("/w/acme/documents/doc_1/file")).toBe(false);
+  });
+
+  it("lets only Phean's own pages embed a document's file", () => {
+    const route = readFileSync("src/app/w/[slug]/documents/[id]/file/route.ts", "utf8");
+    expect(route).toContain("frame-ancestors 'self'");
+    expect(route).toContain('"X-Frame-Options": "SAMEORIGIN"');
+    expect(route).toMatch(/Content-Security-Policy": "sandbox;/);
   });
 });
 
