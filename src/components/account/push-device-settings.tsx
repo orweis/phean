@@ -4,10 +4,10 @@ import { BellRing } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
-import { forgetDeviceAction, registerDeviceAction, setDeviceOptionsAction, tieDeviceAction } from "@/app/account/actions";
-import { deviceLabel } from "@/lib/device-label";
+import { forgetDeviceAction, setDeviceOptionsAction, tieDeviceAction } from "@/app/account/actions";
 import { PUSH_MAX_DEVICES } from "@/lib/push";
 
+import { pushRegistration, subscribeThisDevice } from "../push-subscription";
 import { ActionButton } from "../ui/action-button";
 import { ActionForm } from "../ui/action-form";
 import { Button } from "../ui/button";
@@ -32,25 +32,6 @@ interface PushDeviceSettingsProps {
 
 /** Where this browser stands: still looking, no Web Push here, inside the desktop app, no service worker yet, or able to subscribe. */
 type Support = "checking" | "unsupported" | "desktop" | "no-worker" | "ready";
-
-/** The VAPID key as the Push API takes it. */
-function keyBytes(base64url: string): Uint8Array<ArrayBuffer> {
-  const binary = atob(base64url.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(base64url.length / 4) * 4, "="));
-  return Uint8Array.from(binary, (char) => char.charCodeAt(0));
-}
-
-function sameKey(subscription: PushSubscription, key: Uint8Array): boolean {
-  const current = subscription.options.applicationServerKey;
-  if (!current) return false;
-  const bytes = new Uint8Array(current);
-  return bytes.length === key.length && bytes.every((byte, index) => byte === key[index]);
-}
-
-/** The service worker's registration, if the page has one; `ready` alone would wait forever without it. */
-async function registration(): Promise<ServiceWorkerRegistration | null> {
-  if (!(await navigator.serviceWorker.getRegistration())) return null;
-  return navigator.serviceWorker.ready;
-}
 
 function OptionToggle({ device, name, title, hint, on, notice }: { device: DeviceSummary; name: "answerFromNotification" | "private"; title: string; hint: string; on: boolean; notice: string }) {
   return (
@@ -104,7 +85,7 @@ export function PushDeviceSettings({ publicKey, devices, canSubscribe }: PushDev
     (async () => {
       if ("pheanDesktop" in window) return "desktop" as const;
       if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) return "unsupported" as const;
-      const ready = await registration();
+      const ready = await pushRegistration();
       if (!ready) return "no-worker" as const;
       subscription.current = await ready.pushManager.getSubscription();
       return "ready" as const;
@@ -136,39 +117,13 @@ export function PushDeviceSettings({ publicKey, devices, canSubscribe }: PushDev
     if (!publicKey) return;
     setError(null);
     setPending(true);
-    try {
-      const permission = await Notification.requestPermission();
-      if (permission !== "granted") {
-        setError(
-          permission === "denied"
-            ? "Notifications are blocked for Phean in this browser's settings. Allow them there, then try again."
-            : "Allow notifications when your browser asks, to get them here.",
-        );
-        return;
-      }
-      const ready = await registration();
-      if (!ready) return setSupport("no-worker");
-      const key = keyBytes(publicKey);
-      let current = await ready.pushManager.getSubscription();
-      // A subscription made for another key (the server's keys changed) can never be written to.
-      if (current && !sameKey(current, key)) {
-        await current.unsubscribe();
-        current = null;
-      }
-      current ??= await ready.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key });
-      subscription.current = current;
-      const label = deviceLabel(navigator.userAgent);
-      const result = await registerDeviceAction({ ...current.toJSON(), label });
-      if (!result.ok) return setError(result.message);
-      setEndpoint(current.endpoint);
-      const message = `Notifications are on for ${result.label}`;
-      if (status) status.announce({ message, undo: { action: forgetDeviceAction, fields: { deviceId: result.deviceId }, done: `Turned notifications off for ${result.label}` } });
-      router.refresh();
-    } catch {
-      setError("This browser could not subscribe to notifications. Try again, or use another browser.");
-    } finally {
-      setPending(false);
-    }
+    const result = await subscribeThisDevice(publicKey);
+    setPending(false);
+    if (!result.ok) return result.reason === "no-worker" ? setSupport("no-worker") : setError(result.message);
+    setEndpoint(result.endpoint);
+    const message = `Notifications are on for ${result.label}`;
+    if (status) status.announce({ message, undo: { action: forgetDeviceAction, fields: { deviceId: result.deviceId }, done: `Turned notifications off for ${result.label}` } });
+    router.refresh();
   }
 
   const note = (text: string) => <p className="text-sm text-ink-2">{text}</p>;

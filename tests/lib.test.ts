@@ -16,6 +16,7 @@ import { deviceLabel } from "@/lib/device-label";
 import { addDays, dayOf, daysBetween, isoDate, isoDayFromToday, isPastDue, startOfUtcDay, todayIso } from "@/lib/dates";
 import { faviconBadgeText } from "@/lib/favicon";
 import { isWorkspaceSlug, lastWorkspaceCookie } from "@/lib/last-workspace";
+import { offersPush, type PushPromptInput } from "@/lib/push-prompt";
 import { swimlaneOf } from "@/lib/swimlanes";
 import {
   isLate,
@@ -358,5 +359,25 @@ describe("last workspace", () => {
     expect(isWorkspaceSlug("")).toBe(false);
     expect(isWorkspaceSlug("Acme")).toBe(false);
     expect(isWorkspaceSlug("../acme")).toBe(false);
+  });
+});
+
+describe("the notifications prompt", () => {
+  const ready: PushPromptInput = { configured: true, member: true, desktop: false, supported: true, permission: "default", subscribed: false, dismissed: false };
+
+  it("is offered on a browser that can subscribe and has not", () => {
+    expect(offersPush(ready)).toBe(true);
+    // Allowed for the site but not subscribed (a cleared subscription): one tap still finishes it.
+    expect(offersPush({ ...ready, permission: "granted" })).toBe(true);
+  });
+
+  it("is not offered where a tap cannot work, once on, or after Not now", () => {
+    expect(offersPush({ ...ready, configured: false })).toBe(false);
+    expect(offersPush({ ...ready, member: false })).toBe(false);
+    expect(offersPush({ ...ready, desktop: true })).toBe(false);
+    expect(offersPush({ ...ready, supported: false })).toBe(false);
+    expect(offersPush({ ...ready, permission: "denied" })).toBe(false);
+    expect(offersPush({ ...ready, subscribed: true })).toBe(false);
+    expect(offersPush({ ...ready, dismissed: true })).toBe(false);
   });
 });
