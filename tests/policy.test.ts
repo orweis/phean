@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
-import { approveAgent, archiveAgent, archiveRevokedAgents, createAgent, listAgents, revokeAgent, unarchiveAgent } from "@/server/domain/agents";
+import { approveAgent, archiveAgent, archiveRevokedAgents, canTransferClaims, createAgent, listAgents, revokeAgent, unarchiveAgent } from "@/server/domain/agents";
 import { attachDocument } from "@/server/domain/documents";
 import { DEFAULT_WORKFLOW } from "@/lib/workflow";
 import { saveWorkflow } from "@/server/domain/workflow";
@@ -10,7 +10,7 @@ import { grantableLevels } from "@/lib/domain";
 import { PERMISSIONS, roleCan } from "@/lib/permissions";
 import { createGoal, setGoalStatus } from "@/server/domain/goals";
 import { ACTIONS, can, type Action } from "@/server/domain/policy";
-import { captureTasks } from "@/server/domain/tasks";
+import { captureTasks, transferClaims } from "@/server/domain/tasks";
 import { listPendingInvitations } from "@/server/domain/tenants";
 
 import { addMember, asUser, createTestDb, seedUser, seedWorkspace, type TestDb } from "./support/db";
@@ -68,6 +68,24 @@ describe("policy matrix", () => {
   it("lets a person grant Admin exactly when their role manages agents in the policy matrix", () => {
     for (const role of Object.keys(PERMISSIONS)) expect(grantableLevels(role).includes("admin"), role).toBe(roleCan(role, "agent:manage"));
     expect(roleCan("constructor", "agent:manage")).toBe(false);
+  });
+});
+
+describe("handing one agent's claims to another", () => {
+  const approver = { createdByUserId: "u_1" };
+  const someoneElse = { createdByUserId: "u_2" };
+
+  it("is for a person who approved both agents, or one who manages agents", () => {
+    expect(canTransferClaims(person("member"), approver, approver)).toBe(true);
+    expect(canTransferClaims(person("member"), approver, someoneElse)).toBe(false);
+    expect(canTransferClaims(person("member"), someoneElse, approver)).toBe(false);
+    expect(canTransferClaims(person("member"), { createdByUserId: null }, approver)).toBe(false);
+    for (const role of ["owner", "admin"] as const) expect(canTransferClaims(person(role), someoneElse, someoneElse)).toBe(true);
+    expect(canTransferClaims(person("platform_admin"), approver, approver)).toBe(false);
+  });
+
+  it("is never an agent's, even at Admin", () => {
+    for (const role of AGENT_ROLES) expect(canTransferClaims(agent(role), approver, approver)).toBe(false);
   });
 });
 
@@ -139,6 +157,18 @@ describe("policy enforcement in services", () => {
     const { agent } = await approveAgent(owner, grant);
     await expect(revokeAgent(platformAdmin, { agentId: agent.id })).rejects.toMatchObject({ code: "forbidden" });
     await expect(revokeAgent(member, { agentId: agent.id })).rejects.toThrow("did not connect themselves");
+  });
+
+  it("lets a member hand over only their own agents' claims, and an owner anyone's", async () => {
+    const grant = { level: "write", lifetimeDays: 30, oauthClientId: "client_1" } as const;
+    const { agent: mine } = await approveAgent(member, { ...grant, name: "Claude" });
+    const { agent: alsoMine } = await approveAgent(member, { ...grant, name: "Claude Content Agent" });
+    const { agent: owners } = await approveAgent(owner, { ...grant, name: "Owner's agent" });
+    await expect(transferClaims(member, { fromAgentId: mine.id, toAgentId: alsoMine.id })).resolves.toEqual({ moved: [] });
+    await expect(transferClaims(member, { fromAgentId: owners.id, toAgentId: mine.id })).rejects.toMatchObject({ code: "forbidden" });
+    await expect(transferClaims(member, { fromAgentId: mine.id, toAgentId: owners.id })).rejects.toMatchObject({ code: "forbidden" });
+    await expect(transferClaims(platformAdmin, { fromAgentId: mine.id, toAgentId: alsoMine.id })).rejects.toMatchObject({ code: "forbidden" });
+    await expect(transferClaims(owner, { fromAgentId: mine.id, toAgentId: owners.id })).resolves.toEqual({ moved: [] });
   });
 
   it("lets only owners and admins archive revoked agents", async () => {

@@ -17,6 +17,7 @@ const ACTION_BATCH_PHRASES = {
   "task.handed_off": ["handed off", "task"],
   "task.handoff_cancelled": ["called off handoffs of", "task"],
   "task.picked_up": ["picked up", "task"],
+  "task.claim_transferred": ["handed over", "task"],
   "task.completed": ["completed", "task"],
   "task.archived": ["archived", "task"],
   "task.unarchived": ["unarchived", "task"],

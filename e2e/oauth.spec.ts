@@ -5,15 +5,18 @@ import { LIMITS } from "../src/lib/domain";
 import { newPerson, newWorkspace, runId, signUp } from "./support/accounts";
 import { agentRow, approveClient, FIXED_KEY_TRIGGER, issueToken } from "./support/agents";
 import { BASE_URL, DEMO_SESSION } from "./support/env";
+import { expectAccessible } from "./support/checks";
 import { card, popover } from "./support/locators";
 import { openTab } from "./support/navigation";
 import { OAUTH_CLIENT_STATE, oauthClient, type OAuthTestClient } from "./support/oauth-client";
 
-const REPLACES = "You already have an agent with this name. Allowing replaces its connection.";
+const REPLACES = "Allowing reconnects it, keeping its history and claims, and replaces its connection.";
 const OTHER_CLIENT = "It last connected from a different client.";
 
 const allow = (page: Page) => page.getByRole("button", { name: "Allow" });
 const accessTo = (page: Page, workspace: string) => page.getByRole("group", { name: `Access to ${workspace}` });
+const connectAs = (page: Page) => page.getByRole("group", { name: "Connect as" });
+const takeOver = (page: Page) => page.getByRole("group", { name: "Take over the work of" });
 
 /** Opens the dialog as the client would, and waits for it. `scope` replaces the scope the client asks for. */
 async function openDialog(page: Page, client: OAuthTestClient, clientName = "Scripted Client", scope?: string) {
@@ -311,11 +314,15 @@ test("reusing a name warns before replacing the connection", async ({ page }) =>
     await expect(warning).toBeVisible();
   });
 
-  await test.step("a typed name warns at Allow, and the second Allow replaces", async () => {
+  await test.step("a typed name that one of the person's agents has warns at once, and a page that missed it warns at Allow", async () => {
     const other = await oauthClient(BASE_URL, { clientName: "Other Client" });
     await openDialog(page, other, "Other Client");
-    await page.getByLabel("Agent name").fill("Scripted Client");
     await expect(warning).toHaveCount(0);
+    await page.getByLabel("Agent name").fill("Scripted Client");
+    await expect(warning).toBeVisible();
+    await expect(page.getByRole("button", { name: "Reconnect “Scripted Client”" })).toBeVisible();
+    // As if the agent had been approved after this page loaded: the server warns before replacing anything.
+    await page.locator('input[name="replaces"]').evaluate((input: HTMLInputElement) => (input.value = ""));
     await allow(page).click();
     await expect(warning).toBeVisible();
     await expect(page).toHaveURL(/\/oauth\/approve/);
@@ -339,11 +346,99 @@ test("reusing a name warns before replacing the connection", async ({ page }) =>
 
     await page.goto(renamed.authorizationUrl);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Connect Renaming Client to Phean");
-    await expect(page.getByLabel("Agent name")).toHaveValue("Desk agent");
-    await expect(warning).toBeVisible();
-    await expect(page.getByText(OTHER_CLIENT)).toHaveCount(0);
+    // The agent it was approved as is chosen, so Allow renews it rather than typing its name again.
+    await expect(connectAs(page).getByRole("radio", { name: "Desk agent" })).toBeChecked();
+    await expect(connectAs(page).getByRole("radio", { name: "Desk agent" })).toHaveAccessibleDescription(/last connected from this client/);
+    await expect(page.getByLabel("Agent name")).toHaveCount(0);
+    await expect(warning).toHaveCount(0);
+    await connectAs(page).getByRole("radio", { name: "A new agent" }).check();
+    await expect(page.getByLabel("Agent name")).toHaveValue("Renaming Client");
     await page.getByRole("button", { name: "Cancel" }).click();
     await expect(page).not.toHaveURL(/\/oauth\/approve/);
+  });
+});
+
+test("reconnecting by picking an agent, and handing another agent's claim over to it", async ({ page }) => {
+  test.slow();
+  const workspace = await newWorkspace(page, "Handovers");
+  const title = `Build Q3 2026 board deck ${runId()}`;
+  const confirms: string[] = [];
+  let deckId = "";
+  page.on("dialog", (dialog) => {
+    confirms.push(dialog.message());
+    void dialog.accept();
+  });
+
+  await test.step("a first session connects as Claude, claims the deck and runs a sub-agent", async () => {
+    const first = await oauthClient(BASE_URL, { clientName: "Claude Code" });
+    await openDialog(page, first, "Claude Code");
+    await page.getByLabel("Agent name").fill("Claude");
+    await allow(page).click();
+    const claude = await first.connect();
+    const captured = await claude.call("capture_tasks", { tasks: [{ title, status: "todo" }] });
+    deckId = (captured.structuredContent as { created: { id: string }[] }).created[0]!.id;
+    expect((await claude.call("claim_task", { taskId: deckId })).isError).toBeFalsy();
+    // Acting as a named worker makes it Claude's sub-agent.
+    expect((await claude.call("whoami", { actingAs: "Deck writer" })).isError).toBeFalsy();
+    await claude.close();
+  });
+
+  await test.step("a second session connects as a new agent, and is told about names it runs into", async () => {
+    const second = await oauthClient(BASE_URL, { clientName: "Claude Code" });
+    await openDialog(page, second, "Claude Code");
+    const claude = connectAs(page).getByRole("radio", { name: "Claude", exact: true });
+    await expect(claude).not.toBeChecked();
+    await expect(claude).toHaveAccessibleDescription("Sub-agent: Deck writer · 1 open claim · last connected from another client");
+    await expect(connectAs(page).getByRole("radio", { name: "A new agent" })).toBeChecked();
+    await page.getByLabel("Agent name").fill("Deck writer");
+    await expect(page.getByText("“Deck writer” is the name of a sub-agent of “Claude”.")).toBeVisible();
+    await expect(page.getByText("pass actingAs “Deck writer”")).toBeVisible();
+    await page.getByLabel("Agent name").fill("Claude Content Agent");
+    await expect(page.getByText("is the name of a sub-agent")).toHaveCount(0);
+    await expect(page.getByText(REPLACES)).toHaveCount(0);
+    await allow(page).click();
+    const content = await second.connect();
+    expect((await content.call("whoami")).structuredContent).toMatchObject({ agent: { name: "Claude Content Agent" } });
+    // Claude's claim is not the Content Agent's to change.
+    const listed = await content.call("list_tasks", { claimed: "mine" });
+    expect(JSON.stringify(listed.structuredContent)).not.toContain(title);
+    await content.close();
+  });
+
+  await test.step("a third session picks the Content Agent, takes over Claude's work and revokes Claude", async () => {
+    const third = await oauthClient(BASE_URL, { clientName: "Claude Code" });
+    await openDialog(page, third, "Claude Code");
+    // A new registration has never been approved, so nothing is chosen for it but a new agent.
+    await expect(connectAs(page).getByRole("radio", { name: "A new agent" })).toBeChecked();
+    await connectAs(page).getByRole("radio", { name: "Claude", exact: true }).check();
+    await expect(takeOver(page).getByRole("checkbox", { name: "Claude Content Agent" })).toBeVisible();
+    await expect(takeOver(page).getByRole("checkbox", { name: "Claude", exact: true })).toHaveCount(0);
+    // Picking again: the agent to reconnect is never among those whose work it takes over.
+    await connectAs(page).getByRole("radio", { name: "Claude Content Agent" }).check();
+    await expect(page.getByLabel("Agent name")).toHaveCount(0);
+    const fromClaude = takeOver(page).getByRole("checkbox", { name: "Claude", exact: true });
+    await expect(fromClaude).toHaveAccessibleDescription(/1 open claim/);
+    await fromClaude.check();
+    await takeOver(page).getByRole("checkbox", { name: "Also revoke “Claude” and its sub-agents" }).check();
+    await expectAccessible(page);
+    await allow(page).click();
+    await expect(page.getByText("Connected. You can close this window.")).toBeVisible();
+    expect(confirms).toEqual(["Revoke “Claude”? It and its sub-agents lose access at once, and this cannot be undone."]);
+
+    const content = await third.connect();
+    expect((await content.call("whoami")).structuredContent).toMatchObject({ agent: { name: "Claude Content Agent" } });
+    const listed = await content.call("list_tasks", { claimed: "mine" });
+    expect((listed.structuredContent as { tasks: { id: string }[] }).tasks.map((task) => task.id)).toEqual([deckId]);
+    expect((await content.call("complete_task", { taskId: deckId, note: "Deck done" })).isError).toBeFalsy();
+    await content.close();
+  });
+
+  await test.step("the Agents page shows Claude revoked, and the activity says who handed the work over", async () => {
+    await page.goto(`/w/${workspace.slug}/agents`);
+    await expect(agentRow(page, "Claude")).toContainText("Revoked");
+    await expect(agentRow(page, "Claude Content Agent")).not.toContainText("Revoked");
+    await page.goto(`/w/${workspace.slug}/tasks/${deckId}`);
+    await expect(page.getByText(`handed "${title}" from Claude to Claude Content Agent`)).toBeVisible();
   });
 });
 

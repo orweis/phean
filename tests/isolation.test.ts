@@ -3,7 +3,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { eq } from "drizzle-orm";
 
 import { agents, tasks } from "@/server/db/schema";
-import { approveAgent, authenticateAgentToken, findRenewableAgent, resolveOAuthAgent, revokeAgent } from "@/server/domain/agents";
+import { agentContext, approveAgent, approveAgentThen, authenticateAgentToken, findReconnectableAgent, findRenewableAgent, listOwnAgents, resolveOAuthAgent, revokeAgent } from "@/server/domain/agents";
 import type { Ctx } from "@/server/domain/context";
 import { listActivity } from "@/server/domain/events";
 import { getDigest } from "@/server/domain/digest";
@@ -19,6 +19,7 @@ import {
   captureTasks,
   claimTask,
   collectAnswers,
+  completeTask,
   getTask,
   linkSession,
   listDecisions,
@@ -26,6 +27,7 @@ import {
   listTasks,
   requestInput,
   retractAnswer,
+  transferClaims,
   updateTask,
   type Task,
 } from "@/server/domain/tasks";
@@ -262,7 +264,7 @@ describe("tenant isolation", () => {
 
     // The same person in another workspace: it is not theirs to renew there, nor its sub-agents to revoke.
     const samePerson = { ...globexOwner, actor: acmeOwner.actor };
-    const { createSubagent, agentContext } = await import("@/server/domain/agents");
+    const { createSubagent } = await import("@/server/domain/agents");
     const { agent: worker } = await createSubagent(agentContext(testDb.db, (await resolveOAuthAgent(testDb.db, agent.id))!), { name: "Worker" });
     await expect(revokeAgent(samePerson, { agentId: worker.id })).rejects.toMatchObject({ code: "not_found" });
     expect(await findRenewableAgent(samePerson, "Laptop")).toBeNull();
@@ -270,6 +272,32 @@ describe("tenant isolation", () => {
     expect(renewed).toBe(false);
     expect(there.id).not.toBe(agent.id);
     expect((await resolveOAuthAgent(testDb.db, agent.id))?.tenant).toEqual(acme.tenant);
+  });
+
+  it("reconnects, lists and hands over claims only among one workspace's own agents", async () => {
+    const grant = { level: "write", lifetimeDays: 30, oauthClientId: "client_1" } as const;
+    const { agent: acmeAgent } = await approveAgent(acmeOwner, { ...grant, name: "Claude" });
+    const acmeCtx = agentContext(testDb.db, (await resolveOAuthAgent(testDb.db, acmeAgent.id))!);
+    await claimTask(acmeCtx, { taskId: acmeTask.id });
+    // The same person, with an agent of their own in Globex.
+    const samePerson = { ...globexOwner, actor: acmeOwner.actor };
+    const { agent: globexAgentRow } = await approveAgent(samePerson, { ...grant, name: "Claude Content Agent" });
+
+    expect((await listOwnAgents(samePerson)).map((agent) => agent.id)).toEqual([globexAgentRow.id]);
+    expect(await findReconnectableAgent(samePerson, acmeAgent.id)).toBeNull();
+    const issue = vi.fn(async () => "code");
+    await expect(approveAgentThen(samePerson, { ...grant, agentId: acmeAgent.id }, issue)).rejects.toMatchObject({ code: "not_found" });
+    expect(issue).not.toHaveBeenCalled();
+
+    // Neither direction reaches across: the other workspace's agent is not found from here.
+    await expect(transferClaims(samePerson, { fromAgentId: acmeAgent.id, toAgentId: globexAgentRow.id })).rejects.toMatchObject({ code: "not_found" });
+    await expect(transferClaims(acmeOwner, { fromAgentId: acmeAgent.id, toAgentId: globexAgentRow.id })).rejects.toMatchObject({ code: "not_found" });
+    await expect(transferClaims(globexOwner, { fromAgentId: acmeAgent.id, toAgentId: globexAgentRow.id })).rejects.toMatchObject({ code: "not_found" });
+    const [held] = await testDb.db.select({ claimedBy: tasks.claimedByAgentId }).from(tasks).where(eq(tasks.id, acmeTask.id));
+    expect(held!.claimedBy).toBe(acmeAgent.id);
+
+    // A family is one workspace's too: a Globex agent never shares an Acme agent's claim.
+    await expect(completeTask(globexAgent, { taskId: acmeTask.id })).rejects.toMatchObject({ code: "not_found" });
   });
 
   describe("over an OAuth token", () => {

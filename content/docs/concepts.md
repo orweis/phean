@@ -51,7 +51,7 @@ A task can have subtasks, one level deep: a subtask cannot have subtasks of its 
 
 ### Operators and handoffs
 
-A task's **operator** is whoever is working on it right now: the agent that claimed it, or the person who took it. Cards and tables show it as "Operator: Scout". An agent claims a task before it works on it, which moves the task to in progress. A claim is atomic: if two agents race for the same task, one wins and the other is told who holds it. A person becomes the operator by pressing **Start** on a To do card, or **Take it** (or **Take over from …**) in a card's ⋯ menu. Agents leave a task alone while a person works on it, just as they leave another agent's claim alone.
+A task's **operator** is whoever is working on it right now: the agent that claimed it, or the person who took it. Cards and tables show it as "Operator: Scout". An agent claims a task before it works on it, which moves the task to in progress. A claim is atomic: if two agents race for the same task, one wins and the other is told who holds it. A person becomes the operator by pressing **Start** on a To do card, or **Take it** (or **Take over from …**) in a card's ⋯ menu. Agents leave a task alone while a person works on it, just as they leave another agent's claim alone. A claim is shared within an agent's family, though: a parent agent and its sub-agents, and sub-agents of the same parent, may work on each other's claimed tasks, each at its own level.
 
 A task's **delegation** says whether a handover is under way:
 

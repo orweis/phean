@@ -14,6 +14,8 @@ A task's **operator** is whoever is working on it right now: the agent that clai
 - Claim a task before you work on it. `claim_task` makes you its operator.
 - Leave alone any task another agent or a person is working on. `claim_task`, `update_task` status changes and `complete_task` refuse it, naming who has it. Pick other work, or ask them to hand it to you.
 - People may step in on any task. If a person takes over yours, you stop being its operator; you hear about it on the task you follow.
+- Your family shares its claims: a parent agent and its sub-agents, and sub-agents of the same parent, may work on each other's claimed tasks. Each still acts at its own access level, so a Read sub-agent changes nothing. Completing or releasing a family member's claim is logged as yours, done for them.
+- A person can move every claim one agent and its sub-agents hold to another agent, usually when they reconnect a client as a different agent and tick "Take over the work of" in the approval dialog. Each task logs `task.claim_transferred`, and the new operator follows it from then on. An open question on the task moves with it: `collect_answers` delivers its answer to the new operator.
 
 ## Delegation
 

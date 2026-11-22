@@ -5,18 +5,18 @@ import { alias } from "drizzle-orm/pg-core";
 import type { z } from "zod";
 
 import { addDays } from "@/lib/dates";
-import { ACCESS_LEVEL_META, AGENT_TOKEN_PREFIX, agentAccessEnds, grantableLevels, highestGrantableLevel, LIMITS, lowerLevel, toMemberRole, type AgentAccessLevel } from "@/lib/domain";
+import { ACCESS_LEVEL_META, AGENT_TOKEN_PREFIX, agentAccessEnds, grantableLevels, highestGrantableLevel, LIMITS, lowerLevel, OPEN_TASK_STATUSES, toMemberRole, type AgentAccessLevel } from "@/lib/domain";
 
 import type { Db } from "../db/client";
 import { publicColumns } from "../db/columns";
 import { newId } from "../db/ids";
-import { agents, member, oauthRefreshToken, organization, user, verification, type AgentRow } from "../db/schema";
+import { agents, member, oauthRefreshToken, organization, tasks, user, verification, type AgentRow } from "../db/schema";
 import { liveAgent } from "./agent-liveness";
 import { agentRole, inTenant, inTransaction, type Actor, type Ctx, type Tenant } from "./context";
 import { conflict, forbidden, invalid, notFound } from "./errors";
 import { recordEvent, recordEvents } from "./events";
 import { assertCan, can } from "./policy";
-import { AgentRefInput, ApproveAgentInput, CreateAgentInput, CreateSubagentInput, Empty } from "./schemas";
+import { AgentRefInput, ApproveAgentInput, CreateAgentInput, CreateSubagentInput, Empty, ReconnectAgentInput } from "./schemas";
 import { parseInput, service } from "./service";
 import { disableWebhooksOf } from "./webhooks";
 
@@ -141,17 +141,88 @@ async function revokeTokensOf(db: Db, agentId: string): Promise<void> {
   await db.delete(oauthRefreshToken).where(eq(oauthRefreshToken.referenceId, agentId));
 }
 
-/** The same comparison as the agents_oauth_name_uq index, so what this finds is what an insert would hit. */
-function renewableBy(ctx: Ctx, approverId: string, name: string): SQL | undefined {
-  return and(inTenant(ctx, agents), eq(agents.createdByUserId, approverId), eq(agents.name, name), eq(agents.authKind, "oauth"), isNull(agents.revokedAt));
+/** Which of a person's agents an approval renews: the one of this name, or the one they chose by id. */
+type RenewalTarget = { name: string } | { id: string };
+
+/**
+ * This person's live OAuth agent in this workspace, by name (the same comparison as the
+ * agents_oauth_name_uq index, so what this finds is what an insert would hit) or by id. Revoked
+ * agents are never renewed; an expired one still is. OAuth agents are never sub-agents, and the
+ * check says so anyway, since a posted id is chosen by the browser.
+ */
+function renewableBy(ctx: Ctx, approverId: string, target: RenewalTarget): SQL | undefined {
+  const which = "id" in target ? and(eq(agents.id, target.id), isNull(agents.parentAgentId)) : eq(agents.name, target.name);
+  return and(inTenant(ctx, agents), eq(agents.createdByUserId, approverId), eq(agents.authKind, "oauth"), isNull(agents.revokedAt), which);
 }
 
 /** The agent an approval under this name would renew: this person's, in this workspace, not revoked. An expired one still counts. */
 export async function findRenewableAgent(ctx: Ctx, name: string): Promise<Agent | null> {
   assertCan(ctx, "workspace:read");
   if (ctx.actor.type !== "user") return null;
-  const [agent] = await ctx.db.select(agentColumns).from(agents).where(renewableBy(ctx, ctx.actor.id, name.trim()));
+  const [agent] = await ctx.db.select(agentColumns).from(agents).where(renewableBy(ctx, ctx.actor.id, { name: name.trim() }));
   return agent ?? null;
+}
+
+/**
+ * One of this person's agents, by an id the browser posted: it must be in this workspace, theirs,
+ * signed in with OAuth, not revoked and not a sub-agent. Anything else reads as not found, so a
+ * forged id learns nothing about the agent it names.
+ */
+export async function findReconnectableAgent(ctx: Ctx, agentId: string): Promise<Agent | null> {
+  assertCan(ctx, "workspace:read");
+  if (ctx.actor.type !== "user") return null;
+  const [agent] = await ctx.db.select(agentColumns).from(agents).where(renewableBy(ctx, ctx.actor.id, { id: agentId.trim() }));
+  return agent ?? null;
+}
+
+/** One of a person's own agents, as the approval dialog offers it for reconnecting or handing work over. */
+export interface OwnAgent {
+  id: string;
+  name: string;
+  oauthClientId: string | null;
+  /** Its access has lapsed; reconnecting renews it. */
+  expired: boolean;
+  /** Its live sub-agents' names, which `actingAs` on it reaches. */
+  subagents: string[];
+  /** Open tasks it or one of its sub-agents has claimed: what handing its work over moves. */
+  openClaims: number;
+}
+
+/**
+ * This person's own live OAuth agents in this workspace (expired ones too, as `findRenewableAgent`
+ * counts them), oldest first, each with its sub-agents and open claims.
+ */
+export async function listOwnAgents(ctx: Ctx): Promise<OwnAgent[]> {
+  assertCan(ctx, "workspace:read");
+  if (ctx.actor.type !== "user") return [];
+  const rows = await ctx.db
+    .select({ id: agents.id, name: agents.name, oauthClientId: agents.oauthClientId, accessExpiresAt: agents.accessExpiresAt })
+    .from(agents)
+    .where(and(inTenant(ctx, agents), eq(agents.createdByUserId, ctx.actor.id), eq(agents.authKind, "oauth"), isNull(agents.revokedAt), isNull(agents.parentAgentId)))
+    .orderBy(asc(agents.createdAt));
+  if (rows.length === 0) return [];
+  const ids = rows.map((row) => row.id);
+  const subagents = await ctx.db
+    .select({ parentAgentId: agents.parentAgentId, name: agents.name })
+    .from(agents)
+    .where(and(inTenant(ctx, agents), inArray(agents.parentAgentId, ids), isNull(agents.revokedAt)))
+    .orderBy(asc(agents.createdAt));
+  const root = sql<string>`coalesce(${agents.parentAgentId}, ${agents.id})`;
+  const claims = await ctx.db
+    .select({ root, open: count() })
+    .from(tasks)
+    .innerJoin(agents, and(eq(agents.tenantId, tasks.tenantId), eq(agents.id, tasks.claimedByAgentId)))
+    .where(and(inTenant(ctx, tasks), inArray(tasks.status, [...OPEN_TASK_STATUSES]), or(inArray(agents.id, ids), inArray(agents.parentAgentId, ids))))
+    .groupBy(root);
+  const now = Date.now();
+  return rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    oauthClientId: row.oauthClientId,
+    expired: row.accessExpiresAt !== null && row.accessExpiresAt.getTime() <= now,
+    subagents: subagents.filter((sub) => sub.parentAgentId === row.id).map((sub) => sub.name),
+    openClaims: Number(claims.find((claim) => claim.root === row.id)?.open ?? 0),
+  }));
 }
 
 /**
@@ -182,17 +253,19 @@ function pendingCodesOf(agentId: string): SQL {
 
 /**
  * A person approves an agent that signed in with OAuth, and `issue` hands its client a code. The same
- * person, workspace and name renews that row, keeping its history and watches; anything else is a new
- * agent. A renewal issues the code first and only then replaces the old connection (its grant, its
- * refresh tokens, its pending codes, and through `tokensNotBefore` and the client check its access
- * tokens), so an `issue` that fails leaves the old connection exactly as it was.
+ * person, workspace and name renews that row, keeping its history and watches, and so does choosing
+ * one of their agents by id (`agentId`, which must pass `findReconnectableAgent`'s checks); anything
+ * else is a new agent. A renewal issues the code first and only then replaces the old connection
+ * (its grant, its refresh tokens, its pending codes, and through `tokensNotBefore` and the client
+ * check its access tokens), so an `issue` that fails leaves the old connection exactly as it was.
  */
 export async function approveAgentThen<T>(
   ctx: Ctx,
-  input: z.input<typeof ApproveAgentInput>,
+  input: z.input<typeof ApproveAgentInput> | z.input<typeof ReconnectAgentInput>,
   issue: (agentId: string) => Promise<T>,
 ): Promise<{ agent: Agent; renewed: boolean; issued: T }> {
-  const { name, level, lifetimeDays, oauthClientId } = parseInput(ApproveAgentInput, input);
+  const chosen = "agentId" in input && input.agentId !== undefined;
+  const { level, lifetimeDays, oauthClientId, ...which } = chosen ? parseInput(ReconnectAgentInput, input) : parseInput(ApproveAgentInput, input as z.input<typeof ApproveAgentInput>);
   assertCan(ctx, "agent:connect");
   const { actor } = ctx;
   if (actor.type !== "user" || actor.role === "platform_admin") throw forbidden("Only a person can approve an agent.");
@@ -200,37 +273,42 @@ export async function approveAgentThen<T>(
   if (!grantableLevels(actor.role).includes(level)) throw forbidden(`Your role cannot grant ${levelLabel} access. Ask a workspace admin.`);
   const grantAt = (now: Date) => ({ accessLevel: level, accessExpiresAt: addDays(now, lifetimeDays), oauthClientId });
   const terms = `${levelLabel} access for ${lifetimeDays} day${lifetimeDays === 1 ? "" : "s"}`;
+  const target: RenewalTarget = "agentId" in which ? { id: which.agentId } : { name: which.name };
 
   // A new agent is made first: its code must name a row that exists.
-  const created = await inTransaction(ctx, async (tx) => {
-    const now = new Date();
-    const [row] = await tx.db
-      .insert(agents)
-      .values({ id: newId("ag"), tenantId: tx.tenant.id, name, authKind: "oauth", createdByUserId: actor.id, createdAt: now, ...grantAt(now) })
-      // An agent of this name exists, or a concurrent approval got there first: this waits for it, and renews what is there.
-      .onConflictDoNothing({ target: [agents.tenantId, agents.createdByUserId, agents.name], where: sql`${agents.authKind} = 'oauth' and ${agents.revokedAt} is null` })
-      .returning(agentColumns);
-    if (!row) return null;
-    await recordEvent(tx, {
-      action: "agent.created",
-      entityType: "agent",
-      entityId: row.id,
-      summary: `connected a new agent "${name}" with ${terms}`,
-      data: { parentAgentId: null, level, lifetimeDays },
-    });
-    return row;
-  });
+  const created =
+    "name" in target
+      ? await inTransaction(ctx, async (tx) => {
+          const now = new Date();
+          const [row] = await tx.db
+            .insert(agents)
+            .values({ id: newId("ag"), tenantId: tx.tenant.id, name: target.name, authKind: "oauth", createdByUserId: actor.id, createdAt: now, ...grantAt(now) })
+            // An agent of this name exists, or a concurrent approval got there first: this waits for it, and renews what is there.
+            .onConflictDoNothing({ target: [agents.tenantId, agents.createdByUserId, agents.name], where: sql`${agents.authKind} = 'oauth' and ${agents.revokedAt} is null` })
+            .returning(agentColumns);
+          if (!row) return null;
+          await recordEvent(tx, {
+            action: "agent.created",
+            entityType: "agent",
+            entityId: row.id,
+            summary: `connected a new agent "${target.name}" with ${terms}`,
+            data: { parentAgentId: null, level, lifetimeDays },
+          });
+          return row;
+        })
+      : null;
   if (created) return { agent: created, renewed: false, issued: await issue(created.id) };
 
-  const [current] = await ctx.db.select(agentColumns).from(agents).where(renewableBy(ctx, actor.id, name));
-  if (!current) throw conflict(`"${name}" was revoked just now. Approve it again.`);
+  const gone = () => ("id" in target ? notFound("agent of yours to reconnect", target.id) : conflict(`"${target.name}" was revoked just now. Approve it again.`));
+  const [current] = await ctx.db.select(agentColumns).from(agents).where(renewableBy(ctx, actor.id, target));
+  if (!current) throw gone();
   // The codes outstanding before this one is issued: whichever client holds them, they are replaced.
   const replacedCodes = (await ctx.db.select({ id: verification.id }).from(verification).where(pendingCodesOf(current.id))).map(({ id }) => id);
   const issued = await issue(current.id);
 
   const agent = await inTransaction(ctx, async (tx) => {
-    const [locked] = await tx.db.select(agentColumns).from(agents).where(and(renewableBy(tx, actor.id, name), eq(agents.id, current.id))).for("update");
-    if (!locked) throw conflict(`"${name}" was revoked just now. Approve it again.`);
+    const [locked] = await tx.db.select(agentColumns).from(agents).where(renewableBy(tx, actor.id, { id: current.id })).for("update");
+    if (!locked) throw conflict(`"${current.name}" was revoked just now. Approve it again.`);
     const now = new Date();
     // Also when it was last approved: `findLastApprovedAgent` orders by it.
     const [renewed] = await tx.db.update(agents).set({ ...grantAt(now), tokensNotBefore: now }).where(and(inTenant(tx, agents), eq(agents.id, locked.id))).returning(agentColumns);
@@ -240,12 +318,38 @@ export async function approveAgentThen<T>(
       action: "agent.renewed",
       entityType: "agent",
       entityId: locked.id,
-      summary: `renewed agent "${name}" with ${terms}`,
+      summary: `renewed agent "${locked.name}" with ${terms}`,
       data: { level, lifetimeDays },
     });
     return renewed!;
   });
   return { agent, renewed: true, issued };
+}
+
+/**
+ * Whether this actor may hand the open claims of agent `from` (and its sub-agents) to agent `to`: a
+ * person who approved both, or one who manages agents. It is a person's call, made in the approval
+ * dialog, so no agent may move another's work, even at Admin.
+ */
+export function canTransferClaims(actor: Actor, from: Pick<Agent, "createdByUserId">, to: Pick<Agent, "createdByUserId">): boolean {
+  if (actor.type !== "user" || !can(actor, "task:write")) return false;
+  if (can(actor, "agent:manage")) return true;
+  return can(actor, "agent:connect") && from.createdByUserId === actor.id && to.createdByUserId === actor.id;
+}
+
+/** Two top-level agents of this workspace for a transfer of claims, if `canTransferClaims` allows it. */
+export async function assertCanTransferClaims(ctx: Ctx, fromAgentId: string, toAgentId: string): Promise<{ from: Agent; to: Agent }> {
+  assertCan(ctx, "task:write");
+  if (ctx.actor.type !== "user") throw forbidden("Only a person hands one agent's work to another.");
+  if (fromAgentId === toAgentId) throw invalid("An agent cannot take over its own work.");
+  const rows = await ctx.db.select(agentColumns).from(agents).where(and(inTenant(ctx, agents), inArray(agents.id, [fromAgentId, toAgentId])));
+  const from = rows.find((row) => row.id === fromAgentId);
+  const to = rows.find((row) => row.id === toAgentId);
+  if (!from) throw notFound("agent", fromAgentId);
+  if (!to || to.revokedAt) throw notFound("active agent", toAgentId);
+  if (from.parentAgentId || to.parentAgentId) throw invalid("Work moves between top-level agents; a sub-agent's claims go with its parent's.");
+  if (!canTransferClaims(ctx.actor, from, to)) throw forbidden(`Only the person who approved both "${from.name}" and "${to.name}", or a workspace owner or admin, can hand one's work to the other.`);
+  return { from, to };
 }
 
 /** `approveAgentThen` with nothing to issue: the dialog's action issues a code, everything else just approves. */

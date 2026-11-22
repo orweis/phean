@@ -9,13 +9,13 @@ import { Logo } from "@/components/logo";
 import { Card } from "@/components/ui/card";
 import { todayIso } from "@/lib/dates";
 import { grantableLevels } from "@/lib/domain";
-import { authorizeRetryPath, clientDisplayName, issuableLevels, renewalKey, requestedLevels } from "@/lib/oauth-consent";
+import { authorizeRetryPath, clientDisplayName, issuableLevels, requestedLevels, type ConsentAgent } from "@/lib/oauth-consent";
 import { queryStringOf, routes } from "@/lib/routes";
 import { attempt } from "@/server/actions";
 import { auth } from "@/server/auth/auth";
 import { readConsentRequest } from "@/server/auth/consent";
 import { getSession, ownMemberships, personContext } from "@/server/auth/session";
-import { findLastApprovedAgent, findRenewableAgent } from "@/server/domain/agents";
+import { findLastApprovedAgent, listOwnAgents } from "@/server/domain/agents";
 
 export const metadata: Metadata = { title: "Connect an agent" };
 
@@ -76,20 +76,21 @@ export default async function ApproveAgentPage({ searchParams }: PageProps<"/oau
       </DialogPage>
     );
   }
-  // Per workspace, the name this person last approved this client under, so a renamed agent is renewed
-  // rather than doubled; then, for that name and the client's own, whether Allow would replace a connection.
+  // Per workspace, this person's own agents there, to reconnect one or take over its work, and the
+  // one they last approved this client as, which the dialog chooses unless they choose otherwise.
   const choices = await Promise.all(
     memberships.map(async (membership) => {
       const ctx = personContext(membership, session.user);
-      const slug = membership.tenant.slug;
-      const lastName = (await findLastApprovedAgent(ctx, request.clientId))?.name;
-      const renewals = await Promise.all(
-        [...new Set([lastName, clientName])].filter((name): name is string => !!name).map(async (name) => {
-          const agent = await findRenewableAgent(ctx, name);
-          return agent && { key: renewalKey(slug, name), otherClient: agent.oauthClientId !== request.clientId };
-        }),
-      );
-      return { slug, lastName, renewals: renewals.filter((renewal) => renewal !== null) };
+      const [own, last] = await Promise.all([listOwnAgents(ctx), findLastApprovedAgent(ctx, request.clientId)]);
+      const agents: ConsentAgent[] = own.map(({ id, name, oauthClientId, expired, subagents, openClaims }) => ({
+        id,
+        name,
+        sameClient: oauthClientId === request.clientId,
+        expired,
+        subagents,
+        openClaims,
+      }));
+      return { agents, lastAgentId: last?.id };
     }),
   );
 
@@ -126,9 +127,8 @@ export default async function ApproveAgentPage({ searchParams }: PageProps<"/oau
             slug: tenant.slug,
             name: tenant.name,
             levels: grantableLevels(role),
-            lastName: choices[index]!.lastName,
+            ...choices[index]!,
           }))}
-          renewals={choices.flatMap(({ renewals }) => renewals)}
           asked={requestedLevels(request.scope)}
           issuable={issuableLevels(request.scope)}
           today={todayIso()}

@@ -5,12 +5,13 @@ import type { z } from "zod";
 
 import type { ActionState } from "@/lib/action-state";
 import { ACCESS_LEVEL_META } from "@/lib/domain";
-import { authorizeRetryPath, consentScope, levelField, renewalKey, type ConsentOutcome } from "@/lib/oauth-consent";
+import { authorizeRetryPath, consentScope, levelField, NEW_AGENT, renewalKey, type ConsentOutcome } from "@/lib/oauth-consent";
 import { attempt } from "@/server/actions";
 import { auth, completeConsent } from "@/server/auth/auth";
 import { readConsentRequest } from "@/server/auth/consent";
 import { getSession, ownMemberships, personContext } from "@/server/auth/session";
-import { approveAgentThen, findRenewableAgent } from "@/server/domain/agents";
+import { approveAgentThen, findReconnectableAgent, findRenewableAgent, listOwnAgents, revokeAgent } from "@/server/domain/agents";
+import { transferClaims } from "@/server/domain/tasks";
 import { invalid } from "@/server/domain/errors";
 import { ApproveAgentInput } from "@/server/domain/schemas";
 import { formToInput } from "@/server/forms";
@@ -24,8 +25,9 @@ function goOn(navigate: string, outcome: ConsentOutcome): ActionState {
 }
 
 /**
- * Allow or Cancel. Everything comes from the session and the signed query, and the posted workspace
- * is only ever looked up among the person's own memberships. The agent is approved before the
+ * Allow or Cancel. Everything comes from the session and the signed query, and the posted workspace,
+ * agent to reconnect and agents whose work to take over are only ever looked up among the person's
+ * own memberships and agents. The agent is approved before the
  * consent call, so the code is bound to a row that already exists.
  */
 export async function decideConsentAction(_previous: ActionState, formData: FormData): Promise<ActionState> {
@@ -50,13 +52,27 @@ export async function decideConsentAction(_previous: ActionState, formData: Form
   if (!membership) return { status: "error", message: "Choose one of your workspaces.", at: Date.now() };
   const ctx = personContext(membership, session.user);
 
+  // The agent to reconnect is posted by the browser, so it is looked up again among this person's own.
+  const chosenId = String(formData.get("agent") ?? "");
+  const chosen = chosenId && chosenId !== NEW_AGENT ? await findReconnectableAgent(ctx, chosenId) : null;
+  if (chosenId && chosenId !== NEW_AGENT && !chosen) return { status: "error", message: "Choose one of your agents in this workspace, or connect a new one.", at: Date.now() };
+
   const name = String(formData.get("name") ?? "");
   const key = renewalKey(slug, name);
   // The warning has to have been on screen for this workspace and name before Allow replaces anything.
-  if (formData.get("replaces") !== key) {
+  if (!chosen && formData.get("replaces") !== key) {
     const renewable = await findRenewableAgent(ctx, name);
     if (renewable) return { status: "idle", data: { replaces: key, otherClient: renewable.oauthClientId !== request.clientId }, at: Date.now() };
   }
+
+  // Agents whose work the approved one takes over, and which of those to revoke: only this person's
+  // own agents here, as the dialog offered them; the transfer checks each again.
+  const own = await listOwnAgents(ctx);
+  const takeOver = [...new Set(formData.getAll("takeOver").map(String))];
+  const revoke = [...new Set(formData.getAll("revoke").map(String))].filter((id) => takeOver.includes(id));
+  const renewing = chosen ?? own.find((agent) => agent.name === name.trim());
+  if (takeOver.some((id) => !own.some((agent) => agent.id === id))) return { status: "error", message: "Choose whose work to take over among your own agents here.", at: Date.now() };
+  if (renewing && takeOver.includes(renewing.id)) return { status: "error", message: `"${renewing.name}" cannot take over its own work. Untick it, or connect another agent.`, at: Date.now() };
 
   // Each workspace's levels are their own radio group, so the level is the chosen row's and no other.
   const fields = new FormData();
@@ -69,9 +85,16 @@ export async function decideConsentAction(_previous: ActionState, formData: Form
     const level = ApproveAgentInput.shape.level.safeParse(input.level);
     const scope = level.success ? consentScope(request.scope, level.data) : undefined;
     if (scope === null && level.success) throw invalid(`This client asked only for more than ${ACCESS_LEVEL_META[level.data].label} access. Choose a higher level, or Cancel.`);
-    // A renewal replaces the old connection only once the new client has its code.
-    const consent = (agentId: string) => completeConsent(auth, requestHeaders, { agentId, oauthQuery, scope: scope ?? undefined });
-    return (await approveAgentThen(ctx, { ...input, oauthClientId: request.clientId }, consent)).issued;
+    // The work moves to the approved agent, and anyone ticked is revoked, before the client has its
+    // code; a renewal replaces the old connection only once the new client has it.
+    const consent = async (agentId: string) => {
+      for (const fromAgentId of takeOver) await transferClaims(ctx, { fromAgentId, toAgentId: agentId });
+      for (const revoked of revoke) await revokeAgent(ctx, { agentId: revoked });
+      return completeConsent(auth, requestHeaders, { agentId, oauthQuery, scope: scope ?? undefined });
+    };
+    const grant = { ...input, oauthClientId: request.clientId };
+    const approval = chosen ? { level: grant.level, lifetimeDays: grant.lifetimeDays, oauthClientId: grant.oauthClientId, agentId: chosen.id } : grant;
+    return (await approveAgentThen(ctx, approval, consent)).issued;
   });
   return allowed.ok ? goOn(allowed.value.url, "allowed") : allowed.state;
 }

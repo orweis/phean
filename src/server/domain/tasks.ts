@@ -24,6 +24,7 @@ import { patchOf, publicColumns } from "../db/columns";
 import { newId } from "../db/ids";
 import { agents, goals, member, tasks, user, watches, type TaskRow } from "../db/schema";
 import { liveAgent } from "./agent-liveness";
+import { assertCanTransferClaims } from "./agents";
 import { createdByFields, inTenant, inTransaction, tenantRow, type Ctx } from "./context";
 import { conflict, invalid, notFound } from "./errors";
 import { recordEvent, recordEvents, taskActivity, type Activity } from "./events";
@@ -51,6 +52,7 @@ import {
   SessionInput,
   TaskDraft,
   TaskRefInput,
+  TransferClaimsInput,
   Empty,
   UpdateTaskInput,
   WaitForAnswersInput,
@@ -101,9 +103,34 @@ function userOnly(ctx: Ctx, instead: string): string {
   return ctx.actor.id;
 }
 
-/** Whether the acting agent or person is the task's operator. */
-const operates = (ctx: Ctx, task: Pick<Task, "claimedByAgentId" | "operatorUserId">) =>
-  ctx.actor.type === "agent" ? task.claimedByAgentId === ctx.actor.id : task.operatorUserId === ctx.actor.id;
+/**
+ * Whether two agents are one family: the same agent, a parent and its sub-agent, or two sub-agents
+ * of the same parent. A family shares its claims; each member still acts only at its own level.
+ */
+async function sameFamily(ctx: Ctx, agentId: string, otherId: string): Promise<boolean> {
+  if (agentId === otherId) return true;
+  const rows = await ctx.db
+    .select({ id: agents.id, parentAgentId: agents.parentAgentId })
+    .from(agents)
+    .where(and(inTenant(ctx, agents), inArray(agents.id, [agentId, otherId])));
+  const rootOf = (id: string) => {
+    const row = rows.find((candidate) => candidate.id === id);
+    return row && (row.parentAgentId ?? row.id);
+  };
+  const root = rootOf(agentId);
+  return root !== undefined && root === rootOf(otherId);
+}
+
+/** Whether the acting agent or person is the task's operator. An agent operates a task its family claimed. */
+async function operates(ctx: Ctx, task: Pick<Task, "claimedByAgentId" | "operatorUserId">): Promise<boolean> {
+  if (ctx.actor.type !== "agent") return task.operatorUserId === ctx.actor.id;
+  return task.claimedByAgentId !== null && sameFamily(ctx, ctx.actor.id, task.claimedByAgentId);
+}
+
+/** The claimant an agent acts for when it works on a family member's claim, for the activity log; nothing when it is its own. */
+function onBehalfOf(ctx: Ctx, task: Pick<Task, "claimedByAgentId">): { claimedByAgentId: string } | Record<string, never> {
+  return ctx.actor.type === "agent" && task.claimedByAgentId && task.claimedByAgentId !== ctx.actor.id ? { claimedByAgentId: task.claimedByAgentId } : {};
+}
 
 /** No one working on it. */
 const NO_OPERATOR = { claimedByAgentId: null, operatorUserId: null, claimedAt: null } as const;
@@ -111,7 +138,7 @@ const NO_OPERATOR = { claimedByAgentId: null, operatorUserId: null, claimedAt: n
 const NO_DELEGATION = { delegation: null, delegateToAgentId: null, delegateToUserId: null, delegationNote: "", delegatedAt: null } as const;
 
 /** A new operator's first step forward (a session, a question, an update) ends their pick-up. */
-const settledBy = (ctx: Ctx, task: Task) => (task.delegation === "picking_up" && operates(ctx, task) ? NO_DELEGATION : {});
+const settledBy = async (ctx: Ctx, task: Task) => (task.delegation === "picking_up" && (await operates(ctx, task)) ? NO_DELEGATION : {});
 
 /** Tasks being handed to the actor by name, or to anyone, that they do not already operate. */
 export function handedTo(ctx: Ctx): SQL {
@@ -281,17 +308,23 @@ async function operatorName(ctx: Ctx, task: Pick<Task, "claimedByAgentId" | "ope
 
 /**
  * Agents must not change work another operator (an agent's claim, or a person working on it) holds;
- * people may always step in.
+ * people may always step in. A claim held by the agent's own family (its parent, its sub-agents, or
+ * its parent's other sub-agents) counts as its own.
  */
 async function assertNotClaimedByOther(ctx: Ctx, task: Task): Promise<void> {
   const me = agentIdOf(ctx);
-  if (!me || operates(ctx, task) || (!task.claimedByAgentId && !task.operatorUserId)) return;
+  if (!me || (!task.claimedByAgentId && !task.operatorUserId) || (await operates(ctx, task))) return;
   const who = await operatorName(ctx, task);
   throw conflict(
     task.claimedByAgentId
       ? `"${task.title}" is claimed by ${who}. Pick another task, or ask a human to release it.`
       : `"${task.title}" is being worked on by ${who}. Pick another task, or ask them to hand it off to you.`,
   );
+}
+
+/** " for <claimant>" when an agent completes or releases a claim its family holds, so the log says whose work it was. */
+async function forWhom(ctx: Ctx, task: Task): Promise<string> {
+  return "claimedByAgentId" in onBehalfOf(ctx, task) ? ` for ${await operatorName(ctx, task)}` : "";
 }
 
 export interface CaptureResult {
@@ -409,7 +442,7 @@ export const updateTask = service(UpdateTaskInput, async (ctx, input): Promise<T
     // Finished work has no handover left, and a pick-up ends with any move.
     if (statusChange === "done" || statusChange === "dropped" || current.delegation === "picking_up") Object.assign(patch, NO_DELEGATION);
   }
-  Object.assign(patch, settledBy(ctx, current));
+  Object.assign(patch, await settledBy(ctx, current));
 
   return inTransaction(ctx, async (tx) => {
     const [task] = await tx.db
@@ -480,6 +513,8 @@ export const claimTask = service(ClaimTaskInput, async (ctx, { taskId, session }
       data: {
         goalId: current.goalId,
         ...(pickingUp && { fromAgentId: current.claimedByAgentId, fromUserId: current.operatorUserId }),
+        // A claim taken from one of its family is recorded with whose it was.
+        ...(!pickingUp && current.claimedByAgentId && !mine && { fromAgentId: current.claimedByAgentId }),
         ...(linked && { session: sessionData(linked) }),
       },
     });
@@ -642,7 +677,7 @@ export const linkSession = service(LinkSessionInput, async (ctx, { taskId, sessi
     await assertNotClaimedByOther(tx, current);
     const [task] = await tx.db
       .update(tasks)
-      .set({ agentSessions: withSession(current.agentSessions, next), ...settledBy(tx, current) })
+      .set({ agentSessions: withSession(current.agentSessions, next), ...(await settledBy(tx, current)) })
       .where(tenantRow(tx, tasks, taskId))
       .returning(taskColumns);
     // Refreshing the brief or the message is routine; only a new place to resume is news.
@@ -702,7 +737,7 @@ export const requestInput = service(AskInput, async (ctx, { taskId, question, ki
     const inputAnswers = open ? withAnswer(current.inputAnswers, closed(open, { outcome: "resolved" })) : current.inputAnswers;
     const [task] = await tx.db
       .update(tasks)
-      .set({ inputRequest, inputAnswers, ...(next && { agentSessions: withSession(current.agentSessions, next) }), ...settledBy(tx, current) })
+      .set({ inputRequest, inputAnswers, ...(next && { agentSessions: withSession(current.agentSessions, next) }), ...(await settledBy(tx, current)) })
       .where(tenantRow(tx, tasks, taskId))
       .returning(taskColumns);
     await recordEvent(tx, {
@@ -914,10 +949,83 @@ export const releaseTask = service(ReleaseTaskInput, async (ctx, { taskId, note 
       action: "task.released",
       entityType: "task",
       entityId: taskId,
-      summary: `released "${current.title}"`,
+      summary: `released "${current.title}"${await forWhom(tx, current)}`,
       data: { goalId: current.goalId, fromAgentId: current.claimedByAgentId, fromUserId: current.operatorUserId, ...(note && { note }) },
     });
     return task!;
+  });
+});
+
+/**
+ * A person hands every open claim one agent and its sub-agents hold (`from`) to another of their
+ * agents (`to`), as when a client reconnected under the wrong agent. Each task keeps its status,
+ * stage, sessions and history; only its operator changes, so the one-operator rule holds. A handoff
+ * under way stays under way, except one meant for `to`, which `to` has now picked up. An open
+ * question, and any answer not yet collected, that `from`'s family asked goes with the work, so
+ * `collect_answers` delivers it to `to`; nothing is closed, since the run goes on. `to` follows each
+ * task from now on, so it hears of later changes like any task it claimed.
+ */
+export const transferClaims = service(TransferClaimsInput, async (ctx, { fromAgentId, toAgentId }): Promise<{ moved: Task[] }> => {
+  const { from, to } = await assertCanTransferClaims(ctx, fromAgentId, toAgentId);
+
+  return inTransaction(ctx, async (tx) => {
+    const family = await tx.db
+      .select({ id: agents.id, name: agents.name })
+      .from(agents)
+      .where(and(inTenant(tx, agents), or(eq(agents.id, from.id), eq(agents.parentAgentId, from.id))));
+    const familyIds = new Set(family.map((agent) => agent.id));
+    // Locked until the move commits, so a concurrent claim, release or completion waits for it.
+    const held = await tx.db
+      .select(taskColumns)
+      .from(tasks)
+      .where(and(inTenant(tx, tasks), inArray(tasks.claimedByAgentId, [...familyIds]), isOpenTask))
+      .orderBy(asc(tasks.createdAt))
+      .for("update");
+
+    // A question the family asked is `to`'s now: it gets the answer, and `to` is top-level, so no "via".
+    const asTo = <R extends InputRequest>(request: R): R => {
+      const moved = { ...request, agentId: to.id, agentName: to.name };
+      delete moved.viaAgentName;
+      return moved;
+    };
+    const moved: Task[] = [];
+    for (const current of held) {
+      const open = current.inputRequest;
+      const inputRequest = open && familyIds.has(open.agentId) ? asTo(open) : open;
+      const inputAnswers = current.inputAnswers.map((entry) => (entry.collected || !familyIds.has(entry.agentId) ? entry : asTo(entry)));
+      // A handoff meant for `to` is one it has now taken; any other stays under way.
+      const pickedUp = current.delegation === "handing_off" && current.delegateToAgentId === to.id;
+      const [task] = await tx.db
+        .update(tasks)
+        .set({
+          claimedByAgentId: to.id,
+          operatorUserId: null,
+          inputRequest,
+          inputAnswers,
+          ...(pickedUp && { delegation: "picking_up" as const, delegateToAgentId: null, delegateToUserId: null, delegatedAt: new Date() }),
+        })
+        .where(tenantRow(tx, tasks, current.id))
+        .returning(taskColumns);
+      moved.push(task!);
+    }
+    if (moved.length) {
+      await tx.db
+        .insert(watches)
+        .values(moved.map((task) => ({ tenantId: tx.tenant.id, agentId: to.id, entityType: "task" as const, entityId: task.id, reason: "auto" as const })))
+        .onConflictDoNothing();
+    }
+    const nameOf = (id: string | null) => family.find((agent) => agent.id === id)?.name ?? from.name;
+    await recordEvents(
+      tx,
+      held.map((current) => ({
+        action: "task.claim_transferred" as const,
+        entityType: "task" as const,
+        entityId: current.id,
+        summary: `handed "${current.title}" from ${nameOf(current.claimedByAgentId)} to ${to.name}`,
+        data: { goalId: current.goalId, fromAgentId: current.claimedByAgentId, toAgentId: to.id, toName: to.name },
+      })),
+    );
+    return { moved };
   });
 });
 
@@ -941,8 +1049,8 @@ export const completeTask = service(CompleteTaskInput, async (ctx, { taskId, not
       action: "task.completed",
       entityType: "task",
       entityId: taskId,
-      summary: `completed "${current.title}"`,
-      data: { goalId: current.goalId, note },
+      summary: `completed "${current.title}"${await forWhom(tx, current)}`,
+      data: { goalId: current.goalId, note, ...onBehalfOf(ctx, current) },
     });
     return task!;
   });
