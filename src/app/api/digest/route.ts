@@ -1,6 +1,5 @@
 import { emailConfig } from "@/server/config";
-import { getDb } from "@/server/db/client";
-import { sendDueDigests } from "@/server/digest/send";
+import { sendDigestsNow } from "@/server/entry";
 
 /**
  * Vercel Cron calls this every hour to email the morning digests whose hour it is in their
@@ -14,5 +13,5 @@ export async function GET(request: Request): Promise<Response> {
   const authorized = secret ? request.headers.get("authorization") === `Bearer ${secret}` : process.env.VERCEL_ENV !== "production";
   if (!authorized) return new Response("Unauthorized", { status: 401 });
   if (!emailConfig()) return Response.json({ skipped: "Email is not set up: set RESEND_API_KEY and PHEAN_EMAIL_FROM." });
-  return Response.json(await sendDueDigests(getDb()));
+  return Response.json(await sendDigestsNow());
 }

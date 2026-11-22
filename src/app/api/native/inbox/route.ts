@@ -1,7 +1,6 @@
 import { getSession } from "@/server/auth/session";
 import { trustedOrigins } from "@/server/config";
-import { getDb } from "@/server/db/client";
-import { handleInbox } from "@/server/push/http";
+import { nativeInbox } from "@/server/entry";
 
 export const dynamic = "force-dynamic";
 
@@ -11,7 +10,7 @@ export const dynamic = "force-dynamic";
  */
 export async function GET(request: Request): Promise<Response> {
   const session = await getSession();
-  return handleInbox(request, { db: getDb(), person: session ? { id: session.user.id, name: session.user.name } : null, origins: trustedOrigins() });
+  return nativeInbox(request, { person: session ? { id: session.user.id, name: session.user.name } : null, origins: trustedOrigins() });
 }
 
 /** No preflight is ever answered, so no other origin can send the custom header. */

@@ -14,10 +14,8 @@ import { queryStringOf, routes } from "@/lib/routes";
 import { attempt } from "@/server/actions";
 import { auth } from "@/server/auth/auth";
 import { readConsentRequest } from "@/server/auth/consent";
-import { getSession } from "@/server/auth/session";
-import { getDb } from "@/server/db/client";
+import { getSession, ownMemberships, personContext } from "@/server/auth/session";
 import { findLastApprovedAgent, findRenewableAgent } from "@/server/domain/agents";
-import { listMemberships, userContext } from "@/server/domain/tenants";
 
 export const metadata: Metadata = { title: "Connect an agent" };
 
@@ -63,7 +61,7 @@ export default async function ApproveAgentPage({ searchParams }: PageProps<"/oau
 
   // Only the person's own memberships, so a platform admin is offered nothing extra here. A client on a
   // workspace's own URL can only be given that workspace, so it is the one offered.
-  const memberships = (await listMemberships(getDb(), session.user.id)).filter(({ tenant }) => request.workspace === null || tenant.slug === request.workspace);
+  const memberships = (await ownMemberships(session.user)).filter(({ tenant }) => request.workspace === null || tenant.slug === request.workspace);
   if (request.workspace !== null && memberships.length === 0) {
     return (
       <DialogPage title={`Connect ${called} to Phean`}>
@@ -82,7 +80,7 @@ export default async function ApproveAgentPage({ searchParams }: PageProps<"/oau
   // rather than doubled; then, for that name and the client's own, whether Allow would replace a connection.
   const choices = await Promise.all(
     memberships.map(async (membership) => {
-      const ctx = userContext(getDb(), membership, session.user);
+      const ctx = personContext(membership, session.user);
       const slug = membership.tenant.slug;
       const lastName = (await findLastApprovedAgent(ctx, request.clientId))?.name;
       const renewals = await Promise.all(

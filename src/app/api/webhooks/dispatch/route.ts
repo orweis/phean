@@ -1,6 +1,4 @@
-import { getDb } from "@/server/db/client";
-import { prunePushDeliveries, sendDuePushes } from "@/server/push/dispatch";
-import { dispatchDue, pruneDeliveries } from "@/server/webhooks/dispatch";
+import { dispatchPushesNow, dispatchWebhooksNow } from "@/server/entry";
 
 /**
  * The safety net behind the after-commit kick: Vercel Cron calls this every minute to send
@@ -16,10 +14,7 @@ export async function GET(request: Request): Promise<Response> {
   const authorized = secret ? request.headers.get("authorization") === `Bearer ${secret}` : process.env.VERCEL_ENV !== "production";
   if (!authorized) return new Response("Unauthorized", { status: 401 });
 
-  const db = getDb();
-  const report = await dispatchDue(db);
-  await pruneDeliveries(db);
-  const push = await sendDuePushes(db);
-  await prunePushDeliveries(db);
+  const report = await dispatchWebhooksNow();
+  const push = await dispatchPushesNow();
   return Response.json({ ...report, push });
 }

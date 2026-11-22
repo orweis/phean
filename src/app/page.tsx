@@ -24,7 +24,7 @@ import { ButtonLink } from "@/components/ui/button";
 import { CopyButton } from "@/components/ui/copy-button";
 import { cx } from "@/lib/cx";
 import { routes } from "@/lib/routes";
-import { getSession } from "@/server/auth/session";
+import { hasSessionCookie } from "@/server/auth/session";
 import { appUrl, mcpResourceUrl } from "@/server/config";
 import { organizationSchema, softwareSchema, websiteSchema } from "@/server/site-schema";
 
@@ -110,8 +110,7 @@ function ConnectCommand({ command }: { command: string }) {
 }
 
 export default async function LandingPage() {
-  const session = await getSession();
-  const signedIn = Boolean(session);
+  const signedIn = await hasSessionCookie();
   const start = signedIn ? { href: routes.workspaces(), label: "Go to your workspaces" } : { href: routes.signUp(), label: "Create a workspace" };
   const connect = `claude mcp add --transport http phean ${mcpResourceUrl()}`;
 

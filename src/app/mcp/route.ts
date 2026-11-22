@@ -1,7 +1,6 @@
-import { getDb } from "@/server/db/client";
-import { createPheanMcpHandler } from "@/server/mcp/handler";
+import { mcpHandler } from "@/server/entry";
 
-const handler = createPheanMcpHandler({ getDb });
+const handler = mcpHandler();
 
 /** Long enough for wait_for_answers (at most MAX_WAIT_SECONDS) to hold a request open. */
 export const maxDuration = 300;

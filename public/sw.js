@@ -240,6 +240,7 @@ exports.routes = {
     twoFactor: (next) => withQuery("/sign-in/two-factor", { next }),
     account: () => "/account",
     workspaces: () => "/workspaces",
+    app: () => "/w",
     workspace: (slug) => `/w/${slug}`,
     questions: (slug) => `/w/${slug}#questions`,
     decisions: (slug) => `/w/${slug}/decisions`,

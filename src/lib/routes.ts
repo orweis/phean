@@ -34,6 +34,8 @@ export const routes = {
   /** The signed-in person's own account: how they sign in, and two-factor. */
   account: () => "/account",
   workspaces: () => "/workspaces",
+  /** The way into the app: the workspace the person last opened, or their list of workspaces. */
+  app: () => "/w",
   workspace: (slug: string) => `/w/${slug}`,
   /** The overview's list of agent questions waiting on a person. */
   questions: (slug: string) => `/w/${slug}#questions`,

@@ -15,6 +15,7 @@ import { appearanceCookie, colorSchemeFor, parseAppearance } from "@/lib/appeara
 import { deviceLabel } from "@/lib/device-label";
 import { addDays, dayOf, daysBetween, isoDate, isoDayFromToday, isPastDue, startOfUtcDay, todayIso } from "@/lib/dates";
 import { faviconBadgeText } from "@/lib/favicon";
+import { isWorkspaceSlug, lastWorkspaceCookie } from "@/lib/last-workspace";
 import { swimlaneOf } from "@/lib/swimlanes";
 import {
   isLate,
@@ -342,5 +343,20 @@ describe("deviceLabel", () => {
       ["curl/8.0", "This browser"],
     ];
     for (const [userAgent, label] of cases) expect(deviceLabel(userAgent), userAgent).toBe(label);
+  });
+});
+
+describe("last workspace", () => {
+  it("writes a cookie for the whole site that outlives the session", () => {
+    expect(lastWorkspaceCookie("acme", false)).toBe("phean-workspace=acme; Path=/; Max-Age=31536000; SameSite=Lax");
+    expect(lastWorkspaceCookie("acme", true)).toMatch(/; Secure$/);
+  });
+
+  it("reads back only what could be a workspace slug", () => {
+    expect(isWorkspaceSlug("acme-co")).toBe(true);
+    expect(isWorkspaceSlug(undefined)).toBe(false);
+    expect(isWorkspaceSlug("")).toBe(false);
+    expect(isWorkspaceSlug("Acme")).toBe(false);
+    expect(isWorkspaceSlug("../acme")).toBe(false);
   });
 });

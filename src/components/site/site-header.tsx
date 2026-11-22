@@ -7,7 +7,7 @@ import { Logo } from "@/components/logo";
 import { ButtonLink } from "@/components/ui/button";
 import { cx } from "@/lib/cx";
 import { routes } from "@/lib/routes";
-import { getSession } from "@/server/auth/session";
+import { hasSessionCookie } from "@/server/auth/session";
 
 import { MobileMenu } from "./mobile-menu";
 import { NavMenu } from "./nav-menu";
@@ -93,8 +93,8 @@ function SheetGroup({ group }: { group: SiteGroup }) {
  * menus fold into one sheet holding the whole site map. Every link is in the HTML from the server.
  */
 export async function SiteHeader({ current, wide = true }: { current: SiteSection; wide?: boolean }) {
-  const session = await getSession();
-  const start = session ? { href: routes.workspaces(), label: "Open Phean" } : { href: routes.signUp(), label: "Get started" };
+  const signedIn = await hasSessionCookie();
+  const start = signedIn ? { href: routes.app(), label: "Open Phean" } : { href: routes.signUp(), label: "Get started" };
 
   return (
     <header className="glass-bar text-ink">
@@ -129,7 +129,7 @@ export async function SiteHeader({ current, wide = true }: { current: SiteSectio
           >
             GitHub<span className="sr-only"> (opens in a new tab)</span>
           </a>
-          {!session && (
+          {!signedIn && (
             <ButtonLink href={routes.signIn()} variant="ghost" className="max-sm:hidden">
               Sign in
             </ButtonLink>
@@ -160,7 +160,7 @@ export async function SiteHeader({ current, wide = true }: { current: SiteSectio
             {[PRODUCT, USE_CASE_LINKS, AGENT_LINKS, DEVELOPER_LINKS, RESOURCE_LINKS].map((group) => (
               <SheetGroup key={group.title} group={group} />
             ))}
-            {!session && (
+            {!signedIn && (
               <div className="grid grid-cols-2 gap-2">
                 <ButtonLink href={routes.signIn()} variant="secondary" size="lg">
                   Sign in

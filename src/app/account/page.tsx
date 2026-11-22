@@ -18,10 +18,9 @@ import { queryParam } from "@/lib/routes";
 import { auth } from "@/server/auth/auth";
 import { getViewer } from "@/server/auth/session";
 import { oauthProviders, vapidConfig } from "@/server/config";
-import { getDb } from "@/server/db/client";
-import { personContext } from "@/server/domain/context";
 import { listDevices } from "@/server/domain/notifications";
 import { getAppearance, getTheme } from "@/server/web";
+import { personCtx } from "@/server/entry";
 
 export const metadata: Metadata = { title: "Account" };
 
@@ -48,7 +47,7 @@ export default async function AccountPage({ searchParams }: PageProps<"/account"
   const connected = queryParam(params.connected);
   const failed = callbackErrorMessage(queryParam(params.error));
   const twoFactorEnabled = Boolean((viewer.user as { twoFactorEnabled?: boolean | null }).twoFactorEnabled);
-  const [appearance, theme, devices] = await Promise.all([getAppearance(), getTheme(), listDevices(personContext(getDb(), viewer.user))]);
+  const [appearance, theme, devices] = await Promise.all([getAppearance(), getTheme(), listDevices(personCtx(viewer.user))]);
   const canSubscribe = viewer.memberships.some((membership) => roleCan(membership.role, "notify:subscribe"));
 
   return (

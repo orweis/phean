@@ -53,3 +53,30 @@ test("a link to something that is not there says so", async ({ page }) => {
   const response = await page.request.get("/w/globex/link/not-an-id", { maxRedirects: 0 });
   expect(response.status()).toBe(404);
 });
+
+/** `/w` is the way into the app: the workspace last opened, or the list when there is none to return to. */
+test("/w opens the workspace last opened, or the list of workspaces", async ({ page, context }) => {
+  await page.goto("/");
+  await expect(page.getByRole("link", { name: "Open Phean" }).first()).toHaveAttribute("href", "/w");
+
+  await page.goto("/w/globex/board");
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  await page.goto("/w");
+  await expect(page).toHaveURL("/w/globex");
+
+  // A link to another workspace that only came into view is not a visit.
+  await page.goto("/workspaces");
+  await page.goto("/w");
+  await expect(page).toHaveURL("/w/globex");
+
+  // Leave the workspace first, so its page cannot remember it again.
+  await page.goto("/account");
+  // A workspace this person cannot see is never opened for them.
+  await context.addCookies([{ name: "phean-workspace", value: "not-theirs", domain: "localhost", path: "/" }]);
+  await page.goto("/w");
+  await expect(page).toHaveURL("/workspaces");
+
+  await context.clearCookies({ name: "phean-workspace" });
+  await page.goto("/w");
+  await expect(page).toHaveURL("/workspaces");
+});
