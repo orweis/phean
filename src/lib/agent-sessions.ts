@@ -67,6 +67,13 @@ export interface InputRequest {
   viaAgentName?: string;
   /** ISO timestamp. */
   askedAt: string;
+  /** ISO timestamp a person last snoozed it: it waits behind everything asked before then. */
+  snoozedAt?: string;
+}
+
+/** Where an open request stands in the queue: when it was asked, or when it was last snoozed. */
+export function queuedAt(request: Pick<InputRequest, "askedAt" | "snoozedAt">): string {
+  return request.snoozedAt ?? request.askedAt;
 }
 
 /**

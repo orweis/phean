@@ -25,7 +25,7 @@ import { recall, type Memory } from "./memory";
 import { assertCan } from "./policy";
 import { BoardInput, BrowseTasksInput, Empty, GoalRefInput, GoalScopeInput, JourneysInput } from "./schemas";
 import { service } from "./service";
-import { byUrgency, handedTo, isAwaitingInput, isDueWithinWeek, isOpenTask, isOverdue, selectTaskViews, type TaskView } from "./tasks";
+import { byUrgency, handedTo, isAwaitingInput, isDueWithinWeek, isOpenTask, isOverdue, requestQueueOrder, selectTaskViews, type TaskView } from "./tasks";
 import { loadWorkflow } from "./workflow";
 
 export interface WorkspaceStats {
@@ -137,7 +137,7 @@ export const getStatusSummary = service(Empty, async (ctx): Promise<StatusSummar
   const [stats, awaitingInputTasks, overdueTasks, dueSoonTasks] = await Promise.all([
     getWorkspaceStats(ctx.db, [ctx.tenant.id]),
     selectTaskViews(ctx, isAwaitingInput)
-      .orderBy(sql`${tasks.inputRequest}->>'askedAt'`)
+      .orderBy(requestQueueOrder)
       .limit(20),
     selectTaskViews(ctx, isOverdue)
       .orderBy(...byUrgency)

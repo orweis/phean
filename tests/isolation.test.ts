@@ -27,6 +27,7 @@ import {
   listTasks,
   requestInput,
   retractAnswer,
+  snoozeRequest,
   transferClaims,
   updateTask,
   type Task,
@@ -103,6 +104,7 @@ describe("tenant isolation", () => {
     for (const ctx of [globexOwner, globexAgent]) expect(await listDecisions(ctx, {})).toEqual({ open: [], closed: [] });
     const { inputAnswers } = await answerInput(acmeOwner, { taskId: acmeTask.id, answer: "Yes" });
     await expect(retractAnswer(globexOwner, { taskId: acmeTask.id, requestId: inputAnswers[0]!.id })).rejects.toMatchObject({ code: "not_found" });
+    await expect(snoozeRequest(globexOwner, { taskId: acmeTask.id, requestId: inputAnswers[0]!.id })).rejects.toMatchObject({ code: "not_found" });
     expect((await getBoard(globexOwner, { heldBy: acme.scout.agentId })).columns.flatMap((column) => column.tasks)).toEqual([]);
     expect(await collectAnswers(globexAgent, { taskIds: [acmeTask.id] })).toEqual([]);
     expect((await listDecisions(globexOwner, {})).closed).toEqual([]);

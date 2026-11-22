@@ -27,6 +27,7 @@ const GROUPS = [
       { keys: ["Enter"], what: "Send the ticked options, where a request takes several" },
       { keys: ["J"], what: "Next request" },
       { keys: ["K"], what: "Previous request" },
+      { keys: ["S"], what: "Snooze the selected request to the back of the queue" },
     ],
   },
   {

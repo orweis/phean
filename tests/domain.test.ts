@@ -35,6 +35,7 @@ import {
   requestInput,
   resolveInput,
   retractAnswer,
+  snoozeRequest,
   suggestNextActions,
   updateTask,
   waitForAnswers,
@@ -390,6 +391,35 @@ describe("agent sessions and questions", () => {
     expect(event).toMatchObject({ action: "task.input_answered", actorName: "Dana", data: expect.objectContaining({ answer: "Escalate to their CFO." }) });
     await expect(answerInput(human, { taskId: task.id, answer: "Too late" })).rejects.toMatchObject({ code: "conflict" });
     await expect(answerInput(human, { taskId: task.id })).resolves.toMatchObject({ inputRequest: null });
+  });
+
+  it("snoozes a request to the back of the queue, and puts it back on undo", async () => {
+    const ask = async (title: string) => {
+      const task = await todo(title);
+      await claimTask(scout, { taskId: task.id });
+      return requestInput(scout, { taskId: task.id, question: `${title}?` });
+    };
+    const first = await ask("Pick the venue");
+    const second = await ask("Pick the caterer");
+    const queue = async () => (await listDecisions(human, {})).open.map((task) => task.title);
+    expect(await queue()).toEqual(["Pick the venue", "Pick the caterer"]);
+
+    const requestId = first.inputRequest!.id;
+    const snoozed = await snoozeRequest(human, { taskId: first.id, requestId });
+    expect(snoozed.inputRequest).toMatchObject({ ...first.inputRequest, snoozedAt: expect.any(String) });
+    expect(await queue()).toEqual(["Pick the caterer", "Pick the venue"]);
+    expect((await getStatusSummary(human, {})).awaitingInputTasks.map((task) => task.title)).toEqual(["Pick the caterer", "Pick the venue"]);
+    expect(await actionsOf(human, first.id)).toContain("task.input_snoozed");
+
+    const restored = await snoozeRequest(human, { taskId: first.id, requestId, undo: true });
+    expect(restored.inputRequest).toEqual(first.inputRequest);
+    expect(await queue()).toEqual(["Pick the venue", "Pick the caterer"]);
+
+    // Only a person snoozes, and only the request that is still waiting.
+    await expect(snoozeRequest(scout, { taskId: first.id, requestId })).rejects.toMatchObject({ code: "invalid" });
+    await expect(snoozeRequest(human, { taskId: first.id, requestId: "q_gone" })).rejects.toMatchObject({ code: "conflict" });
+    await answerInput(human, { taskId: second.id, answer: "Ana's" });
+    await expect(snoozeRequest(human, { taskId: second.id, requestId: second.inputRequest!.id })).rejects.toMatchObject({ code: "conflict" });
   });
 
   it("lets a person take an answer back until the asking agent collects it", async () => {

@@ -213,3 +213,37 @@ test("an agent waits on a decision and wakes when the person makes it", async ({
     await expect(lane(page, "done").locator(`[data-task="${task.id}"]`)).toBeVisible();
   });
 });
+
+/** A request a person is not ready for goes to the back of the queue, by button or S, and Undo puts it back. */
+test("a person snoozes a request to the back of the queue, and undoes it", async ({ page }) => {
+  const { slug } = await newWorkspace(page, "Snooze Co");
+  await openTab(page, slug, "Agents");
+  const token = await issueToken(page, "Planner");
+  await asAgent(token, async (agent) => {
+    const { created } = await agent.call<{ created: { id: string }[] }>("capture_tasks", {
+      tasks: [{ title: "Book the venue" }, { title: "Choose the caterer" }, { title: "Send the invites" }],
+    });
+    for (const [index, task] of created.entries()) {
+      await agent.call("claim_task", { taskId: task.id });
+      await agent.call("request_input", { taskId: task.id, kind: "decision", question: `Question ${index + 1}?`, options: ["Yes", "No"] });
+    }
+  });
+
+  await page.goto(`/w/${slug}/decisions`);
+  const entries = page.locator("[data-entry]");
+  const order = () => entries.evaluateAll((items) => items.map((item) => item.getAttribute("aria-label")));
+  await expect.poll(order).toEqual(["Book the venue", "Choose the caterer", "Send the invites"]);
+
+  await page.getByRole("button", { name: "Snooze Book the venue" }).click();
+  await expect(page.locator("[data-status-region]")).toContainText("Snoozed “Book the venue” to the back of the queue");
+  await expect.poll(order).toEqual(["Choose the caterer", "Send the invites", "Book the venue"]);
+  await expect(entries.last()).toContainText("snoozed");
+
+  await page.locator("[data-status-region]").getByRole("button", { name: "Undo" }).click();
+  await expect.poll(order).toEqual(["Book the venue", "Choose the caterer", "Send the invites"]);
+
+  // S snoozes the selected request.
+  await entries.nth(1).focus();
+  await page.keyboard.press("s");
+  await expect.poll(order).toEqual(["Book the venue", "Send the invites", "Choose the caterer"]);
+});

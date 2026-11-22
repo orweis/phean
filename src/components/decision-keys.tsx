@@ -28,7 +28,7 @@ function markSelected(root: HTMLElement, entry: HTMLElement): number {
  * the first on arrival, then the one last focused or clicked, and, when an answered entry leaves,
  * the one that takes its place. While an entry is selected, 1 to 9 choose its options (or tick
  * them, where several may be picked, and Enter sends), J and K move to the next and previous
- * entry, and Enter opens its task. Each option shows its number and
+ * entry, S snoozes it to the back of the queue, and Enter opens its task. Each option shows its number and
  * names it in `aria-keyshortcuts`; Undo in the status region makes a mistaken key cheap.
  */
 export function DecisionKeys({ children }: { children: ReactNode }) {
@@ -108,6 +108,13 @@ export function DecisionKeys({ children }: { children: ReactNode }) {
       if (!link) return;
       event.preventDefault();
       router.push(link.getAttribute("href")!, { scroll: false });
+      return;
+    }
+    if (key === "s") {
+      const snooze = entry.querySelector<HTMLButtonElement>("[data-snooze]:not(:disabled)");
+      if (!snooze) return;
+      event.preventDefault();
+      snooze.click();
       return;
     }
     if (key !== "j" && key !== "k") return;

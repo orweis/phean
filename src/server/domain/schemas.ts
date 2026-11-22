@@ -221,6 +221,13 @@ export const AnswerInput = z.object({
     .describe("For a request that takes several options: the positions of the options picked"),
 });
 
+export const SnoozeRequestInput = z.object({
+  taskId,
+  requestId: z.string().trim().min(1).max(LIMITS.ref).describe("The id of the open request to snooze"),
+  /** Undo: put it back where it was in the queue. */
+  undo: z.preprocess((value) => value === true || value === "true", z.boolean()).default(false),
+});
+
 export const RetractAnswerInput = z.object({
   taskId,
   requestId: z.string().trim().min(1).max(LIMITS.ref).describe("The id of the request whose answer is taken back"),
