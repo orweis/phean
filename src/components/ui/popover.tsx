@@ -159,7 +159,7 @@ export function Popover({
         aria-label={title}
         className={cx(
           "glass-float absolute z-40 rounded-xl outline-none motion-safe:animate-glass-in",
-          menu ? "w-56 p-1.5" : "w-80 p-4",
+          menu ? "w-max max-w-[calc(100vw-1.5rem)] min-w-56 p-1.5" : "w-80 p-4",
           "sm:mt-2 sm:origin-top sm:group-data-[side=top]/pop:bottom-full sm:group-data-[side=top]/pop:mt-0 sm:group-data-[side=top]/pop:mb-2 sm:group-data-[side=top]/pop:origin-bottom",
           inline
             ? "max-sm:static max-sm:mt-2 max-sm:w-full"
