@@ -54,6 +54,7 @@ Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) first. The rules below are the
 ### Database
 
 - Change the schema in `src/server/db/schema`, then `pnpm db:generate` and commit the SQL in `drizzle/`. Migrations only move forward and run on every Vercel build, so keep them compatible with the previous release.
+- The public site (the landing page, `docs`, `blog`, `privacy`, `components/site` and `components/marketing`) never reads the database, so it stays up when the database is down: it asks `hasSessionCookie()` whether someone is signed in, never `getSession`. `tests/site.test.ts` checks this. The sign-in pages read the session through `getSessionIfReachable()`.
 - Nothing may open the database at import time; `next build` runs without one. Use `getDb()` inside functions, or `lazyDb` where a handle must exist at module load. `auth` in `server/auth/auth.ts` is a lazy Proxy for the same reason (the OAuth provider writes its resource row when built): import it freely, but build a real instance only with `createAuth(db, baseUrl)`, as the tests and `auth.config.ts` do.
 
 ### UI

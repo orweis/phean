@@ -1,3 +1,6 @@
+import { readFileSync, readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
+
 import { describe, expect, it } from "vitest";
 
 import robots, { PRIVATE_PATHS } from "@/app/robots";
@@ -59,5 +62,21 @@ describe("crawlers", () => {
     }
     expect(rules.flatMap((rule) => rule.userAgent)).toEqual(expect.arrayContaining(["*", "GPTBot", "ClaudeBot", "PerplexityBot"]));
     expect(config.sitemap).toMatch(/\/sitemap\.xml$/);
+  });
+});
+
+describe("the public site without the database", () => {
+  const PUBLIC = ["src/app/page.tsx", "src/app/docs", "src/app/blog", "src/app/privacy", "src/components/site", "src/components/marketing"];
+  const files = (path: string): string[] =>
+    statSync(path).isDirectory() ? readdirSync(path).flatMap((name) => files(join(path, name))) : /\.tsx?$/.test(path) ? [path] : [];
+
+  it("never reads the database, so it stays up when the database is down", () => {
+    const reaches = PUBLIC.flatMap(files).flatMap((file) => {
+      const source = readFileSync(file, "utf8");
+      return [/@\/server\/db\b/, /@\/server\/domain\b/, /\b(getSession|getViewer|requireUser|requireWorkspace|getDb|lazyDb)\b/]
+        .filter((pattern) => pattern.test(source))
+        .map((pattern) => `${file}: ${pattern}`);
+    });
+    expect(reaches).toEqual([]);
   });
 });
