@@ -6,7 +6,7 @@ import { timeAgo, truncate } from "@/lib/format";
 import { routes } from "@/lib/routes";
 import type { TaskView } from "@/server/domain/tasks";
 
-import { DelegationBadge } from "./task-card";
+import { DelegationBadge, HandedOverBy } from "./task-card";
 import { ActionButton } from "./ui/action-button";
 
 /** Whether a task is being handed to the viewer: by name, or to anyone (the same rule as `handedTo`). */
@@ -32,6 +32,7 @@ export function HandoffList({ tasks, slug, viewerId, canWrite }: { tasks: readon
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
               <DelegationBadge task={task} />
               {forYou && <span className="text-xs font-semibold text-ink">For you</span>}
+              <HandedOverBy task={task} className="text-xs text-muted" />
             </div>
             <p className="mt-1.5 text-sm font-semibold text-ink">
               <Link href={routes.task(slug, task.id)} scroll={false} className="hover:underline hover:underline-offset-2">

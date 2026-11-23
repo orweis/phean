@@ -249,16 +249,24 @@ const handoffNote = z
 
 /**
  * Passing a task to another operator. Name the agent (its name or id) or the person (their email
- * or user id), or neither to let anyone pick it up.
+ * or user id), or neither to let anyone pick it up; or hand it back to whoever handed it over.
  */
 export const HandOffInput = z
   .object({
     taskId,
     toAgent: z.string().trim().min(1).max(LIMITS.name).optional().describe("The agent to hand it to: its name, as whoami and the Agents page show it, or its id"),
     toPerson: z.string().trim().min(1).max(LIMITS.ref).optional().describe("The person to hand it to: their email, or their user id"),
+    handBack: z
+      .boolean()
+      .optional()
+      .describe("true: hand it back to the agent or person who handed it to you (the task's handedOffBy), usually once your part is done. Not with toAgent or toPerson"),
     note: handoffNote,
   })
-  .refine((input) => !(input.toAgent && input.toPerson), { message: "Hand it to an agent or to a person, not both.", path: ["toPerson"] });
+  .refine((input) => !(input.toAgent && input.toPerson), { message: "Hand it to an agent or to a person, not both.", path: ["toPerson"] })
+  .refine((input) => !(input.handBack && (input.toAgent || input.toPerson)), {
+    message: "handBack hands it to whoever handed it over; leave out toAgent and toPerson.",
+    path: ["handBack"],
+  });
 
 /** The web form's handoff: one choice of who, `agent:<id>`, `person:<user id>`, or empty for anyone. */
 export const HandOffChoiceInput = z.object({ taskId, to: z.string().trim().max(LIMITS.ref).default(""), note: handoffNote });
@@ -286,7 +294,7 @@ export const ListTasksInput = z.object({
     .enum(["any", "mine", "unclaimed", "handed_to_me", "handed_off_by_me"])
     .default("any")
     .describe(
-      "mine: tasks you operate; unclaimed: no operator; handed_to_me: tasks being handed off to you, or to anyone; handed_off_by_me: tasks you handed off, to see where they went (combine with status \"done\" for the finished ones)",
+      "mine: tasks you operate; unclaimed: no operator; handed_to_me: tasks being handed off to you, or to anyone; handed_off_by_me: tasks you or your sub-agents handed off, to see where they went (combine with status \"done\" for the finished ones)",
     ),
   due: z
     .enum(["any", "overdue", "next_7_days"])

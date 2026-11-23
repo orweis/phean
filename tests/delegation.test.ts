@@ -257,3 +257,111 @@ describe("returning and taking over", () => {
     expect(await view(human)).toMatchObject({ operatorType: null, delegation: null, delegateToAgentId: null });
   });
 });
+
+describe("handing back", () => {
+  const scoutHands = { kind: "agent", id: "", name: "Scout" };
+  beforeEach(() => {
+    scoutHands.id = ws.scout.agentId;
+  });
+
+  it("remembers who handed a task over through the pick-up and the work, and shows it in lists", async () => {
+    await claimTask(scout, { taskId: task.id });
+    await handOffTask(scout, { taskId: task.id, toAgent: "Closer", note: "Outline is in the doc" });
+    expect(await view(human)).toMatchObject({ handedOffByAgentId: ws.scout.agentId, handedOffByUserId: null, handedOffBy: scoutHands });
+    await claimTask(closer, { taskId: task.id });
+    await linkSession(closer, { taskId: task.id, session: { sessionId: "s-3" } });
+    await updateTask(closer, { taskId: task.id, priority: "high" });
+    await requestInput(closer, { taskId: task.id, kind: "question", question: "Which launch date?" });
+    expect(await view(closer)).toMatchObject({ delegation: null, handedOffBy: scoutHands });
+    expect((await listTasks(closer, { claimed: "mine" }))[0]).toMatchObject({ handedOffBy: scoutHands });
+    // Released, it still knows who handed it over; the next handoff replaces it.
+    await releaseTask(closer, { taskId: task.id, note: "Blocked" });
+    expect(await view(human)).toMatchObject({ delegation: "returned", handedOffBy: scoutHands });
+    await handOffTask(human, { taskId: task.id, toAgent: "Closer" });
+    expect(await view(human)).toMatchObject({ handedOffBy: { kind: "person", id: human.actor.id, name: "Dana" } });
+  });
+
+  it("hands finished work back to the agent that handed it over, which picks it up and closes it", async () => {
+    await claimTask(scout, { taskId: task.id });
+    await handOffTask(scout, { taskId: task.id, toAgent: "Closer", note: "Write the pricing section" });
+    await claimTask(closer, { taskId: task.id });
+
+    const back = await handOffTask(closer, { taskId: task.id, handBack: true, note: "Pricing is written; the table is in the doc" });
+    expect(back).toMatchObject({ delegation: "handing_off", delegateToAgentId: ws.scout.agentId, claimedByAgentId: ws.closer.agentId, handedOffByAgentId: ws.closer.agentId });
+    expect((await listTasks(scout, { claimed: "handed_to_me" })).map((row) => row.id)).toEqual([task.id]);
+    const [event] = (await listActivity(human, {})).filter((entry) => entry.action === "task.handed_off");
+    expect(event).toMatchObject({ summary: 'is handing "Draft the launch post" back to Scout', data: expect.objectContaining({ handBack: true, toAgentId: ws.scout.agentId }) });
+
+    await claimTask(scout, { taskId: task.id });
+    expect(await view(human)).toMatchObject({ operatorName: "Scout", delegation: "picking_up", delegationNote: "Pricing is written; the table is in the doc", handedOffBy: { kind: "agent", name: "Closer" } });
+    await completeTask(scout, { taskId: task.id, note: "Reviewed and published" });
+    expect(await view(human)).toMatchObject({ status: "done" });
+  });
+
+  it("hands work back to the person who handed it over, as a handoff to them", async () => {
+    await handOffTask(leeCtx, { taskId: task.id, toAgent: "Scout", note: "Please draft it" });
+    await claimTask(scout, { taskId: task.id });
+    await handOffTask(scout, { taskId: task.id, handBack: true, note: "Draft is attached" });
+    expect(await view(human)).toMatchObject({ delegation: "handing_off", delegateToUserId: lee.id, delegateToName: "Lee" });
+    expect((await listTasks(leeCtx, { claimed: "handed_to_me" })).map((row) => row.id)).toEqual([task.id]);
+    await takeTask(leeCtx, { taskId: task.id });
+    expect(await view(human)).toMatchObject({ operatorName: "Lee", delegation: "picking_up" });
+  });
+
+  it("refuses to hand back what nobody handed over, to yourself, to someone gone, or alongside a named target", async () => {
+    await claimTask(closer, { taskId: task.id });
+    await expect(handOffTask(closer, { taskId: task.id, handBack: true })).rejects.toMatchObject({ code: "invalid", message: expect.stringContaining("Nobody handed") });
+    await expect(handOffTask(closer, { taskId: task.id, handBack: true, toAgent: "Scout" })).rejects.toMatchObject({ code: "invalid", message: expect.stringContaining("handBack") });
+    await expect(handOffTask(closer, { taskId: task.id, handBack: true, toPerson: lee.email })).rejects.toMatchObject({ code: "invalid" });
+
+    // Closer handing off and then handing back would be handing it to itself.
+    await handOffTask(closer, { taskId: task.id });
+    await expect(handOffTask(closer, { taskId: task.id, handBack: true })).rejects.toMatchObject({ code: "invalid", message: expect.stringContaining("over yourself") });
+
+    await claimTask(scout, { taskId: task.id });
+    await revokeAgent(human, { agentId: ws.closer.agentId });
+    await expect(handOffTask(scout, { taskId: task.id, handBack: true })).rejects.toMatchObject({ code: "invalid", message: expect.stringContaining("no longer connected") });
+  });
+
+  it("restores who handed it over when a handoff is called off, however many times it was redirected", async () => {
+    await claimTask(scout, { taskId: task.id });
+    await handOffTask(scout, { taskId: task.id, toAgent: "Closer" });
+    await claimTask(closer, { taskId: task.id });
+    // Closer starts handing it back, redirects it to Lee, then thinks better of it.
+    await handOffTask(closer, { taskId: task.id, handBack: true });
+    await handOffTask(closer, { taskId: task.id, toPerson: lee.email });
+    await cancelHandOff(closer, { taskId: task.id });
+    expect(await view(human)).toMatchObject({ operatorName: "Closer", delegation: null, handedOffBy: scoutHands });
+    // So handing back still reaches Scout.
+    expect(await handOffTask(closer, { taskId: task.id, handBack: true })).toMatchObject({ delegateToAgentId: ws.scout.agentId });
+  });
+
+  it("hands work back to the sub-agent that passed it, not to its parent", async () => {
+    const { agent: writer, token } = await createSubagent(scout, { name: "Scout Writer" });
+    const writerCtx = agentContext(testDb.db, (await authenticateAgentToken(testDb.db, token))!);
+    await claimTask(writerCtx, { taskId: task.id });
+    await handOffTask(writerCtx, { taskId: task.id, toAgent: "Closer" });
+    await claimTask(closer, { taskId: task.id });
+    expect(await handOffTask(closer, { taskId: task.id, handBack: true })).toMatchObject({ delegateToAgentId: writer.id });
+  });
+});
+
+describe("the migration that added handedOffBy", () => {
+  it("backfills open tasks from their latest handoff, and leaves finished ones alone", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { sql } = await import("drizzle-orm");
+    const done = (await addTask(human, { title: "Old work", status: "todo" })).created[0]!;
+    await claimTask(scout, { taskId: task.id });
+    await handOffTask(scout, { taskId: task.id, toAgent: "Closer" });
+    await claimTask(closer, { taskId: task.id });
+    await handOffTask(human, { taskId: done.id, toAgent: "Scout" });
+    await completeTask(scout, { taskId: done.id });
+    // As tasks handed off before this release were left: no hander.
+    await testDb.db.execute(sql`update tasks set handed_off_by_agent_id = null, handed_off_by_user_id = null where id in (${task.id}, ${done.id})`);
+
+    const backfill = readFileSync(new URL("../drizzle/0019_handoff_family.sql", import.meta.url), "utf8").split("--> statement-breakpoint").at(-1)!;
+    await testDb.db.execute(sql.raw(backfill));
+    expect(await view(human)).toMatchObject({ handedOffBy: { kind: "agent", id: ws.scout.agentId, name: "Scout" } });
+    expect(await view(human, done.id)).toMatchObject({ handedOffBy: null });
+  });
+});

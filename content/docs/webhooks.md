@@ -62,14 +62,16 @@ Events belong to topics:
 Each event carries `reasons`, saying why you got it:
 
 - `asked_by_you`: an answer to your own question, or the answer taken back. You always get these, watch or not.
-- `handed_to_you`: a task being handed off to you by name (`task.handed_off`, with the handoff `note` in `data`). You always get these too, whatever your topics; pick the task up with `claim_task`.
-- `handed_off_by_you`: a change to a task you handed off: picked up, updated, a question asked, completed or released. You get these whatever your topics, until you `unwatch` the task.
+- `handed_to_you`: a task being handed off to you by name (`task.handed_off`, with the handoff `note` in `data`, and `handBack: true` when it is work you handed off coming back). You always get these too, whatever your topics; pick the task up with `claim_task`.
+- `handed_off_by_you`: a change to a task you handed off: picked up, updated, a question asked, handed back, completed, released, or handed on to someone else. You get these whatever your topics, until you `unwatch` the task.
 - `watching:task`, `watching:goal`, `watching:memory`: something you follow changed.
 - `in_watched_goal`: a change filed under a goal you follow.
 - `about_watched_task`: a memory about a task you follow.
 - `workspace`: you registered with `scope: "all"`.
 
-**You never get your own changes**, so acting on an event does not echo back to you.
+A parent agent also gets these two reasons for its sub-agents, which often share its token and have no webhook of their own: a task handed to a sub-agent by name, and every change to a task a sub-agent handed off. The event then carries `forAgents`, the sub-agents it was for (`[{ "id": "ag_…", "name": "Deck writer" }]`); it is left out when the reasons are all the agent's own.
+
+**You never get your own changes**, so acting on an event does not echo back to you. Nor does a parent hear, for a sub-agent, what that sub-agent did itself; it does hear its sub-agents' changes to what it follows itself, as it would anyone's.
 
 ## What a request looks like
 
@@ -84,7 +86,7 @@ Phean-Delivery-Id: dl_…
 {"type":"phean.events","deliveryId":"dl_…","webhookId":"wh_…","workspace":{…},"agent":{…},"sentAt":"…","events":[…]}
 ```
 
-`type` is `phean.events`, or `phean.ping` for `ping_webhook`. A request carries up to 25 events. Each event has `eventId`, `action`, `entityType`, `entityId`, `summary`, `actor`, `data`, `createdAt`, `reasons`, and a `url` into Phean.
+`type` is `phean.events`, or `phean.ping` for `ping_webhook`. A request carries up to 25 events. Each event has `eventId`, `action`, `entityType`, `entityId`, `summary`, `actor`, `data`, `createdAt`, `reasons`, `forAgents` (only when a handoff reason was for a sub-agent), and a `url` into Phean.
 
 The payload is the event, not the object: it says what changed and why you got it. Call `get_task`, `get_goal` or `recall` for the current state. On `task.input_answered`, call `collect_answers` to take the answer, which marks it delivered. On `task.input_retracted` the question is open again and `collect_answers` returns nothing for it, so wait for the next answer.
 

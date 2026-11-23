@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNotNull, isNull, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, or, sql, type SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import type { z } from "zod";
 
@@ -22,7 +22,7 @@ import { truncate } from "@/lib/format";
 
 import { patchOf, publicColumns } from "../db/columns";
 import { newId } from "../db/ids";
-import { agents, goals, member, tasks, user, watches, type TaskRow } from "../db/schema";
+import { agents, events, goals, member, tasks, user, watches, type TaskRow } from "../db/schema";
 import { liveAgent } from "./agent-liveness";
 import { assertCanTransferClaims } from "./agents";
 import { createdByFields, inTenant, inTransaction, tenantRow, type Ctx } from "./context";
@@ -61,6 +61,12 @@ import {
 import { service } from "./service";
 
 export type Task = Omit<TaskRow, "tenantId" | "search">;
+/** Who last handed a task over, so whoever works on it now can hand it back. */
+export interface HandedOffBy {
+  kind: "agent" | "person";
+  id: string;
+  name: string;
+}
 /**
  * A task with the labels every list needs: its goal's title, who has claimed it, the task it is a
  * subtask of, and how many subtasks of its own are done.
@@ -73,6 +79,8 @@ export type TaskView = Task & {
   operatorName: string | null;
   /** Who a handoff is meant for, when it names someone. */
   delegateToName: string | null;
+  /** Who last handed it over (kept through the pick-up and the work), or null: `hand_off_task` with `handBack` returns it to them. */
+  handedOffBy: HandedOffBy | null;
   parentTitle: string | null;
   subtaskCount: number;
   subtasksDone: number;
@@ -163,6 +171,8 @@ const parentTask = alias(tasks, "parent_task");
 const operatorUser = alias(user, "operator_user");
 const delegateAgent = alias(agents, "delegate_agent");
 const delegateUser = alias(user, "delegate_user");
+const handerAgent = alias(agents, "hander_agent");
+const handerUser = alias(user, "hander_user");
 
 const subtaskTally = (filter: SQL) =>
   sql<number>`(select count(*)::int from tasks as sub where sub.tenant_id = ${tasks.tenantId} and sub.parent_task_id = ${tasks.id} and ${filter})`;
@@ -177,6 +187,9 @@ export function selectTaskViews(ctx: Ctx, where?: SQL) {
       operatorType: sql<"agent" | "user" | null>`case when ${tasks.claimedByAgentId} is not null then 'agent' when ${tasks.operatorUserId} is not null then 'user' end`,
       operatorName: sql<string | null>`coalesce(${agents.name}, ${operatorUser.name})`,
       delegateToName: sql<string | null>`coalesce(${delegateAgent.name}, ${delegateUser.name})`,
+      handedOffBy: sql<HandedOffBy | null>`case
+        when ${tasks.handedOffByAgentId} is not null then json_build_object('kind', 'agent', 'id', ${tasks.handedOffByAgentId}, 'name', ${handerAgent.name})
+        when ${tasks.handedOffByUserId} is not null then json_build_object('kind', 'person', 'id', ${tasks.handedOffByUserId}, 'name', ${handerUser.name}) end`,
       parentTitle: parentTask.title,
       // Dropped subtasks are not part of the work any more.
       subtaskCount: subtaskTally(sql`sub.status <> 'dropped'`),
@@ -191,6 +204,8 @@ export function selectTaskViews(ctx: Ctx, where?: SQL) {
     .leftJoin(operatorUser, eq(operatorUser.id, tasks.operatorUserId))
     .leftJoin(delegateAgent, and(eq(delegateAgent.tenantId, tasks.tenantId), eq(delegateAgent.id, tasks.delegateToAgentId)))
     .leftJoin(delegateUser, eq(delegateUser.id, tasks.delegateToUserId))
+    .leftJoin(handerAgent, and(eq(handerAgent.tenantId, tasks.tenantId), eq(handerAgent.id, tasks.handedOffByAgentId)))
+    .leftJoin(handerUser, eq(handerUser.id, tasks.handedOffByUserId))
     .leftJoin(parentTask, and(eq(parentTask.tenantId, tasks.tenantId), eq(parentTask.id, tasks.parentTaskId)))
     .where(and(inTenant(ctx, tasks), where));
 }
@@ -600,12 +615,53 @@ async function handoffTarget(ctx: Ctx, toAgent?: string, toPerson?: string): Pro
   return null;
 }
 
+/** Who handed a task over before the handoff being made or called off now, as its `task.handed_off` event keeps it. */
+type Hander = { agentId: string | null; userId: string | null };
+const handerOf = (task: Pick<Task, "handedOffByAgentId" | "handedOffByUserId">): Hander => ({ agentId: task.handedOffByAgentId, userId: task.handedOffByUserId });
+
+/** The hander before the latest handoff of a task, from that handoff's event; null when it kept none. */
+async function handerBeforeLatestHandoff(ctx: Ctx, taskId: string): Promise<Hander | null> {
+  const [latest] = await ctx.db
+    .select({ data: events.data })
+    .from(events)
+    .where(and(inTenant(ctx, events), eq(events.entityType, "task"), eq(events.entityId, taskId), eq(events.action, "task.handed_off")))
+    .orderBy(desc(events.id))
+    .limit(1);
+  const before = latest?.data.handedOffByBefore as Hander | undefined;
+  return before && typeof before === "object" ? { agentId: before.agentId ?? null, userId: before.userId ?? null } : null;
+}
+
+/** Whoever handed the task to the actor, as a handoff target: refused when there is no one, or they can no longer take it. */
+async function handBackTarget(ctx: Ctx, task: Task): Promise<{ agentId: string | null; userId: string | null; name: string }> {
+  if (task.handedOffByAgentId) {
+    const [agent] = await ctx.db
+      .select({ id: agents.id, name: agents.name, live: sql<boolean>`(${liveAgent()})` })
+      .from(agents)
+      .where(and(inTenant(ctx, agents), eq(agents.id, task.handedOffByAgentId)));
+    if (!agent?.live) {
+      throw invalid(`${agent?.name ?? "The agent"} handed "${task.title}" over but is no longer connected. Hand it to someone with toAgent or toPerson, or complete it.`);
+    }
+    return { agentId: agent.id, userId: null, name: agent.name };
+  }
+  if (task.handedOffByUserId) {
+    const [person] = await ctx.db
+      .select({ id: user.id, name: user.name })
+      .from(member)
+      .innerJoin(user, eq(user.id, member.userId))
+      .where(and(eq(member.organizationId, ctx.tenant.id), eq(user.id, task.handedOffByUserId)));
+    if (!person) throw invalid(`The person who handed "${task.title}" over is no longer in this workspace. Hand it to someone with toAgent or toPerson, or complete it.`);
+    return { agentId: null, userId: person.id, name: person.name };
+  }
+  throw invalid(`Nobody handed "${task.title}" over, so there is no one to hand it back to. Name toAgent or toPerson, or complete it yourself.`);
+}
+
 /**
- * Hands a task on: to a named agent or person, or to anyone. It stays with its operator until
- * someone picks it up. Its operator may hand it off, and so may a person or, for a task no one
- * works on, any agent that may write.
+ * Hands a task on: to a named agent or person, to anyone, or back to whoever handed it over
+ * (`handBack`). It stays with its operator until someone picks it up. Its operator may hand it off,
+ * and so may a person or, for a task no one works on, any agent that may write. The task remembers
+ * who handed it off (`handedOffBy`) until the next handoff, so the work can come back to them.
  */
-export const handOffTask = service(HandOffInput, async (ctx, { taskId, toAgent, toPerson, note }): Promise<Task> => {
+export const handOffTask = service(HandOffInput, async (ctx, { taskId, toAgent, toPerson, handBack, note }): Promise<Task> => {
   assertCan(ctx, "task:write");
 
   return inTransaction(ctx, async (tx) => {
@@ -614,15 +670,27 @@ export const handOffTask = service(HandOffInput, async (ctx, { taskId, toAgent, 
       throw conflict(`"${current.title}" is already ${TASK_STATUS_META[current.status].label.toLowerCase()}. Capture a new task for follow-up work.`);
     }
     await assertNotClaimedByOther(tx, current);
-    const target = await handoffTarget(tx, toAgent, toPerson);
-    if (target && (target.agentId ?? target.userId) === ctx.actor.id) throw invalid("You cannot hand a task to yourself.");
+    const target = handBack ? await handBackTarget(tx, current) : await handoffTarget(tx, toAgent, toPerson);
+    if (target && (target.agentId ?? target.userId) === ctx.actor.id) {
+      throw invalid(handBack ? `You handed "${current.title}" over yourself, so there is no one to hand it back to. Name toAgent or toPerson instead.` : "You cannot hand a task to yourself.");
+    }
     if (target && ((target.agentId && target.agentId === current.claimedByAgentId) || (target.userId && target.userId === current.operatorUserId))) {
       throw invalid(`${target.name} is already working on "${current.title}".`);
     }
+    // Handing off again while a handoff waits replaces it, so the hander before both is the one to keep.
+    const before = current.delegation === "handing_off" ? ((await handerBeforeLatestHandoff(tx, taskId)) ?? handerOf(current)) : handerOf(current);
 
     const [task] = await tx.db
       .update(tasks)
-      .set({ delegation: "handing_off", delegateToAgentId: target?.agentId ?? null, delegateToUserId: target?.userId ?? null, delegationNote: note, delegatedAt: new Date() })
+      .set({
+        delegation: "handing_off",
+        delegateToAgentId: target?.agentId ?? null,
+        delegateToUserId: target?.userId ?? null,
+        delegationNote: note,
+        delegatedAt: new Date(),
+        handedOffByAgentId: tx.actor.type === "agent" ? tx.actor.id : null,
+        handedOffByUserId: tx.actor.type === "user" ? tx.actor.id : null,
+      })
       .where(tenantRow(tx, tasks, taskId))
       .returning(taskColumns);
     // The agent passing the work on keeps hearing about it until it is done (`handed_off_by_you`).
@@ -636,8 +704,17 @@ export const handOffTask = service(HandOffInput, async (ctx, { taskId, toAgent, 
       action: "task.handed_off",
       entityType: "task",
       entityId: taskId,
-      summary: `is handing off "${current.title}" to ${target?.name ?? "anyone"}`,
-      data: { goalId: current.goalId, toAgentId: target?.agentId ?? null, toUserId: target?.userId ?? null, toName: target?.name ?? null, ...(note && { note }) },
+      summary: handBack ? `is handing "${current.title}" back to ${target!.name}` : `is handing off "${current.title}" to ${target?.name ?? "anyone"}`,
+      data: {
+        goalId: current.goalId,
+        toAgentId: target?.agentId ?? null,
+        toUserId: target?.userId ?? null,
+        toName: target?.name ?? null,
+        ...(handBack && { handBack: true }),
+        ...(note && { note }),
+        // Calling this handoff off restores who had handed the task over before it.
+        handedOffByBefore: before,
+      },
     });
     return task!;
   });
@@ -660,7 +737,13 @@ export const cancelHandOff = service(TaskRefInput, async (ctx, { taskId }): Prom
     const current = await findTask(tx, taskId, { lock: true });
     if (current.delegation !== "handing_off") return current;
     await assertNotClaimedByOther(tx, current);
-    const [task] = await tx.db.update(tasks).set(NO_DELEGATION).where(tenantRow(tx, tasks, taskId)).returning(taskColumns);
+    // The handoff never happened, so whoever had handed the task over before it still has.
+    const before = await handerBeforeLatestHandoff(tx, taskId);
+    const [task] = await tx.db
+      .update(tasks)
+      .set({ ...NO_DELEGATION, ...(before && { handedOffByAgentId: before.agentId, handedOffByUserId: before.userId }) })
+      .where(tenantRow(tx, tasks, taskId))
+      .returning(taskColumns);
     await recordEvent(tx, {
       action: "task.handoff_cancelled",
       entityType: "task",
@@ -1005,7 +1088,9 @@ export const releaseTask = service(ReleaseTaskInput, async (ctx, { taskId, note 
  * under way stays under way, except one meant for `to`, which `to` has now picked up. An open
  * question, and any answer not yet collected, that `from`'s family asked goes with the work, so
  * `collect_answers` delivers it to `to`; nothing is closed, since the run goes on. `to` follows each
- * task from now on, so it hears of later changes like any task it claimed.
+ * task from now on, so it hears of later changes like any task it claimed. Open work `from`'s family
+ * handed off is `to`'s to hear about and take back: `to` follows it as a handoff, and a hand-back
+ * goes to `to`. Earlier followers, the agent that handed the work to `from` among them, keep hearing.
  */
 export const transferClaims = service(TransferClaimsInput, async (ctx, { fromAgentId, toAgentId }): Promise<{ moved: Task[] }> => {
   const { from, to } = await assertCanTransferClaims(ctx, fromAgentId, toAgentId);
@@ -1054,19 +1139,42 @@ export const transferClaims = service(TransferClaimsInput, async (ctx, { fromAge
       await tx.db
         .insert(watches)
         .values(moved.map((task) => ({ tenantId: tx.tenant.id, agentId: to.id, entityType: "task" as const, entityId: task.id, reason: "auto" as const })))
+        // A follow `to` already has (a handoff's, say) is never downgraded.
         .onConflictDoNothing();
     }
+    // Open work the family handed off comes back to `to` now, and `to` hears how it goes.
+    const handedOff = await tx.db
+      .update(tasks)
+      .set({ handedOffByAgentId: to.id })
+      .where(and(inTenant(tx, tasks), inArray(tasks.handedOffByAgentId, [...familyIds]), isOpenTask))
+      .returning({ id: tasks.id, title: tasks.title, goalId: tasks.goalId });
+    if (handedOff.length) {
+      await tx.db
+        .insert(watches)
+        .values(handedOff.map((task) => ({ tenantId: tx.tenant.id, agentId: to.id, entityType: "task" as const, entityId: task.id, reason: "handoff" as const })))
+        .onConflictDoUpdate({ target: [watches.agentId, watches.entityType, watches.entityId], set: { reason: "handoff" } });
+    }
     const nameOf = (id: string | null) => family.find((agent) => agent.id === id)?.name ?? from.name;
-    await recordEvents(
-      tx,
-      held.map((current) => ({
+    const movedIds = new Set(moved.map((task) => task.id));
+    await recordEvents(tx, [
+      ...held.map((current) => ({
         action: "task.claim_transferred" as const,
         entityType: "task" as const,
         entityId: current.id,
         summary: `handed "${current.title}" from ${nameOf(current.claimedByAgentId)} to ${to.name}`,
         data: { goalId: current.goalId, fromAgentId: current.claimedByAgentId, toAgentId: to.id, toName: to.name },
       })),
-    );
+      // A task handed off and now worked on by someone else changes only who it comes back to.
+      ...handedOff
+        .filter((task) => !movedIds.has(task.id))
+        .map((task) => ({
+          action: "task.updated" as const,
+          entityType: "task" as const,
+          entityId: task.id,
+          summary: `moved the handoff of "${task.title}" to ${to.name}, who takes it back when it is done`,
+          data: { changed: ["handedOffByAgentId"], goalId: task.goalId },
+        })),
+    ]);
     return { moved };
   });
 });
@@ -1138,10 +1246,11 @@ export const listTasks = service(ListTasksInput, async (ctx, input): Promise<Tas
     mine: ctx.actor.type === "agent" ? eq(tasks.claimedByAgentId, ctx.actor.id) : eq(tasks.operatorUserId, ctx.actor.id),
     unclaimed: and(isNull(tasks.claimedByAgentId), isNull(tasks.operatorUserId)),
     handed_to_me: handedTo(ctx),
-    // Tasks this agent handed off, wherever they went since: picked up, updated, done.
+    // Tasks this agent or its sub-agents handed off, wherever they went since: picked up, updated, done.
     handed_off_by_me:
       ctx.actor.type === "agent"
-        ? sql`exists (select 1 from ${watches} where ${watches.tenantId} = ${tasks.tenantId} and ${watches.agentId} = ${ctx.actor.id} and ${watches.entityType} = 'task' and ${watches.entityId} = ${tasks.id} and ${watches.reason} = 'handoff')`
+        ? sql`exists (select 1 from ${watches} where ${watches.tenantId} = ${tasks.tenantId} and ${watches.entityType} = 'task' and ${watches.entityId} = ${tasks.id} and ${watches.reason} = 'handoff'
+            and (${watches.agentId} = ${ctx.actor.id} or ${watches.agentId} in (select ${agents.id} from ${agents} where ${agents.tenantId} = ${tasks.tenantId} and ${agents.parentAgentId} = ${ctx.actor.id})))`
         : sql`false`,
   }[input.claimed];
   const due = { any: undefined, overdue: isOverdue, next_7_days: isDueWithinWeek }[input.due];

@@ -67,10 +67,15 @@ test("a person starts a task, hands it to an agent with a note, and the agent pi
     await page.goto(`/w/${slug}/tasks/${task.id}`);
     await expect(page.getByText("Operator: Writer")).toBeVisible();
     await expect(page.getByText("Picking up", { exact: true })).toBeVisible();
+    // The task remembers who handed it over, so the work can go back to them.
+    await expect(page.getByText(`Handed over by ${owner.name}`)).toBeVisible();
   });
 
-  await test.step("the board shows the handoff with a dashed edge, and the Handoff filter finds it", async () => {
-    await asAgent(token, (agent) => agent.call("hand_off_task", { taskId: task.id, toPerson: owner.email, note: "Drafted; needs your sign-off on the wording." }));
+  await test.step("the agent hands it back when done; the board shows the handoff with a dashed edge, and the Handoff filter finds it", async () => {
+    await asAgent(token, async (agent) => {
+      const { task: back } = await agent.call<{ task: Task }>("hand_off_task", { taskId: task.id, handBack: true, note: "Drafted; needs your sign-off on the wording." });
+      expect(back).toMatchObject({ delegation: "handing_off" });
+    });
     await page.goto(`/w/${slug}/board`);
     await expect(taskCard()).toContainText(`Handing off to ${owner.name}`);
     await expect(taskCard()).toHaveCSS("border-top-style", "dashed");
@@ -91,5 +96,6 @@ test("a person starts a task, hands it to an agent with a note, and the agent pi
     await page.goto(`/w/${slug}/tasks/${task.id}`);
     await expect(page.getByText(`Operator: ${owner.name}`)).toBeVisible();
     await expect(page.getByText("Picking up", { exact: true })).toBeVisible();
+    await expect(page.getByText("Handed over by Writer")).toBeVisible();
   });
 });

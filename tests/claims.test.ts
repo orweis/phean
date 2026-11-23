@@ -225,6 +225,39 @@ describe("handing one agent's claims to another", () => {
     expect(await view(other.id)).toMatchObject({ claimedByAgentId: content.id, delegation: "handing_off", delegateToAgentId: ws.scout.agentId });
   });
 
+  it("hands the family's handoffs to the new agent too: it hears how they go, and work comes back to it", async () => {
+    const worker = await subagentOf(claude.ctx, "Deck writer");
+    const other = (await addTask(ws.human, { title: "Pull the Q2 numbers", status: "todo" })).created[0]!;
+    await claimTask(claude.ctx, { taskId: task.id });
+    await handOffTask(claude.ctx, { taskId: task.id, toAgent: "Scout", note: "Slides 1-5" });
+    await claimTask(ws.scout.ctx, { taskId: task.id });
+    await claimTask(worker.ctx, { taskId: other.id });
+    await handOffTask(worker.ctx, { taskId: other.id, toAgent: "Closer" });
+    // A handoff Scout made to Claude stays Scout's to hear about.
+    const scouts = (await addTask(ws.human, { title: "Scout's errand", status: "todo" })).created[0]!;
+    await claimTask(ws.scout.ctx, { taskId: scouts.id });
+    await handOffTask(ws.scout.ctx, { taskId: scouts.id, toAgent: "Claude" });
+    await claimTask(claude.ctx, { taskId: scouts.id });
+
+    await transferClaims(miaCtx, { fromAgentId: claude.id, toAgentId: content.id });
+    expect(await view()).toMatchObject({ claimedByAgentId: ws.scout.agentId, handedOffBy: { kind: "agent", id: content.id, name: "Claude Content Agent" } });
+    expect(await view(other.id)).toMatchObject({ claimedByAgentId: content.id, delegation: "handing_off", handedOffByAgentId: content.id });
+    expect(await view(scouts.id)).toMatchObject({ claimedByAgentId: content.id, handedOffByAgentId: ws.scout.agentId });
+    expect(await lastEvent(task.id)).toMatchObject({ action: "task.updated", actorId: mia.id, data: { changed: ["handedOffByAgentId"] } });
+
+    const follows = await testDb.db.select({ id: watches.entityId, reason: watches.reason }).from(watches).where(and(eq(watches.agentId, content.id), eq(watches.entityType, "task")));
+    expect(follows.filter((row) => row.reason === "handoff").map((row) => row.id).sort()).toEqual([task.id, other.id].sort());
+    // Scout and Claude keep their own follows: nothing is downgraded or taken away.
+    const kept = await testDb.db.select({ agentId: watches.agentId, id: watches.entityId, reason: watches.reason }).from(watches).where(eq(watches.reason, "handoff"));
+    expect(kept).toEqual(expect.arrayContaining([
+      { agentId: claude.id, id: task.id, reason: "handoff" },
+      { agentId: worker.id, id: other.id, reason: "handoff" },
+      { agentId: ws.scout.agentId, id: scouts.id, reason: "handoff" },
+    ]));
+    // Scout's hand-back lands with the new agent.
+    expect(await handOffTask(ws.scout.ctx, { taskId: task.id, handBack: true, note: "Slides done" })).toMatchObject({ delegateToAgentId: content.id });
+  });
+
   it("is a call for the person who approved both, or an owner or admin, and never for an agent", async () => {
     await claimTask(claude.ctx, { taskId: task.id });
     const lee = await seedUser(testDb.db, "Lee");

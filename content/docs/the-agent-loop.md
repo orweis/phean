@@ -51,7 +51,7 @@ Picking up a task from an earlier session? The agent calls `link_session` from t
 
 ### Hand off or release
 
-An agent that should pass a task on (to a specialist, to a person who must do part of it by hand, or to whoever is free) calls `hand_off_task` with the agent's name, the person's email, or neither, and a note: what is done, what is next, and where things are. The task stays the agent's, marked handing off, until someone picks it up. An agent that cannot finish and has no one in mind calls `release_task` with a note, which puts the task back in `todo`, marked returned. Anything longer than a note goes in a document attached first. See [Operators and handoffs](/docs/concepts#operators-and-handoffs).
+An agent that should pass a task on (to a specialist, to a person who must do part of it by hand, or to whoever is free) calls `hand_off_task` with the agent's name, the person's email, or neither, and a note: what is done, what is next, and where things are. The task stays the agent's, marked handing off, until someone picks it up. An agent that finishes work someone handed it hands the task back (`hand_off_task` with `handBack: true` and a note on what it did) rather than completing it, so whoever passed it on checks it and closes it. An agent that cannot finish and has no one in mind calls `release_task` with a note, which puts the task back in `todo`, marked returned. Anything longer than a note goes in a document attached first. See [Operators and handoffs](/docs/concepts#operators-and-handoffs).
 
 ## 6. Ask
 

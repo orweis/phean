@@ -197,6 +197,12 @@ export const tasks = pgTable(
     delegationNote: text("delegation_note").notNull().default(""),
     /** When the delegation last changed. */
     delegatedAt: timestampTz("delegated_at"),
+    /**
+     * Who last handed it off: an agent or a person, at most one. Kept through the pick-up and the work
+     * until the next handoff replaces it, so the new operator can hand it back when it is done.
+     */
+    handedOffByAgentId: text("handed_off_by_agent_id"),
+    handedOffByUserId: text("handed_off_by_user_id").references(() => user.id, { onDelete: "set null" }),
     completedAt: timestampTz("completed_at"),
     /** Set when a finished (done or dropped) task is filed away, off the board; reopening it clears it. */
     archivedAt: timestampTz("archived_at"),
@@ -243,9 +249,15 @@ export const tasks = pgTable(
       columns: [t.tenantId, t.delegateToAgentId],
       foreignColumns: [agents.tenantId, agents.id],
     }),
+    foreignKey({
+      name: "tasks_handed_off_by_agent_fk",
+      columns: [t.tenantId, t.handedOffByAgentId],
+      foreignColumns: [agents.tenantId, agents.id],
+    }),
     // One operator at most: an agent's claim or a person, never both.
     check("tasks_one_operator_ck", sql`num_nonnulls(${t.claimedByAgentId}, ${t.operatorUserId}) <= 1`),
     check("tasks_one_delegate_ck", sql`num_nonnulls(${t.delegateToAgentId}, ${t.delegateToUserId}) <= 1`),
+    check("tasks_one_hander_ck", sql`num_nonnulls(${t.handedOffByAgentId}, ${t.handedOffByUserId}) <= 1`),
     // Several agents scanning the same inbox must not capture the same item twice.
     uniqueIndex("tasks_source_ref_uq")
       .on(t.tenantId, t.source, t.sourceRef)
@@ -503,6 +515,8 @@ export const webhookDeliveries = pgTable(
       .references(() => events.id, { onDelete: "cascade" }),
     /** Why this agent gets the event, e.g. "watching:task", "asked_by_you". */
     reasons: text("reasons").array().notNull(),
+    /** The sub-agents of the webhook's agent that the handoff reasons were for, when any were. */
+    forAgents: jsonb("for_agents").$type<{ id: string; name: string }[]>(),
     status: text("status", { enum: ["pending", "delivered", "dead"] }).notNull().default("pending"),
     attempts: integer("attempts").notNull().default(0),
     lastError: text("last_error"),

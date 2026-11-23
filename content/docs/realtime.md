@@ -51,7 +51,7 @@ Every message is one JSON text frame.
 | `type` | Carries |
 | --- | --- |
 | `ready` | `agent`, `workspace`, `topics`, `scope`, `cursor`, `reconnectAt`, and `truncated`. |
-| `events` | `events` (shaped as a webhook payload's events, with `eventId` and `reasons`) and `cursor`. |
+| `events` | `events` (shaped as a webhook payload's events, with `eventId`, `reasons`, and `forAgents` when a handoff reason was for one of your sub-agents) and `cursor`. |
 | `reconnect` | `cursor` and a `reason`. The server closes right after. |
 | `pong` | The answer to a `{"type":"ping"}` you send. |
 
