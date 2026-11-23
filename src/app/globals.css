@@ -837,8 +837,52 @@
   }
 }
 
+/*
+ * The handoff story (components/marketing/handoff-relay.tsx): the player moves `--beat` on the
+ * figure, and each piece of the stage shows from its `--in` beat until its `--out` beat. Without a
+ * script the stage rests on the story's end (HANDOFF_REST). A piece arrives by a wipe (`clip-path`),
+ * as if written, and those that are not states (`data-at=""`) rise a little as they come; a state
+ * that takes another's place (`data-at="swap"`) replaces it at once and wipes in. Opacity is only
+ * ever 0 or 1, never between, so no text is ever seen faded below its contrast. At the loop's last
+ * beat the pieces that last to the end (`--hold`) wipe away together, and the stage starts clean.
+ */
+[data-handoff] {
+  --beat: 13;
+}
+
+[data-handoff] [data-at] {
+  --shown: calc(clamp(0, var(--beat) - var(--in) + 1, 1) * clamp(0, var(--out) - var(--beat), 1));
+  opacity: calc(clamp(0, var(--beat) - var(--in) + 1, 1) * clamp(0, var(--out) + var(--hold, 0) - var(--beat), 1));
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  [data-handoff] [data-at] {
+    clip-path: inset(-0.5rem calc((1 - var(--shown)) * 100%) -0.5rem -0.5rem);
+    translate: 0 calc((1 - var(--shown)) * 0.375rem);
+    transition:
+      clip-path 550ms var(--ease-out),
+      translate 450ms var(--ease-out);
+  }
+
+  [data-handoff] [data-at="swap"] {
+    translate: none;
+  }
+
+  /* Grok Bot typing: three dots that breathe while the story plays. */
+  [data-handoff][data-running] [data-typing] > * {
+    animation: handoff-typing 1s ease-in-out infinite;
+  }
+}
+
+@keyframes handoff-typing {
+  50% {
+    opacity: 0.35;
+    transform: translateY(-2px);
+  }
+}
+
 /* "Pause motion" on the site (WCAG 2.2.2): everything that loops stops where it is. */
-[data-paused] :is([data-demo] *, [data-hill] *, [data-hill] [data-hill-pick]::after, [data-glow]::before, [data-drift], [data-drift]::before, .hero-scene .art) {
+[data-paused] :is([data-handoff] *, [data-demo] *, [data-hill] *, [data-hill] [data-hill-pick]::after, [data-glow]::before, [data-drift], [data-drift]::before, .hero-scene .art) {
   animation-play-state: paused !important;
 }
 

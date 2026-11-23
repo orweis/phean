@@ -110,6 +110,53 @@ test("the landing page keeps still for people who ask for less motion", async ({
   await context.close();
 });
 
+test("the landing page shows agents handing a task between them, and tells it in words", async ({ page }) => {
+  await page.goto("/#handoffs");
+  const section = page.getByRole("region", { name: "Agents pass the work along. You see the whole picture." });
+  const steps = section.getByRole("list", { name: "The handoff, step by step" }).getByRole("listitem");
+  await expect(steps).toHaveCount(6);
+  await expect(steps.getByRole("heading", { level: 3 })).toHaveText([
+    "You ask Grok Bot",
+    "Grok Bot drafts and hands off",
+    "Claude's routine picks it up",
+    "Claude researches and adds",
+    "Claude hands it back",
+    "Grok Bot sends it and finishes",
+  ]);
+  await expect(steps.nth(4)).toContainText("Handed back to Grok Bot: added 3 points");
+  await expect(steps.nth(1)).toContainText("Handing off to Claude");
+
+  // The picture plays while it is on screen, moving from beat to beat, and its own Pause holds it.
+  const stage = section.locator("[data-handoff]");
+  await stage.evaluate((element) => element.scrollIntoView({ block: "center" }));
+  const beat = () => stage.evaluate((element) => Number(getComputedStyle(element).getPropertyValue("--beat")));
+  await expect.poll(beat, { timeout: 10_000 }).toBeGreaterThanOrEqual(2);
+  await section.getByRole("button", { name: "Pause the handoff" }).click();
+  await expect(section.getByRole("button", { name: "Play the handoff" })).toHaveAttribute("aria-pressed", "true");
+  const held = await beat();
+  await page.waitForTimeout(2500);
+  expect(await beat()).toBe(held);
+  await section.getByRole("button", { name: "Play the handoff" }).click();
+  await expect.poll(beat, { timeout: 5000 }).not.toBe(held);
+});
+
+test("the handoff story is a still storyboard for people who ask for less motion", async ({ browser }) => {
+  const context = await browser.newContext({ reducedMotion: "reduce" });
+  const page = await context.newPage();
+  await page.goto("/#handoffs");
+  const section = page.getByRole("region", { name: "Agents pass the work along. You see the whole picture." });
+  // Every step shows, numbered, with its state; the moving picture and its Pause are gone.
+  const steps = section.getByRole("list", { name: "The handoff, step by step" }).getByRole("listitem");
+  await expect(steps).toHaveCount(6);
+  for (const step of await steps.all()) await expect(step).toBeVisible();
+  await expect(steps.first()).toContainText("1");
+  await expect(section.getByRole("button", { name: /the handoff$/ })).toBeHidden();
+  await expect(section.locator("[data-handoff] > [aria-hidden]")).toBeHidden();
+  const moving = await section.evaluate((element) => [...element.querySelectorAll("*")].filter((node) => getComputedStyle(node).animationName !== "none").length);
+  expect(moving).toBe(0);
+  await context.close();
+});
+
 test("the docs are one click from the landing page, and walk page to page", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("navigation", { name: "Site" }).getByRole("link", { name: "Docs" }).click();
