@@ -10,6 +10,7 @@ import { agents, events, organization, webhookDeliveries, webhooks, type Webhook
 import { assertWebhookUrlSafe, allowPrivateWebhooks, resolveHost, type Resolver } from "./url-safety";
 import { isRoutineFireUrl, ROUTINE_HEADERS, routineBody } from "./routines";
 import { decryptSecret, SIGNATURE_HEADER, signPayload } from "./signing";
+import type { ForAgent } from "./routing";
 
 /** Events per request: enough to drain a burst quickly, small enough to process in one go. */
 export const BATCH_SIZE = 25;
@@ -132,6 +133,8 @@ export interface WebhookPayload {
     data: Record<string, unknown>;
     createdAt: string;
     reasons: string[];
+    /** The sub-agents of `agent` the handoff reasons were for; only present when there were any. */
+    forAgents?: ForAgent[];
     url: string;
   }[];
 }
@@ -141,6 +144,7 @@ async function buildBatch(db: Db, hook: Claimed, deps: DispatchDeps) {
     .select({
       deliveryId: webhookDeliveries.id,
       reasons: webhookDeliveries.reasons,
+      forAgents: webhookDeliveries.forAgents,
       event: events,
       slug: organization.slug,
       workspaceName: organization.name,
@@ -162,7 +166,7 @@ async function buildBatch(db: Db, hook: Claimed, deps: DispatchDeps) {
     workspace: { slug: first!.slug, name: first!.workspaceName },
     agent: { id: hook.agent_id, name: first!.agentName },
     sentAt: new Date().toISOString(),
-    events: rows.map(({ event, reasons, slug }) => ({
+    events: rows.map(({ event, reasons, forAgents, slug }) => ({
       eventId: event.id,
       action: event.action,
       entityType: event.entityType,
@@ -172,6 +176,7 @@ async function buildBatch(db: Db, hook: Claimed, deps: DispatchDeps) {
       data: event.data,
       createdAt: event.createdAt.toISOString(),
       reasons,
+      ...(forAgents?.length ? { forAgents } : {}),
       url: eventUrl(deps.baseUrl, slug, event.entityType, event.entityId, event.action),
     })),
   };

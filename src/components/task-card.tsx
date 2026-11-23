@@ -1,4 +1,4 @@
-import { Archive, ArrowRight, Bot, CalendarClock, Check, CircleX, CornerDownRight, Ellipsis, Handshake, ListChecks, Trash2, Unlock, User, UserCheck } from "lucide-react";
+import { Archive, ArrowRight, Bot, CalendarClock, Check, CircleX, CornerDownRight, CornerUpLeft, Ellipsis, Handshake, ListChecks, Trash2, Unlock, User, UserCheck } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
@@ -259,7 +259,27 @@ export function TaskMeta({ task, slug, showGoal, showDue = true }: { task: TaskV
         </span>
       )}
       <DelegationBadge task={task} />
+      <HandedOverBy task={task} />
     </div>
+  );
+}
+
+/**
+ * "Handed over by Claude": who passed an open task on, so whoever works on it knows whom it goes
+ * back to. Left out while the one who handed it over is its operator again (handing it off, say).
+ */
+export function HandedOverBy({ task, className }: { task: Pick<TaskView, "status" | "handedOffBy" | "claimedByAgentId" | "operatorUserId">; className?: string }) {
+  const hander = task.handedOffBy;
+  if (!hander || !isOpenTaskStatus(task.status)) return null;
+  if (hander.id === (hander.kind === "agent" ? task.claimedByAgentId : task.operatorUserId)) return null;
+  return (
+    <span className={cx("inline-flex min-w-0 items-center gap-1", className)} data-handed-over-by={hander.kind}>
+      <CornerUpLeft className="size-3 shrink-0" aria-hidden />
+      {/* An agent's name can be long; it ends in an ellipsis inside its row, and the name stays in the title. */}
+      <span className="truncate" title={hander.name}>
+        Handed over by {hander.name}
+      </span>
+    </span>
   );
 }
 

@@ -3,8 +3,19 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { and, eq } from "drizzle-orm";
 
 import { routes } from "@/lib/routes";
-import { agents, member, tasks } from "@/server/db/schema";
-import { agentContext, approveAgent, approveAgentThen, authenticateAgentToken, findReconnectableAgent, findRenewableAgent, listOwnAgents, resolveOAuthAgent, revokeAgent } from "@/server/domain/agents";
+import { agents, member, tasks, webhookDeliveries } from "@/server/db/schema";
+import {
+  agentContext,
+  approveAgent,
+  approveAgentThen,
+  authenticateAgentToken,
+  findReconnectableAgent,
+  findRenewableAgent,
+  listOwnAgents,
+  resolveNamedSubagent,
+  resolveOAuthAgent,
+  revokeAgent,
+} from "@/server/domain/agents";
 import type { Ctx } from "@/server/domain/context";
 import { listActivity } from "@/server/domain/events";
 import { getDigest } from "@/server/domain/digest";
@@ -39,7 +50,7 @@ import {
 } from "@/server/domain/tasks";
 import { getWorkspaceOverviews, listMemberships } from "@/server/domain/tenants";
 import { createPheanMcpHandler } from "@/server/mcp/handler";
-import { deleteWebhook, watch } from "@/server/domain/webhooks";
+import { deleteWebhook, registerWebhook, watch } from "@/server/domain/webhooks";
 
 import { addMember, createTestDb, seedUser, seedWorkspace, type TestDb, type Workspace } from "./support/db";
 import { connectMcpClient, dataOf, textOf } from "./support/mcp";
@@ -203,6 +214,39 @@ describe("tenant isolation", () => {
     expect(await listHandoffs(globexOwner, {})).toEqual([]);
     expect((await browseTasks(globexOwner, { handoff: "any" })).tasks).toEqual([]);
     expect((await listHandoffs(acmeOwner, {})).map((row) => row.id)).toEqual([acmeTask.id]);
+  });
+
+  it("remembers who handed a task over, hands it back and routes a family's handoffs only inside the workspace", async () => {
+    const { handOffTask } = await import("@/server/domain/tasks");
+    vi.stubEnv("PHEAN_WEBHOOK_ALLOW_PRIVATE", "1");
+    try {
+      // Globex's Scout listens for its family's handoffs; Acme's Scout's sub-agent hands work off.
+      await registerWebhook(globexAgent, { url: "https://hooks.example.com/globex", topics: ["decisions"] });
+      const principal = await resolveNamedSubagent(testDb.db, (await authenticateAgentToken(testDb.db, acme.scout.token))!, "Writer");
+      const writer = agentContext(testDb.db, principal!);
+      await claimTask(writer, { taskId: acmeTask.id });
+      await handOffTask(writer, { taskId: acmeTask.id, toAgent: "Closer", note: "Bluebird draft" });
+      await claimTask(acme.closer.ctx, { taskId: acmeTask.id });
+      await completeTask(acme.closer.ctx, { taskId: acmeTask.id });
+      const [hook] = await testDb.db.select({ id: webhookDeliveries.webhookId }).from(webhookDeliveries).where(eq(webhookDeliveries.tenantId, globex.tenant.id));
+      expect(hook).toBeUndefined();
+      expect(await listTasks(globexAgent, { claimed: "handed_off_by_me" })).toEqual([]);
+      expect((await listTasks(acme.scout.ctx, { claimed: "handed_off_by_me" })).map((row) => row.id)).toEqual([acmeTask.id]);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+
+    // The column takes only this workspace's agents, as the delegate's does.
+    await expect(testDb.db.update(tasks).set({ handedOffByAgentId: globex.scout.agentId }).where(eq(tasks.id, acmeTask.id))).rejects.toThrow();
+    await expect(testDb.db.update(tasks).set({ handedOffByAgentId: acme.scout.agentId, handedOffByUserId: acmeOwner.actor.id }).where(eq(tasks.id, acmeTask.id))).rejects.toThrow();
+
+    // A hand-back can only go where the handoff came from, and Globex cannot hand Acme's work back at all.
+    const [open] = (await captureTasks(acmeOwner, { tasks: [{ title: "Bluebird follow-up", status: "todo" }] })).created as [Task];
+    await handOffTask(acmeOwner, { taskId: open.id, toAgent: "Scout" });
+    await claimTask(acme.scout.ctx, { taskId: open.id });
+    await expect(handOffTask(globexAgent, { taskId: open.id, handBack: true })).rejects.toMatchObject({ code: "not_found" });
+    expect(await handOffTask(acme.scout.ctx, { taskId: open.id, handBack: true })).toMatchObject({ delegateToUserId: acmeOwner.actor.id });
+    expect((await getTask(globexOwner, { taskId: open.id }).catch((error: unknown) => error)) as object).toMatchObject({ code: "not_found" });
   });
 
   it("streams only the agent's own workspace's events over the realtime socket", async () => {

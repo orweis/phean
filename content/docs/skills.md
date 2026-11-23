@@ -38,7 +38,9 @@ See [Webhooks](/docs/webhooks) and [Realtime events](/docs/realtime).
 - the delegation states (`handing_off`, `picking_up`, `returned`) and what ends each;
 - when to hand off (and when a decision with `request_input` is the right move instead), with `hand_off_task` to an agent, a person or anyone;
 - writing a handoff note someone with no memory of the session can act on;
-- finding work handed to it (`list_tasks` with `claimed: "handed_to_me"`), picking it up with `claim_task`, and letting a task go with `release_task`.
+- finding work handed to it (`list_tasks` with `claimed: "handed_to_me"`), picking it up with `claim_task`, and letting a task go with `release_task`;
+- handing finished work back to whoever handed it over (`hand_off_task` with `handBack: true`) instead of completing it, and reviewing work handed back to it;
+- hearing how its handoffs, and its sub-agents', went (`handed_off_by_you`, `forAgents`, `list_tasks` with `claimed: "handed_off_by_me"`).
 
 See [Operators and handoffs](/docs/concepts#operators-and-handoffs).
 

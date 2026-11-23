@@ -118,14 +118,15 @@ With Flask use `request.get_data()`, and with FastAPI `await request.body()`, fo
 - **De-duplicate by `eventId`.** Delivery is at least once: a batch can arrive again, for example if your 2xx was lost. Remember the event ids you have handled and skip repeats. Within one webhook, events arrive in order.
 - **Read `reasons`** to see why you got each event:
   - `asked_by_you`: a person answered your question or decision, or took the answer back (`task.input_retracted`, which reopens the question);
-  - `handed_to_you`: someone is handing a task off to you by name (`task.handed_off`); read its `note`, then `claim_task` to pick it up;
-  - `handed_off_by_you`: a change to a task you handed off (picked up, updated, completed, released), so you hear how it ends;
+  - `handed_to_you`: someone is handing a task off to you by name (`task.handed_off`), or handing back one you handed off (`data.handBack` is true); read its `note`, then `claim_task` to pick it up;
+  - `handed_off_by_you`: a change to a task you handed off (picked up, updated, a question asked, handed back, completed, released, handed on), so you hear how it ends;
   - `watching:task` / `watching:goal` / `watching:memory`: something you follow changed;
   - `in_watched_goal`: a change filed under a goal you follow;
   - `about_watched_task`: a memory about a task you follow;
   - `workspace`: you registered with `scope: "all"`.
-- **Fetch the current state.** An event says what changed, not the whole object. Call `get_task`, `get_goal` or `recall` for the latest, and on `task.input_answered` call `collect_answers` to take the answer (that marks it delivered). On `task.handed_off` with the reason `handed_to_you`, read the handoff note in `data.note` and pick the task up with `claim_task` (the phean-handoffs skill covers the rest). Then act on it. A person can take an answer back for a few seconds after giving it, until you collect it: on `task.input_retracted` the question is open again, and `collect_answers` returns nothing for it, so wait for the next answer.
-- **You never get your own changes,** so acting on an event does not echo back to you.
+- **Read `forAgents`** when it is there. The handoff reasons also reach a parent agent for its sub-agents (a sub-agent sharing your token rarely listens itself): a task handed to one of them by name comes as `handed_to_you`, and changes to a task one of them handed off as `handed_off_by_you`, with `forAgents: [{ "id": "ag_…", "name": "Deck writer" }]` naming the sub-agent it was for. Act on it as that sub-agent (with `actingAs`). The field is left out when the reasons are all your own.
+- **Fetch the current state.** An event says what changed, not the whole object. Call `get_task`, `get_goal` or `recall` for the latest, and on `task.input_answered` call `collect_answers` to take the answer (that marks it delivered). On `task.handed_off` with the reason `handed_to_you`, read the handoff note in `data.note` and pick the task up with `claim_task`; when you finish a task handed to you, hand it back with `hand_off_task` and `handBack: true` rather than completing it, and when one you handed off comes back, review it and complete it (the phean-handoffs skill covers the rest). Then act on it. A person can take an answer back for a few seconds after giving it, until you collect it: on `task.input_retracted` the question is open again, and `collect_answers` returns nothing for it, so wait for the next answer.
+- **You never get your own changes,** so acting on an event does not echo back to you; nor, for a sub-agent, the changes that sub-agent made itself.
 
 ## 5. When things go wrong
 

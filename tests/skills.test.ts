@@ -91,9 +91,20 @@ describe("the phean-handoffs skill", () => {
     }
   });
 
-  it("carries an example handoff the server would accept", () => {
-    const example = JSON.parse(codeBlock(SKILL, "json"));
-    expect(HandOffInput.safeParse(example).success).toBe(true);
+  it("carries an example handoff and hand-back the server would accept", () => {
+    const examples = [...SKILL.matchAll(/```json\n([\s\S]+?)\n```/g)].map((match) => JSON.parse(match[1]!) as Record<string, unknown>);
+    expect(examples).toHaveLength(2);
+    for (const example of examples) expect(HandOffInput.safeParse(example).success).toBe(true);
+    expect(examples.map((example) => Boolean(example.handBack))).toEqual([false, true]);
+    expect(HandOffInput.safeParse({ ...examples[1], toAgent: "Builder agent" }).success).toBe(false);
+  });
+
+  it("teaches handing finished work back by default, as the server's guidance does", () => {
+    for (const text of [SKILL, SERVER_INSTRUCTIONS]) {
+      expect(text).toMatch(/handBack: true/);
+      expect(text).toContain("handedOffBy");
+      expect(text).toContain("forAgents");
+    }
   });
 });
 

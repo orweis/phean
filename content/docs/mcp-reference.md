@@ -41,7 +41,7 @@ Markers below: **read-only** tools never change workspace state; **destructive**
 | Tool | Description |
 | --- | --- |
 | `capture_tasks` | Record up to 100 tasks in one call, de-duplicated by `source` and `sourceRef`; skipped items come back in `duplicates`. |
-| `list_tasks` | Read-only. Tasks filtered by status, goal, parent, priority, operator (`claimed`: `mine`, `unclaimed`, `handed_to_me`, `handed_off_by_me`) or due date, most urgent first. Each carries its operator and delegation. |
+| `list_tasks` | Read-only. Tasks filtered by status, goal, parent, priority, operator (`claimed`: `mine`, `unclaimed`, `handed_to_me`, `handed_off_by_me`) or due date, most urgent first. Each carries its operator, its delegation and who handed it over (`handedOffBy`). `handed_off_by_me` includes your sub-agents' handoffs. |
 | `get_task` | Read-only. One task with its links, sessions, documents, open and answered requests, parent, subtasks and recent activity. |
 | `update_task` | Change only the fields you pass: title, description, status or stage, priority, due date, goal, tags, source, `sourceRef`, parent, links. |
 | `assign_tasks_to_goal` | File several tasks under one goal; inbox tasks become `todo`. |
@@ -52,7 +52,7 @@ Markers below: **read-only** tools never change workspace state; **destructive**
 | --- | --- |
 | `claim_task` | Become a task's operator before working on it, with your `session`; moves it to in progress. Fails with the operator's name if another agent or a person works on it, unless it is being handed to you: then you pick it up (`picking_up`). |
 | `link_session` | Attach this session to a task so a person can resume with you. One per agent; linking again replaces yours. |
-| `hand_off_task` | Pass a task on to an agent (`toAgent`), a person (`toPerson`, their email) or anyone, with a `note`. It stays yours, `handing_off`, until someone picks it up; a named agent hears `handed_to_you`. |
+| `hand_off_task` | Pass a task on to an agent (`toAgent`), a person (`toPerson`, their email) or anyone, with a `note`; or, with `handBack: true`, back to whoever handed it to you (`handedOffBy`), the default once your part is done. It stays yours, `handing_off`, until someone picks it up; a named agent hears `handed_to_you`. |
 | `cancel_hand_off` | Call off a handoff no one has picked up yet. |
 | `release_task` | Let go of a task you cannot finish, with a `note`; it goes back to `todo`, marked `returned`, for the next operator. |
 | `complete_task` | Mark a task done with a short note; closes any open request of yours on it. |

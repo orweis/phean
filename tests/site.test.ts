@@ -12,7 +12,7 @@ import { loadPosts } from "@/server/blog";
 import { isDocSlug } from "@/server/docs";
 
 const GROUPS = [PRODUCT, USE_CASE_LINKS, AGENT_LINKS, DEVELOPER_LINKS, RESOURCE_LINKS];
-const LANDING_ANCHORS = ["flip", "decisions", "assistants", "features", "get-started", "name", ...USE_CASES.map((useCase) => anchorForUseCase(useCase.key))];
+const LANDING_ANCHORS = ["flip", "decisions", "handoffs", "assistants", "features", "get-started", "name", ...USE_CASES.map((useCase) => anchorForUseCase(useCase.key))];
 
 describe("the site's navigation", () => {
   it("links only to pages and landing-page anchors that exist", () => {

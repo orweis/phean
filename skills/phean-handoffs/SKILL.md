@@ -1,6 +1,6 @@
 ---
 name: phean-handoffs
-description: How to pass work between agents and people in Phean without dropping it. Use whenever you are connected to a Phean MCP server and a task should move to someone else (a specialist agent, a person who must do part of it by hand, whoever is free), you cannot finish a task, a task is handed to you, or you find a person or another agent working on something. Covers operators, the delegation states (handing off, picking up, returned), writing the handoff note, picking up a handoff, calling one off, and hearing about handoffs by webhook.
+description: How to pass work between agents and people in Phean without dropping it. Use whenever you are connected to a Phean MCP server and a task should move to someone else (a specialist agent, a person who must do part of it by hand, whoever is free), you cannot finish a task, a task is handed to you, you finish a task someone handed you, or you find a person or another agent working on something. Covers operators, the delegation states (handing off, picking up, returned), writing the handoff note, picking up a handoff, handing finished work back by default, calling one off, and hearing how your handoffs (and your sub-agents') went by webhook, stream or list_tasks.
 ---
 
 # Handoffs in Phean
@@ -27,7 +27,7 @@ A task's `delegation` says whether a handover is under way. No delegation (null)
 | `picking_up` | A new operator has taken it and is reading the handoff note. | The new operator's first step forward: `link_session`, `request_input`, `update_task`, or `complete_task`. |
 | `returned` | The operator let it go with `release_task` and a note; it is back in To do. | Someone claims or takes it. |
 
-Who it is for is `delegateToName` (null means anyone); the note is `delegationNote`.
+Who it is for is `delegateToName` (null means anyone); the note is `delegationNote`. Who handed it over is `handedOffBy` (`{ kind: "agent" | "person", id, name }`, or null): it stays on the task through the pick-up and the work, until the next handoff replaces it, so you always know whom to hand it back to.
 
 ## Handing a task off
 
@@ -42,6 +42,7 @@ Call `hand_off_task` with:
 - `taskId`;
 - `toAgent`: the agent's name, as `whoami`, the Agents page and the activity log show it, or its id; or
 - `toPerson`: the person's email, or their user id; or neither, to let anyone pick it up;
+- or `handBack: true` (and neither of those), to hand it back to whoever handed it to you (see "Handing it back" below);
 - `note`: what is done, what is next, and where things are.
 
 ```json
@@ -64,9 +65,30 @@ Every task, document, decision and goal you read from Phean carries a `url` that
 
 Links open for people who are signed in to the workspace; they never grant access on their own.
 
+## Handing it back when you are done
+
+When you finish a task that someone handed to you, do not call `complete_task` yourself. Hand it back to them with `hand_off_task` and `handBack: true`, with a note on what you did, where the result is, and what is left. They passed you the work, so they check it and close it (or pass it on).
+
+```json
+{
+  "taskId": "t_8f2k1q",
+  "handBack": true,
+  "note": "Pagination is done and tested (cursor-based, 50 per page); the PR is linked on the task and CI is green. Left: the changelog entry. Response shape unchanged."
+}
+```
+
+- `handBack` goes to the task's `handedOffBy`: an agent hears it at once as `handed_to_you` and picks it up with `claim_task`; a person finds it handed to them in Phean, as with `toPerson`.
+- It is refused when nobody handed the task over (`handedOffBy` is null), when the one who did can no longer take it (revoked, or no longer in the workspace), and alongside `toAgent` or `toPerson`. Then hand it to someone by name, or complete it.
+- Complete the task yourself instead only when the handoff note says to ("close it when it's merged"), when it was handed to anyone rather than to you by name, or when nobody handed it to you.
+- Handing back is an ordinary handoff: the task stays yours, `handing_off`, until they pick it up, and you become its `handedOffBy`, so they can hand it back again if something is missing.
+
+When a task you handed off comes back to you (`handed_to_you` on a task you handed off), pick it up with `claim_task`, review the work against what you asked for, then `complete_task` it, or hand it on with a note on what is still wrong.
+
 ## Hearing how it ends
 
-Handing a task off does not end your interest in it. Phean keeps you following it, and every change after that (picked up, updated, a question asked, completed, released) reaches your webhook or realtime stream with the reason `handed_off_by_you`, even if you subscribed to other topics. Without a webhook or a stream, call `list_tasks` with `claimed` set to `handed_off_by_me` (add `status: "done"` for the finished ones) when you sync up. When the work comes back `returned`, or sits in `handing_off` with no taker, decide what happens next: hand it to someone else, take it back with `claim_task`, or tell the person who asked for it. `unwatch` ends the follow once you no longer care.
+Handing a task off does not end your interest in it. Phean keeps you following it, and every change after that (picked up, updated, a question asked, handed back, completed by the agent or by a person, released, handed on to someone else, moved to another agent with its claims) reaches your webhook or realtime stream with the reason `handed_off_by_you`, even if you subscribed to other topics. Without a webhook or a stream, call `list_tasks` with `claimed` set to `handed_off_by_me` (add `status: "done"` for the finished ones) when you sync up. When the work comes back `returned`, or sits in `handing_off` with no taker, decide what happens next: hand it to someone else, take it back with `claim_task`, or tell the person who asked for it. `unwatch` ends the follow once you no longer care.
+
+Your sub-agents' handoffs are yours to hear about too, because a sub-agent (one that shares your token, especially) rarely listens itself. Your webhook or stream gets `handed_off_by_you` for every task a sub-agent handed off, and `handed_to_you` for every task handed to a sub-agent by name, with `forAgents` (`[{ id, name }]`) on the event naming the sub-agent it was for; act on it as that sub-agent (with `actingAs`, say). `list_tasks` with `handed_off_by_me` lists your sub-agents' handoffs beside yours. A sub-agent's own listing shows only its own. You still never hear what you did yourself, nor, for a sub-agent, what that sub-agent did itself.
 
 ## Writing the handoff note
 
@@ -95,5 +117,6 @@ When you cannot finish and have no one in mind, call `release_task` with a `note
 
 - One operator at a time: claim before you work, and never work on a task someone else operates unless it is being handed to you.
 - Hand off or release; never leave a claimed task silently stalled.
+- Finished work that was handed to you goes back with `handBack: true`, unless the note says to complete it.
 - A handoff is not a question. If you only need a person's choice or a fact, ask with `request_input` and keep the task.
 - Tell the person in one line when you hand them a task, with its link, as you would for a decision.

@@ -2,12 +2,26 @@ import { and, eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { agents, member, webhookDeliveries, webhooks } from "@/server/db/schema";
-import { agentContext, approveAgent, resolveOAuthAgent, revokeAgent } from "@/server/domain/agents";
+import { agentContext, approveAgent, authenticateAgentToken, createSubagent, resolveNamedSubagent, resolveOAuthAgent, revokeAgent } from "@/server/domain/agents";
 import type { Ctx } from "@/server/domain/context";
 import { inTransaction } from "@/server/domain/context";
 import { createGoal, setGoalStatus } from "@/server/domain/goals";
 import { remember } from "@/server/domain/memory";
-import { answerInput, captureTasks, claimTask, completeTask, handOffTask, linkSession, listTasks, requestInput, retractAnswer, updateTask } from "@/server/domain/tasks";
+import {
+  answerInput,
+  captureTasks,
+  claimTask,
+  completeTask,
+  handOffTask,
+  linkSession,
+  listTasks,
+  releaseTask,
+  requestInput,
+  retractAnswer,
+  takeTask,
+  transferClaims,
+  updateTask,
+} from "@/server/domain/tasks";
 import { deleteWebhook, getWebhook, listWatches, pingWith, registerWebhook, unwatch, watch } from "@/server/domain/webhooks";
 import { backoffSeconds, dispatchDue, MAX_CONSECUTIVE_FAILURES, type DispatchDeps, type WebhookPayload } from "@/server/webhooks/dispatch";
 import { isRoutineFireUrl, ROUTINE_BETA, ROUTINE_TEXT_MAX, routineText } from "@/server/webhooks/routines";
@@ -15,7 +29,7 @@ import { SIGNATURE_HEADER, verifySignature } from "@/server/webhooks/signing";
 import { setDispatchScheduler } from "@/server/webhooks/trigger";
 import { assertWebhookUrlSafe, isPrivateAddress } from "@/server/webhooks/url-safety";
 
-import { addMember, asUser, createTestDb, seedUser, seedWorkspace, type TestDb, type Workspace } from "./support/db";
+import { addMember, asUser, connectAgent, createTestDb, seedUser, seedWorkspace, type TestDb, type Workspace } from "./support/db";
 
 let testDb: TestDb;
 let ws: Workspace;
@@ -234,6 +248,164 @@ describe("routing changes to webhooks", () => {
     const { received, deps } = receiver();
     await dispatchDue(testDb.db, deps);
     expect(mine(received, url)).toEqual([]);
+  });
+});
+
+describe("how a handoff ends reaches the agent that handed it off", () => {
+  let url: string;
+  let task: Awaited<ReturnType<typeof todo>>;
+
+  /** Scout, listening for decisions only, hands a task it worked on to Closer, which picks it up. */
+  beforeEach(async () => {
+    url = endpoint();
+    await registerWebhook(scout, { url, topics: ["decisions"] });
+    task = await todo(human, "Draft the launch post");
+    await claimTask(scout, { taskId: task.id });
+    await handOffTask(scout, { taskId: task.id, toAgent: "Closer", note: "Outline is attached" });
+    await claimTask(closer, { taskId: task.id });
+  });
+
+  /** What Scout's webhook got, and Scout's follow on the task afterwards. */
+  async function heard() {
+    const { received, deps } = receiver();
+    await dispatchDue(testDb.db, deps);
+    const watched = await listWatches(scout, { entityType: "task" });
+    return { events: eventsTo(received, url).map((event) => [event.action, event.reasons, event.forAgents]), follow: watched.map((entry) => entry.reason) };
+  }
+
+  const third = async () => (await connectAgent(human, "Third")).ctx;
+
+  it.each([
+    ["is updated", () => updateTask(closer, { taskId: task.id, priority: "high" }), [["task.updated", ["handed_off_by_you"]]]],
+    [
+      "has a question asked",
+      () => requestInput(closer, { taskId: task.id, kind: "question", question: "Which launch date?" }),
+      [["task.input_requested", ["handed_off_by_you"]]],
+    ],
+    ["is completed by the agent it was handed to", () => completeTask(closer, { taskId: task.id, note: "Published" }), [["task.completed", ["handed_off_by_you"]]]],
+    ["is completed by a person", () => completeTask(human, { taskId: task.id, note: "Done by hand" }), [["task.completed", ["handed_off_by_you"]]]],
+    ["is taken over by a person", () => takeTask(human, { taskId: task.id }), [["task.picked_up", ["handed_off_by_you"]]]],
+    ["is released", () => releaseTask(closer, { taskId: task.id, note: "Blocked on legal" }), [["task.released", ["handed_off_by_you"]]]],
+    [
+      "is handed back",
+      () => handOffTask(closer, { taskId: task.id, handBack: true, note: "Drafted; ready for review" }),
+      [["task.handed_off", ["handed_to_you", "handed_off_by_you"]]],
+    ],
+  ] as const)("when the task %s", async (_, act, expected) => {
+    await act();
+    expect(await heard()).toEqual({ events: [["task.picked_up", ["handed_off_by_you"], undefined], ...expected.map((event) => [...event, undefined])], follow: ["handoff"] });
+  });
+
+  it("when the task is handed on to a third agent, which picks it up and finishes it", async () => {
+    const other = await third();
+    await handOffTask(closer, { taskId: task.id, toAgent: "Third", note: "Needs the pricing table" });
+    await claimTask(other, { taskId: task.id });
+    await completeTask(other, { taskId: task.id, note: "Shipped" });
+    expect((await heard()).events.map(([action]) => action)).toEqual(["task.picked_up", "task.handed_off", "task.picked_up", "task.completed"]);
+    expect((await listWatches(scout, { entityType: "task" })).map((entry) => entry.reason)).toEqual(["handoff"]);
+  });
+
+  it("when a person moves the claim to another agent", async () => {
+    const other = await connectAgent(human, "Third");
+    await transferClaims(human, { fromAgentId: ws.closer.agentId, toAgentId: other.agentId });
+    await completeTask(other.ctx, { taskId: task.id });
+    expect(await heard()).toEqual({
+      events: [
+        ["task.picked_up", ["handed_off_by_you"], undefined],
+        ["task.claim_transferred", ["handed_off_by_you"], undefined],
+        ["task.completed", ["handed_off_by_you"], undefined],
+      ],
+      follow: ["handoff"],
+    });
+  });
+
+  it("keeps the handoff follow when the agent acts on the task again, or claims it back", async () => {
+    await releaseTask(closer, { taskId: task.id, note: "Over to you" });
+    await claimTask(scout, { taskId: task.id });
+    await updateTask(scout, { taskId: task.id, priority: "low" });
+    expect((await heard()).follow).toEqual(["handoff"]);
+  });
+});
+
+describe("a parent hears its sub-agents' handoffs", () => {
+  /** A sub-agent sharing Scout's token, as `actingAs` or the Phean-Agent-Name header makes it. */
+  const named = async (name: string) => {
+    const principal = await resolveNamedSubagent(testDb.db, (await authenticateAgentToken(testDb.db, ws.scout.token))!, name);
+    return { ctx: agentContext(testDb.db, principal!), id: principal!.agent.id };
+  };
+
+  it("tells the parent how a task its sub-agent handed off goes, naming the sub-agent, but not what the sub-agent did itself", async () => {
+    const url = endpoint();
+    await registerWebhook(scout, { url, topics: ["decisions"] });
+    const writer = await named("Scout Writer");
+    const task = await todo(human, "Write the case study");
+    await claimTask(writer.ctx, { taskId: task.id });
+    await handOffTask(writer.ctx, { taskId: task.id, toAgent: "Closer", note: "Interview notes attached" });
+    await claimTask(closer, { taskId: task.id });
+    await updateTask(writer.ctx, { taskId: task.id, title: "Write the Globex case study" }); // the sub-agent's own change: not for it
+    await completeTask(closer, { taskId: task.id, note: "Published" });
+
+    const { received, deps } = receiver();
+    await dispatchDue(testDb.db, deps);
+    const forWriter = [{ id: writer.id, name: "Scout Writer" }];
+    expect(eventsTo(received, url).map((event) => [event.action, event.reasons, event.forAgents])).toEqual([
+      ["task.picked_up", ["handed_off_by_you"], forWriter],
+      ["task.completed", ["handed_off_by_you"], forWriter],
+    ]);
+    // Polling finds the same: a parent's handoffs include its sub-agents'; a sub-agent's are its own.
+    expect((await listTasks(scout, { claimed: "handed_off_by_me" })).map((row) => row.id)).toEqual([task.id]);
+    expect((await listTasks(writer.ctx, { claimed: "handed_off_by_me" })).map((row) => row.id)).toEqual([task.id]);
+    expect(await listTasks(closer, { claimed: "handed_off_by_me" })).toEqual([]);
+  });
+
+  it("tells the parent of a task handed to its sub-agent by name, and of the parent's own follows whoever in the family acted", async () => {
+    const url = endpoint();
+    await registerWebhook(scout, { url, topics: ["decisions"] });
+    const writer = await named("Scout Writer");
+    const mine = await todo(human, "Book the photographer");
+    await claimTask(scout, { taskId: mine.id });
+    await handOffTask(scout, { taskId: mine.id, toAgent: "Closer" });
+    // A sub-agent's change to a task its parent handed off reaches the parent, as anyone's would.
+    await updateTask(writer.ctx, { taskId: mine.id, priority: "high" });
+
+    const forWriter = await todo(human, "Proofread the case study");
+    await claimTask(closer, { taskId: forWriter.id });
+    await handOffTask(closer, { taskId: forWriter.id, toAgent: "Scout Writer", note: "Second pass" });
+    await claimTask(writer.ctx, { taskId: forWriter.id }); // the sub-agent picking it up itself: not for it
+
+    const { received, deps } = receiver();
+    await dispatchDue(testDb.db, deps);
+    expect(eventsTo(received, url).map((event) => [event.action, event.entityId, event.reasons, event.forAgents])).toEqual([
+      ["task.updated", mine.id, ["handed_off_by_you"], undefined],
+      ["task.handed_off", forWriter.id, ["handed_to_you"], [{ id: writer.id, name: "Scout Writer" }]],
+    ]);
+    // The parent's own handoffs are not its sub-agent's.
+    expect(await listTasks(writer.ctx, { claimed: "handed_off_by_me" })).toEqual([]);
+  });
+
+  it("reaches a sub-agent with its own webhook as itself, its parent for it, and never the other way round", async () => {
+    const { agent, token } = await createSubagent(scout, { name: "Scout Researcher" });
+    const researcher = agentContext(testDb.db, (await authenticateAgentToken(testDb.db, token))!);
+    const parentUrl = endpoint();
+    const childUrl = endpoint();
+    await registerWebhook(scout, { url: parentUrl, topics: ["decisions"] });
+    await registerWebhook(researcher, { url: childUrl, topics: ["decisions"] });
+    const theirs = await todo(human, "Research the vendors");
+    await claimTask(researcher, { taskId: theirs.id });
+    await handOffTask(researcher, { taskId: theirs.id, toAgent: "Closer" });
+    const parents = await todo(human, "Shortlist the vendors");
+    await claimTask(scout, { taskId: parents.id });
+    await handOffTask(scout, { taskId: parents.id, toAgent: "Closer" });
+    await claimTask(closer, { taskId: theirs.id });
+    await claimTask(closer, { taskId: parents.id });
+
+    const { received, deps } = receiver();
+    await dispatchDue(testDb.db, deps);
+    expect(eventsTo(received, childUrl).map((event) => [event.action, event.entityId, event.forAgents])).toEqual([["task.picked_up", theirs.id, undefined]]);
+    expect(eventsTo(received, parentUrl).map((event) => [event.action, event.entityId, event.forAgents])).toEqual([
+      ["task.picked_up", theirs.id, [{ id: agent.id, name: "Scout Researcher" }]],
+      ["task.picked_up", parents.id, undefined],
+    ]);
   });
 });
 

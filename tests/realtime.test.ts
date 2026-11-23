@@ -7,8 +7,8 @@ import WebSocket, { WebSocketServer } from "ws";
 import { eq, sql } from "drizzle-orm";
 
 import { agents, realtimeStreams } from "@/server/db/schema";
-import { createSubagent, revokeAgent } from "@/server/domain/agents";
-import { answerInput, captureTasks, requestInput, updateTask } from "@/server/domain/tasks";
+import { agentContext, authenticateAgentToken, createSubagent, resolveNamedSubagent, revokeAgent } from "@/server/domain/agents";
+import { answerInput, captureTasks, claimTask, completeTask, handOffTask, requestInput, updateTask } from "@/server/domain/tasks";
 import { authenticateStream, streamRefusal, streamToken, STREAM_PROTOCOL, TOKEN_PROTOCOL_PREFIX } from "@/server/realtime/auth";
 import { CLOSE, parseStreamOptions, runEventStream, STREAM_LIMITS, type StreamLimits, type StreamMessage } from "@/server/realtime/stream";
 
@@ -106,6 +106,29 @@ describe("the realtime event stream", () => {
       expect.objectContaining({ action: "task.input_answered", entityId: task.id, reasons: ["asked_by_you", "watching:task"], url: `https://phean.test/w/${ws.tenant.slug}/decisions` }),
     ]);
     expect(pushed.cursor).toBe(pushed.events[0]!.eventId);
+  });
+
+  it("tells a parent how its sub-agent's handoff goes, with the same reasons as a webhook and the sub-agent named", async () => {
+    // A sub-agent sharing Scout's token hands a task off.
+    const principal = await resolveNamedSubagent(testDb.db, (await authenticateAgentToken(testDb.db, ws.scout.token))!, "Scout Writer");
+    const writer = agentContext(testDb.db, principal!);
+    const [task] = (await captureTasks(ws.human, { tasks: [{ title: "Write the case study", status: "todo" }] })).created;
+    await claimTask(writer, { taskId: task!.id });
+    await handOffTask(writer, { taskId: task!.id, toAgent: "Closer" });
+    const client = connect(ws.scout.token, "?topics=decisions");
+    await client.next("ready");
+    await claimTask(ws.closer.ctx, { taskId: task!.id });
+    await handOffTask(ws.closer.ctx, { taskId: task!.id, handBack: true, note: "Drafted" });
+    await claimTask(writer, { taskId: task!.id });
+    await completeTask(writer, { taskId: task!.id });
+
+    const received: Extract<StreamMessage, { type: "events" }>["events"] = [];
+    while (received.length < 2) received.push(...((await client.next("events")) as Extract<StreamMessage, { type: "events" }>).events);
+    const forWriter = [{ id: principal!.agent.id, name: "Scout Writer" }];
+    expect(received.map((event) => [event.action, event.reasons, event.forAgents])).toEqual([
+      ["task.picked_up", ["handed_off_by_you"], forWriter],
+      ["task.handed_off", ["handed_to_you", "handed_off_by_you"], forWriter],
+    ]);
   });
 
   it("resumes after a cursor, so a reconnecting agent misses nothing and repeats nothing", async () => {

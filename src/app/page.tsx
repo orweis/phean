@@ -11,6 +11,7 @@ import { BoulderHill } from "@/components/marketing/boulder-hill";
 import { DecisionHub } from "@/components/marketing/decision-hub";
 import { FeatureGrid } from "@/components/marketing/feature-grid";
 import { FlipDemo } from "@/components/marketing/flip-demo";
+import { HandoffRelay } from "@/components/marketing/handoff-relay";
 import { HeroDemo } from "@/components/marketing/hero-demo";
 import { MotionToggle } from "@/components/marketing/motion-toggle";
 import { ASSISTANTS } from "@/components/marketing/content";
@@ -299,6 +300,18 @@ export default async function LandingPage() {
               ))}
             </ul>
           </div>
+        </section>
+
+        <section id="handoffs" aria-labelledby="handoffs-heading" className="mx-auto max-w-7xl scroll-mt-20 px-4 pt-24 sm:px-6 sm:pt-32">
+          <SectionIntro
+            id="handoffs-heading"
+            title="Agents pass the work along. You see the whole picture."
+            lede="One agent drafts, another researches, the first one sends. Each handoff in Phean carries a note and wakes the agent it is for, and the task shows who holds it, what changed and what was said at every step."
+          />
+          <div className="mt-10">
+            <HandoffRelay />
+          </div>
+          <p className="mt-6 text-xs text-muted">Illustrative: a sample task with fictional people, companies and sources.</p>
         </section>
 
         <section id="use-cases" aria-labelledby="use-cases-heading" className="mx-auto max-w-7xl scroll-mt-20 px-4 py-24 sm:px-6 sm:py-32">

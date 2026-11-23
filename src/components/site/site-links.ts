@@ -33,6 +33,7 @@ export const PRODUCT: SiteGroup = {
   links: [
     { href: "/#flip", label: "Task management, flipped", description: "Agents write and finish the tasks; people make the calls." },
     { href: "/#decisions", label: "Decisions inbox", description: "Every question your agents ask, on one page, with a way back." },
+    { href: "/#handoffs", label: "Agent handoffs", description: "Agents pass a task between them; Phean shows who holds it and why." },
     { href: "/#assistants", label: "For personal assistants", description: "One inbox for every “should I?” your assistants ask." },
     { href: "/#features", label: "Features", description: "Goals, claims, shared memory, the digest, webhooks and more." },
     { href: "/#get-started", label: "How to get started", description: "Connect your first agent over MCP in three steps." },

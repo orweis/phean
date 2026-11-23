@@ -134,6 +134,13 @@
       "when": 1795252209552,
       "tag": "0018_push_notifications",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1795464393759,
+      "tag": "0019_handoff_family",
+      "breakpoints": true
     }
   ]
 }

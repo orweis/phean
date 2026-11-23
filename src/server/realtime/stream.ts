@@ -1,14 +1,14 @@
-import { and, asc, count, eq, gt, lt, lte, max, notInArray, or, sql } from "drizzle-orm";
+import { and, asc, count, eq, gt, lt, lte, max, notInArray, sql } from "drizzle-orm";
 
 import { WEBHOOK_TOPICS, type WebhookTopic } from "@/lib/domain";
 
 import type { Db } from "../db/client";
 import { newId } from "../db/ids";
-import { agents, events, realtimeStreams, watches } from "../db/schema";
+import { agents, events, realtimeStreams } from "../db/schema";
 import { liveAgent } from "../domain/agent-liveness";
 import type { AgentPrincipal } from "../domain/agents";
 import { eventUrl } from "../webhooks/dispatch";
-import { concerns, reasonsFor, topicsOf, watchingOf, type Listener, type RoutedEvent } from "../webhooks/routing";
+import { loadFollows, routeEvent, topicsOf, type ForAgent, type Listener, type RoutedEvent } from "../webhooks/routing";
 
 /**
  * The realtime event stream an agent opens over a WebSocket (`/api/events`): the same events, for
@@ -97,6 +97,8 @@ export interface StreamEvent {
   data: Record<string, unknown>;
   createdAt: string;
   reasons: string[];
+  /** The listening agent's sub-agents the handoff reasons were for; only present when there were any. */
+  forAgents?: ForAgent[];
   url: string;
 }
 
@@ -382,22 +384,10 @@ async function releaseLease(db: Db, id: string): Promise<void> {
 async function route(db: Db, tenantId: string, listener: Listener, rows: (typeof events.$inferSelect)[], slug: string, origin: string): Promise<StreamEvent[]> {
   const routable = rows.filter((row) => topicsOf(row.action).length > 0);
   if (routable.length === 0) return [];
-  const keys = routable.flatMap((row) => concerns(row as RoutedEvent));
-  const watched = keys.length
-    ? await db
-        .select({ type: watches.entityType, id: watches.entityId, reason: watches.reason })
-        .from(watches)
-        .where(
-          and(
-            eq(watches.tenantId, tenantId),
-            eq(watches.agentId, listener.agentId),
-            or(...keys.map((key) => sql`(${watches.entityType} = ${key.type} and ${watches.entityId} = ${key.id})`)),
-          ),
-        )
-    : [];
-  const watching = watchingOf(watched);
+  // Read on every poll: a sub-agent named for the first time mid-stream is heard from at once.
+  const follows = (await loadFollows(db, tenantId, [listener.agentId], routable as RoutedEvent[])).get(listener.agentId);
   return routable.flatMap((row) => {
-    const reasons = reasonsFor(row as RoutedEvent, listener, watching, row.actorType === "agent" ? row.actorId : null);
+    const { reasons, forAgents } = routeEvent(row as RoutedEvent, listener, follows?.watching ?? new Map(), row.actorType === "agent" ? row.actorId : null, follows?.family);
     if (reasons.length === 0) return [];
     return [
       {
@@ -410,6 +400,7 @@ async function route(db: Db, tenantId: string, listener: Listener, rows: (typeof
         data: row.data,
         createdAt: row.createdAt.toISOString(),
         reasons,
+        ...(forAgents.length ? { forAgents } : {}),
         url: eventUrl(origin, slug, row.entityType, row.entityId, row.action),
       },
     ];

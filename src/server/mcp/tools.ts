@@ -138,7 +138,7 @@ export const TOOLS: readonly PheanTool[] = [
     name: "list_tasks",
     title: "List tasks",
     description:
-      "Tasks filtered by status, goal, parent task (its subtasks), priority, operator (claimed: mine, unclaimed, or handed_to_me for work being handed off to you or to anyone), or due date, most urgent first. Each includes its goal title, its operator (operatorType and operatorName: the agent or person working on it now), its delegation (handing_off, picking_up or returned, with delegateToName and delegationNote), its parent's title, and its subtask progress.",
+      "Tasks filtered by status, goal, parent task (its subtasks), priority, operator (claimed: mine, unclaimed, handed_to_me for work being handed off to you or to anyone, or handed_off_by_me for work you or your sub-agents handed off), or due date, most urgent first. Each includes its goal title, its operator (operatorType and operatorName: the agent or person working on it now), its delegation (handing_off, picking_up or returned, with delegateToName and delegationNote), who last handed it over (handedOffBy), its parent's title, and its subtask progress.",
     readOnly: true,
     service: listTasks,
     key: "tasks",
@@ -230,7 +230,7 @@ export const TOOLS: readonly PheanTool[] = [
     name: "hand_off_task",
     title: "Hand off task",
     description:
-      "Pass a task you operate (or one no one is working on) to someone else: another agent (toAgent: its name or id), a person (toPerson: their email), or anyone (neither). Write a note for them: where the work stands, what is left, what they must not miss. The task stays yours, marked 'handing_off', until they pick it up with claim_task (a person takes it in Phean); a named agent hears about it at once by webhook or the realtime stream (reason handed_to_you). Handing off again changes who it is for; cancel_hand_off keeps it.",
+      "Pass a task you operate (or one no one is working on) to someone else: another agent (toAgent: its name or id), a person (toPerson: their email), or anyone (neither). Write a note for them: where the work stands, what is left, what they must not miss. The task stays yours, marked 'handing_off', until they pick it up with claim_task (a person takes it in Phean); a named agent hears about it at once by webhook or the realtime stream (reason handed_to_you). Handing off again changes who it is for; cancel_hand_off keeps it. Finished a task someone handed you? Pass handBack: true (no toAgent or toPerson) to hand it back to them (the task's handedOffBy) with a note on what you did, where it is and what is left, so they check it and complete it; complete it yourself only when their note says to, or when it was handed to anyone.",
     service: handOffTask,
     key: "task",
   }),
@@ -245,7 +245,7 @@ export const TOOLS: readonly PheanTool[] = [
     name: "complete_task",
     title: "Complete task",
     description:
-      "Mark a task done, with a one or two sentence note on what you did. The note is appended to the task for humans to review, and any open question of yours on it is closed.",
+      "Mark a task done, with a one or two sentence note on what you did. The note is appended to the task for humans to review, and any open question of yours on it is closed. A task someone handed to you by name goes back to them with hand_off_task handBack instead, unless their note says to complete it.",
     service: completeTask,
     key: "task",
   }),
