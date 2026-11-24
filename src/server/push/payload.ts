@@ -49,6 +49,10 @@ export interface ResolvedPayload {
   slug: string;
   requestId: string;
   reason: ResolvedReason;
+  /** Where it was, so the notification names it even when the one it replaces is gone. Private devices get it too, as they get it with a request. */
+  workspaceName?: string;
+  /** What was answered or closed: the request's question. Never to a private device. */
+  question?: string;
   /** Who answered: only when a person did, and never to a private device. */
   by?: string;
   /** Who closed it otherwise (the agent, or a person completing the task); never to a private device. */
@@ -113,14 +117,30 @@ export function resolvedReason(action: string | undefined): ResolvedReason {
   return "closed";
 }
 
-/**
- * Replaces the notification of a request closed elsewhere: "Answered by Dana", "Replaced by a new
- * question", "Closed by Scout". `by` is only ever a person who answered, so a worker that reads
- * only `by` never says an agent answered. A private device learns no names.
- */
-export function resolvedPayload(slug: string, requestId: string, { reason, by }: { reason: ResolvedReason; by: string | null }, device: Pick<PayloadDevice, "private">): ResolvedPayload {
-  const payload: ResolvedPayload = { v: 1, type: "resolved", slug, requestId, reason };
-  if (device.private || !by || reason === "replaced") return payload;
-  return reason === "answered" ? { ...payload, by: truncate(by, NAME_CHARS) } : { ...payload, closedBy: truncate(by, NAME_CHARS) };
+/** What a `resolved` push says it is about: the request's question and its workspace, when known. */
+export interface ResolvedSubject {
+  workspaceName: string | null;
+  question: string | null;
 }
 
+/**
+ * Replaces the notification of a request closed elsewhere: "Answered by Dana", "Replaced by a new
+ * question", "Closed by Scout", always with what it was about (the question, and the workspace),
+ * so it reads on its own when the notification it replaces is gone. `by` is only ever a person who
+ * answered, so a worker that reads only `by` never says an agent answered. A private device learns
+ * only the workspace, as with a request: no names, no question.
+ */
+export function resolvedPayload(
+  slug: string,
+  requestId: string,
+  { reason, by }: { reason: ResolvedReason; by: string | null },
+  device: Pick<PayloadDevice, "private">,
+  subject: ResolvedSubject = { workspaceName: null, question: null },
+): ResolvedPayload {
+  const payload: ResolvedPayload = { v: 1, type: "resolved", slug, requestId, reason };
+  if (subject.workspaceName) payload.workspaceName = truncate(subject.workspaceName, NAME_CHARS);
+  if (device.private) return payload;
+  if (subject.question) payload.question = truncate(subject.question, QUESTION_CHARS);
+  if (!by || reason === "replaced") return payload;
+  return reason === "answered" ? { ...payload, by: truncate(by, NAME_CHARS) } : { ...payload, closedBy: truncate(by, NAME_CHARS) };
+}

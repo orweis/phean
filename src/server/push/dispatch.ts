@@ -178,7 +178,13 @@ async function payloadFor(db: Db, row: Claimed, device: { userId: string; answer
   if (!wantsTopic(await notificationPreferencesOf(personContext(db, { id: device.userId, name: "" })), pushTopicOf(row.kind, event?.action))) return "preference";
 
   if (row.kind === "resolved") {
-    return resolvedPayload(tenant.slug, row.request_id, { reason: resolvedReason(event?.action), by: event?.by ?? null }, device);
+    // What it was about: the request, archived on its task once it closed (or still open, if a race reopened it).
+    const [task] = await ctx.db.select({ request: tasks.inputRequest, answers: tasks.inputAnswers }).from(tasks).where(tenantRow(ctx, tasks, row.task_id));
+    const closed = task?.answers.find((entry) => entry.id === row.request_id) ?? (task?.request?.id === row.request_id ? task.request : undefined);
+    return resolvedPayload(tenant.slug, row.request_id, { reason: resolvedReason(event?.action), by: event?.by ?? null }, device, {
+      workspaceName: tenant.name,
+      question: closed?.question ?? null,
+    });
   }
   if (row.closed_at) return "closed";
   const [muted] = await db.select({ userId: pushMutes.userId }).from(pushMutes).where(and(eq(pushMutes.tenantId, row.tenant_id), eq(pushMutes.userId, device.userId)));

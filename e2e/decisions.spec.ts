@@ -86,10 +86,10 @@ test("an agent waits on a decision and wakes when the person makes it", async ({
     const letter = card(page, "1 request waiting on you").locator(`[data-task="${courier.id}"]`);
     await letter.getByRole("button", { name: "DHL" }).click();
     const status = page.locator("[data-status-region]");
-    await expect(status).toContainText("Sent “DHL” to Auditor scout");
+    await expect(status).toContainText(`Sent “DHL” to Auditor scout for “${COURIER}”`);
     await expect(card(page, "Nothing waiting on you")).toBeVisible();
     await status.getByRole("button", { name: "Undo" }).click();
-    await expect(status).toContainText("Auditor scout's question is open again.");
+    await expect(status).toContainText(`“${COURIER}” is open again.`);
     const reopened = card(page, "1 request waiting on you").locator(`[data-task="${courier.id}"]`);
     await expect(reopened.locator("blockquote")).toHaveText(COURIER);
 

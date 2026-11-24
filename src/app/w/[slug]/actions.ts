@@ -1,6 +1,7 @@
 "use server";
 
 import { GOAL_STATUS_META } from "@/lib/domain";
+import { truncate } from "@/lib/format";
 import { routes } from "@/lib/routes";
 import { tenantAction } from "@/server/actions";
 import { cancelInvitation, inviteMember, removeMember } from "@/server/auth/workspaces";
@@ -53,7 +54,7 @@ export const archiveDoneTasksAction = tenantAction(archiveDoneTasks, {
   success: ({ archived }) => (archived ? `Archived ${archived === 1 ? "1 done task" : `${archived} done tasks`}.` : "Nothing done to archive."),
 });
 export const answerInputAction = tenantAction(answerInput, { success: "Answered." });
-export const retractAnswerAction = tenantAction(retractAnswer, { success: "Answer taken back." });
+export const retractAnswerAction = tenantAction(retractAnswer, { success: (task) => `Took back your answer to “${truncate(task.inputRequest?.question ?? task.title, 60)}”` });
 export const snoozeRequestAction = tenantAction(snoozeRequest, { success: "Snoozed." });
 
 // Memory

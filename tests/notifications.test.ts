@@ -22,7 +22,7 @@ import { answerInput, captureTasks, collectAnswers, completeTask, requestInput, 
 import { PUSH_GIVE_UP_MS, PUSH_MAX_FAILURES, sendDuePushes } from "@/server/push/dispatch";
 import { isPushServiceHost } from "@/server/push/endpoints";
 import { inboxFeed } from "@/server/push/http";
-import { PUSH_OPTION_CHARS, PUSH_PAYLOAD_MAX_BYTES, requestPayload } from "@/server/push/payload";
+import { PUSH_OPTION_CHARS, PUSH_PAYLOAD_MAX_BYTES, requestPayload, resolvedPayload } from "@/server/push/payload";
 import { setPushScheduler } from "@/server/push/trigger";
 import type { InputRequest } from "@/lib/agent-sessions";
 
@@ -281,7 +281,7 @@ describe("routing", () => {
     await sendDuePushes(testDb.db, push.deps);
     expect(push.sent.map((message) => message.body)).toEqual([
       expect.objectContaining({ type: "request", requestId: first.requestId }),
-      { v: 1, type: "resolved", slug: ws.tenant.slug, requestId: first.requestId, reason: "replaced" },
+      { v: 1, type: "resolved", slug: ws.tenant.slug, requestId: first.requestId, reason: "replaced", workspaceName: ws.tenant.name, question: "Which auditor?" },
       expect.objectContaining({ type: "request", requestId: newer, question: "Okafor or Brandt?" }),
     ]);
   });
@@ -298,6 +298,11 @@ describe("routing", () => {
     await completeTask(ws.scout.ctx, { taskId: second.taskId });
     await sendDuePushes(testDb.db, push.deps);
 
+    // Each names what it closed, and where.
+    expect(push.sent.filter((message) => message.body.type === "resolved").map((message) => [message.body.question, message.body.workspaceName])).toEqual([
+      ["Which auditor?", ws.tenant.name],
+      ["Which bank?", ws.tenant.name],
+    ]);
     // Closed by the agent, never "answered" by it: `by` is only ever a person who answered.
     expect(push.sent.map((message) => [message.body.type, message.body.requestId, message.body.reason ?? null, message.body.by ?? null, message.body.closedBy ?? null])).toEqual([
       ["request", first.requestId, null, null, null],
@@ -321,8 +326,9 @@ describe("routing", () => {
     await resolveInput(ws.scout.ctx, { taskId: second.taskId });
     await sendDuePushes(testDb.db, push.deps);
     expect(push.sent.filter((message) => message.body.type === "resolved").map((message) => message.body)).toEqual([
-      { v: 1, type: "resolved", slug: ws.tenant.slug, requestId: first.requestId, reason: "answered" },
-      { v: 1, type: "resolved", slug: ws.tenant.slug, requestId: second.requestId, reason: "closed" },
+      // The workspace, as a private device's request push names it; never the question or who.
+      { v: 1, type: "resolved", slug: ws.tenant.slug, requestId: first.requestId, reason: "answered", workspaceName: ws.tenant.name },
+      { v: 1, type: "resolved", slug: ws.tenant.slug, requestId: second.requestId, reason: "closed", workspaceName: ws.tenant.name },
     ]);
   });
 });
@@ -507,6 +513,23 @@ describe("payload", () => {
     // The question is cut to fit; the buttons never are.
     expect(payload).toMatchObject({ type: "request", answerable: true, options: heaviest });
     expect(JSON.stringify(requestPayload(workspace, "t_1", request, { answerFromNotification: true, private: false }))).not.toMatch(/Secret|example\.com|url/);
+  });
+
+  it("names what a resolved push closed, cut to fit, and gives a private device only the workspace", () => {
+    const long = { reason: "closed" as const, by: "S".repeat(500) };
+    const subject = { workspaceName: "W".repeat(500), question: "Q".repeat(5000) };
+    const payload = resolvedPayload("acme", request.id, long, { private: false }, subject);
+    expect(Buffer.byteLength(JSON.stringify(payload))).toBeLessThan(PUSH_PAYLOAD_MAX_BYTES);
+    expect(payload.question!.length).toBeLessThanOrEqual(300);
+    expect(payload).toMatchObject({ reason: "closed", closedBy: expect.any(String), workspaceName: expect.any(String) });
+    expect(resolvedPayload("acme", request.id, long, { private: true }, { workspaceName: "Acme", question: "Which auditor?" })).toEqual({
+      v: 1,
+      type: "resolved",
+      slug: "acme",
+      requestId: request.id,
+      reason: "closed",
+      workspaceName: "Acme",
+    });
   });
 
   it("sends no buttons when an option is longer than a button shows, rather than a cut label", () => {
