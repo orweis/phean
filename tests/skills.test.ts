@@ -222,6 +222,15 @@ describe("the phean-pipelines skill", () => {
     expect(parsed.data?.definition.stops.map((stop) => stop.kind)).toEqual(expect.arrayContaining(["agent", "person"]));
   });
 
+  it("teaches designing, changing and following a pipeline, as the server's guidance does", () => {
+    for (const heading of ["## Designing a pipeline", "## Changing a pipeline", "## Running and following", "## Left to people"]) expect(SKILL).toContain(heading);
+    for (const text of [SKILL, SERVER_INSTRUCTIONS]) {
+      for (const tool of ["list_pipelines", "get_pipeline", "update_pipeline", "rerun_from", "request_input"]) expect(text, tool).toContain(tool);
+      expect(text).toMatch(/proposal/);
+    }
+    for (const other of ["phean-handoffs", "phean-decisions", "phean-webhooks"] as const) expect(SKILLS[other], other).toContain("phean-pipelines");
+  });
+
   it("teaches finishing a stop with a result rather than handing it on, as the server's guidance does", () => {
     for (const text of [SKILL, SERVER_INSTRUCTIONS]) {
       expect(text).toMatch(/Do not hand it on yourself/);

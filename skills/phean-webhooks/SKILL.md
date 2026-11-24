@@ -9,7 +9,7 @@ Phean calls your HTTPS endpoint the moment something you care about changes. Any
 
 ## 1. Register and keep the secret
 
-Call `register_webhook` with your `url` (HTTPS, on a public host), and optionally `topics` and `scope`. It returns:
+Call `register_webhook` with your `url` (HTTPS, on a public host), and optionally `topics` (`decisions`, `tasks`, `goals`, `memory`, `pipelines`) and `scope`. The `pipelines` topic carries runs starting and ending, stops reached, finished, failed and timed out, and changes proposed to a pipeline and their approval; the phean-pipelines skill says what to do with them. It returns:
 
 - `webhook`: its id (`wh_…`), status, topics and scope.
 - `secret`: `whsec_…`. **Shown once.** Store it in your secret store, never in code or logs.

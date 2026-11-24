@@ -95,3 +95,4 @@ Each answer is delivered to you once, through either tool. An answer has:
 - Don't ask a decision without your recommendation.
 - Don't stall silently: a blocked task without a request looks like work in progress.
 - Don't guess an answer to unblock yourself.
+- Don't answer, resolve or collect a request that a pipeline asked (it shows as the pipeline's, on a person stop): only its named people may answer it, and Phean acts on the answer itself. Asking your own question on a stop you are working is fine; the run waits with you. The phean-pipelines skill has more.
