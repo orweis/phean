@@ -1,6 +1,6 @@
 "use client";
 
-import { Bot, Brain, CalendarRange, FileText, KanbanSquare, LayoutDashboard, Scale, Search, Target, Users } from "lucide-react";
+import { Bot, Brain, CalendarRange, FileText, KanbanSquare, LayoutDashboard, Scale, Search, Target, Users, Workflow } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useRef, useState } from "react";
@@ -25,6 +25,7 @@ const TAB_EXTRAS: Record<WorkspacePageKey, { icon: typeof Bot; count?: keyof Nav
   tasks: { icon: KanbanSquare, count: "inbox", quiet: true },
   goals: { icon: Target },
   timeline: { icon: CalendarRange },
+  pipelines: { icon: Workflow },
   memory: { icon: Brain },
   documents: { icon: FileText },
   search: { icon: Search },

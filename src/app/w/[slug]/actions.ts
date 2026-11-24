@@ -10,6 +10,18 @@ import { attachDocument, deleteDocument, updateDocument } from "@/server/domain/
 import { createGoal, setGoalStatus, updateGoal } from "@/server/domain/goals";
 import { forget, remember, updateMemory } from "@/server/domain/memory";
 import { muteWorkspace, unmuteWorkspace } from "@/server/domain/notifications";
+import {
+  approvePipelineVersion,
+  archivePipeline,
+  cancelRun,
+  definePipeline,
+  pausePipeline,
+  rejectPipelineVersion,
+  rerunFrom,
+  resumePipeline,
+  startRun,
+  updatePipeline,
+} from "@/server/domain/pipelines";
 import { deleteWebhook } from "@/server/domain/webhooks";
 import { saveWorkflow } from "@/server/domain/workflow";
 import {
@@ -55,6 +67,23 @@ export const archiveDoneTasksAction = tenantAction(archiveDoneTasks, {
 export const answerInputAction = tenantAction(answerInput, { success: "Answered." });
 export const retractAnswerAction = tenantAction(retractAnswer, { success: "Answer taken back." });
 export const snoozeRequestAction = tenantAction(snoozeRequest, { success: "Snoozed." });
+
+// Pipelines
+export const definePipelineAction = tenantAction(definePipeline, {
+  redirectTo: ({ pipeline, run }, ctx) => (run ? routes.pipelineRun(ctx.tenant.slug, run.id) : routes.pipeline(ctx.tenant.slug, pipeline.id, { tab: "definition" })),
+});
+export const updatePipelineAction = tenantAction(updatePipeline, {
+  success: ({ proposal, pipeline }) => (proposal ? `Proposed version ${proposal.number}.` : `Saved. New runs ride version ${pipeline.currentVersion}.`),
+  data: ({ webhookSecret }) => (webhookSecret ? { webhookSecret } : {}),
+});
+export const approvePipelineVersionAction = tenantAction(approvePipelineVersion, { success: ({ pipeline }) => `Approved. New runs ride version ${pipeline.currentVersion}.` });
+export const rejectPipelineVersionAction = tenantAction(rejectPipelineVersion, { success: (version) => `Rejected version ${version.number}.` });
+export const pausePipelineAction = tenantAction(pausePipeline, { success: "Paused." });
+export const resumePipelineAction = tenantAction(resumePipeline, { success: "Resumed." });
+export const archivePipelineAction = tenantAction(archivePipeline, { success: "Archived." });
+export const startRunAction = tenantAction(startRun, { redirectTo: ({ run }, ctx) => routes.pipelineRun(ctx.tenant.slug, run.id) });
+export const cancelRunAction = tenantAction(cancelRun, { success: ({ run }) => `Cancelled run ${run.number}.` });
+export const rerunFromAction = tenantAction(rerunFrom, { success: ({ run }) => `Run ${run.number} runs again.` });
 
 // Memory
 export const rememberAction = tenantAction(remember, { success: "Saved to memory." });

@@ -449,7 +449,7 @@ A grey capsule well with capsule segments; the selected one is raised (near whit
 
 ### Navigation
 
-The glass header holds the boulder wordmark, a `/`, the workspace switcher (a capsule that opens a glass menu), the search box (from 768px; phones use the Search tab), and the account menu: a ghost capsule with the person's initial on a brand-tinted disc and their name (the initial alone on phones), which opens a glass popover with their name and email, the theme picker, the appearance picker, and Sign out. Below them, the tab rail (Overview, Decisions, Tasks, Goals, Timeline, Memory, Documents, Search, Agents, Members, from `WORKSPACE_PAGES` in `lib/workspace-pages.ts`) is a row of capsules: muted until hovered, which fills them grey; the active tab is a violet-tinted capsule with semibold violet text. Inline text links underline on hover and thicken the underline while pressed (the `link` utility).
+The glass header holds the boulder wordmark, a `/`, the workspace switcher (a capsule that opens a glass menu), the search box (from 768px; phones use the Search tab), and the account menu: a ghost capsule with the person's initial on a brand-tinted disc and their name (the initial alone on phones), which opens a glass popover with their name and email, the theme picker, the appearance picker, and Sign out. Below them, the tab rail (Overview, Decisions, Tasks, Goals, Timeline, Pipelines, Memory, Documents, Search, Agents, Members, from `WORKSPACE_PAGES` in `lib/workspace-pages.ts`) is a row of capsules: muted until hovered, which fills them grey; the active tab is a violet-tinted capsule with semibold violet text. Inline text links underline on hover and thicken the underline while pressed (the `link` utility).
 
 ### Menus, popovers and sheets
 

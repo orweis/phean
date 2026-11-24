@@ -10,6 +10,7 @@ export const WORKSPACE_PAGES = [
   { key: "tasks", label: "Tasks", href: routes.board, words: ["board", "kanban", "table", "calendar", "map", "lanes"] },
   { key: "goals", label: "Goals", href: routes.goals, words: ["outcomes", "progress", "objectives"] },
   { key: "timeline", label: "Timeline", href: routes.timeline, words: ["timetable", "gantt", "history", "flow"] },
+  { key: "pipelines", label: "Pipelines", href: routes.pipelines, words: ["lines", "workflows", "runs", "automations"] },
   { key: "memory", label: "Memory", href: routes.memory, words: ["facts", "notes", "preferences", "choices"] },
   { key: "documents", label: "Documents", href: routes.documents, words: ["files", "drafts", "docs"] },
   { key: "search", label: "Search", href: routes.search, words: ["find"] },
