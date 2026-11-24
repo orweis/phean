@@ -99,8 +99,8 @@ function readNotificationData(raw) {
         request: request?.type === "request" && !request.private && request.slug === raw.slug && request.requestId === raw.requestId ? request : null,
     };
 }
-function spec(tag, title, data, extra = {}) {
-    return { title, options: { tag, icon: NOTIFICATION_ICON, badge: NOTIFICATION_ICON, data, actions: [], ...extra } };
+function spec(tag, title, data, { badge = "request", ...extra } = {}) {
+    return { title, options: { tag, icon: NOTIFICATION_ICON, badge: routes_1.routes.notificationBadge(badge), data, actions: [], ...extra } };
 }
 const optionAction = (index) => `option-${index}`;
 exports.optionAction = optionAction;
@@ -129,7 +129,7 @@ function notificationFor(push, previous = null) {
         return spec("phean", "Phean", null, { body: "Something changed in Phean." });
     if (push.type === "resolved") {
         const data = { slug: push.slug, requestId: push.requestId, taskId: previous?.taskId ?? null, request: null };
-        return spec(push.requestId, resolvedTitle(push), data, { body: previous?.request?.question, silent: true });
+        return spec(push.requestId, resolvedTitle(push), data, { body: previous?.request?.question, silent: true, badge: "resolved" });
     }
     if (push.private) {
         return spec(push.requestId, `A decision is waiting in ${push.workspaceName}`, { slug: push.slug, requestId: push.requestId, taskId: push.taskId, request: null });
@@ -168,6 +168,7 @@ function parseAnswerResult(raw) {
 }
 function answeredNotification(data, result) {
     return spec(data.requestId, `Sent “${result.answer}” to ${result.agentName}`, data, {
+        badge: "resolved",
         body: result.taskTitle || undefined,
         actions: [{ action: exports.UNDO_ACTION, title: "Undo" }],
         silent: true,
@@ -176,7 +177,7 @@ function answeredNotification(data, result) {
 function answerFailedNotification(data, status, message) {
     const forClick = { ...data, request: null };
     if (status === 409)
-        return spec(data.requestId, "Already answered", forClick, { body: message || "This request was answered or replaced before your answer arrived.", silent: true });
+        return spec(data.requestId, "Already answered", forClick, { body: message || "This request was answered or replaced before your answer arrived.", silent: true, badge: "resolved" });
     if (status === 401)
         return spec(data.requestId, "Sign in to answer", forClick, { body: "Open Phean on this device to sign in again.", silent: true });
     return spec(data.requestId, "Your answer was not sent", forClick, { body: "Open the request to answer it in Phean.", silent: true });
@@ -214,7 +215,7 @@ function isOfflineAsset(path) {
 "./routes": function (exports, require) {
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.routes = exports.APP_ICON_SIZES = void 0;
+exports.routes = exports.NOTIFICATION_BADGE_SIZE = exports.NOTIFICATION_BADGES = exports.APP_ICON_SIZES = void 0;
 exports.queryParam = queryParam;
 exports.queryStringOf = queryStringOf;
 exports.safeNextPath = safeNextPath;
@@ -227,6 +228,8 @@ function withQuery(path, query = {}) {
     return search ? `${path}?${search}` : path;
 }
 exports.APP_ICON_SIZES = [192, 512];
+exports.NOTIFICATION_BADGES = ["request", "resolved"];
+exports.NOTIFICATION_BADGE_SIZE = 96;
 exports.routes = {
     home: () => "/",
     docs: (slug) => (slug ? `/docs/${slug}` : "/docs"),
@@ -277,6 +280,7 @@ exports.routes = {
     offline: () => "/offline",
     serviceWorker: () => "/sw.js",
     appIcon: (size) => `/icons/${size}.png`,
+    notificationBadge: (kind) => `/icons/badge-${kind}.png`,
 };
 function queryParam(value) {
     const first = Array.isArray(value) ? value[0] : value;

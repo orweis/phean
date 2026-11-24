@@ -16,14 +16,14 @@ import {
   resolveOAuthAgent,
   revokeAgent,
 } from "@/server/domain/agents";
-import type { Ctx } from "@/server/domain/context";
+import { personContext, type Ctx } from "@/server/domain/context";
 import { listActivity } from "@/server/domain/events";
 import { getDigest } from "@/server/domain/digest";
 import { createGoal, findGoal, listGoals, updateGoal, type Goal } from "@/server/domain/goals";
 import { attachDocument, deleteDocument, getDocument, listDocuments, updateDocument } from "@/server/domain/documents";
 import { countMemoryKinds, forget, recall, remember, type Memory } from "@/server/domain/memory";
 import { getWorkflow, saveWorkflow } from "@/server/domain/workflow";
-import { answerFromNotification, muteWorkspace, openDecisions, undoFromNotification } from "@/server/domain/notifications";
+import { answerFromNotification, muteWorkspace, openDecisions, setNotificationPreferences, undoFromNotification } from "@/server/domain/notifications";
 import { sendDuePushes } from "@/server/push/dispatch";
 import { handlePushAnswer, inboxFeed } from "@/server/push/http";
 import { browseTasks, getBoard, getGoalDetail, getStatusSummary } from "@/server/domain/overview";
@@ -52,7 +52,7 @@ import { getWorkspaceOverviews, listMemberships } from "@/server/domain/tenants"
 import { createPheanMcpHandler } from "@/server/mcp/handler";
 import { deleteWebhook, registerWebhook, watch } from "@/server/domain/webhooks";
 
-import { addMember, createTestDb, seedUser, seedWorkspace, type TestDb, type Workspace } from "./support/db";
+import { addMember, asUser, createTestDb, seedUser, seedWorkspace, type TestDb, type Workspace } from "./support/db";
 import { connectMcpClient, dataOf, textOf } from "./support/mcp";
 import { connectOAuthAgent, createOAuthServer, OAUTH_BASE, OAUTH_RESOURCE } from "./support/oauth";
 import { deliveriesOf, deviceFor, fakePushService } from "./support/push";
@@ -455,6 +455,36 @@ describe("tenant isolation", () => {
     expect(await deliveriesOf(testDb.db, eliDevice.id)).toEqual([]);
     await expect(undoFromNotification(globexOwner, { taskId: acmeTask.id, requestId, endpoint: eliDevice.endpoint })).rejects.toMatchObject({ code: "not_found" });
     await expect(undoFromNotification(acmeOwner, { taskId: acmeTask.id, requestId, endpoint: danaDevice.endpoint })).resolves.toBeUndefined();
+  });
+
+  it("keeps a person's own action and their notification choices to that person, in the workspace it happened in", async () => {
+    // Sam works in both workspaces; Dana only in Acme.
+    const sam = await seedUser(testDb.db, "Sam");
+    await addMember(testDb.db, acme.tenant, sam, "member");
+    await addMember(testDb.db, globex.tenant, sam, "member");
+    const dana = { id: acmeOwner.actor.id, name: acmeOwner.actor.name };
+    const [samDevice, danaDevice] = [await deviceFor(testDb.db, sam), await deviceFor(testDb.db, dana)];
+    const push = fakePushService();
+
+    const acmeAsk = await requestInput(acme.scout.ctx, { taskId: acmeTask.id, kind: "decision", question: "Bluebird or Robin?", options: ["Bluebird", "Robin"] });
+    await sendDuePushes(testDb.db, push.deps);
+    // Sam answers in Acme: Dana's device is told, Sam's own is not.
+    await answerInput(asUser(testDb.db, acme.tenant, sam, "member"), { taskId: acmeTask.id, answer: "Robin" });
+    expect((await deliveriesOf(testDb.db, danaDevice.id)).map((row) => row.kind)).toEqual(["request", "resolved"]);
+    expect((await deliveriesOf(testDb.db, samDevice.id)).map((row) => [row.kind, row.requestId])).toEqual([["request", acmeAsk.inputRequest!.id]]);
+
+    // A Globex question still reaches Sam: what he did in Acme silences nothing there.
+    const [globexTask] = (await captureTasks(globexOwner, { tasks: [{ title: "Globex work", status: "todo" }] })).created as [Task];
+    const globexAsk = await requestInput(globexAgent, { taskId: globexTask.id, question: "Ship it?" });
+    expect((await deliveriesOf(testDb.db, samDevice.id)).at(-1)).toMatchObject({ kind: "request", requestId: globexAsk.inputRequest!.id, status: "pending", tenantId: globex.tenant.id });
+
+    // Sam's choices apply to Sam in every workspace, and never to anyone else.
+    await setNotificationPreferences(personContext(testDb.db, sam), { requests: false });
+    expect((await inboxFeed(testDb.db, sam)).items.map((item) => [item.slug, item.notify])).toEqual([[globex.tenant.slug, false]]);
+    await requestInput(acme.scout.ctx, { taskId: acmeTask.id, question: "And the memo?" });
+    expect((await deliveriesOf(testDb.db, samDevice.id)).filter((row) => row.tenantId === acme.tenant.id)).toHaveLength(1);
+    expect((await deliveriesOf(testDb.db, danaDevice.id)).at(-1)).toMatchObject({ kind: "request", status: "pending" });
+    expect((await inboxFeed(testDb.db, dana)).items.every((item) => item.notify)).toBe(true);
   });
 
   it("sends no Decision notification to a platform admin or someone who left the workspace", async () => {

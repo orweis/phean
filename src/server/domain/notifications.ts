@@ -1,22 +1,31 @@
 import { timingSafeEqual } from "node:crypto";
 
-import { and, count, desc, eq, gt, inArray, ne, notInArray, sql } from "drizzle-orm";
+import { and, count, desc, eq, gt, inArray, ne, notInArray, or, sql } from "drizzle-orm";
 
 import { askerName, type RequestKind } from "@/lib/agent-sessions";
 import { roleCan } from "@/lib/permissions";
+import { DEFAULT_NOTIFICATION_PREFERENCES, NOTIFICATION_TOPICS, type NotificationPreferences } from "@/lib/notification-preferences";
 import { PUSH_MAX_DEVICES } from "@/lib/push";
-
 
 import { newId } from "../db/ids";
 import type { Db } from "../db/client";
-import { pushDeliveries, pushDevices, pushMutes, session, tasks } from "../db/schema";
+import { notificationPreferences, pushDeliveries, pushDevices, pushMutes, session, tasks } from "../db/schema";
 import { assertPushEndpointSafe, UnsafePushEndpoint } from "../push/endpoints";
 import { decryptSecret, encryptSecret } from "../webhooks/signing";
 import type { Resolver } from "../webhooks/url-safety";
 import { inTenant, inTransaction, type Ctx, type PersonCtx } from "./context";
 import { forbidden, invalid, notFound } from "./errors";
 import { assertCan } from "./policy";
-import { DeviceEndpointInput, DeviceOptionsInput, DeviceRefInput, Empty, NotificationAnswerInput, NotificationUndoInput, RegisterDeviceInput } from "./schemas";
+import {
+  DeviceEndpointInput,
+  DeviceOptionsInput,
+  DeviceRefInput,
+  Empty,
+  NotificationAnswerInput,
+  NotificationPreferencesInput,
+  NotificationUndoInput,
+  RegisterDeviceInput,
+} from "./schemas";
 import { personService, service } from "./service";
 import { answerInput, findTask, isAwaitingInput, retractAnswer } from "./tasks";
 import { listMemberships } from "./tenants";
@@ -192,6 +201,35 @@ export const setDeviceOptions = personService(DeviceOptionsInput, async (ctx, { 
   if (Object.keys(patch).length === 0) throw invalid("Nothing to change.");
   const [device] = await ctx.db.update(pushDevices).set(patch).where(ownDevice(ctx, deviceId)).returning(deviceColumns);
   return { ...device!, signedIn: current.signedIn };
+});
+
+/** What the person chose to be notified about, on every device; the defaults until they change one. */
+export async function notificationPreferencesOf(ctx: PersonCtx): Promise<NotificationPreferences> {
+  const [row] = await ctx.db
+    .select({ requests: notificationPreferences.requests, reopened: notificationPreferences.reopened, resolved: notificationPreferences.resolved })
+    .from(notificationPreferences)
+    .where(eq(notificationPreferences.userId, ctx.person.id));
+  return row ?? { ...DEFAULT_NOTIFICATION_PREFERENCES };
+}
+
+/**
+ * Turns topics on or off for all the person's devices at once: their Web Push devices (checked
+ * when a push is queued and again when it is sent) and Phean desktop (the inbox feed's `notify`).
+ */
+export const setNotificationPreferences = personService(NotificationPreferencesInput, async (ctx, input): Promise<NotificationPreferences> => {
+  const current = await notificationPreferencesOf(ctx);
+  const patch: Partial<NotificationPreferences> = {};
+  for (const topic of NOTIFICATION_TOPICS) {
+    const wanted = input[topic];
+    if (wanted !== undefined && wanted !== current[topic]) patch[topic] = wanted;
+  }
+  if (Object.keys(patch).length === 0) throw invalid("Nothing to change.");
+  const next = { ...current, ...patch };
+  await ctx.db
+    .insert(notificationPreferences)
+    .values({ userId: ctx.person.id, ...next })
+    .onConflictDoUpdate({ target: notificationPreferences.userId, set: { ...patch, updatedAt: new Date() } });
+  return next;
 });
 
 /** Signing out or revoking a session ends the devices turned on in it. */
@@ -390,7 +428,9 @@ export const undoFromNotification = service(NotificationUndoInput, async (ctx, {
 /**
  * The push the acting device needs no more, queued in this transaction (the sender starts after
  * commit): its own `resolved` is dropped, and its `request` counts as shown, so a later answer
- * elsewhere still replaces it. Only the acting person's own device, named by its endpoint.
+ * elsewhere still replaces it. A person's own `request` rows are written dead (`own_action`, see
+ * `enqueuePushes`); the acting device's is the one exception. Only the acting person's own device,
+ * named by its endpoint.
  */
 async function settleOnDevice(tx: Ctx, endpoint: string, requestId: string, kind: "request" | "resolved"): Promise<void> {
   const own = tx.db
@@ -405,7 +445,7 @@ async function settleOnDevice(tx: Ctx, endpoint: string, requestId: string, kind
         inTenant(tx, pushDeliveries),
         eq(pushDeliveries.requestId, requestId),
         eq(pushDeliveries.kind, kind),
-        eq(pushDeliveries.status, "pending"),
+        or(eq(pushDeliveries.status, "pending"), and(eq(pushDeliveries.status, "dead"), eq(pushDeliveries.lastError, "own_action"))),
         inArray(pushDeliveries.deviceId, own),
       ),
     );

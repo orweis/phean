@@ -587,6 +587,13 @@ export const DeviceOptionsInput = DeviceRefInput.extend({
   private: flag.optional(),
 });
 
+/** What a person turns on or off for all their devices (`NOTIFICATION_TOPICS`); a field left out stays as it is. */
+export const NotificationPreferencesInput = z.object({
+  requests: flag.optional(),
+  reopened: flag.optional(),
+  resolved: flag.optional(),
+});
+
 /** An answer from a notification's button (`option`, an index into the open request's options) or its text reply. */
 export const NotificationAnswerInput = z
   .object({

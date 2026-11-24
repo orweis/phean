@@ -1,5 +1,5 @@
 import { isLinkableId } from "./links";
-import { APP_ICON_SIZES, routes } from "./routes";
+import { APP_ICON_SIZES, routes, type NotificationBadge } from "./routes";
 
 /**
  * The service worker's pure parts: a Web Push payload (docs/apps/CONTRACTS.md, "Web Push payload")
@@ -23,7 +23,7 @@ export const OFFLINE_CACHE = "phean-offline-v1";
 /** Every call the worker makes to Phean says who it is, which also forces a CORS preflight no other origin passes. */
 export const PUSH_CLIENT_HEADERS = { "Content-Type": "application/json", "Phean-Client": "web" } as const;
 
-/** A notification shows the app icon, and the same for the status bar's small one. */
+/** A notification shows the colourful app icon. */
 const NOTIFICATION_ICON = routes.appIcon(APP_ICON_SIZES[0]);
 
 export interface RequestPush {
@@ -153,8 +153,18 @@ export function readNotificationData(raw: unknown): NotificationData | null {
   };
 }
 
-function spec(tag: string, title: string, data: NotificationData | null, extra: Partial<NotificationSpec["options"]> = {}): NotificationSpec {
-  return { title, options: { tag, icon: NOTIFICATION_ICON, badge: NOTIFICATION_ICON, data, actions: [], ...extra } };
+/**
+ * A notification's spec. The status bar's small icon (`badge`) is a white silhouette, since Android
+ * keeps only its alpha: the boulder on its slope while a request waits, a check once it is settled
+ * (answered, sent from here, or closed).
+ */
+function spec(
+  tag: string,
+  title: string,
+  data: NotificationData | null,
+  { badge = "request", ...extra }: Partial<Omit<NotificationSpec["options"], "badge">> & { badge?: NotificationBadge } = {},
+): NotificationSpec {
+  return { title, options: { tag, icon: NOTIFICATION_ICON, badge: routes.notificationBadge(badge), data, actions: [], ...extra } };
 }
 
 /** An option button's action name, and back. */
@@ -193,7 +203,7 @@ export function notificationFor(push: PushPayload | null, previous: Notification
   if (!push) return spec("phean", "Phean", null, { body: "Something changed in Phean." });
   if (push.type === "resolved") {
     const data: NotificationData = { slug: push.slug, requestId: push.requestId, taskId: previous?.taskId ?? null, request: null };
-    return spec(push.requestId, resolvedTitle(push), data, { body: previous?.request?.question, silent: true });
+    return spec(push.requestId, resolvedTitle(push), data, { body: previous?.request?.question, silent: true, badge: "resolved" });
   }
   if (push.private) {
     return spec(push.requestId, `A decision is waiting in ${push.workspaceName}`, { slug: push.slug, requestId: push.requestId, taskId: push.taskId, request: null });
@@ -249,6 +259,7 @@ export function parseAnswerResult(raw: unknown): AnswerResult | null {
 /** After an answer: what was sent and to whom, with Undo. */
 export function answeredNotification(data: NotificationData, result: AnswerResult): NotificationSpec {
   return spec(data.requestId, `Sent “${result.answer}” to ${result.agentName}`, data, {
+    badge: "resolved",
     body: result.taskTitle || undefined,
     actions: [{ action: UNDO_ACTION, title: "Undo" }],
     silent: true,
@@ -258,7 +269,7 @@ export function answeredNotification(data: NotificationData, result: AnswerResul
 /** An answer that did not land: answered already (409), signed out (401), or anything else. A click opens the request. */
 export function answerFailedNotification(data: NotificationData, status: number, message?: string): NotificationSpec {
   const forClick: NotificationData = { ...data, request: null };
-  if (status === 409) return spec(data.requestId, "Already answered", forClick, { body: message || "This request was answered or replaced before your answer arrived.", silent: true });
+  if (status === 409) return spec(data.requestId, "Already answered", forClick, { body: message || "This request was answered or replaced before your answer arrived.", silent: true, badge: "resolved" });
   if (status === 401) return spec(data.requestId, "Sign in to answer", forClick, { body: "Open Phean on this device to sign in again.", silent: true });
   return spec(data.requestId, "Your answer was not sent", forClick, { body: "Open the request to answer it in Phean.", silent: true });
 }

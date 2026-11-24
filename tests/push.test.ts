@@ -17,7 +17,7 @@ import {
   undoneNotification,
   type RequestPush,
 } from "@/lib/push";
-import { routes } from "@/lib/routes";
+import { APP_ICON_SIZES, routes } from "@/lib/routes";
 
 const ORIGIN = "https://phean.example";
 
@@ -84,6 +84,16 @@ describe("notificationFor", () => {
     expect(title).toBe("Scout asks · Acme");
     expect(options).toMatchObject({ tag: "q_abc123", body: "Which auditor?", actions: [{ action: "option-0", title: "Okafor" }, { action: "option-1", title: "Lindqvist" }] });
     expect(options.data).toMatchObject({ slug: "acme", requestId: "q_abc123", taskId: "t_def456" });
+  });
+
+  it("keeps the colourful icon large and gives the status bar a monochrome badge for the kind", () => {
+    const asked = notificationFor(request());
+    expect(asked.options.icon).toBe(routes.appIcon(APP_ICON_SIZES[0]));
+    expect(asked.options.badge).toBe(routes.notificationBadge("request"));
+    expect(asked.options.badge).not.toBe(asked.options.icon);
+    const settled = notificationFor(parsed({ v: 1, type: "resolved", slug: "acme", requestId: "q_abc123", by: "Dana" }), asked.options.data);
+    expect(settled.options.badge).toBe(routes.notificationBadge("resolved"));
+    expect(notificationFor(null).options.badge).toBe(routes.notificationBadge("request"));
   });
 
   it("shows no buttons when the device may not answer from notifications", () => {
