@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import Script from "next/script";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import {
@@ -66,7 +65,6 @@ function setDisabled(measurementId: string, disabled: boolean) {
 function initGtag(measurementId: string, debug: boolean) {
   setDisabled(measurementId, false);
   window.dataLayer = window.dataLayer ?? [];
-  // The loader script's element id must never be "gtag": an element id is also a global, and would shadow this function.
   if (typeof window.gtag !== "function") {
     window.gtag = function gtag() {
       // gtag.js reads the Arguments object itself, not an array.
@@ -89,6 +87,15 @@ function initGtag(measurementId: string, debug: boolean) {
     allow_ad_personalization_signals: false,
     ...(debug ? { debug_mode: true } : {}),
   });
+  // gtag.js itself, added once by hand: a script element React renders is never run. Its id must never
+  // be "gtag", or the element would shadow the function above.
+  if (!document.getElementById("phean-gtag-loader")) {
+    const script = document.createElement("script");
+    script.id = "phean-gtag-loader";
+    script.async = true;
+    script.src = `https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(measurementId)}`;
+    document.head.appendChild(script);
+  }
 }
 
 interface AnalyticsProps {
@@ -186,7 +193,6 @@ export function Analytics({ measurementId, debug, consent: initial, signedIn }: 
 
   return (
     <>
-      {consent === "granted" && <Script id="phean-gtag-loader" src={`https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(measurementId)}`} strategy="afterInteractive" />}
       {asking && <ConsentBar onChoose={choose} current={consent} />}
     </>
   );
