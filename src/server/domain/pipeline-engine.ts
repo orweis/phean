@@ -1094,6 +1094,14 @@ export interface RunView {
   definition: PipelineDefinition;
 }
 
+/** Who serves a stop, in words: the agent's name, the person's (or "an owner or admin"), or "any agent". */
+export async function servedByOf(ctx: Ctx, stop: PipelineStop): Promise<string> {
+  if (stop.kind === "agent") return stop.agent!;
+  if (stop.kind === "any_agent") return "any agent";
+  if (stop.kind === "person") return describeApprovers(ctx, { person: stop.person, role: stop.role });
+  return "another pipeline";
+}
+
 export async function runView(ctx: Ctx, runId: string): Promise<RunView> {
   const run = await findRun(ctx, runId);
   const pipeline = await findPipeline(ctx, run.pipelineId);
@@ -1105,8 +1113,7 @@ export async function runView(ctx: Ctx, runId: string): Promise<RunView> {
     : [];
   const taskOf = (id: string | null) => taskRows.find((task) => task.id === id) ?? null;
   const trip: Trip = { run, pipeline, definition, sys: ctx, notes: new Map() };
-  const servedBy = async (stop: PipelineStop) =>
-    stop.kind === "agent" ? stop.agent! : stop.kind === "any_agent" ? "any agent" : stop.kind === "person" ? await describeApprovers(ctx, { person: stop.person, role: stop.role }) : "another pipeline";
+  const servedBy = (stop: PipelineStop) => servedByOf(ctx, stop);
   const view = async (stop: PipelineStop, row: RunStop | undefined): Promise<RunStopView> => ({
     stopId: stop.id,
     name: stop.name,

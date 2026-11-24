@@ -4,14 +4,16 @@ import { and, asc, desc, eq, inArray, max, ne, sql } from "drizzle-orm";
 import type { z } from "zod";
 
 import { LIVE_RUN_STATUSES, type PipelineKind, type RunStatus, type Source } from "@/lib/domain";
-import { normalizeDefinition, type PipelineDefinition } from "@/lib/pipelines";
+import { stopViewState } from "@/lib/pipeline-map";
+import { nextFiring, nextStepFor, stopPosition, type RunRecord } from "@/lib/pipeline-stats";
+import { normalizeDefinition, stopOrder, type PipelineDefinition } from "@/lib/pipelines";
 import { routes } from "@/lib/routes";
 
 import { newId } from "../db/ids";
-import { agents, pipelineRuns, pipelines, pipelineTriggers, pipelineVersions, type PipelineVersionRow } from "../db/schema";
+import { agents, pipelineRuns, pipelineRunStops, pipelines, pipelineTriggers, pipelineVersions, tasks, type PipelineVersionRow } from "../db/schema";
 import { createdByFields, inTenant, inTransaction, tenantRow, type Ctx } from "./context";
 import { conflict, forbidden, invalid, notFound } from "./errors";
-import { recordEvent } from "./events";
+import { recordEvent, runActivity, type Activity } from "./events";
 import {
   actorProblems,
   beginRun,
@@ -24,6 +26,7 @@ import {
   rerunRun,
   runColumns,
   runView,
+  servedByOf,
   setPipelineStatus,
   sweepDeadlines,
   type Pipeline,
@@ -37,13 +40,17 @@ import {
   DefinePipelineInput,
   ListPipelinesInput,
   ListRunsInput,
+  PipelineHistoryInput,
   PipelineRefInput,
+  PipelineRequestsInput,
   PipelineTriggersInput,
+  PipelineVersionInput,
   PipelineVersionRefInput,
   RerunFromInput,
   RunOptionsInput,
   RunRefInput,
   StartRunInput,
+  TaskRefInput,
   UpdatePipelineInput,
 } from "./schemas";
 import { service } from "./service";
@@ -517,3 +524,243 @@ export const rerunFrom = service(RerunFromInput, async (ctx, { runId, stopId, no
   await rerunRun(ctx, runId, stopId, note);
   return runView(ctx, runId);
 });
+
+// Reads for the app's pages
+
+/** How many of a pipeline's latest runs its row on the Pipelines tab shows as dots. */
+export const RUN_STRIP = 20;
+
+/** A run as a dot on a pipeline's strip. */
+export type StripRun = Pick<PipelineRun, "id" | "number" | "status" | "startedAt" | "endedAt">;
+
+/** A pipeline on the Pipelines tab: its summary, its latest runs, and when its schedule fires next. */
+export type PipelineBoardRow = PipelineSummary & {
+  strip: StripRun[];
+  /** The current version's stops in order, and the inputs a run takes. */
+  line: { id: string; name: string; kind: PipelineDefinition["stops"][number]["kind"] }[];
+  inputs: PipelineDefinition["inputs"];
+  schedule: PipelineTriggers["schedule"];
+  nextRunAt: Date | null;
+};
+
+/** Every pipeline (archived ones only when asked for) with its last runs as a strip and its next scheduled run. */
+export const listPipelineBoard = service(ListPipelinesInput, async (ctx, input): Promise<PipelineBoardRow[]> => {
+  const summaries = await listPipelines(ctx, input);
+  if (summaries.length === 0) return [];
+  const ids = summaries.map((pipeline) => pipeline.id);
+  const latest = sql`(select max(r2.number) from ${pipelineRuns} r2 where r2.tenant_id = ${ctx.tenant.id} and r2.pipeline_id = ${pipelineRuns.pipelineId})`;
+  const strips = await ctx.db
+    .select({ pipelineId: pipelineRuns.pipelineId, id: pipelineRuns.id, number: pipelineRuns.number, status: pipelineRuns.status, startedAt: pipelineRuns.startedAt, endedAt: pipelineRuns.endedAt })
+    .from(pipelineRuns)
+    .where(and(inTenant(ctx, pipelineRuns), inArray(pipelineRuns.pipelineId, ids), sql`${pipelineRuns.number} > ${latest} - ${RUN_STRIP}`))
+    .orderBy(desc(pipelineRuns.number));
+  const schedules = await ctx.db
+    .select({ pipelineId: pipelineTriggers.pipelineId, cron: pipelineTriggers.cron, timeZone: pipelineTriggers.timeZone, lastFiredAt: pipelineTriggers.lastFiredAt })
+    .from(pipelineTriggers)
+    .where(and(inTenant(ctx, pipelineTriggers), inArray(pipelineTriggers.pipelineId, ids), eq(pipelineTriggers.kind, "schedule")));
+  const versions = await ctx.db
+    .select({ pipelineId: pipelineVersions.pipelineId, number: pipelineVersions.number, definition: pipelineVersions.definition })
+    .from(pipelineVersions)
+    .innerJoin(pipelines, and(eq(pipelines.tenantId, pipelineVersions.tenantId), eq(pipelines.id, pipelineVersions.pipelineId), eq(pipelines.currentVersion, pipelineVersions.number)))
+    .where(and(inTenant(ctx, pipelineVersions), inArray(pipelineVersions.pipelineId, ids)));
+  const now = new Date();
+  return summaries.map((pipeline) => {
+    const definition = versions.find((version) => version.pipelineId === pipeline.id)?.definition;
+    const byId = new Map(definition?.stops.map((stop) => [stop.id, stop]));
+    const found = schedules.find((entry) => entry.pipelineId === pipeline.id);
+    const schedule = found?.cron && found.timeZone ? { cron: found.cron, timeZone: found.timeZone, lastFiredAt: found.lastFiredAt } : null;
+    return {
+      ...pipeline,
+      strip: strips.filter((run) => run.pipelineId === pipeline.id).map(({ id, number, status, startedAt, endedAt }) => ({ id, number, status, startedAt, endedAt })),
+      line: definition ? stopOrder(definition).map((id) => ({ id, name: byId.get(id)!.name, kind: byId.get(id)!.kind })) : [],
+      inputs: definition?.inputs ?? [],
+      schedule,
+      nextRunAt: schedule && pipeline.status === "active" ? nextFiring(schedule.cron, schedule.timeZone, now) : null,
+    };
+  });
+});
+
+/** A run in a pipeline's history: its stop rows (reruns and hand-backs included) for the grid and insights. */
+export type RunHistory = RunRecord & Pick<PipelineRun, "trigger" | "triggeredByName" | "taskId" | "summary">;
+
+/** A pipeline's latest runs, newest first, each with every stop row it has had. */
+export const pipelineHistory = service(PipelineHistoryInput, async (ctx, { pipelineId, limit }): Promise<RunHistory[]> => {
+  assertCan(ctx, "workspace:read");
+  const pipeline = await findPipeline(ctx, pipelineId);
+  await sweepDeadlines(ctx);
+  const runs = await ctx.db
+    .select(runColumns)
+    .from(pipelineRuns)
+    .where(and(inTenant(ctx, pipelineRuns), eq(pipelineRuns.pipelineId, pipeline.id)))
+    .orderBy(desc(pipelineRuns.number))
+    .limit(limit);
+  if (runs.length === 0) return [];
+  const rows = await ctx.db
+    .select({
+      runId: pipelineRunStops.runId,
+      stopId: pipelineRunStops.stopId,
+      state: pipelineRunStops.state,
+      attempt: pipelineRunStops.attempt,
+      startedAt: pipelineRunStops.startedAt,
+      endedAt: pipelineRunStops.endedAt,
+      supersededAt: pipelineRunStops.supersededAt,
+      branch: pipelineRunStops.branch,
+      taskStatus: tasks.status,
+    })
+    .from(pipelineRunStops)
+    .leftJoin(tasks, and(eq(tasks.tenantId, pipelineRunStops.tenantId), eq(tasks.id, pipelineRunStops.taskId)))
+    .where(and(inTenant(ctx, pipelineRunStops), inArray(pipelineRunStops.runId, runs.map((run) => run.id))))
+    .orderBy(asc(pipelineRunStops.startedAt));
+  return runs.map((run) => ({
+    id: run.id,
+    number: run.number,
+    version: run.version,
+    status: run.status,
+    startedAt: run.startedAt,
+    endedAt: run.endedAt,
+    endName: run.endName,
+    trigger: run.trigger,
+    triggeredByName: run.triggeredByName,
+    taskId: run.taskId,
+    summary: run.summary,
+    stops: rows
+      .filter((row) => row.runId === run.id)
+      .map((row) => ({ stopId: row.stopId, state: row.state, attempt: row.attempt, startedAt: row.startedAt, endedAt: row.endedAt, superseded: Boolean(row.supersededAt), branch: row.branch, taskStatus: row.taskStatus ?? null })),
+  }));
+});
+
+/** One version of a pipeline with its definition: to read an older one, or diff it against the one before. */
+export const getPipelineVersion = service(PipelineVersionInput, async (ctx, { pipelineId, version }): Promise<PipelineVersion> => {
+  assertCan(ctx, "workspace:read");
+  const pipeline = await findPipeline(ctx, pipelineId);
+  const [row] = await ctx.db
+    .select(versionColumns)
+    .from(pipelineVersions)
+    .where(and(inTenant(ctx, pipelineVersions), eq(pipelineVersions.pipelineId, pipeline.id), eq(pipelineVersions.number, version)));
+  if (!row) throw notFound(`version ${version} of pipeline`, pipeline.id);
+  return row;
+});
+
+/** What a pipeline's decision shows on the Decisions page beside its options. */
+export interface PipelineRequestContext {
+  pipelineId: string;
+  pipelineName: string;
+  runId: string;
+  runNumber: number;
+  stopName: string;
+  /** "Stop 3 of 5". */
+  position: { index: number; total: number } | null;
+  /** What each option leads to, in words: "Send (Grok Bot)", "Ends: Sent". */
+  steps: { option: string; next: string }[];
+  /** When the time limit runs out, and the option taken then. */
+  dueAt: Date | null;
+  onTimeout: string | null;
+}
+
+/**
+ * Where each pipeline decision stands, keyed by run and stop (`${runId}:${stopId}`): its place on the
+ * line, what each option leads to, and its time limit. A decision whose run is gone is left out.
+ */
+export const describePipelineRequests = service(PipelineRequestsInput, async (ctx, { requests }): Promise<Record<string, PipelineRequestContext>> => {
+  assertCan(ctx, "workspace:read");
+  const out: Record<string, PipelineRequestContext> = {};
+  const definitions = new Map<string, PipelineDefinition>();
+  for (const { runId, stopId } of requests) {
+    const [run] = await ctx.db.select(runColumns).from(pipelineRuns).where(tenantRow(ctx, pipelineRuns, runId));
+    if (!run) continue;
+    const key = `${run.pipelineId}:${run.version}`;
+    if (!definitions.has(key)) definitions.set(key, await loadDefinition(ctx, run.pipelineId, run.version));
+    const definition = definitions.get(key)!;
+    const stop = definition.stops.find((candidate) => candidate.id === stopId);
+    if (!stop) continue;
+    const [pipeline] = await ctx.db.select({ name: pipelines.name }).from(pipelines).where(tenantRow(ctx, pipelines, run.pipelineId));
+    const [row] = await ctx.db
+      .select({ dueAt: pipelineRunStops.dueAt, recovering: pipelineRunStops.recovering })
+      .from(pipelineRunStops)
+      .where(and(inTenant(ctx, pipelineRunStops), eq(pipelineRunStops.runId, run.id), eq(pipelineRunStops.stopId, stopId), sql`${pipelineRunStops.supersededAt} is null`));
+    const options = row?.recovering ? [] : stop.options.length ? stop.options : stop.then.choice?.map((branch) => branch.label) ?? [];
+    const steps = await Promise.all(
+      options.map(async (option) => {
+        const target = nextStepFor(definition, stopId, option);
+        const next = !target
+          ? "Asks again"
+          : target.kind === "end"
+            ? `Ends: ${target.name}`
+            : target.kind === "fork"
+              ? target.stops.map((next) => next.name).join(" and ")
+              : `${target.stop.name} (${await servedByOf(ctx, target.stop)})`;
+        return { option, next };
+      }),
+    );
+    out[`${runId}:${stopId}`] = {
+      pipelineId: run.pipelineId,
+      pipelineName: pipeline?.name ?? "",
+      runId: run.id,
+      runNumber: run.number,
+      stopName: stop.name,
+      position: stopPosition(definition, stopId),
+      steps,
+      dueAt: row?.dueAt ?? null,
+      onTimeout: row?.recovering ? null : (stop.onTimeout ?? null),
+    };
+  }
+  return out;
+});
+
+/** Where a task sits on a pipeline's line: the run it carries, or the stop it serves. */
+export interface TaskLine {
+  /** The task carries the whole run, or serves one stop of it. */
+  role: "run" | "stop";
+  pipeline: { id: string; name: string };
+  run: { id: string; number: number; status: RunStatus; headline: string };
+  /** The run's stops in order; `current` marks the one this task serves. */
+  stops: { stopId: string; name: string; state: ReturnType<typeof stopViewState>; taskId: string | null; current: boolean }[];
+}
+
+/** The line a task is on, if it carries a run or serves (or once served) one of its stops; null otherwise. */
+export const taskLine = service(TaskRefInput, async (ctx, { taskId }): Promise<TaskLine | null> => {
+  assertCan(ctx, "workspace:read");
+  const [carried] = await ctx.db.select({ id: pipelineRuns.id }).from(pipelineRuns).where(and(inTenant(ctx, pipelineRuns), eq(pipelineRuns.taskId, taskId)));
+  const [served] = carried
+    ? []
+    : await ctx.db
+        .select({ runId: pipelineRunStops.runId, stopId: pipelineRunStops.stopId })
+        .from(pipelineRunStops)
+        .where(and(inTenant(ctx, pipelineRunStops), eq(pipelineRunStops.taskId, taskId)))
+        .orderBy(desc(pipelineRunStops.startedAt))
+        .limit(1);
+  const runId = carried?.id ?? served?.runId;
+  if (!runId) return null;
+  const view = await runView(ctx, runId);
+  return {
+    role: carried ? "run" : "stop",
+    pipeline: { id: view.pipeline.id, name: view.pipeline.name },
+    run: { id: view.run.id, number: view.run.number, status: view.run.status, headline: view.headline },
+    stops: view.stops.map((stop) => ({
+      stopId: stop.stopId,
+      name: stop.name,
+      state: stopViewState(stop.state, stop.task?.status),
+      taskId: stop.task?.id ?? null,
+      current: !carried && stop.stopId === served?.stopId,
+    })),
+  };
+});
+
+/** A run's activity: its own events and its tasks', newest first. */
+export const getRunActivity = service(RunRefInput, async (ctx, { runId }): Promise<Activity[]> => {
+  assertCan(ctx, "workspace:read");
+  const run = await findRun(ctx, runId);
+  const rows = await ctx.db.select({ taskId: pipelineRunStops.taskId }).from(pipelineRunStops).where(and(inTenant(ctx, pipelineRunStops), eq(pipelineRunStops.runId, run.id)));
+  const taskIds = [...new Set([run.taskId, ...rows.map((row) => row.taskId)].filter((id): id is string => Boolean(id)))];
+  return runActivity(ctx, run.id, taskIds);
+});
+
+/** The stops of a definition in the order a run meets them, with who serves each, in words. */
+export async function stopsServedBy(ctx: Ctx, definition: PipelineDefinition): Promise<Record<string, string>> {
+  const out: Record<string, string> = {};
+  for (const id of stopOrder(definition)) {
+    const stop = definition.stops.find((candidate) => candidate.id === id)!;
+    out[id] = await servedByOf(ctx, stop);
+  }
+  return out;
+}

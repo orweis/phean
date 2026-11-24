@@ -412,6 +412,19 @@ describe("payload", () => {
     expect(requestPayload(workspace, "t_1", { ...request, multiple: true }, { answerFromNotification: true, private: false })).toMatchObject({ options: [], answerable: false });
   });
 
+  it("says which pipeline, run and stop asked, additively, and still fits in 3 KB", () => {
+    const pipeline = { pipelineId: "p_1", pipelineName: "Weekly newsletter", runId: "r_1", runNumber: 42, stopId: "review", stopName: "Review" };
+    expect(requestPayload(workspace, "t_1", { ...request, agentName: "Weekly newsletter", pipeline }, { answerFromNotification: true, private: false })).toMatchObject({
+      agentName: "Weekly newsletter",
+      options: ["Okafor", "Lindqvist"],
+      pipeline: { name: "Weekly newsletter", run: 42, stop: "Review" },
+    });
+    const long = { ...pipeline, pipelineName: "P".repeat(2000), stopName: "S".repeat(2000) };
+    const payload = requestPayload(workspace, "t_1", { ...request, question: "Q".repeat(4000), pipeline: long }, { answerFromNotification: true, private: false });
+    expect(Buffer.byteLength(JSON.stringify(payload))).toBeLessThanOrEqual(PUSH_PAYLOAD_MAX_BYTES);
+    expect(requestPayload(workspace, "t_1", { ...request, pipeline }, { answerFromNotification: true, private: true })).not.toHaveProperty("pipeline");
+  });
+
   it("gives a private device only that a decision waits, and where", () => {
     const payload = requestPayload(workspace, "t_1", request, { answerFromNotification: true, private: true });
     expect(payload).toEqual({ v: 1, type: "request", private: true, slug: "acme", workspaceName: "Acme", requestId: request.id, taskId: "t_1" });

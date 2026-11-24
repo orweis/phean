@@ -9,8 +9,14 @@ import {
   approvePipelineVersion,
   cancelRun,
   definePipeline,
+  describePipelineRequests,
   getPipeline,
+  getPipelineVersion,
   getRun,
+  getRunActivity,
+  listPipelineBoard,
+  pipelineHistory,
+  taskLine,
   listRuns,
   pausePipeline,
   rejectPipelineVersion,
@@ -526,5 +532,102 @@ describe("triggers", () => {
     const address = "198.51.100.9";
     for (let call = 0; call < PIPELINE_TRIGGER_LIMIT.max; call++) await post("pht_wrong", {}, address);
     expect((await post(webhookSecret!, {}, address)).status).toBe(429);
+  });
+});
+
+describe("the app's reads", () => {
+  const review = (): StopDraft => ({
+    id: "review",
+    name: "Review",
+    kind: "person",
+    person: human.actor.id,
+    timeLimitMinutes: 120,
+    onTimeout: "Drop",
+    then: { choice: [{ label: "Approve", to: "send" }, { label: "Drop", end: "dropped" }] },
+  });
+
+  async function line() {
+    const { pipeline } = await define(human, [agentStop("draft", "Scout", { next: "review" }), review(), agentStop("send", "Closer", { end: "sent" })], {
+      ends: ["sent", "dropped"],
+      triggers: { schedule: { cron: "0 9 * * 1", timeZone: "UTC" } },
+    });
+    return pipeline;
+  }
+
+  it("lists pipelines with their latest runs as a strip, their stops and their next scheduled run", async () => {
+    const pipeline = await line();
+    const first = await startRun(human, { pipelineId: pipeline.id });
+    await cancelRun(human, { runId: first.run.id });
+    await startRun(human, { pipelineId: pipeline.id });
+    const [row] = await listPipelineBoard(human, {});
+    expect(row).toMatchObject({ id: pipeline.id, runs: { total: 2, live: 1 }, line: [{ id: "draft", kind: "agent" }, { id: "review", kind: "person" }, { id: "send" }], inputs: [] });
+    expect(row!.strip.map((run) => [run.number, run.status])).toEqual([
+      [2, "running"],
+      [1, "cancelled"],
+    ]);
+    expect(row!.nextRunAt?.getUTCDay()).toBe(1);
+    await pausePipeline(human, { pipelineId: pipeline.id });
+    expect((await listPipelineBoard(human, {}))[0]!.nextRunAt).toBeNull();
+  });
+
+  it("reads a pipeline's history with every stop row, a version's definition, and a run's activity", async () => {
+    const pipeline = await line();
+    const started = await startRun(human, { pipelineId: pipeline.id });
+    const draft = stopIn(started, "draft").task!.id;
+    await claimTask(scout, { taskId: draft });
+    await completeTask(scout, { taskId: draft, note: "Drafted." });
+    await rerunFrom(human, { runId: started.run.id, stopId: "draft" });
+    const [history] = await pipelineHistory(human, { pipelineId: pipeline.id });
+    expect(history).toMatchObject({ number: 1, status: "running", trigger: "manual" });
+    expect(history!.stops.filter((row) => row.stopId === "draft").map((row) => [row.state, row.superseded])).toEqual([
+      ["done", true],
+      ["active", false],
+    ]);
+    expect(history!.stops.find((row) => row.stopId === "draft" && !row.superseded)?.taskStatus).toBe("todo");
+    expect((await getPipelineVersion(human, { pipelineId: pipeline.id, version: 1 })).definition.stops).toHaveLength(3);
+    await expect(getPipelineVersion(human, { pipelineId: pipeline.id, version: 9 })).rejects.toMatchObject({ code: "not_found" });
+    const actions = (await getRunActivity(human, { runId: started.run.id })).map((event) => event.action);
+    expect(actions).toEqual(expect.arrayContaining(["pipeline.run_started", "pipeline.stop_reached", "pipeline.run_rerun", "task.completed", "task.captured"]));
+  });
+
+  it("describes a pipeline decision: its place on the line, where each option leads, and its time limit", async () => {
+    const pipeline = await line();
+    const started = await startRun(human, { pipelineId: pipeline.id });
+    const draft = stopIn(started, "draft").task!.id;
+    await claimTask(scout, { taskId: draft });
+    await completeTask(scout, { taskId: draft, note: "Drafted." });
+    const described = await describePipelineRequests(human, { requests: [{ runId: started.run.id, stopId: "review" }, { runId: "r_missing", stopId: "review" }] });
+    expect(Object.keys(described)).toEqual([`${started.run.id}:review`]);
+    expect(described[`${started.run.id}:review`]).toMatchObject({
+      pipelineName: "Newsletter",
+      runNumber: 1,
+      stopName: "Review",
+      position: { index: 2, total: 3 },
+      steps: [
+        { option: "Approve", next: "send (Closer)" },
+        { option: "Drop", next: "Ends: Dropped" },
+      ],
+      onTimeout: "Drop",
+    });
+    expect(described[`${started.run.id}:review`]!.dueAt).toBeInstanceOf(Date);
+  });
+
+  it("finds the line a task is on: the run it carries, or the stop it serves", async () => {
+    const pipeline = await line();
+    const started = await startRun(human, { pipelineId: pipeline.id });
+    const draft = stopIn(started, "draft").task!.id;
+    expect(await taskLine(human, { taskId: draft })).toMatchObject({
+      role: "stop",
+      pipeline: { id: pipeline.id, name: "Newsletter" },
+      run: { number: 1, headline: "At draft" },
+      stops: [
+        { stopId: "draft", state: "handing_off", current: true, taskId: draft },
+        { stopId: "review", state: "upcoming", current: false, taskId: null },
+        { stopId: "send", state: "upcoming", current: false },
+      ],
+    });
+    expect(await taskLine(human, { taskId: started.run.taskId! })).toMatchObject({ role: "run", stops: [{ current: false }, { current: false }, { current: false }] });
+    const [plain] = (await captureTasks(human, { tasks: [{ title: "Not on a line" }] })).created;
+    expect(await taskLine(human, { taskId: plain!.id })).toBeNull();
   });
 });

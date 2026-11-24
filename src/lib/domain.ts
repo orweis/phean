@@ -198,6 +198,52 @@ export const STOP_STATE_META: Record<StopState | "upcoming", EnumMeta> = {
   cancelled: { label: "Cancelled", tone: "neutral" },
 };
 
+/**
+ * A stop as the map, the grid and the run page show it: its state, with `handing_off` split out of
+ * `active` while no one has picked its task up yet (the plan's states table). Each is an icon, a word
+ * and a line form (`STOP_STYLE` in `components/charts/stations.ts`); hue is the last cue.
+ */
+export const STOP_VIEW_STATES = ["upcoming", "handing_off", "active", "waiting", "done", "failed", "skipped", "not_reached", "cancelled"] as const;
+export type StopViewState = (typeof STOP_VIEW_STATES)[number];
+
+export const STOP_VIEW_META: Record<StopViewState, EnumMeta> = {
+  upcoming: { label: "Upcoming", tone: "neutral" },
+  handing_off: { label: "Handing off", tone: "fresh" },
+  active: { label: "In progress", tone: "info" },
+  waiting: { label: "Waiting on a person", tone: "warning" },
+  done: { label: "Done", tone: "success" },
+  failed: { label: "Failed", tone: "danger" },
+  skipped: { label: "Skipped", tone: "neutral" },
+  not_reached: { label: "Not reached", tone: "neutral" },
+  cancelled: { label: "Cancelled", tone: "neutral" },
+};
+
+export const STOP_KIND_META: Record<StopKind, EnumMeta> = {
+  agent: { label: "Agent", tone: "neutral" },
+  person: { label: "Person", tone: "neutral" },
+  any_agent: { label: "Any agent", tone: "neutral" },
+  pipeline: { label: "Another pipeline", tone: "neutral" },
+};
+
+export const PIPELINE_KIND_META: Record<PipelineKind, EnumMeta> = {
+  regular: { label: "Regular", tone: "neutral" },
+  adhoc: { label: "Ad hoc", tone: "neutral" },
+  factory: { label: "Factory", tone: "neutral" },
+};
+
+export const FAILURE_ACTION_META: Record<FailureAction, EnumMeta> = {
+  fail: { label: "Fail this branch", tone: "neutral" },
+  retry: { label: "Retry the stop", tone: "neutral" },
+  hand_back: { label: "Hand back to the stop before", tone: "neutral" },
+  ask: { label: "Ask a person", tone: "neutral" },
+};
+
+export const PROPOSAL_STATE_META: Record<ProposalState, EnumMeta> = {
+  proposed: { label: "Proposed", tone: "warning" },
+  approved: { label: "Approved", tone: "success" },
+  rejected: { label: "Rejected", tone: "neutral" },
+};
+
 export const RUN_TRIGGER_META: Record<RunTrigger, EnumMeta> = {
   manual: { label: "Started by a person", tone: "neutral" },
   agent: { label: "Started by an agent", tone: "neutral" },
