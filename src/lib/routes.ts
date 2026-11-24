@@ -64,9 +64,9 @@ export const routes = {
   /** Every pipeline in the workspace (the page comes with the Pipelines tab). */
   pipelines: (slug: string) => `/w/${slug}/pipelines`,
   /** One pipeline: its map, runs and definition. */
-  pipeline: (slug: string, pipelineId: string) => `/w/${slug}/pipelines/${pipelineId}`,
-  /** One run of a pipeline (a trip down the line). */
-  pipelineRun: (slug: string, runId: string) => `/w/${slug}/pipelines/runs/${runId}`,
+  pipeline: (slug: string, pipelineId: string, query?: { tab?: string; version?: string }) => withQuery(`/w/${slug}/pipelines/${pipelineId}`, query),
+  /** One run of a pipeline (a trip down the line), in one of its views. */
+  pipelineRun: (slug: string, runId: string, query?: { view?: string; stop?: string }) => withQuery(`/w/${slug}/pipelines/runs/${runId}`, query),
   /** A pipeline's inbound webhook: POST here with its secret to start a run. */
   pipelineTrigger: (pipelineId: string) => `/api/pipelines/${pipelineId}/trigger`,
   /** A permalink for anything with a Phean id (`t_`, `g_`, `d_`, `m_`, `q_`, `p_`, `r_`): it redirects to where that thing is shown. */

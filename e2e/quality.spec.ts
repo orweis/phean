@@ -29,6 +29,10 @@ const PAGES = [
   "/w/globex/settings",
   "/w/globex/goals/g_missing",
   "/w/globex/documents/d_missing",
+  "/w/globex/pipelines",
+  "/w/globex/pipelines?kind=adhoc",
+  "/w/globex/pipelines/p_missing",
+  "/w/globex/pipelines/runs/r_missing",
   "/docs",
   "/docs/realtime",
   "/docs/security",
@@ -56,6 +60,7 @@ const PANELS = [
   ["/w/globex/decisions", "More for"],
   ["/w/globex/memory", "Add"],
   ["/w/globex/documents", "New document"],
+  ["/w/globex/pipelines", "New pipeline"],
   ["/w/globex/agents", "Key for a bot"],
   ["/account", "Change password"],
 ] as const;
@@ -69,6 +74,20 @@ async function openPanel(page: Page, path: string, trigger: string) {
     .first();
   await panel.locator("summary").click();
   return panel;
+}
+
+/**
+ * The seeded pipeline's pages (each tab) and its latest run's (each view), whose ids are only known
+ * at run time: the Pipelines tab links to the pipeline, and its strip to each run.
+ */
+async function pipelinePages(page: Page): Promise<string[]> {
+  await page.goto("/w/globex/pipelines");
+  const row = page.locator("[data-pipeline]").first();
+  const pipeline = await row.getByRole("link").first().getAttribute("href");
+  const run = await row.locator("[data-run-strip] a").last().getAttribute("href");
+  expect(pipeline).toMatch(/^\/w\/globex\/pipelines\/p_/);
+  expect(run).toMatch(/^\/w\/globex\/pipelines\/runs\/r_/);
+  return [pipeline!, `${pipeline}?tab=runs`, `${pipeline}?tab=insights`, `${pipeline}?tab=definition`, run!, `${run}?view=timeline`, `${run}?view=activity`];
 }
 
 /** The first goal on the overview's goal map, whose id is only known at run time. */
@@ -115,6 +134,20 @@ test.describe("signed in", () => {
 
   test("a goal page has no detectable accessibility violations", async ({ page }) => {
     await page.goto(await goalPage(page));
+    await expectAccessible(page);
+  });
+
+  test("a pipeline's tabs and a run's views have no detectable accessibility violations", async ({ page }) => {
+    for (const path of await pipelinePages(page)) {
+      await page.goto(path);
+      await expectAccessible(page);
+    }
+  });
+
+  test("a run's Re-run panel has no detectable accessibility violations", async ({ page }) => {
+    const pages = await pipelinePages(page);
+    const panel = await openPanel(page, pages[4]!, "Re-run from a stop");
+    await expect(panel.getByLabel("From", { exact: true })).toBeFocused();
     await expectAccessible(page);
   });
 
@@ -320,6 +353,13 @@ test.describe("signed in", () => {
       await page.goto(await goalPage(page));
       await expectNothingCutOff(page);
       await expectNowClearOfDates(page);
+    });
+
+    test("a pipeline's tabs and a run's views keep everything inside the screen", async ({ page }) => {
+      for (const path of await pipelinePages(page)) {
+        await page.goto(path);
+        await expectNothingCutOff(page);
+      }
     });
 
     for (const path of TIMETABLES) {

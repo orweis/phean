@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, or, sql } from "drizzle-orm";
 
 import type { EventAction } from "@/lib/activity";
 
@@ -82,6 +82,17 @@ export async function taskActivity(ctx: Ctx, taskId: string, limit = 20): Promis
     .select(activityColumns)
     .from(events)
     .where(and(inTenant(ctx, events), eq(events.entityType, "task"), eq(events.entityId, taskId)))
+    .orderBy(desc(events.createdAt), desc(events.id))
+    .limit(limit);
+}
+
+/** The latest events about one pipeline run: the run's own, and its tasks' (the run's and each stop's), newest first. */
+export async function runActivity(ctx: Ctx, runId: string, taskIds: readonly string[], limit = 100): Promise<Activity[]> {
+  const aboutRun = and(eq(events.entityType, "pipeline_run"), eq(events.entityId, runId));
+  return ctx.db
+    .select(activityColumns)
+    .from(events)
+    .where(and(inTenant(ctx, events), taskIds.length ? or(aboutRun, and(eq(events.entityType, "task"), inArray(events.entityId, [...taskIds]))) : aboutRun))
     .orderBy(desc(events.createdAt), desc(events.id))
     .limit(limit);
 }

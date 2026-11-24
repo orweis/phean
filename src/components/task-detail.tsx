@@ -9,6 +9,7 @@ import { requireWorkspace } from "@/server/auth/session";
 import { listAgents } from "@/server/domain/agents";
 import { listGoals } from "@/server/domain/goals";
 import { can } from "@/server/domain/policy";
+import { taskLine } from "@/server/domain/pipelines";
 import { getTask } from "@/server/domain/tasks";
 import { listMembers } from "@/server/domain/tenants";
 import { orNotFound } from "@/server/web";
@@ -20,6 +21,7 @@ import { MarkdownView } from "./documents/markdown-view";
 import { DocumentChips } from "./documents/document-chips";
 import { OpenQuestions } from "./open-questions";
 import { HandOffPopover } from "./hand-off-form";
+import { TaskLineStrip } from "./pipelines/task-line";
 import { HandoverNote, StageBadge, TaskActionRow, TaskMeta } from "./task-card";
 import { ActionButton } from "./ui/action-button";
 import { CopyLinkButton } from "./ui/copy-link-button";
@@ -44,11 +46,12 @@ function Section({ title, children, count }: { title: string; count?: number; ch
  */
 export async function TaskDetail({ slug, taskId, headingLevel = 1 }: { slug: string; taskId: string; headingLevel?: 1 | 2 }) {
   const { ctx } = await requireWorkspace(slug);
-  const [{ task, parent, subtasks, activity }, goals, agents, members] = await Promise.all([
+  const [{ task, parent, subtasks, activity }, goals, agents, members, line] = await Promise.all([
     orNotFound(getTask(ctx, { taskId })),
     listGoals(ctx, {}),
     listAgents(ctx, {}),
     listMembers(ctx, {}),
+    taskLine(ctx, { taskId }),
   ]);
   const canWrite = can(ctx.actor, "task:write");
   // Who the task can be handed to: live agents, and the people here other than you.
@@ -105,6 +108,7 @@ export async function TaskDetail({ slug, taskId, headingLevel = 1 }: { slug: str
           <CopyLinkButton path={routes.task(slug, task.id)} subject="link to this task" />
         </p>
         <HandoverNote task={task} />
+        {line && <TaskLineStrip line={line} slug={slug} />}
         <TaskActionRow task={task} slug={slug} canWrite={canWrite} goals={goals} className="pt-1" />
         {canWrite && isOpenTaskStatus(task.status) && (
           <div className="flex">

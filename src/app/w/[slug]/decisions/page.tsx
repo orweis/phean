@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import { AnsweredDecisions } from "@/components/answered-decisions";
+import { DecisionKeys } from "@/components/decision-keys";
 import { NotificationMute } from "@/components/notification-mute";
 import { NotificationsPrompt } from "@/components/notifications-prompt";
 import { OpenQuestions } from "@/components/open-questions";
@@ -17,6 +18,7 @@ import { vapidConfig } from "@/server/config";
 import { listGoals } from "@/server/domain/goals";
 import { isWorkspaceMuted } from "@/server/domain/notifications";
 import { can } from "@/server/domain/policy";
+import { describePipelineRequests } from "@/server/domain/pipelines";
 import { findRequest, listDecisions, type DecisionRecord } from "@/server/domain/tasks";
 
 export const metadata: Metadata = { title: "Decisions" };
@@ -31,6 +33,17 @@ function answeredSummary(closed: readonly DecisionRecord[]): string {
   return `${kinds} settled.${pickup}`;
 }
 
+/** The open requests' cards, under one keyboard selection when the person can answer. */
+function OpenRequests({ canAnswer, children }: { canAnswer: boolean; children: React.ReactNode }) {
+  return canAnswer ? (
+    <DecisionKeys>
+      <div className="space-y-6">{children}</div>
+    </DecisionKeys>
+  ) : (
+    <>{children}</>
+  );
+}
+
 export default async function DecisionsPage({ params, searchParams }: PageProps<"/w/[slug]/decisions">) {
   const { slug } = await params;
   const focus = queryParam((await searchParams).focus);
@@ -43,10 +56,16 @@ export default async function DecisionsPage({ params, searchParams }: PageProps<
     // Only members get notifications, so only they have a mute.
     can(ctx.actor, "notify:subscribe") ? isWorkspaceMuted(ctx, {}) : null,
   ]);
+  // Pipeline decisions hold a run until someone answers, so they are pinned first, in a group of their own.
+  const pinned = open.filter((task) => task.inputRequest?.pipeline);
+  const rest = open.filter((task) => !task.inputRequest?.pipeline);
+  const contexts = pinned.length
+    ? await describePipelineRequests(ctx, { requests: pinned.map((task) => ({ runId: task.inputRequest!.pipeline!.runId, stopId: task.inputRequest!.pipeline!.stopId })) })
+    : {};
   const linkedElsewhere = linked?.record && !closed.some(({ request }) => request.id === focus) ? linked.record : null;
   const canAnswer = can(ctx.actor, "task:write");
   const proposed = goals.filter((goal) => goal.status === "proposed");
-  const decisions = open.filter((task) => task.inputRequest?.kind === "decision").length;
+  const decisions = open.filter((task) => task.inputRequest?.kind === "decision" && !task.inputRequest.pipeline).length;
 
   return (
     <>
@@ -71,21 +90,35 @@ export default async function DecisionsPage({ params, searchParams }: PageProps<
             </CardBody>
           </Card>
         )}
-        {open.length > 0 || proposed.length === 0 ? (
-          <Card id="questions" tone={open.length ? "wait" : "plain"}>
+        {/* One keyboard selection across the pinned pipeline decisions and the rest: J and K move through both. */}
+        <OpenRequests canAnswer={canAnswer}>
+        {pinned.length > 0 && (
+          <Card id="pipelines" tone="wait" className="scroll-mt-32">
             <CardHeader
-              tone={open.length ? "wait" : "plain"}
-              divided={open.length > 0}
-              title={open.length ? `${pluralize(open.length, "request")} waiting on you` : "Nothing waiting on you"}
+              tone="wait"
+              title={`Pipelines: ${pluralize(pinned.length, "run")} waiting on you`}
+              description="Each holds its run until you decide. Under each option, where the run goes next; at the time limit, the run takes its default."
+            />
+            <CardBody className="py-1">
+              <OpenQuestions tasks={pinned} slug={slug} canAnswer={canAnswer} showGoal focus={focus} pipelines={contexts} keys={false} />
+            </CardBody>
+          </Card>
+        )}
+        {rest.length > 0 || (pinned.length === 0 && proposed.length === 0) ? (
+          <Card id="questions" tone={rest.length ? "wait" : "plain"}>
+            <CardHeader
+              tone={rest.length ? "wait" : "plain"}
+              divided={rest.length > 0}
+              title={rest.length ? `${pluralize(rest.length, "request")} waiting on you` : "Nothing waiting on you"}
               description={
-                open.length
-                  ? `${[decisions && pluralize(decisions, "decision"), open.length - decisions && pluralize(open.length - decisions, "question")].filter(Boolean).join(" and ")}, longest waiting first; snoozed ones wait at the back.`
+                rest.length
+                  ? `${[decisions && pluralize(decisions, "decision"), rest.length - decisions && pluralize(rest.length - decisions, "question")].filter(Boolean).join(" and ")}, longest waiting first; snoozed ones wait at the back.`
                   : undefined
               }
             />
-            {open.length > 0 ? (
+            {rest.length > 0 ? (
               <CardBody className="py-1">
-                <OpenQuestions tasks={open} slug={slug} canAnswer={canAnswer} showGoal focus={focus} />
+                <OpenQuestions tasks={rest} slug={slug} canAnswer={canAnswer} showGoal focus={focus} keys={false} />
               </CardBody>
             ) : (
               <CardBody className="pt-0">
@@ -101,6 +134,7 @@ export default async function DecisionsPage({ params, searchParams }: PageProps<
             )}
           </Card>
         ) : null}
+        </OpenRequests>
         {proposed.length > 0 && (
           <Card id="approvals" tone="wait" className="scroll-mt-32">
             <CardHeader

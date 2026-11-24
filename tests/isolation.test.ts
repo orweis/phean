@@ -23,7 +23,23 @@ import { createGoal, findGoal, listGoals, updateGoal, type Goal } from "@/server
 import { attachDocument, deleteDocument, getDocument, listDocuments, updateDocument } from "@/server/domain/documents";
 import { countMemoryKinds, forget, recall, remember, type Memory } from "@/server/domain/memory";
 import { getWorkflow, saveWorkflow } from "@/server/domain/workflow";
-import { cancelRun, definePipeline, getPipeline, getRun, listPipelines, listRuns, rerunFrom, startRun, updatePipeline } from "@/server/domain/pipelines";
+import {
+  cancelRun,
+  definePipeline,
+  describePipelineRequests,
+  getPipeline,
+  getPipelineVersion,
+  getRun,
+  getRunActivity,
+  listPipelineBoard,
+  listPipelines,
+  listRuns,
+  pipelineHistory,
+  rerunFrom,
+  startRun,
+  taskLine,
+  updatePipeline,
+} from "@/server/domain/pipelines";
 import { pipelineRuns } from "@/server/db/schema";
 import { answerFromNotification, muteWorkspace, openDecisions, undoFromNotification } from "@/server/domain/notifications";
 import { sendDuePushes } from "@/server/push/dispatch";
@@ -286,6 +302,13 @@ describe("tenant isolation", () => {
       await expect(cancelRun(ctx, { runId: run.run.id })).rejects.toMatchObject({ code: "not_found" });
       await expect(rerunFrom(ctx, { runId: run.run.id, stopId: "draft" })).rejects.toMatchObject({ code: "not_found" });
       await expect(updatePipeline(ctx, { pipelineId: pipeline.id, name: "Mine" })).rejects.toMatchObject({ code: "not_found" });
+      // The app's pages read through the same walls.
+      expect(await listPipelineBoard(ctx, {})).toEqual([]);
+      await expect(pipelineHistory(ctx, { pipelineId: pipeline.id })).rejects.toMatchObject({ code: "not_found" });
+      await expect(getPipelineVersion(ctx, { pipelineId: pipeline.id, version: 1 })).rejects.toMatchObject({ code: "not_found" });
+      await expect(getRunActivity(ctx, { runId: run.run.id })).rejects.toMatchObject({ code: "not_found" });
+      expect(await describePipelineRequests(ctx, { requests: [{ runId: run.run.id, stopId: "draft" }] })).toEqual({});
+      expect(await taskLine(ctx, { taskId: run.stops[0]!.task!.id })).toBeNull();
     }
     // A stop names an agent of its own workspace: Globex's Scout is not Acme's, and Acme's is not Globex's.
     const handed = await listTasks(acme.scout.ctx, { claimed: "handed_to_me" });

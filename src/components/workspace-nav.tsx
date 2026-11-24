@@ -1,6 +1,6 @@
 "use client";
 
-import { Bot, Brain, CalendarRange, FileText, KanbanSquare, LayoutDashboard, Scale, Search, Target, Users } from "lucide-react";
+import { Bot, Brain, CalendarRange, FileText, KanbanSquare, LayoutDashboard, Scale, Search, Target, Users, Workflow } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useRef, useState } from "react";
@@ -25,6 +25,7 @@ const TAB_EXTRAS: Record<WorkspacePageKey, { icon: typeof Bot; count?: keyof Nav
   tasks: { icon: KanbanSquare, count: "inbox", quiet: true },
   goals: { icon: Target },
   timeline: { icon: CalendarRange },
+  pipelines: { icon: Workflow },
   memory: { icon: Brain },
   documents: { icon: FileText },
   search: { icon: Search },
@@ -54,7 +55,7 @@ export function WorkspaceNav({ slug, counts }: { slug: string; counts: NavCounts
   useChipRail(rail, heading ?? pathname);
 
   return (
-    <nav ref={rail} aria-label="Workspace" className="chip-rail relative -mx-1 flex gap-0.5">
+    <nav ref={rail} aria-label="Workspace" className="chip-rail relative -mx-1 flex gap-0.5 after:block after:w-1 after:shrink-0 after:content-['']">
       {TABS.map(({ label, icon: Icon, href, ...tab }) => {
         const target = href(slug);
         const here = "exact" in tab ? pathname === target : pathname.startsWith(target);

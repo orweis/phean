@@ -8,7 +8,7 @@ import { mcpClientSetups } from "@/lib/mcp-config";
 import { queryParam, routes, safeNextPath } from "@/lib/routes";
 import { attempt, expectedErrorMessage } from "@/server/actions";
 import { invalid } from "@/server/domain/errors";
-import { CreateGoalInput, RememberInput, TaskDraft, UpdateGoalInput, UpdateTaskInput } from "@/server/domain/schemas";
+import { CreateGoalInput, RememberInput, StartRunInput, TaskDraft, UpdateGoalInput, UpdatePipelineInput, UpdateTaskInput } from "@/server/domain/schemas";
 import { parseInput } from "@/server/domain/service";
 import { formToInput } from "@/server/forms";
 
@@ -129,6 +129,13 @@ describe("formToInput", () => {
     const input = formToInput(form([["title", "Ship it"], ["workspace", "acme"], ["unknown", "x"]]), TaskDraft);
     expect(input).toEqual({ title: "Ship it" });
     expect(parseInput(TaskDraft, input)).toMatchObject({ title: "Ship it", status: "inbox", priority: "medium", tags: [] });
+  });
+
+  it("reads object fields as JSON, and leaves text that is not JSON for the schema to refuse", () => {
+    const input = formToInput(form([["pipelineId", "p_1"], ["inputs", '{"topic":"AI, agents"}']]), StartRunInput);
+    expect(parseInput(StartRunInput, input)).toMatchObject({ pipelineId: "p_1", inputs: { topic: "AI, agents" } });
+    expect(formToInput(form([["pipelineId", "p_1"], ["triggers", "{nope"]]), UpdatePipelineInput).triggers).toBe("{nope");
+    expect(() => parseInput(UpdatePipelineInput, formToInput(form([["pipelineId", "p_1"], ["triggers", "{nope"]]), UpdatePipelineInput))).toThrow();
   });
 
   it("splits array fields on commas and repeated keys", () => {

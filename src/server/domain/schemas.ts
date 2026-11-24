@@ -784,3 +784,10 @@ export const RerunFromInput = z.object({
   stopId: pipelineIdent.describe("The stop to run again; every stop after it runs again too"),
   note: z.string().trim().max(LIMITS.note).default("").describe("What to do differently, added to the stop's handoff note"),
 });
+
+// Pipelines, for the app's pages
+export const PipelineHistoryInput = z.object({ pipelineId, limit: limit(100, 50) });
+export const PipelineVersionInput = z.object({ pipelineId, version: z.coerce.number().int().min(1) });
+export const PipelineRequestsInput = z.object({
+  requests: z.array(z.object({ runId, stopId: pipelineIdent })).max(100),
+});

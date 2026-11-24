@@ -18,6 +18,7 @@ import { createAgent } from "../src/server/domain/agents";
 import { findTenantBySlug, listMemberships, userContext } from "../src/server/domain/tenants";
 import { DEMO_USER, DEMO_WORKSPACES as WORKSPACES, SAMPLE_HISTORY_SLUG } from "./demo-account";
 import { seedSampleHistory } from "./sample-history";
+import { seedSamplePipelines } from "./sample-pipelines";
 
 const AGENT_NAMES = ["Inbox sweeper", "Calendar planner"];
 
@@ -48,10 +49,12 @@ for (const name of AGENT_NAMES) tokens.push(await createAgent(ctx, { name }));
 
 const history = memberships.find((membership) => membership.tenant.slug === SAMPLE_HISTORY_SLUG);
 const sampled = history ? await seedSampleHistory(db, history.tenant, owner) : 0;
+const pipelineRuns = history ? await seedSamplePipelines(db, userContext(db, history, owner)) : 0;
 
 console.log(`Sign in as ${DEMO_USER.email} / ${DEMO_USER.password}`);
 console.log(`Workspaces: ${memberships.map((membership) => `/w/${membership.tenant.slug}`).join(", ")}`);
 if (sampled) console.log(`Added ${sampled} sample tasks with three weeks of history to /w/${SAMPLE_HISTORY_SLUG}`);
+if (pipelineRuns) console.log(`Added a sample pipeline with ${pipelineRuns} runs to /w/${SAMPLE_HISTORY_SLUG}/pipelines`);
 console.log(`Agent tokens for /w/${primary.tenant.slug} (shown once):`);
 for (const { agent, token } of tokens) console.log(`  ${agent.name}: ${token}`);
 process.exit(0);

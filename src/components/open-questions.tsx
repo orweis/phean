@@ -1,4 +1,4 @@
-import { AlarmClock, Bot, Check, Ellipsis } from "lucide-react";
+import { AlarmClock, Bot, Check, Ellipsis, Timer, Workflow } from "lucide-react";
 import Link from "next/link";
 
 import { answerInputAction, retractAnswerAction, snoozeRequestAction } from "@/app/w/[slug]/actions";
@@ -7,6 +7,7 @@ import { LIMITS, REQUEST_KIND_META } from "@/lib/domain";
 import { cx } from "@/lib/cx";
 import { timeAgo, truncate } from "@/lib/format";
 import { routes } from "@/lib/routes";
+import type { PipelineRequestContext } from "@/server/domain/pipelines";
 import type { TaskView } from "@/server/domain/tasks";
 
 import { ResumeLink, ResumePopover, TaskLinks } from "./agent-sessions";
@@ -16,7 +17,7 @@ import { GoalLink } from "./goal-link";
 import { MultipleChoice } from "./multiple-choice";
 import { ActionButton } from "./ui/action-button";
 import { ActionForm } from "./ui/action-form";
-import { MetaBadge } from "./ui/badge";
+import { Badge, MetaBadge } from "./ui/badge";
 import { CopyLinkButton } from "./ui/copy-link-button";
 import { CountedTextarea } from "./ui/counted-textarea";
 import { Field } from "./ui/field";
@@ -25,14 +26,55 @@ import type { UndoSpec } from "./ui/status-region";
 import { SubmitButton } from "./ui/submit-button";
 
 /** Taking the answer back reopens the question, until the agent has collected it. */
-const takeBack = (taskId: string, request: InputRequest): UndoSpec => ({
-  action: retractAnswerAction,
-  fields: { taskId, requestId: request.id },
-  done: `${request.agentName}'s question is open again.`,
-});
+const takeBack = (taskId: string, request: InputRequest): UndoSpec | undefined =>
+  // A pipeline acts on its answer at once, so there is nothing to take back.
+  request.pipeline
+    ? undefined
+    : {
+        action: retractAnswerAction,
+        fields: { taskId, requestId: request.id },
+        done: `${request.agentName}'s question is open again.`,
+      };
 
 /** What the status region says once an answer is sent: the receipt a person checks. */
-const sent = (answer: string, request: InputRequest) => `Sent “${truncate(answer, 60)}” to ${request.agentName}`;
+const sent = (answer: string, request: InputRequest) =>
+  request.pipeline
+    ? `Sent “${truncate(answer, 60)}” to ${request.pipeline.pipelineName} #${request.pipeline.runNumber}; the run has it now, so it cannot be taken back`
+    : `Sent “${truncate(answer, 60)}” to ${request.agentName}`;
+
+/** Where the request's run stands and what each option leads to, for a decision a pipeline asked. */
+function PipelineContext({ slug, request, context }: { slug: string; request: InputRequest; context?: PipelineRequestContext }) {
+  const ref = request.pipeline!;
+  return (
+    <div data-pipeline-context className="mt-2 space-y-1 text-xs text-ink-2">
+      {context && context.steps.length > 0 && (
+        <ul aria-label="What each answer leads to" className="flex flex-wrap gap-x-3 gap-y-0.5">
+          {context.steps.map((step) => (
+            <li key={step.option}>
+              <span className="font-semibold text-ink">{step.option}</span> <span aria-hidden>→</span>
+              <span className="sr-only"> leads to</span> {step.next}
+            </li>
+          ))}
+        </ul>
+      )}
+      {context?.dueAt && (
+        <p className="flex items-center gap-1 text-wait-ink">
+          <Timer className="size-3" aria-hidden />
+          Time limit {timeAgo(context.dueAt)}
+          {context.onTimeout ? `; then the run goes with “${context.onTimeout}”` : "; then the stop fails"}
+        </p>
+      )}
+      <p className="sr-only">
+        Asked by the pipeline {ref.pipelineName}, run {ref.runNumber}, at {ref.stopName}.
+      </p>
+      <p>
+        <Link href={routes.pipelineRun(slug, ref.runId)} className="link">
+          Open run #{ref.runNumber}
+        </Link>
+      </p>
+    </div>
+  );
+}
 
 /** A short reply, written here; the panel repeats the question so it stays in view while typing. */
 function OtherAnswer({ taskId, slug, request }: { taskId: string; slug: string; request: InputRequest }) {
@@ -46,7 +88,7 @@ function OtherAnswer({ taskId, slug, request }: { taskId: string; slug: string; 
       phone="inline"
       title={decision ? "Your decision" : "Your answer"}
     >
-      <ActionForm action={answerInputAction} workspace={slug} className="space-y-3" notice={`Sent your answer to ${request.agentName}`} undo={takeBack(taskId, request)} closeOnSuccess>
+      <ActionForm action={answerInputAction} workspace={slug} className="space-y-3" notice={request.pipeline ? `Sent your answer to ${request.pipeline.pipelineName} #${request.pipeline.runNumber}; the run has it now` : `Sent your answer to ${request.agentName}`} undo={takeBack(taskId, request)} closeOnSuccess>
         <input type="hidden" name="taskId" value={taskId} />
         {/* Pinned to this request: a newer question on the task refuses the answer instead of taking it. */}
         <input type="hidden" name="requestId" value={request.id} />
@@ -148,6 +190,9 @@ function Resume({ session, prominent }: { session: AgentSession | undefined; pro
   return prominent && session.url ? <ResumeLink session={session} variant="primary" /> : <ResumePopover sessions={[session]} />;
 }
 
+const pipelineContext = (pipelines: Record<string, PipelineRequestContext> | undefined, request: InputRequest) =>
+  request.pipeline ? pipelines?.[`${request.pipeline.runId}:${request.pipeline.stopId}`] : undefined;
+
 /**
  * Questions and decisions agents asked, longest waiting first. A decision leads with its options,
  * directly under the question; a plain question leads with the way back into the asking agent's
@@ -159,6 +204,8 @@ export function OpenQuestions({
   canAnswer,
   showGoal = false,
   focus,
+  pipelines,
+  keys = true,
 }: {
   tasks: readonly TaskView[];
   slug: string;
@@ -166,6 +213,10 @@ export function OpenQuestions({
   showGoal?: boolean;
   /** The request a link pointed at, marked so `FocusOnLoad` can bring it into view. */
   focus?: string;
+  /** For decisions pipelines asked: where each run stands, by `${runId}:${stopId}`. */
+  pipelines?: Record<string, PipelineRequestContext>;
+  /** False when the page wraps several lists in one `DecisionKeys`, so one request is selected among them all. */
+  keys?: boolean;
 }) {
   const list = (
     <ul>
@@ -193,6 +244,12 @@ export function OpenQuestions({
           >
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
               {request.kind === "decision" && <MetaBadge meta={REQUEST_KIND_META} value={request.kind} />}
+              {request.pipeline && (
+                <Badge>
+                  <Workflow aria-hidden />
+                  Pipeline
+                </Badge>
+              )}
               <p className="text-sm font-semibold text-ink">
                 <Link href={routes.task(slug, task.id)} scroll={false} data-task-link className="hover:underline hover:underline-offset-2">
                   {task.title}
@@ -203,6 +260,15 @@ export function OpenQuestions({
               <Bot className="size-3" aria-hidden />
               {askerName(request)} asked {timeAgo(request.askedAt)}
               {askedInApp(request, session?.app) && ` in ${askedInApp(request, session?.app)}`}
+              {request.pipeline && (
+                <>
+                  <span aria-hidden> · </span>
+                  <span data-pipeline-position>
+                    {pipelineContext(pipelines, request)?.position ? `Stop ${pipelineContext(pipelines, request)!.position!.index} of ${pipelineContext(pipelines, request)!.position!.total} · ` : ""}
+                    {request.pipeline.pipelineName} #{request.pipeline.runNumber}
+                  </span>
+                </>
+              )}
               {request.snoozedAt && (
                 <>
                   <span aria-hidden> · </span>
@@ -237,12 +303,14 @@ export function OpenQuestions({
                   <MoreAnswers taskId={task.id} slug={slug} request={request} title={task.title} />
                   <CopyLinkButton path={routes.request(slug, request.id)} subject={`link to the request on ${task.title}`} compact />
                 </div>
+                {request.pipeline && <PipelineContext slug={slug} request={request} context={pipelineContext(pipelines, request)} />}
                 {request.context && <p className="mt-2.5 text-sm whitespace-pre-line wrap-anywhere text-ink-2">{request.context}</p>}
                 <TaskLinks links={request.links} className="mt-2.5" />
                 <DocumentChips documents={task.documents} slug={slug} className="mt-2" />
               </>
             ) : (
               <>
+                {request.pipeline && <PipelineContext slug={slug} request={request} context={pipelineContext(pipelines, request)} />}
                 {request.context && <p className="mt-2 text-sm whitespace-pre-line wrap-anywhere text-ink-2">{request.context}</p>}
                 <TaskLinks links={request.links} className="mt-2.5" />
                 <DocumentChips documents={task.documents} slug={slug} className="mt-2" />
@@ -260,5 +328,5 @@ export function OpenQuestions({
       })}
     </ul>
   );
-  return canAnswer ? <DecisionKeys>{list}</DecisionKeys> : list;
+  return canAnswer && keys ? <DecisionKeys>{list}</DecisionKeys> : list;
 }

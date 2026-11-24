@@ -59,3 +59,15 @@ export function relativeDue(isoDate: string, now = new Date()): string {
 export function percent(fraction: number): string {
   return `${Math.round(fraction * 100)}%`;
 }
+
+/** "40s", "12 min", "3 h 5 min", "2 d 4 h": how long something took, to two units at most. */
+export function formatDuration(ms: number): string {
+  const seconds = Math.round(ms / 1000);
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return minutes % 60 ? `${hours} h ${minutes % 60} min` : `${hours} h`;
+  const days = Math.floor(hours / 24);
+  return hours % 24 ? `${days} d ${hours % 24} h` : `${days} d`;
+}
