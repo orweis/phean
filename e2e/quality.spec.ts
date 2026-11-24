@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 import { DEFAULT_THEME, THEME_COOKIE, THEMES } from "../src/lib/themes";
 import { expectAccessible, expectNothingCutOff, expectNowClearOfDates } from "./support/checks";
-import { BASE_URL, DEMO_SESSION } from "./support/env";
+import { ADMIN_SESSION, BASE_URL, DEMO_SESSION } from "./support/env";
 import { desktopSignIn } from "./support/desktop-client";
 import { card, entryKind, popover } from "./support/locators";
 import { oauthClient } from "./support/oauth-client";
@@ -44,6 +44,22 @@ const PAGES = [
   "/blog/author/or-weis",
   "/privacy",
   "/offline",
+];
+
+/** The backoffice's pages, scanned and checked at 375px as the seeded platform admin (`ADMIN_SESSION`). */
+const BACKOFFICE_PAGES = [
+  "/admin",
+  "/admin/activation",
+  "/admin/workspaces",
+  "/admin/workspaces?sort=name&dir=asc&health=dormant",
+  "/admin/workspaces/globex",
+  "/admin/workspaces/park-legal",
+  "/admin/people",
+  "/admin/people?q=customers",
+  "/admin/agents",
+  "/admin/usage",
+  "/admin/health",
+  "/admin/audit",
 ];
 
 /** Pages that draw a timetable, so the Now marker can be checked against the date labels. */
@@ -483,6 +499,37 @@ test.describe("in the dark appearance", () => {
       test(`${path} has no detectable accessibility violations with ${trigger} open`, async ({ page }) => {
         await openPanel(page, path, trigger);
         await expectAccessible(page);
+      });
+    }
+  });
+});
+
+test.describe("the backoffice, as a platform admin", () => {
+  test.use({ storageState: ADMIN_SESSION });
+
+  for (const path of BACKOFFICE_PAGES) {
+    test(`${path} has no detectable accessibility violations`, async ({ page }) => {
+      await page.goto(path);
+      await expectAccessible(page);
+    });
+  }
+
+  test.describe("in dark", () => {
+    test.use({ colorScheme: "dark" });
+    for (const path of ["/admin", "/admin/activation", "/admin/workspaces", "/admin/workspaces/park-legal"]) {
+      test(`${path} has no detectable accessibility violations`, async ({ page }) => {
+        await page.goto(path);
+        await expectAccessible(page);
+      });
+    }
+  });
+
+  test.describe("on a 375px phone", () => {
+    test.use({ viewport: { width: 375, height: 812 } });
+    for (const path of BACKOFFICE_PAGES) {
+      test(`${path} keeps everything inside the screen`, async ({ page }) => {
+        await page.goto(path);
+        await expectNothingCutOff(page);
       });
     }
   });

@@ -72,6 +72,11 @@ import { getWorkspaceOverviews, listMemberships } from "@/server/domain/tenants"
 import { createPheanMcpHandler } from "@/server/mcp/handler";
 import { deleteWebhook, registerWebhook, watch } from "@/server/domain/webhooks";
 
+import { getWorkspaceContent, getWorkspaceDetail, revealContent } from "@/server/backoffice";
+import { toolCallsDaily } from "@/server/db/schema";
+import { countToolCall } from "@/server/domain/usage";
+
+import { ADMIN_EMAIL, seedPlatformAdmin } from "./support/backoffice";
 import { addMember, asUser, createTestDb, seedUser, seedWorkspace, type TestDb, type Workspace } from "./support/db";
 import { connectMcpClient, dataOf, textOf } from "./support/mcp";
 import { connectOAuthAgent, createOAuthServer, OAUTH_BASE, OAUTH_RESOURCE } from "./support/oauth";
@@ -564,5 +569,36 @@ describe("tenant isolation", () => {
     await sendDuePushes(testDb.db, push.deps);
     expect(push.sent.filter((message) => message.endpoint === samDevice.endpoint)).toEqual([]);
     expect(await deliveriesOf(testDb.db, samDevice.id)).toEqual([expect.objectContaining({ status: "dead", lastError: "not_member" })]);
+  });
+});
+
+describe("backoffice", () => {
+  beforeEach(() => {
+    vi.stubEnv("PHEAN_PLATFORM_ADMINS", ADMIN_EMAIL);
+    vi.stubEnv("PHEAN_ADMIN_REQUIRE_2FA", "0");
+  });
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("keeps one workspace's detail and content to that workspace", async () => {
+    const admin = await seedPlatformAdmin(testDb.db, { email: ADMIN_EMAIL.replace("ops", `ops.${acme.tenant.slug}`) });
+    vi.stubEnv("PHEAN_PLATFORM_ADMINS", admin.admin.email);
+    await countToolCall(globexAgent, "list_tasks", false);
+
+    const detail = await getWorkspaceDetail(admin, { slug: globex.tenant.slug });
+    expect(detail.tenant.id).toBe(globex.tenant.id);
+    expect(detail.agents.every((agent) => agent.calls <= 1)).toBe(true);
+    expect(detail.decisions.asked).toBe(0);
+    expect(JSON.stringify(detail)).not.toContain(acmeOwner.actor.name);
+
+    // Showing Acme's content opens Acme only.
+    await revealContent(admin, { slug: acme.tenant.slug, reason: "Checking the merger memo bug" });
+    expect((await getWorkspaceContent(admin, { slug: acme.tenant.slug })).tasks.map((task) => task.title)).toEqual(["Draft merger memo"]);
+    await expect(getWorkspaceContent(admin, { slug: globex.tenant.slug })).rejects.toMatchObject({ code: "forbidden" });
+  });
+
+  it("counts an agent's tool calls in its own workspace only", async () => {
+    await countToolCall(globexAgent, "capture_tasks", false);
+    const rows = await testDb.db.select().from(toolCallsDaily).where(eq(toolCallsDaily.agentId, globex.scout.agentId));
+    expect(rows.map((row) => row.tenantId)).toEqual([globex.tenant.id]);
   });
 });

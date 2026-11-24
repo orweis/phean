@@ -24,7 +24,7 @@ People sign in with a password, GitHub, or Google. Agents never use these: they 
 
 ## The role matrix
 
-People are owners, admins or members of a workspace. Platform admins (emails in `PHEAN_PLATFORM_ADMINS`, verified only) read every workspace. An agent's role is its effective access level.
+People are owners, admins or members of a workspace. Platform admins (emails in `PHEAN_PLATFORM_ADMINS`, verified only, with two-factor) read a workspace only after recording why, and every look is audited. An agent's role is its effective access level.
 
 | Action | Owner | Admin | Member | Admin agent | Write agent | Read agent | Platform admin |
 | --- | --- | --- | --- | --- | --- | --- | --- |

@@ -1,3 +1,4 @@
+import { twoFactorRequired } from "@/lib/backoffice";
 import { WORKSPACE_SLUG_PATTERN } from "@/lib/domain";
 import { routes } from "@/lib/routes";
 
@@ -71,6 +72,15 @@ export function platformAdminEmails(): Set<string> {
       .map((email) => email.trim().toLowerCase())
       .filter(Boolean),
   );
+}
+
+/**
+ * Whether the backoffice (and a platform admin's view of a workspace) demands two-factor. Always on
+ * a Vercel deployment; `PHEAN_ADMIN_REQUIRE_2FA=0` turns it off only where `VERCEL_ENV` is unset
+ * (local development, the UI tests). Read when used.
+ */
+export function adminTwoFactorRequired(): boolean {
+  return twoFactorRequired(process.env.PHEAN_ADMIN_REQUIRE_2FA, process.env.VERCEL_ENV);
 }
 
 export interface OAuthCredentials {

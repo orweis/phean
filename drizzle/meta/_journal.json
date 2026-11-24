@@ -155,6 +155,13 @@
       "when": 1795535573868,
       "tag": "0021_agent_active_day",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1795540647286,
+      "tag": "0022_backoffice",
+      "breakpoints": true
     }
   ]
 }

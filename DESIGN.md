@@ -560,6 +560,17 @@ A stacked area of how many tasks stood at each station at the end of each day: d
 
 The goal tree as a line with stations: a brand ring per active goal, a dashed signal ring while proposed, a filled green dot when achieved, a grey one when abandoned, branches for sub-goals, and a flow bar of each goal's tasks with its percentage done.
 
+### Backoffice
+
+The operator console at `/admin` speaks the same language at a higher density. The glass header carries the backoffice's own tab rail (Overview, Activation, Workspaces, People, Agents, Usage, Health, Audit) in the workspace rail's capsules, with a quiet `fill` strip under it saying the console is read-only and recorded, and a `wait` strip when the admin has no two-factor.
+- **Trend cards** (`TrendCard`): a `Card` with the metric's name and a (?) holding its exact definition, the week's figure in the `figure` style, the comparison with the week before always in words ("+12% on the 7 days before", in `arrive-ink` or `wait-ink` as a second cue, never alone), and twelve weeks of `WeekBars` under it.
+- **Week bars** (`WeekBars` in `components/charts`): server-rendered spans placed by `barFractions`, the latest week in `accent` and the others `accent/35`, a week with nothing as a `rule` hairline, the first and last week named on the axis, and a visually hidden table of every figure.
+- **The funnel** is an ordered list of steps, each a `ProgressBar` of its share of signups with the count in figures beside it and the rates and median time in words.
+- **The retention grid** is a ruled table whose cells take an `accent` wash in four steps (`retentionStep`: 8%, 16%, 26%, 36%, so `ink` keeps its contrast) and always print their percentage; a week not over yet is a muted dot read as "not yet".
+- **Health** reads as a `Badge` in words (Dormant, Decisions stuck, Webhooks failing) and, on the Health page, as a figure in `late-ink` followed by the word "Check".
+- **Content** shown after **Show content** sits in a `wait`-toned card whose header says until when and why, so revealed customer text is never mistaken for metadata.
+- Wide tables scroll inside their card in a focusable, named region (`TableScroll`), the first column pinned on phones (`PINNED_CELL`).
+
 ### Pipelines (line map)
 
 A pipeline is a line on the transit map (`LineMap` in `components/charts/line-map.tsx`, its geometry in `lib/pipeline-map.ts`). Stops are stations left to right on one row, each a 24px dot on the line with its name under it, who serves it (a bot or person glyph and the name) and, when a run rides the map, its state in words; forks and choices stack their branches on rows below and come back up at a join (an interchange: an `edge` outline around the dot, "Waits for all" or "First to arrive"); ends are termini, a square flag, filled `station-done` when the run reached it. Edges turn just after a fork and just before a join, so lines never cross a station; a choice labels each branch beside its turn, "(default)" marking the fallback. Person stops wear a faint `wait-ink` ring. The drawing is decorative (`aria-hidden`), inside a focusable region that holds the same line as an ordered list in words, with each stop's rules; hovering a station shows its instructions.

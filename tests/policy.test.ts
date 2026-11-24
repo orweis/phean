@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { approveAgent, archiveAgent, archiveRevokedAgents, canTransferClaims, createAgent, listAgents, revokeAgent, unarchiveAgent } from "@/server/domain/agents";
 import { attachDocument } from "@/server/domain/documents";
@@ -15,6 +15,13 @@ import { captureTasks, transferClaims } from "@/server/domain/tasks";
 import { approvePipelineVersion, archivePipeline, definePipeline, startRun, updatePipeline } from "@/server/domain/pipelines";
 import { listPendingInvitations } from "@/server/domain/tenants";
 
+import * as backoffice from "@/server/backoffice";
+import { platformContext, type PlatformCtx } from "@/server/backoffice/context";
+import { platformWorkspaceAccess, WORKSPACE_APP_VIEW } from "@/server/backoffice/workspace-access";
+import { backofficeAudit } from "@/server/db/schema";
+import { TOOLS } from "@/server/mcp/tools";
+
+import { ADMIN_EMAIL, everyBackofficeCall, seedPlatformAdmin } from "./support/backoffice";
 import { addMember, asUser, createTestDb, seedUser, seedWorkspace, type TestDb } from "./support/db";
 
 const CONTRIBUTE: readonly Action[] = ["workspace:read", "goal:write", "task:write", "memory:write", "document:write"];
@@ -235,5 +242,89 @@ describe("policy enforcement in services", () => {
     }
     expect(await archiveAgent(owner, { agentId: agent.id })).toEqual({ archived: 1 });
     await expect(unarchiveAgent(member, { agentId: agent.id })).rejects.toMatchObject({ code: "forbidden" });
+  });
+});
+
+describe("backoffice access", () => {
+  let backofficeDb: TestDb;
+  let workspace: Awaited<ReturnType<typeof seedWorkspace>>;
+
+  beforeAll(async () => {
+    backofficeDb = await createTestDb();
+  });
+  beforeEach(async () => {
+    vi.stubEnv("PHEAN_PLATFORM_ADMINS", ADMIN_EMAIL);
+    vi.stubEnv("PHEAN_ADMIN_REQUIRE_2FA", "0");
+    workspace = await seedWorkspace(backofficeDb.db);
+  });
+  afterEach(() => vi.unstubAllEnvs());
+  afterAll(() => backofficeDb.close());
+
+  it("lists every backoffice service in the refusal checks", () => {
+    expect(everyBackofficeCall("x").map(([name]) => name).sort()).toEqual(Object.keys(backoffice).sort());
+  });
+
+  it("refuses people, agents of every level, and unverified or unlisted addresses in every service", async () => {
+    const db = backofficeDb.db;
+    const owner = workspace.human.actor;
+    const { agent: reader } = await approveAgent(workspace.human, { name: "Reader", level: "read", lifetimeDays: 30, oauthClientId: "client_r" });
+    const { agent: chief } = await approveAgent(workspace.human, { name: "Chief", level: "admin", lifetimeDays: 30, oauthClientId: "client_a" });
+    const refused: [string, PlatformCtx][] = [
+      ["a workspace owner", platformContext(db, { id: owner.id, name: owner.name, email: "dana@example.com" })],
+      ["a Write agent", platformContext(db, { id: workspace.scout.agentId, name: "Scout", email: ADMIN_EMAIL })],
+      ["a Read agent", platformContext(db, { id: reader.id, name: "Reader", email: ADMIN_EMAIL })],
+      ["an Admin agent", platformContext(db, { id: chief.id, name: "Chief", email: ADMIN_EMAIL })],
+      ["a listed but unverified address", await seedPlatformAdmin(db, { verified: false, email: ADMIN_EMAIL.replace("ops", `ops+${Date.now()}`) })],
+      ["a verified address that is not listed", await seedPlatformAdmin(db, { email: `someone.${Date.now()}@phean.example` })],
+    ];
+    // The unverified admin must be listed for the check to mean anything.
+    vi.stubEnv("PHEAN_PLATFORM_ADMINS", `${ADMIN_EMAIL},${refused[4]![1].admin.email}`);
+    for (const [who, ctx] of refused) {
+      for (const [name, call] of everyBackofficeCall(workspace.tenant.slug)) {
+        await expect(call(ctx), `${name} for ${who}`).rejects.toMatchObject({ code: "forbidden" });
+      }
+    }
+    // Nothing they tried was recorded as a look.
+    expect(await db.select().from(backofficeAudit)).toEqual([]);
+  });
+
+  it("asks for two-factor when PHEAN_ADMIN_REQUIRE_2FA is on, and lets the admin in once it is", async () => {
+    vi.stubEnv("PHEAN_PLATFORM_ADMINS", `second.${ADMIN_EMAIL},third.${ADMIN_EMAIL}`);
+    vi.stubEnv("PHEAN_ADMIN_REQUIRE_2FA", "1");
+    const without = await seedPlatformAdmin(backofficeDb.db, { email: `second.${ADMIN_EMAIL}` });
+    const withTwoFactor = await seedPlatformAdmin(backofficeDb.db, { email: `third.${ADMIN_EMAIL}`, twoFactor: true });
+    for (const [name, call] of everyBackofficeCall(workspace.tenant.slug)) {
+      await expect(call(without), name).rejects.toThrow("Turn on two-factor");
+    }
+    await expect(backoffice.getOverview(withTwoFactor, {})).resolves.toMatchObject({ totals: expect.any(Object) });
+  });
+
+  it("opens a workspace's app pages to a platform admin only within a content grant, recorded once", async () => {
+    const db = backofficeDb.db;
+    const admin = await seedPlatformAdmin(db, { email: `app.${Date.now()}.${ADMIN_EMAIL}` });
+    vi.stubEnv("PHEAN_PLATFORM_ADMINS", admin.admin.email);
+    const other = await seedWorkspace(db, { name: "Other" });
+    const appViews = async () => (await db.select().from(backofficeAudit)).filter((row) => row.adminUserId === admin.admin.id && row.action === WORKSPACE_APP_VIEW);
+
+    expect(await platformWorkspaceAccess(admin, workspace.tenant.id)).toBe("needs_grant");
+    await backoffice.revealContent(admin, { slug: workspace.tenant.slug, reason: "Ticket 9: board looks empty" });
+    expect(await platformWorkspaceAccess(admin, workspace.tenant.id)).toBe("granted");
+    expect(await platformWorkspaceAccess(admin, workspace.tenant.id)).toBe("granted");
+    expect(await appViews()).toEqual([expect.objectContaining({ tenantId: workspace.tenant.id, reason: "Ticket 9: board looks empty" })]);
+    // The grant is for that workspace only, and lapses.
+    expect(await platformWorkspaceAccess(admin, other.tenant.id)).toBe("needs_grant");
+    expect(await platformWorkspaceAccess(admin, workspace.tenant.id, new Date(Date.now() + 31 * 60_000))).toBe("needs_grant");
+
+    // Two-factor, when required, comes first, grant or not.
+    vi.stubEnv("PHEAN_ADMIN_REQUIRE_2FA", "1");
+    expect(await platformWorkspaceAccess(admin, workspace.tenant.id)).toBe("two_factor");
+    // And someone who is no longer listed is not an admin at all.
+    vi.stubEnv("PHEAN_PLATFORM_ADMINS", ADMIN_EMAIL);
+    expect(await platformWorkspaceAccess(admin, workspace.tenant.id)).toBe("not_admin");
+  });
+
+  it("offers agents no backoffice tool", () => {
+    // Backoffice services take a PlatformCtx, which only a session builds; no tool reaches one.
+    expect(TOOLS.filter((tool) => /backoffice|platform|usage|audit/.test(tool.name))).toEqual([]);
   });
 });

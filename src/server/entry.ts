@@ -13,6 +13,8 @@ import { handlePipelineTrigger } from "./pipelines/trigger";
 import { prunePushDeliveries, sendDuePushes } from "./push/dispatch";
 import { handleInbox } from "./push/http";
 import { dispatchDue, pruneDeliveries, type DispatchReport } from "./webhooks/dispatch";
+import { ensureBackofficeIndexes } from "./backoffice/indexes";
+import { rollUpUsage, rolledUpThrough, type RollupReport } from "./backoffice/rollup";
 
 /**
  * Where pages and route handlers reach server work that needs the database. They never open it
@@ -69,3 +71,31 @@ export const sweepPipelinesNow = (): Promise<SweepReport> => sweepPipelines(getD
 
 /** A pipeline's inbound webhook, on the shared connection. */
 export const pipelineTrigger = (request: Request, pipelineId: string): Promise<Response> => handlePipelineTrigger(request, { db: getDb(), pipelineId });
+
+/** Rolls the event log up into the backoffice's daily usage counts (`/api/admin/rollup`, and hourly from the pipelines tick). */
+export async function rollUpUsageNow(): Promise<RollupReport & { indexesBuilt: string[] }> {
+  const db = getDb();
+  // Outside any transaction, so the indexes build concurrently (see backoffice/indexes.ts).
+  const indexesBuilt = await ensureBackofficeIndexes(db);
+  return { ...(await rollUpUsage(db)), indexesBuilt };
+}
+
+/** How long a rollup stays fresh before the pipelines tick runs the next one. */
+export const ROLLUP_EVERY_MS = 60 * 60 * 1000;
+
+/**
+ * The rollup, when the last one is an hour old (or there was none). The every-minute pipelines tick
+ * calls it, so the backoffice needs no cron of its own; most minutes this is one small read. A
+ * failure is logged and left for the next minute, never failing the tick.
+ */
+export async function rollUpUsageIfDue(now = new Date()): Promise<{ ran: boolean }> {
+  try {
+    const { ranAt } = await rolledUpThrough(getDb());
+    if (ranAt && now.getTime() - ranAt.getTime() < ROLLUP_EVERY_MS) return { ran: false };
+    await rollUpUsageNow();
+    return { ran: true };
+  } catch (error) {
+    console.error("Usage rollup failed", error);
+    return { ran: false };
+  }
+}

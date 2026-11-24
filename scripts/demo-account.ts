@@ -8,3 +8,9 @@ export const DEMO_WORKSPACES = [
 
 /** Gets backdated sample history so the timeline has something to draw on first run. */
 export const SAMPLE_HISTORY_SLUG = "globex";
+
+/**
+ * The local backoffice account `pnpm db:seed` creates, its address marked verified. List it in
+ * `PHEAN_PLATFORM_ADMINS` to open /admin; the UI tests do.
+ */
+export const DEMO_ADMIN = { name: "Opal Ops", email: "ops@phean.dev", password: "phean-ops-password" };
