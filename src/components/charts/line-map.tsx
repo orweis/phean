@@ -44,15 +44,15 @@ function edgePath(from: MapNode, to: MapNode): { d: string; labelAt: { x: number
   const a = centre(from);
   const b = centre(to);
   // On the same row the label sits above the line past the stop's own cell, clear of its selection ring.
-  if (a.y === b.y) return { d: `M ${a.x} ${a.y} H ${b.x}`, labelAt: { x: a.x + W / 2 - 4, y: a.y - 22 } };
+  if (a.y === b.y) return { d: `M ${a.x} ${a.y} H ${b.x}`, labelAt: { x: a.x + W / 2 - 4, y: a.y - 30 } };
   // Down to a branch: turn just after the stop. Up to a join: turn just before it.
   const down = b.y > a.y;
   const x = down ? a.x + W / 2 : b.x - W / 2;
   const s = down ? 1 : -1;
   return {
     d: `M ${a.x} ${a.y} H ${x - R} Q ${x} ${a.y} ${x} ${a.y + s * R} V ${b.y - s * R} Q ${x} ${b.y} ${x + R} ${b.y} H ${b.x}`,
-    // Beside the turn, half way down (or up), clear of both stations.
-    labelAt: { x: x + 8, y: (a.y + b.y) / 2 - 8 },
+    // Just above the line into the stop it leads to, past the turn: between the row above's labels and the station's dot.
+    labelAt: { x: x + 6, y: b.y - 30 },
   };
 }
 
@@ -143,7 +143,7 @@ export function LineMap({ definition, label, servedBy = {}, states, reachedEnd, 
             return (
               <span
                 key={`label-${edge.from}-${edge.label}`}
-                className="absolute max-w-20 truncate rounded-xs bg-panel px-1 text-2xs font-semibold text-ink-2"
+                className="absolute max-w-28 truncate rounded-xs bg-panel px-1 text-2xs font-semibold text-ink-2"
                 style={{ left: labelAt.x, top: labelAt.y }}
                 title={edge.label}
               >
