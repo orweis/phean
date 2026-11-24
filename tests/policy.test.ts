@@ -12,20 +12,21 @@ import { createGoal, setGoalStatus } from "@/server/domain/goals";
 import { answerFromNotification, muteWorkspace, openDecisions, unmuteWorkspace } from "@/server/domain/notifications";
 import { ACTIONS, can, type Action } from "@/server/domain/policy";
 import { captureTasks, transferClaims } from "@/server/domain/tasks";
+import { approvePipelineVersion, archivePipeline, definePipeline, startRun, updatePipeline } from "@/server/domain/pipelines";
 import { listPendingInvitations } from "@/server/domain/tenants";
 
 import { addMember, asUser, createTestDb, seedUser, seedWorkspace, type TestDb } from "./support/db";
 
 const CONTRIBUTE: readonly Action[] = ["workspace:read", "goal:write", "task:write", "memory:write", "document:write"];
-const AGENT_WRITE: readonly Action[] = [...CONTRIBUTE, "agent:delegate", "webhook:manage"];
+const AGENT_WRITE: readonly Action[] = [...CONTRIBUTE, "agent:delegate", "webhook:manage", "pipeline:write"];
 
 const EXPECTED: Record<Role, readonly Action[]> = {
   owner: ACTIONS,
   admin: ACTIONS,
-  member: ["workspace:read", "goal:write", "goal:decide", "task:write", "memory:write", "document:write", "agent:connect", "digest:subscribe", "notify:subscribe"],
+  member: ["workspace:read", "goal:write", "goal:decide", "task:write", "memory:write", "document:write", "agent:connect", "digest:subscribe", "notify:subscribe", "pipeline:write"],
   agent_read: ["workspace:read"],
   agent_write: AGENT_WRITE,
-  agent_admin: ["workspace:read", "goal:write", "task:write", "memory:write", "document:write", "agent:manage", "agent:delegate", "webhook:manage"],
+  agent_admin: ["workspace:read", "goal:write", "task:write", "memory:write", "document:write", "agent:manage", "agent:delegate", "webhook:manage", "pipeline:write"],
   platform_admin: ["workspace:read"],
 };
 
@@ -68,6 +69,17 @@ describe("policy matrix", () => {
     expect(can(person("admin"), "agent:issue_key")).toBe(true);
     expect(grantableLevels("member")).toEqual(["read", "write"]);
     expect(grantableLevels("owner")).toEqual(["read", "write", "admin"]);
+  });
+
+  it("lets members and Write agents define and run pipelines, and only owners and admins change any regular one", () => {
+    for (const role of ["owner", "admin", "member"] as const) expect(can(person(role), "pipeline:write")).toBe(true);
+    expect(can(agent("agent_write"), "pipeline:write")).toBe(true);
+    expect(can(agent("agent_read"), "pipeline:write")).toBe(false);
+    expect(can(person("platform_admin"), "pipeline:write")).toBe(false);
+    for (const role of ["owner", "admin"] as const) expect(can(person(role), "pipeline:manage")).toBe(true);
+    expect(can(person("member"), "pipeline:manage")).toBe(false);
+    // An agent's change to a regular pipeline is always a proposal a person approves, whatever its level.
+    for (const role of AGENT_ROLES) expect(can(agent(role), "pipeline:manage")).toBe(false);
   });
 
   it("lets a person grant Admin exactly when their role manages agents in the policy matrix", () => {
@@ -153,6 +165,28 @@ describe("policy enforcement in services", () => {
       await expect(openDecisions(outsider, {})).rejects.toMatchObject({ code: "forbidden" });
     }
     await expect(answerFromNotification(platformAdmin, { taskId: "t_any", requestId: "q_any", option: 0 })).rejects.toMatchObject({ code: "forbidden" });
+  });
+
+  it("lets members define and run pipelines, keeps a regular one its owner's and admins', and makes an agent's change a proposal", async () => {
+    const { scout } = await seedWorkspace(testDb.db);
+    const definition = { stops: [{ id: "one", name: "One", kind: "any_agent" as const, then: { end: "done" } }], ends: [{ id: "done", name: "Done" }] };
+    await expect(definePipeline(platformAdmin, { name: "Nope", definition })).rejects.toMatchObject({ code: "forbidden" });
+    const { pipeline } = await definePipeline(member, { name: "Member's line", definition });
+    expect(pipeline.ownerUserId).toBe(member.actor.id);
+    await expect(startRun(platformAdmin, { pipelineId: pipeline.id })).rejects.toMatchObject({ code: "forbidden" });
+    await expect(startRun(owner, { pipelineId: pipeline.id })).resolves.toMatchObject({ run: { number: 1 } });
+    // The owner of the workspace may change any regular pipeline; the member owns theirs.
+    await expect(updatePipeline(owner, { pipelineId: pipeline.id, description: "Ours" })).resolves.toMatchObject({ pipeline: { description: "Ours" } });
+    const { pipeline: owners } = await definePipeline(owner, { name: "Owner's line", definition });
+    await expect(archivePipeline(member, { pipelineId: owners.id })).rejects.toMatchObject({ code: "forbidden" });
+    // An agent in this workspace proposes; only a person who may change it approves.
+    const other = await seedWorkspace(testDb.db);
+    const { pipeline: theirs } = await definePipeline(other.human, { name: "Line", definition });
+    const proposed = await updatePipeline(other.scout.ctx, { pipelineId: theirs.id, name: "Better line", reason: "Clearer" });
+    expect(proposed.proposal).toMatchObject({ proposalState: "proposed" });
+    await expect(approvePipelineVersion(other.closer.ctx, { pipelineId: theirs.id, version: 2 })).rejects.toMatchObject({ code: "forbidden" });
+    await expect(archivePipeline(scout.ctx, { pipelineId: pipeline.id })).rejects.toMatchObject({ code: "not_found" });
+    await expect(archivePipeline(other.scout.ctx, { pipelineId: theirs.id })).rejects.toMatchObject({ code: "forbidden" });
   });
 
   it("keeps platform admins read-only", async () => {

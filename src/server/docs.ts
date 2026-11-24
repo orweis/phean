@@ -8,7 +8,7 @@ import { headingId, plainHeading } from "@/lib/docs";
 export const DOC_SECTIONS = [
   { title: "Start here", slugs: ["index", "getting-started", "connect-an-agent"] },
   { title: "Agents", slugs: ["agents", "claude-code", "claude-apps", "cursor", "vs-code", "grok", "chatgpt-dots", "muse", "instinct", "your-own-bot"] },
-  { title: "Using Phean", slugs: ["concepts", "the-agent-loop", "decisions", "sub-agents", "documents"] },
+  { title: "Using Phean", slugs: ["concepts", "the-agent-loop", "decisions", "sub-agents", "documents", "pipelines"] },
   { title: "Building on Phean", slugs: ["webhooks", "realtime", "mcp-reference", "skills"] },
   { title: "Running Phean", slugs: ["self-hosting", "security"] },
 ] as const;

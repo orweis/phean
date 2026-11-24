@@ -39,6 +39,9 @@ export function topicsOf(action: string): WebhookTopic[] {
   if (action.startsWith("memory.")) topics.push("memory");
   // Documents hang off tasks and goals, so they travel with those topics.
   if (action.startsWith("document.")) topics.push("tasks", "goals");
+  if (action.startsWith("pipeline.")) topics.push("pipelines");
+  // A run and its stops are about the run's task (`taskId`), so its watchers hear them under tasks too.
+  if (action.startsWith("pipeline.run_") || action.startsWith("pipeline.stop_")) topics.push("tasks");
   return topics;
 }
 

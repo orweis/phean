@@ -1,8 +1,8 @@
 import { routes } from "./routes";
 
 /**
- * What a Phean id links to, by its prefix: a task, goal, document or memory, or one request (a
- * question or decision, open or answered). Client-safe, so the app, the permalink route and the
+ * What a Phean id links to, by its prefix: a task, goal, document or memory, one request (a
+ * question or decision, open or answered), a pipeline or one of its runs. Client-safe, so the app, the permalink route and the
  * MCP tools all build the same links.
  */
 const LINKS = {
@@ -11,10 +11,12 @@ const LINKS = {
   d: (slug: string, id: string) => routes.document(slug, id),
   m: (slug: string, id: string) => routes.memoryItem(slug, id),
   q: (slug: string, id: string) => routes.request(slug, id),
+  p: (slug: string, id: string) => routes.pipeline(slug, id),
+  r: (slug: string, id: string) => routes.pipelineRun(slug, id),
 } as const;
 
 /** Ids Phean gives the things a link can name: a prefix, an underscore, then the id itself. */
-const LINKABLE_ID = /^(t|g|d|m|q)_[A-Za-z0-9]+$/;
+const LINKABLE_ID = /^(t|g|d|m|q|p|r)_[A-Za-z0-9]+$/;
 
 export function isLinkableId(id: unknown): id is string {
   return typeof id === "string" && LINKABLE_ID.test(id);

@@ -1,16 +1,19 @@
-import { aliasedTable, and, eq, gt, isNull, or, sql, type SQL } from "drizzle-orm";
+import { aliasedTable, and, gt, inArray, isNull, or, sql, type SQL } from "drizzle-orm";
 
 import { agents, member } from "../db/schema";
 
 const parent = aliasedTable(agents, "live_parent");
 
-/** One agent's own standing: not revoked, not lapsed, and a key or an approver who is still a member. */
+/**
+ * One agent's own standing: not revoked, not lapsed, and a key (or the workspace's pipelines agent,
+ * which has no credential) or an approver who is still a member.
+ */
 function standing(agent: typeof agents): SQL {
   return and(
     isNull(agent.revokedAt),
     or(isNull(agent.accessExpiresAt), gt(agent.accessExpiresAt, sql`now()`)),
     or(
-      eq(agent.authKind, "key"),
+      inArray(agent.authKind, ["key", "system"]),
       sql`exists (select 1 from ${member} where ${member.organizationId} = ${agent.tenantId} and ${member.userId} = ${agent.createdByUserId})`,
     ),
   )!;

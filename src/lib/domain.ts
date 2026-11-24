@@ -120,8 +120,91 @@ export const WATCHED_ENTITY_TYPES = ["task", "goal", "memory"] as const;
 export type WatchedEntityType = (typeof WATCHED_ENTITY_TYPES)[number];
 
 /** What a webhook can subscribe to; an event can belong to more than one. */
-export const WEBHOOK_TOPICS = ["decisions", "tasks", "goals", "memory"] as const;
+export const WEBHOOK_TOPICS = ["decisions", "tasks", "goals", "memory", "pipelines"] as const;
 export type WebhookTopic = (typeof WEBHOOK_TOPICS)[number];
+
+/**
+ * Pipelines (see `lib/pipelines.ts`): a named route of stops that work rides along by handoff.
+ * `regular` repeats (a schedule, an event, a person or an agent starts each run); `adhoc` is one job
+ * split between a few actors, created already running; `factory` is reserved for the floor plan
+ * that will group regular pipelines, and nothing makes one yet.
+ */
+export const PIPELINE_KINDS = ["regular", "adhoc", "factory"] as const;
+export type PipelineKind = (typeof PIPELINE_KINDS)[number];
+/** The kinds a pipeline can be defined as today. */
+export const DEFINABLE_PIPELINE_KINDS = ["regular", "adhoc"] as const satisfies readonly PipelineKind[];
+export const PIPELINE_STATUSES = ["active", "paused", "archived"] as const;
+export type PipelineStatus = (typeof PIPELINE_STATUSES)[number];
+/** Where an agent's proposed change to a regular pipeline stands; null on versions people saved directly. */
+export const PROPOSAL_STATES = ["proposed", "approved", "rejected"] as const;
+export type ProposalState = (typeof PROPOSAL_STATES)[number];
+/**
+ * A run's state, rolled up from its stops: waiting on a person beats running, which beats a failure
+ * on another branch, so a run is never failed while a branch is alive.
+ */
+export const RUN_STATUSES = ["running", "waiting", "done", "failed", "cancelled"] as const;
+export type RunStatus = (typeof RUN_STATUSES)[number];
+export const LIVE_RUN_STATUSES = ["running", "waiting"] as const satisfies readonly RunStatus[];
+/** What started a run. */
+export const RUN_TRIGGERS = ["manual", "agent", "schedule", "event", "webhook"] as const;
+export type RunTrigger = (typeof RUN_TRIGGERS)[number];
+/**
+ * A stop's state in one run. A stop with no row yet is upcoming. `active`: its task is handed to
+ * its agent (or being worked); `waiting`: it holds its branch for a person's decision; `skipped`: a
+ * choice took another branch; `not_reached`: its inputs never came (a failure upstream, or the
+ * losing side of a "first" join); `cancelled`: the run was cancelled, or another branch won a join.
+ */
+export const STOP_STATES = ["active", "waiting", "done", "failed", "skipped", "not_reached", "cancelled"] as const;
+export type StopState = (typeof STOP_STATES)[number];
+export const LIVE_STOP_STATES = ["active", "waiting"] as const satisfies readonly StopState[];
+/** Who serves a stop. `pipeline` (start another line's run) is reserved for factories and refused for now. */
+export const STOP_KINDS = ["agent", "person", "any_agent", "pipeline"] as const;
+export type StopKind = (typeof STOP_KINDS)[number];
+/** At a stop where branches meet: wait for every live branch, or go on with the first and cancel the rest. */
+export const JOIN_MODES = ["all", "first"] as const;
+export type JoinMode = (typeof JOIN_MODES)[number];
+/** What happens when a stop fails (its task is dropped, or its time runs out). */
+export const FAILURE_ACTIONS = ["retry", "hand_back", "ask", "fail"] as const;
+export type FailureAction = (typeof FAILURE_ACTIONS)[number];
+/** Who may decide at a person stop by role: `admin` (owners and admins) or any `member`. */
+export const APPROVER_ROLES = ["admin", "member"] as const;
+export type ApproverRole = (typeof APPROVER_ROLES)[number];
+export const PIPELINE_TRIGGER_KINDS = ["schedule", "event", "webhook"] as const;
+export type PipelineTriggerKind = (typeof PIPELINE_TRIGGER_KINDS)[number];
+
+export const PIPELINE_STATUS_META: Record<PipelineStatus, EnumMeta> = {
+  active: { label: "Active", tone: "info" },
+  paused: { label: "Paused", tone: "neutral" },
+  archived: { label: "Archived", tone: "neutral" },
+};
+
+export const RUN_STATUS_META: Record<RunStatus, EnumMeta> = {
+  running: { label: "In progress", tone: "info" },
+  waiting: { label: "Waiting on a person", tone: "warning" },
+  done: { label: "Done", tone: "success" },
+  failed: { label: "Failed", tone: "danger" },
+  cancelled: { label: "Cancelled", tone: "neutral" },
+};
+
+/** Includes `upcoming`, a stop the run has not reached yet (it has no row). */
+export const STOP_STATE_META: Record<StopState | "upcoming", EnumMeta> = {
+  upcoming: { label: "Upcoming", tone: "neutral" },
+  active: { label: "In progress", tone: "info" },
+  waiting: { label: "Waiting on a person", tone: "warning" },
+  done: { label: "Done", tone: "success" },
+  failed: { label: "Failed", tone: "danger" },
+  skipped: { label: "Skipped", tone: "neutral" },
+  not_reached: { label: "Not reached", tone: "neutral" },
+  cancelled: { label: "Cancelled", tone: "neutral" },
+};
+
+export const RUN_TRIGGER_META: Record<RunTrigger, EnumMeta> = {
+  manual: { label: "Started by a person", tone: "neutral" },
+  agent: { label: "Started by an agent", tone: "neutral" },
+  schedule: { label: "On schedule", tone: "neutral" },
+  event: { label: "On an event", tone: "neutral" },
+  webhook: { label: "By webhook", tone: "neutral" },
+};
 
 export const GOAL_MAX_DEPTH = 4;
 export const AGENT_TOKEN_PREFIX = "phn_";
@@ -319,8 +402,9 @@ export const AGENT_CONNECTION_META: Record<AgentConnection, EnumMeta> = {
   shared_key: { label: "Shared key", tone: "neutral" },
 };
 
-export function agentConnection(agent: { authKind: "key" | "oauth"; sharesParentKey: boolean }): AgentConnection {
-  return agent.sharesParentKey ? "shared_key" : agent.authKind;
+export function agentConnection(agent: { authKind: "key" | "oauth" | "system"; sharesParentKey: boolean }): AgentConnection {
+  // The pipelines agent never connects; it is never listed, and reads as a key if it ever is.
+  return agent.sharesParentKey ? "shared_key" : agent.authKind === "system" ? "key" : agent.authKind;
 }
 
 export const ROLE_META: Record<MemberRole | "platform_admin", EnumMeta> = {

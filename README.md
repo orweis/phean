@@ -92,10 +92,12 @@ Four installable skills teach agents what the server instructions cover in short
 
 [`skills/phean-documents/SKILL.md`](skills/phean-documents/SKILL.md) teaches an agent to attach drafts, handoffs and context to a task or goal as documents, and to link them from a decision so you read the draft beside it.
 
+[`skills/phean-pipelines/SKILL.md`](skills/phean-pipelines/SKILL.md) teaches an agent pipelines: planned, repeatable routes of handoffs between agents and people, which Phean runs stop by stop.
+
 Install them where your client reads skills. For Claude Code:
 
 ```bash
-mkdir -p ~/.claude/skills && cp -r skills/phean-decisions skills/phean-handoffs skills/phean-webhooks skills/phean-documents ~/.claude/skills/
+mkdir -p ~/.claude/skills && cp -r skills/phean-decisions skills/phean-handoffs skills/phean-webhooks skills/phean-documents skills/phean-pipelines ~/.claude/skills/
 ```
 
 Use `.claude/skills/` inside a project instead to share them with everyone working there. Other clients that support Agent Skills take the same folder.

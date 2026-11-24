@@ -5,6 +5,14 @@ import { isResumeUrl, LINK_KINDS, MAX_LINKS, REQUEST_KINDS, RESUME_URL_SCHEMES }
 import {
   AGENT_ACCESS_LEVELS,
   AGENT_LIFETIME_DAYS,
+  APPROVER_ROLES,
+  DEFINABLE_PIPELINE_KINDS,
+  FAILURE_ACTIONS,
+  JOIN_MODES,
+  PIPELINE_KINDS,
+  PIPELINE_STATUSES,
+  RUN_STATUSES,
+  STOP_KINDS,
   GOAL_STATUSES,
   INVITABLE_ROLES,
   LIMITS,
@@ -18,6 +26,7 @@ import {
   WORKSPACE_SLUG_PATTERN,
 } from "@/lib/domain";
 import { DOCUMENT_FORMATS } from "@/lib/documents";
+import { cronProblem, definitionProblems, isTimeZone as isZone, normalizeDefinition, PIPELINE_ID_PATTERN, PIPELINE_LIMITS } from "@/lib/pipelines";
 import { TIMELINE_WINDOWS } from "@/lib/timeline";
 
 const goalId = z.string().trim().min(1).describe("Goal id (g_...)");
@@ -604,4 +613,174 @@ export const NotificationUndoInput = z.object({
   taskId,
   requestId: z.string().trim().min(1).max(LIMITS.ref),
   endpoint: pushEndpoint.optional(),
+});
+
+// Pipelines
+const pipelineId = z.string().trim().min(1).max(LIMITS.ref).describe("Pipeline id (p_...)");
+const runId = z.string().trim().min(1).max(LIMITS.ref).describe("Run id (r_...)");
+const pipelineIdent = z
+  .string()
+  .trim()
+  .regex(new RegExp(`^${PIPELINE_ID_PATTERN}$`), "Use lowercase letters, digits and underscores, starting with a letter (at most 40).");
+const option = z.string().trim().min(1).max(LIMITS.option);
+const personRef = z.string().trim().min(1).max(LIMITS.ref);
+
+export const ChoiceBranchInput = z.object({
+  label: option.describe("The result or answer that picks this branch, e.g. \"approved\""),
+  to: pipelineIdent.optional().describe("The stop this branch goes to"),
+  end: pipelineIdent.optional().describe("Or the end it finishes at"),
+});
+
+export const StopThenInput = z
+  .object({
+    next: pipelineIdent.optional().describe("The stop that comes next"),
+    fork: z.array(pipelineIdent).max(PIPELINE_LIMITS.branches).optional().describe("Stops that all run next, side by side; they meet again at a stop that several lead to (a join)"),
+    choice: z
+      .array(ChoiceBranchInput)
+      .max(PIPELINE_LIMITS.branches)
+      .optional()
+      .describe("One branch runs: the one whose label the stop's result starts with (an agent stop) or the person's answer picks (a person stop)"),
+    default: option.optional().describe("With choice: the label taken when the result or answer names none"),
+    end: pipelineIdent.optional().describe("The end the run reaches here"),
+  })
+  .describe("What comes after this stop: exactly one of next, fork, choice or end");
+
+export const FailureRuleInput = z
+  .object({
+    action: z
+      .enum(FAILURE_ACTIONS)
+      .default("fail")
+      .describe("When the stop fails (its task dropped, its agent unreachable, its time up): retry it, hand_back to the stop before it, ask a person whether to retry, or fail this branch"),
+    times: z.number().int().min(1).max(PIPELINE_LIMITS.times).default(1).describe("retry and hand_back: how many times before the branch fails"),
+    person: personRef.optional().describe("ask: who decides, by email or user id (the pipeline's owner when left out)"),
+    role: z.enum(APPROVER_ROLES).optional().describe("ask: or anyone with this role"),
+  })
+  .describe("What happens when the stop fails");
+
+export const PipelineStopInput = z.object({
+  id: pipelineIdent.describe("The stop's id, used by then, templates and rerun_from: draft, review, send"),
+  name: title.describe("What people see: \"Draft the newsletter\""),
+  kind: z.enum(STOP_KINDS).describe("agent: a named agent or sub-agent. person: a person decides (or is told). any_agent: whoever picks it up. pipeline: reserved, not available yet"),
+  agent: z.string().trim().min(1).max(LIMITS.name).optional().describe("agent stops: the agent or sub-agent's name or id"),
+  person: personRef.optional().describe("person stops: who decides, by email or user id"),
+  role: z.enum(APPROVER_ROLES).optional().describe("person stops: or anyone with this role (admin: owners and admins)"),
+  approvals: z.number().int().min(1).max(PIPELINE_LIMITS.approvals).default(1).describe("person stops with a role: how many people must pick the same option"),
+  options: z.array(option).max(MAX_OPTIONS).default([]).describe("person stops: the decision's options; a choice after the stop fills them from its labels"),
+  blocking: z.boolean().default(true).describe("person stops: false makes it advisory (FYI): the person is told and the run goes on"),
+  instructions: z
+    .string()
+    .trim()
+    .max(PIPELINE_LIMITS.instructions)
+    .default("")
+    .describe("The handoff note for whoever serves the stop. May read {{input.<name>}}, {{stops.<id>.result}}, {{stops.<id>.answer}}, {{run.number}} and {{pipeline.name}}"),
+  outputs: z.array(option).max(PIPELINE_LIMITS.outputs).default([]).describe("What the stop should hand on: \"a draft document\", \"the PR link\""),
+  timeLimitMinutes: z.number().int().min(1).max(PIPELINE_LIMITS.timeLimitMinutes).optional().describe("How long the stop may take. An agent stop that runs out fails; a person stop is reminded half way and takes onTimeout at the limit"),
+  onTimeout: option.optional().describe("Blocking person stops: the option taken when the time limit passes without an answer"),
+  onFailure: FailureRuleInput.default({ action: "fail", times: 1 }),
+  join: z.enum(JOIN_MODES).optional().describe("Where branches meet: all (the default) waits for every live branch; first goes on with the first to arrive and cancels the rest"),
+  then: StopThenInput,
+});
+
+export const PipelineInputSpecInput = z.object({
+  name: pipelineIdent.describe("Read in templates as {{input.<name>}}"),
+  description: z.string().trim().max(LIMITS.brief).default(""),
+  required: z.boolean().default(false),
+});
+
+export const PipelineEndInput = z.object({ id: pipelineIdent, name: z.string().trim().min(1).max(LIMITS.name).describe("What people see: \"Sent\", \"Dropped by review\"") });
+
+/** A pipeline's definition, checked whole: every problem is reported, each in a sentence. */
+export const PipelineDefinitionInput = z
+  .object({
+    start: pipelineIdent.optional().describe("The first stop; the first listed when left out"),
+    inputs: z.array(PipelineInputSpecInput).max(PIPELINE_LIMITS.inputs).default([]).describe("Values a run is started with"),
+    stops: z.array(PipelineStopInput).min(1).max(PIPELINE_LIMITS.stops),
+    ends: z.array(PipelineEndInput).min(1).max(PIPELINE_LIMITS.ends).describe("The named endings a run can reach"),
+  })
+  .superRefine((definition, issue) => {
+    for (const message of definitionProblems(normalizeDefinition(definition))) issue.addIssue({ code: "custom", message });
+  });
+
+export const PipelineTriggersInput = z
+  .object({
+    schedule: z
+      .object({
+        cron: z
+          .string()
+          .trim()
+          .min(1)
+          .max(100)
+          .superRefine((cron, issue) => {
+            const problem = cronProblem(cron);
+            if (problem) issue.addIssue({ code: "custom", message: problem });
+          })
+          .describe("Five-field cron: minute hour day-of-month month day-of-week, e.g. \"0 9 * * 1\" for Mondays at 9:00. At most once an hour"),
+        timeZone: z.string().trim().min(1).max(64).refine(isZone, "Unknown time zone.").describe("IANA time zone, e.g. Europe/Berlin"),
+      })
+      .nullable()
+      .optional()
+      .describe("Start a run on a schedule; null or left out for none"),
+    events: z
+      .array(
+        z
+          .object({ tag: z.string().trim().min(1).max(LIMITS.tag).optional(), source: z.enum(SOURCES).optional() })
+          .refine((event) => Boolean(event.tag || event.source), "An event trigger needs a tag, a source, or both."),
+      )
+      .max(10)
+      .default([])
+      .describe("Start a run whenever a task is captured with this tag, from this source, or both; the run gets inputs task_id, task_title and task_description"),
+    webhook: z.boolean().default(false).describe("Accept runs started by POST to the pipeline's trigger URL with its secret (shown once, when turned on)"),
+  })
+  .describe("What starts runs besides start_run (regular pipelines only). Given, it replaces the pipeline's triggers");
+
+const inputValue = z.union([z.string().max(LIMITS.text), z.number(), z.boolean()]);
+export const RunOptionsInput = z.object({
+  inputs: z.record(z.string(), inputValue).default({}).describe("The run's inputs, by name"),
+  taskId: taskId.optional().describe("Run on this existing task: its stops become its subtasks. It must not be a subtask itself"),
+  goalId: goalId.optional().describe("File the run's own task under this goal"),
+});
+
+export const DefinePipelineInput = z.object({
+  name: title,
+  kind: z.enum(DEFINABLE_PIPELINE_KINDS).default("regular").describe("regular: a repeating workload, started by people, agents or triggers. adhoc: one job split between a few actors, started at once"),
+  description: longText.default(""),
+  definition: PipelineDefinitionInput,
+  triggers: PipelineTriggersInput.optional(),
+  run: RunOptionsInput.optional().describe("Start a run at once with these options (an adhoc pipeline always starts one)"),
+});
+
+export const UpdatePipelineInput = z.object({
+  pipelineId,
+  name: title.optional(),
+  description: longText.optional(),
+  definition: PipelineDefinitionInput.optional().describe("The whole new definition; running trips keep the version they started on"),
+  triggers: PipelineTriggersInput.optional(),
+  reason: z.string().trim().max(LIMITS.note).default("").describe("Why: shown to the person who approves a proposal"),
+});
+
+export const PipelineRefInput = z.object({ pipelineId });
+export const PipelineVersionRefInput = z.object({
+  pipelineId,
+  version: z.coerce.number().int().min(1).describe("The proposed version's number"),
+  note: z.string().trim().max(LIMITS.note).default("").describe("Why, when rejecting"),
+});
+
+export const ListPipelinesInput = z.object({
+  kind: z.enum(PIPELINE_KINDS).optional(),
+  status: z.enum(PIPELINE_STATUSES).optional().describe("Only pipelines in this status; archived ones are left out unless asked for"),
+  limit: limit(200, 50),
+});
+
+export const StartRunInput = RunOptionsInput.extend({ pipelineId });
+export const RunRefInput = z.object({ runId });
+export const ListRunsInput = z.object({
+  pipelineId: pipelineId.optional(),
+  status: z.enum(RUN_STATUSES).optional(),
+  limit: limit(200, 30),
+});
+export const CancelRunInput = z.object({ runId, reason: z.string().trim().max(LIMITS.note).default("").describe("Why, for the run's history") });
+export const RerunFromInput = z.object({
+  runId,
+  stopId: pipelineIdent.describe("The stop to run again; every stop after it runs again too"),
+  note: z.string().trim().max(LIMITS.note).default("").describe("What to do differently, added to the stop's handoff note"),
 });

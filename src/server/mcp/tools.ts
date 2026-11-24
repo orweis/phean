@@ -36,7 +36,19 @@ import { planningScaffold } from "./guidance";
 import { defineTool, type PheanTool, serviceTool, type ToolContext } from "./tool";
 import { attachDocument, deleteDocument, getDocument, listDocuments, updateDocument } from "../domain/documents";
 import { getWorkflow } from "../domain/workflow";
-import { fenced, goalTreeMermaid, kanbanMermaid, timelineMermaid } from "./views";
+import { fenced, goalTreeMermaid, kanbanMermaid, pipelineMermaid, timelineMermaid } from "./views";
+import {
+  cancelRun,
+  definePipeline,
+  getPipeline,
+  getRun,
+  listPipelines,
+  listRuns,
+  rerunFrom,
+  startRun,
+  updatePipeline,
+  type PipelineChange,
+} from "../domain/pipelines";
 
 const goalUrl = (ctx: ToolContext, goalId: string) => ctx.url(routes.goal(ctx.tenant.slug, goalId));
 
@@ -526,4 +538,91 @@ export const TOOLS: readonly PheanTool[] = [
     service: listWatches,
     key: "watches",
   }),
+  // Pipelines
+  defineTool({
+    name: "define_pipeline",
+    title: "Define pipeline",
+    description:
+      "Define a pipeline: a named route of stops that work rides along by handoff, each served by an agent (or sub-agent, by name), a person who decides, or any agent. A definition is {inputs, stops, ends}; each stop has an id, name, kind, who serves it, instructions (the handoff note; may read {{input.<name>}} and {{stops.<id>.result}}), and then: next, fork (branches run side by side and meet at a join), choice (one branch, picked by the result's first words or the person's answer), or end. No loops: repeat work with onFailure retry or hand_back. Every problem comes back at once, in words. kind regular repeats (start_run, or triggers: a schedule, a task captured with a tag, a webhook); kind adhoc splits one job between a few actors and starts its run at once. Returns the pipeline, its map (Mermaid), its url, and a run if one started; webhookSecret, when you turned the webhook on, is shown only now. The phean-pipelines skill has an example.",
+    input: definePipeline.schema,
+    run: async (ctx, input) => withPipelineLinks(ctx, await definePipeline(ctx, input)),
+  }),
+  defineTool({
+    name: "update_pipeline",
+    title: "Update pipeline",
+    description:
+      "Change a pipeline's name, description, definition (the whole new definition: a new version; running trips keep theirs) or triggers. An ad hoc pipeline changes at once. A regular pipeline is its owner's or an admin's to change: from you, the change becomes a proposal (proposal in the result) that a person approves; give a reason. Triggers of a regular pipeline stay with people.",
+    input: updatePipeline.schema,
+    run: async (ctx, input) => withPipelineLinks(ctx, await updatePipeline(ctx, input)),
+  }),
+  serviceTool({
+    name: "list_pipelines",
+    title: "List pipelines",
+    description: "The workspace's pipelines (archived ones only when asked for by status), each with its runs at a glance: how many, how many live, how many waiting on a person, and the last one.",
+    readOnly: true,
+    service: listPipelines,
+    key: "pipelines",
+  }),
+  defineTool({
+    name: "get_pipeline",
+    title: "Get pipeline",
+    description: "One pipeline: its current definition and map (Mermaid), versions, proposals waiting on a person, triggers, and recent runs.",
+    input: getPipeline.schema,
+    readOnly: true,
+    run: async (ctx, input) => {
+      const detail = await getPipeline(ctx, input);
+      return { ...detail, map: fenced(pipelineMermaid(detail.definition)) };
+    },
+  }),
+  serviceTool({
+    name: "start_run",
+    title: "Start run",
+    description:
+      "Start a run of a pipeline with its inputs. The run gets a task of its own (or taskId: an existing task that is not a subtask), and each stop becomes a subtask of it as the run reaches it, handed to the stop's agent (who hears handed_to_you) or put to its person as a decision. Returns the run with every stop's state and a headline (\"At Draft\", \"Waiting on Dana at Review\").",
+    service: startRun,
+  }),
+  defineTool({
+    name: "get_run",
+    title: "Get run",
+    description:
+      "One run: its headline, status (running, waiting on a person, done, failed, cancelled), the ending it reached, and every stop in order with its state (upcoming, active, waiting, done, failed, skipped, not_reached, cancelled), task, result, attempt and who it waits on; plus earlier attempts of stops that were rerun or handed back, and the map.",
+    input: getRun.schema,
+    readOnly: true,
+    run: async (ctx, input) => {
+      const view = await getRun(ctx, input);
+      return { ...view, map: fenced(pipelineMermaid(view.definition, new Map(view.stops.map((stop) => [stop.stopId, stop.state])))) };
+    },
+  }),
+  serviceTool({
+    name: "list_runs",
+    title: "List runs",
+    description: "Runs, newest first: of one pipeline, or of all, optionally by status (waiting finds runs held for a person).",
+    readOnly: true,
+    service: listRuns,
+    key: "runs",
+  }),
+  serviceTool({
+    name: "cancel_run",
+    title: "Cancel run",
+    description: "Cancel a live run: its live stops are cancelled and their tasks dropped, then the run's own task. Say why in reason.",
+    destructive: true,
+    service: cancelRun,
+  }),
+  serviceTool({
+    name: "rerun_from",
+    title: "Rerun from a stop",
+    description:
+      "Run a stop again, and every stop after it, on fresh subtasks, with note added to its handoff (what to do differently). Works on a live run, or one that ended or failed, which runs again.",
+    service: rerunFrom,
+  }),
 ];
+
+/** A pipeline's map, its url, and its webhook's address, beside what defining or changing it returned. */
+function withPipelineLinks(ctx: ToolContext, change: PipelineChange) {
+  return {
+    ...change,
+    map: fenced(pipelineMermaid(change.definition)),
+    ...(change.triggers.webhook && { triggerUrl: ctx.url(change.triggers.webhook.url) }),
+    ...(change.webhookSecret && { note: "webhookSecret is shown only now. Store it where the caller of the webhook keeps secrets; never in chat, a task, a memory or a document." }),
+  };
+}

@@ -42,7 +42,8 @@ export const priorityEnum = pgEnum("priority", PRIORITIES);
 export const sourceEnum = pgEnum("task_source", SOURCES);
 export const memoryKindEnum = pgEnum("memory_kind", MEMORY_KINDS);
 export const delegationEnum = pgEnum("task_delegation", DELEGATION_STATES);
-export const agentAuthKindEnum = pgEnum("agent_auth_kind", ["key", "oauth"]);
+/** `system`: the workspace's pipelines agent, which Phean acts as to run pipelines; it has no credential and is never listed. */
+export const agentAuthKindEnum = pgEnum("agent_auth_kind", ["key", "oauth", "system"]);
 export const agentAccessLevelEnum = pgEnum("agent_access_level", AGENT_ACCESS_LEVELS);
 export const actorTypeEnum = pgEnum("actor_type", ACTOR_TYPES);
 
@@ -92,7 +93,7 @@ export const agents = pgTable(
     /** Null for an agent that signs in with OAuth: it holds no key of its own. */
     tokenHash: text("token_hash").unique(),
     tokenPrefix: text("token_prefix"),
-    /** `key`: a `phn_` token a person issued. `oauth`: it signed in through the OAuth flow and was approved. */
+    /** `key`: a `phn_` token a person issued. `oauth`: it signed in through the OAuth flow and was approved. `system`: the pipelines agent. */
     authKind: agentAuthKindEnum("auth_kind").notNull().default("key"),
     accessLevel: agentAccessLevelEnum("access_level").notNull().default("write"),
     /** When an OAuth approval lapses; null for keys. */

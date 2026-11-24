@@ -12,6 +12,7 @@ import {
   type AgentSession,
   type InputAnswer,
   type InputRequest,
+  type PipelineRequestRef,
   type RequestOutcome,
   type TaskLink,
 } from "@/lib/agent-sessions";
@@ -29,6 +30,7 @@ import { createdByFields, inTenant, inTransaction, tenantRow, type Ctx } from ".
 import { conflict, forbidden, invalid, notFound } from "./errors";
 import { recordEvent, recordEvents, taskActivity, type Activity } from "./events";
 import { assertGoalsExist, findGoal } from "./goals";
+import { onRequestAnswered, onTaskFinished, onTasksCaptured } from "./pipeline-engine";
 import { assertCan } from "./policy";
 import { loadWorkflow } from "./workflow";
 import {
@@ -98,6 +100,9 @@ export const byUrgency: SQL[] = [
 ];
 
 const agentIdOf = (ctx: Ctx) => (ctx.actor.type === "agent" ? ctx.actor.id : null);
+
+/** Phean itself running a pipeline (`pipelineContext`): its changes are not reported back to the engine. */
+const isPipelineActor = (ctx: Ctx) => ctx.actor.type === "agent" && ctx.actor.system === true;
 
 /** The acting agent's id, for operations only agents perform; `instead` tells a person what they do. */
 function agentOnly(ctx: Ctx, instead: string): string {
@@ -311,6 +316,33 @@ const archiveOpenRequest = () => {
 /** Clears a task's open question, keeping it in the task's answer history. */
 const closeOpenRequest = () => ({ inputRequest: null, inputAnswers: archiveOpenRequest() });
 
+/**
+ * Marks the open request on a task as a pipeline's decision, so the Decisions page can badge and
+ * sort it, notifications can say "Pipeline", and an answer moves the run on. Only the pipeline
+ * engine calls it, right after asking (`requestInput` as the pipelines agent), on the locked row.
+ */
+export async function tagPipelineRequest(ctx: Ctx, taskId: string, requestId: string, pipeline: PipelineRequestRef): Promise<void> {
+  await inTransaction(ctx, async (tx) => {
+    const current = await findTask(tx, taskId, { lock: true });
+    if (current.inputRequest?.id !== requestId) return;
+    await tx.db.update(tasks).set({ inputRequest: { ...current.inputRequest, pipeline } }).where(tenantRow(tx, tasks, taskId));
+  });
+}
+
+/**
+ * Marks a person's answer collected by whoever asked it, for answers the pipeline engine acted on
+ * itself: the pipelines agent never calls `collect_answers`, and an answer the run already moved
+ * on with cannot be taken back.
+ */
+export async function markAnswerCollected(ctx: Ctx, taskId: string, requestId: string): Promise<void> {
+  await inTransaction(ctx, async (tx) => {
+    const current = await findTask(tx, taskId, { lock: true });
+    if (!current.inputAnswers.some((entry) => entry.id === requestId && !entry.collected)) return;
+    const inputAnswers = current.inputAnswers.map((entry) => (entry.id === requestId ? { ...entry, collected: true } : entry));
+    await tx.db.update(tasks).set({ inputAnswers }).where(tenantRow(tx, tasks, taskId));
+  });
+}
+
 /** What the activity log keeps of a session: enough to find the conversation again. */
 const sessionData = ({ app, url, sessionId }: AgentSession) => ({ app, url, sessionId });
 
@@ -333,6 +365,8 @@ async function operatorName(ctx: Ctx, task: Pick<Task, "claimedByAgentId" | "ope
  * its parent's other sub-agents) counts as its own.
  */
 async function assertNotClaimedByOther(ctx: Ctx, task: Task): Promise<void> {
+  // A pipeline's own moves on its stops are the run's decision, whoever works on the task.
+  if (isPipelineActor(ctx)) return;
   const me = agentIdOf(ctx);
   if (!me || (!task.claimedByAgentId && !task.operatorUserId) || (await operates(ctx, task))) return;
   const who = await operatorName(ctx, task);
@@ -406,6 +440,9 @@ async function capture(ctx: Ctx, drafts: z.output<typeof TaskDraft>[]): Promise<
         data: { goalId: task.goalId, source: task.source, status: task.status },
       })),
     );
+
+    // A pipeline whose trigger matches a new task starts a run on it.
+    if (!isPipelineActor(tx)) await onTasksCaptured(tx, created);
 
     return {
       created,
@@ -485,6 +522,10 @@ export const updateTask = service(UpdateTaskInput, async (ctx, input): Promise<T
       // The status lets the timeline replay where a task stood on each day.
       data: { changed, goalId: task!.goalId, ...(statusChange && { status: statusChange }), ...(moved && { stage: task!.stage }) },
     });
+    // A pipeline stop's task that is finished or dropped moves its run on.
+    if ((statusChange === "done" || statusChange === "dropped") && !isPipelineActor(tx)) {
+      await onTaskFinished(tx, task!, { kind: statusChange === "done" ? "completed" : "dropped", note: "" });
+    }
     return task!;
   });
 });
@@ -587,12 +628,14 @@ export const takeTask = service(TaskRefInput, async (ctx, { taskId }): Promise<T
 /** Who a handoff is for, found in this workspace: a live agent by id or name, or a member by user id or email. */
 async function handoffTarget(ctx: Ctx, toAgent?: string, toPerson?: string): Promise<{ agentId: string | null; userId: string | null; name: string } | null> {
   if (toAgent) {
-    const [byId] = await ctx.db.select({ id: agents.id, name: agents.name }).from(agents).where(and(inTenant(ctx, agents), eq(agents.id, toAgent), liveAgent()));
+    // The pipelines agent takes work back only by handBack, never by name.
+    const connected = and(inTenant(ctx, agents), sql`${agents.authKind} <> 'system'`, liveAgent());
+    const [byId] = await ctx.db.select({ id: agents.id, name: agents.name }).from(agents).where(and(connected, eq(agents.id, toAgent)));
     if (byId) return { agentId: byId.id, userId: null, name: byId.name };
     const named = await ctx.db
       .select({ id: agents.id, name: agents.name })
       .from(agents)
-      .where(and(inTenant(ctx, agents), sql`lower(${agents.name}) = lower(${toAgent})`, liveAgent()))
+      .where(and(connected, sql`lower(${agents.name}) = lower(${toAgent})`))
       .orderBy(asc(agents.createdAt))
       .limit(5);
     if (named.length === 0) throw notFound("connected agent named or with id", toAgent);
@@ -716,6 +759,8 @@ export const handOffTask = service(HandOffInput, async (ctx, { taskId, toAgent, 
         handedOffByBefore: before,
       },
     });
+    // Handing a pipeline stop back to the pipeline that handed it over finishes the stop with the note.
+    if (handBack && !isPipelineActor(tx)) await onTaskFinished(tx, task!, { kind: "handed_back", note });
     return task!;
   });
 });
@@ -904,6 +949,8 @@ export const answerInput = service(AnswerInput, async (ctx, { taskId, answer: wr
       summary: answer ? `answered ${open.agentName} on "${current.title}"` : `marked ${open.agentName}'s question on "${current.title}" answered`,
       data: { goalId: current.goalId, agentId: open.agentId, requestId: open.id, kind: open.kind, question: open.question, answer, ...(picked && { choices: picked }) },
     });
+    // A pipeline's decision moves its run on; an answer from someone the stop does not ask is refused.
+    if (open.pipeline) await onRequestAnswered(tx, task!, record);
     return task!;
   });
 });
@@ -1077,6 +1124,8 @@ export const releaseTask = service(ReleaseTaskInput, async (ctx, { taskId, note 
       summary: `released "${current.title}"${await forWhom(tx, current)}`,
       data: { goalId: current.goalId, fromAgentId: current.claimedByAgentId, fromUserId: current.operatorUserId, ...(note && { note }) },
     });
+    // A pipeline stop its operator lets go of has failed: its failure rule says what next.
+    if (!isPipelineActor(tx)) await onTaskFinished(tx, task!, { kind: "released", note });
     return task!;
   });
 });
@@ -1202,6 +1251,8 @@ export const completeTask = service(CompleteTaskInput, async (ctx, { taskId, not
       summary: `completed "${current.title}"${await forWhom(tx, current)}`,
       data: { goalId: current.goalId, note, ...onBehalfOf(ctx, current) },
     });
+    // The result of a pipeline stop goes to the next one.
+    if (!isPipelineActor(tx)) await onTaskFinished(tx, task!, { kind: "completed", note });
     return task!;
   });
 });
