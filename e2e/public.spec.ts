@@ -131,6 +131,9 @@ test("the landing page shows agents handing a task between them, and tells it in
   await stage.evaluate((element) => element.scrollIntoView({ block: "center" }));
   const beat = () => stage.evaluate((element) => Number(getComputedStyle(element).getPropertyValue("--beat")));
   await expect.poll(beat, { timeout: 10_000 }).toBeGreaterThanOrEqual(2);
+  // Each app comes to the front as its part plays: the chat first, then Phean, then Claude's session.
+  await expect(stage).toHaveAttribute("data-front", "phean", { timeout: 10_000 });
+  await expect(stage).toHaveAttribute("data-front", "claude", { timeout: 10_000 });
   await section.getByRole("button", { name: "Pause the handoff" }).click();
   await expect(section.getByRole("button", { name: "Play the handoff" })).toHaveAttribute("aria-pressed", "true");
   const held = await beat();
@@ -138,6 +141,46 @@ test("the landing page shows agents handing a task between them, and tells it in
   expect(await beat()).toBe(held);
   await section.getByRole("button", { name: "Play the handoff" }).click();
   await expect.poll(beat, { timeout: 5000 }).not.toBe(held);
+});
+
+test("on a phone the handoff's apps are windows on a small desktop, about one screen tall", async ({ browser }) => {
+  const phone = await browser.newContext({ viewport: { width: 375, height: 740 } });
+  const page = await phone.newPage();
+  await page.goto("/#handoffs");
+  const stage = page.locator("[data-handoff]");
+  await stage.evaluate((element) => element.scrollIntoView({ block: "center" }));
+  const desk = stage.locator("[data-desk]");
+  const { width, height } = (await desk.boundingBox())!;
+  expect(height).toBeGreaterThanOrEqual(540);
+  expect(height).toBeLessThanOrEqual(640);
+  // The windows overlap, cascaded, and each stays inside the desk (where it sits when open, not as it opens).
+  const boxes = await desk.locator("[data-window]").evaluateAll((windows) =>
+    windows.map((window) => {
+      const element = window as HTMLElement;
+      return { left: element.offsetLeft, top: element.offsetTop, right: element.offsetLeft + element.offsetWidth, bottom: element.offsetTop + element.offsetHeight };
+    }),
+  );
+  expect(boxes).toHaveLength(3);
+  for (const box of boxes) {
+    expect(box.left).toBeGreaterThanOrEqual(0);
+    expect(box.right).toBeLessThanOrEqual(width + 1);
+    expect(box.bottom).toBeLessThanOrEqual(height + 1);
+  }
+  expect(boxes[1]!.top).toBeGreaterThan(boxes[0]!.top);
+  expect(boxes[2]!.top).toBeGreaterThan(boxes[1]!.top);
+  // Everything on it reads at 12px or more.
+  const small = await desk.evaluate((element) =>
+    [...element.querySelectorAll("*")]
+      .filter((node) => [...node.childNodes].some((child) => child.nodeType === Node.TEXT_NODE && child.textContent!.trim()))
+      .filter((node) => parseFloat(getComputedStyle(node).fontSize) < 12)
+      .map((node) => node.textContent!.trim().slice(0, 30)),
+  );
+  expect(small).toEqual([]);
+  // The chat opens first, and the others open over it as the story reaches them.
+  await expect(stage).toHaveAttribute("data-open", "grok");
+  await expect(stage).toHaveAttribute("data-open", /phean/, { timeout: 10_000 });
+  await expect(stage).toHaveAttribute("data-open", /claude/, { timeout: 10_000 });
+  await phone.close();
 });
 
 test("the handoff story is a still storyboard for people who ask for less motion", async ({ browser }) => {

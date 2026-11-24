@@ -5,11 +5,11 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 
-import { beatAt, HANDOFF_LOOP_MS } from "./handoff-beats";
+import { beatAt, HANDOFF_FRONT, HANDOFF_LOOP_MS, openAt } from "./handoff-beats";
 
 /**
- * The handoff story's player: it moves the stage's `--beat` along `HANDOFF_BEATS`, and the stylesheet
- * fades each piece in and out from that. The clock runs only while the stage is on screen, the tab is
+ * The handoff story's player: it moves the stage's `--beat` along `HANDOFF_BEATS` (with the window in
+ * front and the windows open), and the stylesheet brings each piece in and out from that. The clock runs only while the stage is on screen, the tab is
  * visible, and neither its own Pause nor the page's (`data-paused` on the root) holds it, and it goes
  * on from where it stopped. With reduced motion it never starts: the storyboard stands in for it.
  */
@@ -34,6 +34,9 @@ export function HandoffPlayer({ picture, steps }: { picture: ReactNode; steps: R
       if (next === beat) return;
       beat = next;
       element.style.setProperty("--beat", String(next));
+      // Which app is in front, and which are open: where the windows overlap, they follow the story.
+      element.dataset.front = HANDOFF_FRONT[next];
+      element.dataset.open = openAt(next);
     };
     const running = () => inView && !document.hidden && !held.current && !document.documentElement.hasAttribute("data-paused");
     const tick = () => {

@@ -1,22 +1,41 @@
-import { Bot, Check, FileText, Handshake, LoaderCircle, MessageSquare, Plus, SendHorizontal, User, Webhook } from "lucide-react";
+import {
+  Bot,
+  Check,
+  ChevronRight,
+  CircleCheck,
+  FileText,
+  Globe,
+  Handshake,
+  LoaderCircle,
+  Lock,
+  Mail,
+  MessageSquare,
+  Plus,
+  SendHorizontal,
+  User,
+  Webhook,
+  Zap,
+} from "lucide-react";
 import type { ReactNode } from "react";
 
+import { LogoMark } from "@/components/logo";
 import { Badge } from "@/components/ui/badge";
 import { cx } from "@/lib/cx";
 import { DELEGATION_META, TASK_STATUS_META } from "@/lib/domain";
 
 import { AgentMark } from "./agent-logo";
-import { HANDOFF_END, shown } from "./handoff-beats";
+import { HANDOFF_END, shown, type HandoffWindow } from "./handoff-beats";
 import { HandoffPlayer } from "./handoff-player";
-import { ProductFrame } from "./product-frame";
 
 /*
- * Agents passing one task between them, through Phean (the landing page's #handoffs). The owner asks
- * Grok Bot in a chat; Grok Bot drafts the email and hands the task to Claude; a Claude Code routine
- * wakes on Phean's webhook, researches, adds three lines and hands it back; Grok Bot sends it and
- * completes the task. Phean, in the middle, is the picture both act on. Every piece of the stage is
- * shown from one beat to another (`shown`), and the player moves the beat. All sample data, with
- * fictional companies and `.example` addresses: a drawing of the product, not the product.
+ * Agents passing one task between them, through Phean (the landing page's #handoffs), each in its own
+ * app. The owner asks Grok Bot in a chat; Grok Bot drafts the email and hands the task to Claude in
+ * Phean; Phean's webhook fires a Claude Code routine, whose session researches, adds three lines and
+ * hands the task back; Grok Bot hears, sends the email and completes the task. Phean is the picture
+ * both act on. Side by side from 1024px; under that the three are windows on a small desktop, each
+ * opening and coming to the front as its part plays (`data-front`, `data-open`, set by the player).
+ * Every piece is shown from one beat to another (`shown`). All sample data, with fictional companies
+ * and `.example` addresses: a drawing of the products, not the products.
  */
 
 const END = HANDOFF_END;
@@ -26,6 +45,11 @@ const CLAUDE = { name: "Claude", mark: "claude" } as const;
 const ASK = "Send Dana at Acme the follow-up on Thursday's pricing call. Get Claude to add context from their latest news first.";
 const NOTE_OUT = "Draft is attached. Add context and detail from recent research online: their funding, launches, hiring. Hand it back when done.";
 const NOTE_BACK = "Added 3 points from their Series B news and Q3 launch; sources linked.";
+const ADDED = [
+  "Congratulations on the $40M Series B. Annual seat pooling suits a team that is growing.",
+  "Acme Flow's Q3 launch looked great, and our approvals sync straight into it.",
+  "With 12 sales roles open, each new rep is set up in minutes.",
+];
 
 /** A handover badge, as `DelegationBadge` draws it: the handshake, the state's words and tone. */
 function Handover({ state, to }: { state: keyof typeof DELEGATION_META; to?: string }) {
@@ -54,236 +78,277 @@ function Slot({ children, className }: { children: ReactNode; className?: string
   return <div className={cx("grid *:col-start-1 *:row-start-1", className)}>{children}</div>;
 }
 
-/** An app's window on the page: a title bar with the agent's mark, and what it shows. */
-function Window({
-  title,
-  detail,
-  mark,
-  status,
-  children,
-  className,
-}: {
-  title: string;
-  detail: string;
-  mark: ReactNode;
-  status?: ReactNode;
-  children: ReactNode;
-  className?: string;
-}) {
+/**
+ * A conversation or a log that grows from the bottom: its lines take room only once they arrive
+ * (`flow`), and the oldest slide up out of the top, as in the app.
+ */
+function Feed({ children, className }: { children: ReactNode; className?: string }) {
+  return <div className={cx("handoff-feed flex min-h-0 flex-1 flex-col justify-end overflow-hidden", className)}>{children}</div>;
+}
+
+/** Where each window sits: side by side from 1024px, cascaded on a small desktop under it. */
+const PLACES: Record<HandoffWindow, string> = {
+  grok: "z-[1] max-lg:top-0 max-lg:left-0 max-lg:h-[400px] lg:h-[27rem]",
+  claude: "z-[2] max-lg:top-10 max-lg:left-[5%] max-lg:h-[440px] lg:h-[27rem]",
+  phean: "z-[3] max-lg:top-[92px] max-lg:left-[10%] max-lg:h-[488px] lg:col-span-2 lg:h-[29rem]",
+};
+
+/** An app's window on the stage: a title bar, then what the app shows. */
+function Window({ app, bar, children }: { app: HandoffWindow; bar: ReactNode; children: ReactNode }) {
   return (
-    <div className={cx("product-frame flex flex-col ring-1 ring-rule", className)}>
-      <div className="flex items-center gap-2.5 border-b border-rule px-4 py-2.5">
-        <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-fill text-ink ring-1 ring-rule ring-inset">{mark}</span>
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-semibold text-ink">{title}</span>
-          <span className="block truncate text-2xs text-muted">{detail}</span>
-        </span>
-        {status}
-      </div>
+    <div data-window={app} className={cx("product-frame flex flex-col ring-1 ring-rule max-lg:absolute max-lg:w-[90%]", PLACES[app])}>
+      <div className="flex shrink-0 items-center gap-2.5 border-b border-rule px-3.5 py-2">{bar}</div>
       {children}
     </div>
   );
 }
 
-/* --- Grok Bot: a chat with the owner ------------------------------------------------------------ */
+function AppMark({ children }: { children: ReactNode }) {
+  return <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-fill text-ink ring-1 ring-rule ring-inset">{children}</span>;
+}
 
-function Typing({ from, to }: { from: number; to: number }) {
+/* --- Grok Bot: a chat with its person ---------------------------------------------------------------- */
+
+function GrokFace() {
   return (
-    <span {...shown(from, to, { delay: 500, swap: true })} className="flex items-end gap-2 self-start">
-      <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-fill text-ink ring-1 ring-rule ring-inset">
-        <AgentMark {...GROK} className="size-3.5" />
-      </span>
-      <span data-typing className="flex h-8 items-center gap-1 rounded-2xl rounded-bl-sm bg-fill px-3.5">
-        {[0, 1, 2].map((dot) => (
-          <span key={dot} className="size-1.5 rounded-full bg-muted" style={{ animationDelay: `${dot * 160}ms` }} />
-        ))}
-      </span>
+    <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-fill text-ink ring-1 ring-rule ring-inset">
+      <AgentMark {...GROK} className="size-3.5" />
     </span>
   );
 }
 
-function FromGrok({ from, time, children }: { from: number; time: string; children: ReactNode }) {
+function Typing({ from, to, delay }: { from: number; to: number; delay: number }) {
   return (
-    <div {...shown(from, END, { swap: true })} className="flex items-end gap-2 self-start pr-8">
-      <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-fill text-ink ring-1 ring-rule ring-inset">
-        <AgentMark {...GROK} className="size-3.5" />
-      </span>
-      <span>
-        <span className="block rounded-2xl rounded-bl-sm bg-fill px-3.5 py-2 text-sm text-ink">{children}</span>
-        <span className="mt-0.5 block pl-1 text-2xs text-muted">{`Grok Bot · ${time}`}</span>
-      </span>
+    <div {...shown(from, to, { delay, flow: true })}>
+      <div className="flex items-end gap-2 pt-3">
+        <GrokFace />
+        <span data-typing className="flex h-8 items-center gap-1 rounded-2xl rounded-bl-sm bg-fill px-3.5">
+          {[0, 1, 2].map((dot) => (
+            <span key={dot} className="size-1.5 rounded-full bg-muted" style={{ animationDelay: `${dot * 160}ms` }} />
+          ))}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function FromGrok({ from, time, children, extra }: { from: number; time: string; children: ReactNode; extra?: ReactNode }) {
+  return (
+    <div {...shown(from, END, { flow: true })}>
+      <div className="flex items-end gap-2 pt-3 pr-6">
+        <GrokFace />
+        <div className="min-w-0">
+          <p className="rounded-2xl rounded-bl-sm bg-fill px-3.5 py-2 text-sm text-ink">{children}</p>
+          {extra}
+          <p className="mt-0.5 pl-1 text-xs text-muted">{`Grok Bot · ${time}`}</p>
+        </div>
+      </div>
     </div>
   );
 }
 
 function GrokChat() {
   return (
-    <Window title="Grok Bot" detail="Chat" mark={<AgentMark {...GROK} className="size-4" />}>
-      <div className="flex flex-1 flex-col gap-3 px-4 py-4">
-        <div {...shown(1)} className="self-end pl-10 text-right">
-          <p className="rounded-2xl rounded-br-sm bg-accent-tint px-3.5 py-2 text-left text-sm text-ink">{ASK}</p>
-          <p className="mt-0.5 pr-1 text-2xs text-muted">You · 9:40</p>
+    <Window
+      app="grok"
+      bar={
+        <>
+          <AppMark>
+            <AgentMark {...GROK} className="size-4" />
+          </AppMark>
+          <span className="min-w-0 flex-1 text-sm">
+            <span className="font-semibold text-ink">Grok Bot</span> <span className="text-xs text-muted">· Chat</span>
+          </span>
+        </>
+      }
+    >
+      <Feed className="px-3.5 pb-3">
+        <div {...shown(1, END, { flow: true })}>
+          <div className="pt-3 pl-8 text-right">
+            <p className="rounded-2xl rounded-br-sm bg-accent-tint px-3.5 py-2 text-left text-sm text-ink">{ASK}</p>
+            <p className="mt-0.5 pr-1 text-xs text-muted">You · 9:40</p>
+          </div>
         </div>
-        <Slot className="self-stretch">
-          <Typing from={1} to={2} />
-          <FromGrok from={2} time="9:40">
-            Drafting… handing the research to Claude in Phean.
-          </FromGrok>
-        </Slot>
-        <p {...shown(11)} className="mx-auto flex items-center gap-1.5 rounded-full bg-fill px-3 py-1 text-2xs text-ink-2">
-          <Webhook aria-hidden className="size-3" />
-          Phean · <span className="font-mono">handed_to_you</span> · from Claude
-        </p>
-        <Slot className="self-stretch">
-          <Typing from={11} to={12} />
-          <FromGrok from={12} time="9:42">
-            Claude added 3 points from their news. Here&apos;s the final, sending now.
-          </FromGrok>
-        </Slot>
+        <Typing from={1} to={2} delay={700} />
+        <FromGrok from={2} time="9:40">
+          Drafting… handing the research to Claude in Phean.
+        </FromGrok>
+        <div {...shown(11, END, { flow: true })}>
+          <p className="mx-auto mt-3 flex w-fit items-center gap-1.5 rounded-full bg-fill px-3 py-1 text-xs text-ink-2">
+            <Webhook aria-hidden className="size-3" />
+            Phean · <span className="font-mono">handed_to_you</span>
+          </p>
+        </div>
+        <Typing from={11} to={12} delay={500} />
+        <FromGrok
+          from={12}
+          time="9:42"
+          extra={
+            <p className="mt-1.5 flex items-start gap-2 rounded-lg border border-rule bg-panel px-3 py-2 text-xs text-ink">
+              <Mail aria-hidden className="mt-0.5 size-3.5 shrink-0 text-muted" />
+              <span>
+                <span className="block font-semibold">Following up on Thursday&apos;s pricing call</span>
+                <span className="block text-muted">To dana@acme.example · 3 points added by Claude</span>
+              </span>
+            </p>
+          }
+        >
+          Claude added 3 points from their news. Here&apos;s the final, sending now.
+        </FromGrok>
         <FromGrok from={13} time="9:42">
           Sent to dana@acme.example ✓
         </FromGrok>
-      </div>
-      <div className="flex items-center gap-2 border-t border-rule px-4 py-2.5">
-        <span className="flex-1 truncate rounded-full bg-fill px-3.5 py-1.5 text-xs text-muted">Message Grok Bot</span>
+      </Feed>
+      <div className="flex shrink-0 items-center gap-2 border-t border-rule px-3.5 py-2">
+        <span className="flex-1 rounded-full bg-fill px-3.5 py-1.5 text-xs text-ink-2">Message Grok Bot</span>
         <SendHorizontal aria-hidden className="size-4 text-muted" />
       </div>
     </Window>
   );
 }
 
-/* --- Claude: a scheduled routine's run log --------------------------------------------------------- */
+/* --- Claude: a Claude Code session, started by a routine ------------------------------------------- */
 
-const LOG: {
-  from: number;
-  delay?: number;
-  time?: string;
-  tick: string;
-  tool?: string;
-  text: string;
-}[] = [
-  {
-    from: 4,
-    time: "09:41:02",
-    tick: "↓",
-    tool: "webhook",
-    text: "task.handed_off · handed_to_you",
-  },
-  {
-    from: 5,
-    time: "09:41:03",
-    tick: "✓",
-    tool: "claim_task",
-    text: "“Follow up with Dana at Acme”",
-  },
-  {
-    from: 6,
-    time: "09:41:05",
-    tick: "⌕",
-    tool: "web_search",
-    text: "Acme funding, launches, hiring",
-  },
-  {
-    from: 6,
-    delay: 700,
-    tick: "↳",
-    text: "news.example · Acme raises $40M Series B",
-  },
-  {
-    from: 7,
-    tick: "↳",
-    text: "acme.example/blog · Introducing Acme Flow (Q3)",
-  },
-  { from: 8, tick: "↳", text: "filings.example · Acme Inc., Form D" },
-  {
-    from: 9,
-    time: "09:41:19",
-    tick: "✓",
-    tool: "update_document",
-    text: "Email to Dana · +3 lines",
-  },
-  {
-    from: 10,
-    time: "09:41:22",
-    tick: "✓",
-    tool: "hand_off_task",
-    text: "handBack: true",
-  },
-  { from: 10, delay: 600, tick: "↳", text: `note: “${NOTE_BACK}”` },
-  { from: 11, time: "09:41:23", tick: "■", text: "Run finished · 21s" },
+/** A tool call, folded the way a session folds it: its name, what it was given, and a tick. */
+function ToolCall({ tool, detail }: { tool: string; detail: string }) {
+  return (
+    <p className="flex items-start gap-1.5 rounded-md border border-rule bg-panel px-2.5 py-1.5 text-xs">
+      <ChevronRight aria-hidden className="mt-0.5 size-3 shrink-0 text-muted" />
+      <span className="min-w-0 flex-1">
+        <span className="font-mono font-semibold text-ink">{tool}</span> <span className="text-ink-2">{detail}</span>
+      </span>
+      <Check aria-hidden className="mt-0.5 size-3.5 shrink-0 text-arrive-ink" />
+    </p>
+  );
+}
+
+/** One line of the session, arriving at its beat. */
+function Line({ from, delay, children }: { from: number; delay?: number; children: ReactNode }) {
+  return (
+    <div {...shown(from, END, { delay, flow: true })}>
+      <div className="pt-2">{children}</div>
+    </div>
+  );
+}
+
+const SOURCES = [
+  { from: 6, delay: 700, site: "news.example", title: "Acme raises $40M Series B" },
+  { from: 7, delay: 0, site: "acme.example/blog", title: "Introducing Acme Flow (Q3)" },
+  { from: 7, delay: 500, site: "filings.example", title: "Acme Inc., Form D" },
 ];
 
-function ClaudeRoutine() {
+function ClaudeSession() {
   return (
     <Window
-      title="Claude · scheduled routine"
-      detail="Research for Grok Bot · wakes on Phean webhooks"
-      mark={<AgentMark {...CLAUDE} className="size-4" />}
-      status={
-        <Slot className="justify-items-end">
-          <span {...shown(0, 4, { swap: true })}>
-            <Badge>Waiting</Badge>
+      app="claude"
+      bar={
+        <span className="min-w-0 flex-1">
+          <span className="flex items-center gap-2.5">
+            <AppMark>
+              <AgentMark {...CLAUDE} className="size-4" />
+            </AppMark>
+            <span className="min-w-0 flex-1 text-sm font-semibold text-ink">Research for Grok Bot</span>
+            <Slot className="shrink-0 justify-items-end">
+              <span {...shown(0, 4, { swap: true })}>
+                <Badge>Idle</Badge>
+              </span>
+              <span {...shown(4, 10, { swap: true })}>
+                <Badge tone="info">
+                  <LoaderCircle aria-hidden />
+                  Running
+                </Badge>
+              </span>
+              <span {...shown(10, END, { swap: true })}>
+                <Badge tone="success">
+                  <Check aria-hidden />
+                  Succeeded
+                </Badge>
+              </span>
+            </Slot>
           </span>
-          <span {...shown(4, 11, { swap: true })}>
-            <Badge tone="info">
-              <LoaderCircle aria-hidden />
-              Running
-            </Badge>
+          <span className="mt-1 flex flex-wrap items-center gap-x-1.5 text-xs text-muted">
+            <span className="inline-flex items-center gap-1 font-semibold text-ink-2">
+              <Zap aria-hidden className="size-3" />
+              Routine
+            </span>
+            Triggered by API · Phean webhook
           </span>
-          <span {...shown(11, END, { swap: true })}>
-            <Badge tone="success">
-              <Check aria-hidden />
-              Finished
-            </Badge>
-          </span>
-        </Slot>
+        </span>
       }
     >
-      <div className="flex-1 bg-dusk px-4 py-3.5 font-mono text-xs leading-5 text-dusk-ink">
-        <p className="text-dusk-muted">$ routine listen --phean handed_to_you</p>
-        <ul className="mt-1.5">
-          {LOG.map(({ from, delay, time, tick, tool, text }) => (
-            <li
-              key={text}
-              {...shown(from, END, { delay })}
-              className="grid grid-cols-[4.5rem_1rem_minmax(0,1fr)] gap-x-1.5 max-sm:grid-cols-[1rem_minmax(0,1fr)]"
-            >
-              <span className="text-dusk-muted max-sm:hidden">{time}</span>
-              <span aria-hidden className={cx(tick === "↳" ? "text-dusk-muted" : "text-dusk-hill")}>
-                {tick}
-              </span>
-              <span className={cx("wrap-anywhere", !tool && "text-dusk-muted")}>
-                {tool && <span className="font-semibold">{tool} </span>}
-                {text}
-              </span>
-            </li>
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        <p {...shown(0, 4, { swap: true })} className="absolute inset-x-0 top-1/2 -translate-y-1/2 px-6 text-center text-xs text-muted">
+          Waits for its trigger: a POST from Phean to its Fire URL.
+        </p>
+        <Feed className="px-3.5 pb-3.5">
+          {/* The run's first turn: what the Fire URL was sent, as the routine hands it over. */}
+          <Line from={4}>
+            <div className="rounded-lg bg-fill px-3 py-2 text-xs text-ink">
+              <p className="font-mono text-ink-2">&lt;routine-fire-payload&gt;</p>
+              <p className="mt-1">Phean: 1 change for Claude in Globex. Read the current state from Phean before you act.</p>
+              <p className="mt-1">– Grok Bot is handing off “Follow up with Dana at Acme” to Claude [handed_to_you]</p>
+            </div>
+          </Line>
+          <Line from={5}>
+            <p className="text-sm text-ink">Grok Bot handed me the follow-up for Dana. Picking it up.</p>
+          </Line>
+          <Line from={5} delay={500}>
+            <ToolCall tool="phean · claim_task" detail="Follow up with Dana at Acme" />
+          </Line>
+          <Line from={6}>
+            <ToolCall tool="web_search" detail="Acme funding, launches, hiring" />
+          </Line>
+          {SOURCES.map(({ from, delay, site, title }) => (
+            <Line key={site} from={from} delay={delay}>
+              <p className="flex items-start gap-1.5 pl-5 text-xs text-ink-2">
+                <Globe aria-hidden className="mt-0.5 size-3 shrink-0 text-muted" />
+                <span>
+                  <span className="font-semibold text-ink">{site}</span> · {title}
+                </span>
+              </p>
+            </Line>
           ))}
-        </ul>
+          <Line from={8}>
+            <ToolCall tool="phean · update_document" detail="Email to Dana, 3 lines added" />
+          </Line>
+          <Line from={8} delay={400}>
+            <ul className="space-y-1 pl-5">
+              {ADDED.map((line) => (
+                <li key={line} className="flex gap-1.5 rounded-xs border-l-2 border-accent bg-accent-tint px-2 py-0.5 text-xs text-ink">
+                  <Plus aria-hidden className="mt-0.5 size-3 shrink-0 text-accent-ink" />
+                  {line}
+                </li>
+              ))}
+            </ul>
+          </Line>
+          <Line from={9}>
+            <ToolCall tool="phean · hand_off_task" detail="handBack: true" />
+          </Line>
+          <Line from={9} delay={500}>
+            <p className="ml-5 border-l-2 border-rule pl-2.5 text-xs text-ink-2">“{NOTE_BACK}”</p>
+          </Line>
+          <Line from={10}>
+            <p className="flex items-center gap-1.5 text-xs text-ink-2">
+              <CircleCheck aria-hidden className="size-3.5 text-arrive-ink" />
+              Handed back to Grok Bot. Run finished in 21s.
+            </p>
+          </Line>
+        </Feed>
       </div>
     </Window>
   );
 }
 
-/* --- Phean: the task both agents act on --------------------------------------------------------- */
+/* --- Phean: the task both act on ------------------------------------------------------------------- */
 
-const ACTIVITY: {
-  from: number;
-  who: typeof GROK | typeof CLAUDE;
-  text: string;
-  time: string;
-}[] = [
-  { from: 2, who: GROK, text: "claimed it, from chat", time: "9:40" },
-  { from: 3, who: GROK, text: "is handing it off to Claude", time: "9:40" },
+const ACTIVITY: { from: number; delay?: number; who: typeof GROK | typeof CLAUDE; text: string; time: string }[] = [
+  { from: 3, who: GROK, text: "claimed it, from chat", time: "9:40" },
+  { from: 3, delay: 400, who: GROK, text: "is handing it off to Claude", time: "9:40" },
   { from: 5, who: CLAUDE, text: "picked it up", time: "9:41" },
-  { from: 9, who: CLAUDE, text: "updated “Email to Dana”", time: "9:41" },
-  {
-    from: 10,
-    who: CLAUDE,
-    text: "is handing it back to Grok Bot",
-    time: "9:41",
-  },
-  { from: 12, who: GROK, text: "picked it up", time: "9:42" },
-  { from: 13, who: GROK, text: "completed it", time: "9:42" },
+  { from: 8, who: CLAUDE, text: "updated “Email to Dana”", time: "9:41" },
+  { from: 9, who: CLAUDE, text: "is handing it back to Grok Bot", time: "9:41" },
+  { from: 11, who: GROK, text: "picked it up", time: "9:42" },
+  { from: 14, who: GROK, text: "completed it", time: "9:42" },
 ];
 
 function Operator({ name, from, to }: { name: string; from: number; to: number }) {
@@ -297,7 +362,7 @@ function Operator({ name, from, to }: { name: string; from: number; to: number }
 
 function Note({ by, from, to, children }: { by: string; from: number; to: number; children: ReactNode }) {
   return (
-    <figure {...shown(from, to, { swap: true })} className="rounded-md border border-rule bg-fill/60 px-3 py-2 text-xs">
+    <figure {...shown(from, to, { swap: true })} className="self-start rounded-md border border-rule bg-fill/60 px-3 py-2 text-xs">
       <figcaption className="font-semibold text-ink-2">
         Handoff note <span className="font-normal text-muted">· {by}</span>
       </figcaption>
@@ -308,16 +373,16 @@ function Note({ by, from, to, children }: { by: string; from: number; to: number
 
 function TaskCard() {
   return (
-    <div {...shown(2)} className="relative rounded-lg border border-rule bg-panel p-3.5">
+    <div {...shown(3)} className="relative shrink-0 rounded-lg border border-rule bg-panel p-3 sm:p-3.5">
       {/* Work in transit takes a dashed edge, as a board card does while it is handed off. */}
       <span {...shown(3, 5, { swap: true })} className="pointer-events-none absolute -inset-px rounded-lg border border-dashed border-line-inbox" />
-      <span {...shown(10, 12, { swap: true })} className="pointer-events-none absolute -inset-px rounded-lg border border-dashed border-line-inbox" />
-      <div className="flex items-center gap-2">
+      <span {...shown(9, 11, { swap: true })} className="pointer-events-none absolute -inset-px rounded-lg border border-dashed border-line-inbox" />
+      <div className="flex flex-wrap items-center gap-1.5">
         <Slot>
-          <span {...shown(2, 13, { swap: true })}>
+          <span {...shown(3, 14, { swap: true })}>
             <Status status="in_progress" />
           </span>
-          <span {...shown(13, END, { swap: true })}>
+          <span {...shown(14, END, { swap: true })}>
             <Status status="done" />
           </span>
         </Slot>
@@ -328,10 +393,10 @@ function TaskCard() {
           <span {...shown(5, 6, { swap: true })}>
             <Handover state="picking_up" />
           </span>
-          <span {...shown(10, 12, { swap: true })}>
+          <span {...shown(9, 11, { swap: true })}>
             <Handover state="handing_off" to="Grok Bot" />
           </span>
-          <span {...shown(12, 13, { swap: true })}>
+          <span {...shown(11, 12, { swap: true })}>
             <Handover state="picking_up" />
           </span>
         </Slot>
@@ -339,9 +404,9 @@ function TaskCard() {
       <p className="mt-2 text-sm font-semibold text-ink">{TASK}</p>
       <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
         <Slot>
-          <Operator name="Grok Bot" from={2} to={5} />
-          <Operator name="Claude" from={5} to={12} />
-          <Operator name="Grok Bot" from={12} to={END} />
+          <Operator name="Grok Bot" from={3} to={5} />
+          <Operator name="Claude" from={5} to={11} />
+          <Operator name="Grok Bot" from={11} to={END} />
         </Slot>
         <span className="inline-flex items-center gap-1">
           <MessageSquare aria-hidden className="size-3" />
@@ -352,18 +417,18 @@ function TaskCard() {
           Email to Dana
         </span>
       </div>
-      <Slot className="mt-3">
+      <Slot className="mt-2.5">
         <Note by="Grok Bot, for Claude" from={3} to={6}>
           {NOTE_OUT}
         </Note>
-        <p {...shown(6, 10, { swap: true })} className="flex items-center gap-1.5 self-start text-xs text-muted">
+        <p {...shown(6, 9, { swap: true })} className="flex items-center gap-1.5 self-start text-xs text-muted">
           <LoaderCircle aria-hidden className="size-3" />
           Claude is researching Acme
         </p>
-        <Note by="Claude, back to Grok Bot" from={10} to={13}>
+        <Note by="Claude, back to Grok Bot" from={9} to={14}>
           {NOTE_BACK}
         </Note>
-        <p {...shown(13, END, { swap: true })} className="flex items-start gap-1.5 self-start text-xs text-ink-2">
+        <p {...shown(14, END, { swap: true })} className="flex items-start gap-1.5 self-start text-xs text-ink-2">
           <Check aria-hidden className="mt-0.5 size-3 shrink-0 text-arrive-ink" />
           Grok Bot: sent to dana@acme.example, with Claude&apos;s three points.
         </p>
@@ -374,44 +439,42 @@ function TaskCard() {
 
 function Activity() {
   return (
-    <div className="mt-4">
-      <p className="mb-1.5 text-2xs font-semibold text-muted">Activity</p>
-      <ul className="space-y-1">
-        {ACTIVITY.map(({ from, who, text, time }) => (
-          <li key={`${from}-${text}`} {...shown(from)} className="flex items-center gap-2 text-xs">
-            <span className="flex size-5 shrink-0 items-center justify-center rounded-xs bg-fill text-ink ring-1 ring-rule ring-inset">
-              <AgentMark {...who} className="size-3" />
-            </span>
-            <span className="min-w-0 flex-1 truncate text-ink-2">
-              <span className="font-semibold text-ink">{who.name}</span> {text}
-            </span>
-            <span className="text-2xs text-muted">{time}</span>
-          </li>
+    <div className="mt-3 flex min-h-0 flex-1 flex-col">
+      <p className="shrink-0 text-xs font-semibold text-muted">Activity</p>
+      <Feed>
+        {ACTIVITY.map(({ from, delay, who, text, time }) => (
+          <div key={`${from}-${text}`} {...shown(from, END, { delay, flow: true })}>
+            <p className="flex items-center gap-2 pt-1.5 text-xs">
+              <span className="flex size-5 shrink-0 items-center justify-center rounded-xs bg-fill text-ink ring-1 ring-rule ring-inset">
+                <AgentMark {...who} className="size-3" />
+              </span>
+              <span className="min-w-0 flex-1 text-ink-2">
+                <span className="font-semibold text-ink">{who.name}</span> {text}
+              </span>
+              <span className="text-muted">{time}</span>
+            </p>
+          </div>
         ))}
-      </ul>
+      </Feed>
     </div>
   );
 }
 
 const DRAFT_TOP = ["Hi Dana,", "Thanks again for Thursday's call. As promised, here is the pricing for 40 seats, with the annual discount we discussed."];
-const DRAFT_ADDED = [
-  "Congratulations on the $40M Series B. Annual seat pooling suits a team that is growing.",
-  "Acme Flow's Q3 launch looked great, and our approvals sync straight into it.",
-  "With 12 sales roles open, each new rep is set up in minutes.",
-];
 const DRAFT_END = "Would Tuesday suit for 20 minutes to settle the details?";
 
+/** The email draft attached to the task, as it changes; shown where the windows sit side by side. */
 function Draft() {
   return (
-    <div {...shown(2)} className="flex flex-col rounded-lg border border-rule bg-panel">
+    <div {...shown(3)} className="flex flex-col rounded-lg border border-rule bg-panel max-lg:hidden">
       <div className="flex items-center gap-2 border-b border-rule px-3.5 py-2">
         <FileText aria-hidden className="size-3.5 text-muted" />
-        <span className="flex-1 truncate text-xs font-semibold text-ink">Email to Dana</span>
+        <span className="flex-1 text-xs font-semibold text-ink">Email to Dana</span>
         <Slot className="justify-items-end">
-          <span {...shown(2, 9, { swap: true })} className="text-2xs text-muted">
+          <span {...shown(3, 8, { swap: true })} className="text-xs text-muted">
             Revision 1 · Grok Bot
           </span>
-          <span {...shown(9, 13, { swap: true })} className="text-2xs text-muted">
+          <span {...shown(8, 13, { swap: true })} className="text-xs text-muted">
             Revision 2 · Claude
           </span>
           <span {...shown(13, END, { swap: true })}>
@@ -431,25 +494,25 @@ function Draft() {
         </p>
       </div>
       <Slot className="px-3.5 py-3 text-xs leading-5 text-ink">
-        <div {...shown(2, 9, { swap: true })} className="space-y-2">
+        <div {...shown(3, 8, { swap: true })} className="space-y-2">
           {DRAFT_TOP.map((line) => (
             <p key={line}>{line}</p>
           ))}
           <p>{DRAFT_END}</p>
         </div>
-        <div {...shown(9, END, { swap: true })} className="space-y-2">
+        <div {...shown(8, END, { swap: true })} className="space-y-2">
           {DRAFT_TOP.map((line) => (
             <p key={line}>{line}</p>
           ))}
           {/* Claude's lines, marked by a label and a plus as well as their wash. */}
           <div className="space-y-1">
-            <p {...shown(9, END, { delay: 150 })} className="text-2xs font-semibold text-accent-ink">
+            <p {...shown(8, END, { delay: 150 })} className="text-xs font-semibold text-accent-ink">
               Added by Claude
             </p>
-            {DRAFT_ADDED.map((line, index) => (
+            {ADDED.map((line, index) => (
               <p
                 key={line}
-                {...shown(9, END, { delay: 250 + index * 300 })}
+                {...shown(8, END, { delay: 250 + index * 300 })}
                 className="flex gap-1.5 rounded-xs border-l-2 border-accent bg-accent-tint px-2 py-1"
               >
                 <Plus aria-hidden className="mt-0.5 size-3.5 shrink-0 text-accent-ink" />
@@ -464,34 +527,40 @@ function Draft() {
   );
 }
 
-function PheanTask() {
+function PheanApp() {
   return (
-    <ProductFrame
-      active="Tasks"
-      label="Phean's task, shared by both agents: its operator, its handover, its note and its activity."
-      className="ring-1 ring-rule"
+    <Window
+      app="phean"
+      bar={
+        <span className="flex min-w-0 flex-1 items-center gap-1.5 rounded-full bg-fill px-3 py-1 text-xs text-ink-2">
+          <Lock aria-hidden className="size-3 shrink-0" />
+          <span>
+            <span className="text-ink">phean.ai</span>/w/globex/tasks
+          </span>
+        </span>
+      }
     >
-      <div className="grid grid-cols-1 gap-4 p-4 sm:p-5 md:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]">
-        <div>
+      <div className="flex shrink-0 items-center gap-2 border-b border-rule bg-glass px-3.5 py-2 text-xs">
+        <LogoMark className="size-4" />
+        <span className="font-semibold text-ink">Phean</span>
+        <span className="text-muted">/</span>
+        <span className="font-semibold text-ink-2">Globex</span>
+        <span className="ml-auto rounded-full bg-accent-tint px-2.5 py-0.5 font-semibold text-accent-ink">Tasks</span>
+      </div>
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 bg-paper p-3 sm:p-4 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]">
+        <div className="flex min-h-0 flex-col">
           <TaskCard />
           <Activity />
         </div>
         <Draft />
       </div>
-    </ProductFrame>
+    </Window>
   );
 }
 
 /* --- The story in words ---------------------------------------------------------------------------- */
 
-const STEPS: {
-  from: number;
-  to: number;
-  who: "you" | typeof GROK | typeof CLAUDE;
-  title: string;
-  body: string;
-  state: ReactNode;
-}[] = [
+const STEPS: { from: number; to: number; who: "you" | typeof GROK | typeof CLAUDE; title: string; body: string; state: ReactNode }[] = [
   {
     from: 1,
     to: 3,
@@ -518,12 +587,12 @@ const STEPS: {
     to: 6,
     who: CLAUDE,
     title: "Claude's routine picks it up",
-    body: "Phean's webhook (handed_to_you) wakes a scheduled Claude routine, which claims the task.",
+    body: "Phean's webhook (handed_to_you) fires a Claude Code routine; its session claims the task.",
     state: <Handover state="picking_up" />,
   },
   {
     from: 6,
-    to: 10,
+    to: 9,
     who: CLAUDE,
     title: "Claude researches and adds",
     body: "It reads a news story, Acme's blog and a filing, and adds three lines to the draft.",
@@ -535,7 +604,7 @@ const STEPS: {
     ),
   },
   {
-    from: 10,
+    from: 9,
     to: 11,
     who: CLAUDE,
     title: "Claude hands it back",
@@ -556,10 +625,12 @@ function Steps() {
   return (
     <ol
       aria-label="The handoff, step by step"
-      className="mt-8 grid grid-cols-1 gap-x-5 gap-y-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 motion-reduce:mt-0"
+      // On a phone the cascaded windows tell the story in one screen, so while they play the list is
+      // for screen readers only; with reduced motion it is the storyboard, shown everywhere.
+      className="mt-8 grid grid-cols-1 gap-x-5 gap-y-4 max-lg:motion-safe:sr-only sm:grid-cols-2 sm:gap-y-6 lg:grid-cols-3 xl:grid-cols-6 motion-reduce:mt-0"
     >
       {STEPS.map(({ from, to, who, title, body, state }, index) => (
-        <li key={title} data-step className="relative border-t-2 border-rule pt-3">
+        <li key={title} data-step className="relative border-t-2 border-rule pt-2.5 sm:pt-3">
           {/* The step playing now: a brand bar over the rule (the picture says the same in its own way). */}
           <span aria-hidden {...shown(from, to, { swap: true })} className="absolute inset-x-0 -top-0.5 h-0.5 rounded-full bg-accent motion-reduce:hidden" />
           <p className="flex items-center gap-2 text-xs font-semibold text-ink-2">
@@ -567,9 +638,10 @@ function Steps() {
             {who === "you" ? <User aria-hidden className="size-3.5" /> : <AgentMark {...who} className="size-3.5" />}
             {who === "you" ? "You" : who.name}
           </p>
-          <h3 className="mt-1.5 text-sm font-semibold text-ink">{title}</h3>
-          <p className="mt-1 text-xs text-ink-2">{body}</p>
-          <div className="mt-2">{state}</div>
+          <h3 className="mt-1 text-sm font-semibold text-ink sm:mt-1.5">{title}</h3>
+          <p className="mt-0.5 text-xs leading-snug text-ink-2 sm:mt-1 sm:leading-normal">{body}</p>
+          {/* On a phone the state sits beside the number, so each step stays a few lines tall. */}
+          <div className="mt-2 max-sm:absolute max-sm:top-2 max-sm:right-0 max-sm:mt-0">{state}</div>
         </li>
       ))}
     </ol>
@@ -577,19 +649,17 @@ function Steps() {
 }
 
 /**
- * The stage: Grok Bot's chat and Claude's routine side by side, each acting on Phean's task below
- * them, then the story in six numbered steps. With reduced motion only the steps show, a storyboard.
+ * The stage: Grok Bot's chat, Claude's routine session and Phean, then the story in six numbered
+ * steps. With reduced motion only the steps show, a storyboard.
  */
 export function HandoffRelay() {
   return (
     <HandoffPlayer
       picture={
-        <div className="grid grid-cols-1 gap-5">
-          <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-            <GrokChat />
-            <ClaudeRoutine />
-          </div>
-          <PheanTask />
+        <div data-desk className="relative max-lg:h-[580px] lg:grid lg:grid-cols-2 lg:gap-5">
+          <GrokChat />
+          <ClaudeSession />
+          <PheanApp />
         </div>
       }
       steps={<Steps />}

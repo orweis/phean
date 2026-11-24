@@ -840,19 +840,59 @@
 /*
  * The handoff story (components/marketing/handoff-relay.tsx): the player moves `--beat` on the
  * figure, and each piece of the stage shows from its `--in` beat until its `--out` beat. Without a
- * script the stage rests on the story's end (HANDOFF_REST). A piece arrives by a wipe (`clip-path`),
- * as if written, and those that are not states (`data-at=""`) rise a little as they come; a state
- * that takes another's place (`data-at="swap"`) replaces it at once and wipes in. Opacity is only
- * ever 0 or 1, never between, so no text is ever seen faded below its contrast. At the loop's last
- * beat the pieces that last to the end (`--hold`) wipe away together, and the stage starts clean.
+ * script the stage rests on the story's end (HANDOFF_REST, 14). A piece arrives by a wipe
+ * (`clip-path`), as if written, and those that are not states rise a little as they come; a state
+ * that takes another's place (`data-at="swap"`) replaces it at once and wipes in; a line of a
+ * conversation or log (`data-at="flow"`) takes no room until it arrives, so the feed grows from the
+ * bottom. Opacity is only ever 0 or 1, never between, so no text is ever seen faded below its
+ * contrast. At the loop's last beat the pieces that last to the end (`--hold`) wipe away together.
  */
 [data-handoff] {
-  --beat: 13;
+  --beat: 14;
 }
 
 [data-handoff] [data-at] {
   --shown: calc(clamp(0, var(--beat) - var(--in) + 1, 1) * clamp(0, var(--out) - var(--beat), 1));
-  opacity: calc(clamp(0, var(--beat) - var(--in) + 1, 1) * clamp(0, var(--out) + var(--hold, 0) - var(--beat), 1));
+  --present: calc(clamp(0, var(--beat) - var(--in) + 1, 1) * clamp(0, var(--out) + var(--hold, 0) - var(--beat), 1));
+  opacity: var(--present);
+}
+
+[data-handoff] [data-at="flow"] {
+  flex-shrink: 0;
+  max-height: calc(var(--present) * 40rem);
+  overflow: hidden;
+}
+
+/* A feed's oldest lines leave under a soft top edge, as a scrolled conversation does. */
+.handoff-feed {
+  mask-image: linear-gradient(to bottom, transparent, black 1.25rem);
+}
+
+/*
+ * Under 1024px the three apps are windows on a small desktop (`data-desk`), cascaded: each opens at
+ * its first beat (`data-open`) and comes to the front while its part plays (`data-front`), and the
+ * others show their title bars and edges behind it. With no script, all are open and Phean in front.
+ */
+@media (width < 64rem) {
+  [data-handoff][data-open]:not([data-open~="claude"]) [data-window="claude"],
+  [data-handoff][data-open]:not([data-open~="phean"]) [data-window="phean"] {
+    visibility: hidden;
+    transform: translateY(1.5rem) scale(0.95);
+  }
+
+  [data-handoff][data-front="grok"] [data-window="grok"],
+  [data-handoff][data-front="claude"] [data-window="claude"],
+  [data-handoff]:is([data-front="phean"], :not([data-front])) [data-window="phean"] {
+    z-index: 4;
+  }
+}
+
+/* The app whose part is playing: ringed in the brand, in either layout. */
+[data-handoff][data-front="grok"] [data-window="grok"],
+[data-handoff][data-front="claude"] [data-window="claude"],
+[data-handoff][data-front="phean"] [data-window="phean"] {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -1px;
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -866,6 +906,13 @@
 
   [data-handoff] [data-at="swap"] {
     translate: none;
+  }
+
+  [data-handoff] [data-window] {
+    transition:
+      transform 450ms var(--ease-out),
+      visibility 450ms,
+      outline-color var(--dur-short) var(--ease-out);
   }
 
   /* Grok Bot typing: three dots that breathe while the story plays. */

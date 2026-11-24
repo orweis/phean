@@ -2,10 +2,14 @@ import type { CSSProperties } from "react";
 
 /**
  * The handoff story's clock (`HandoffRelay`): how long each beat holds, in milliseconds. Beat 0 is
- * the empty stage, the last beat fades everything out again, so the loop ends where it begins.
+ * the empty stage, the last beat wipes everything away again, so the loop ends where it begins.
  * Plain data, shared by the server markup (which beat shows what) and the player (when to move on).
+ *
+ *  0 empty · 1 you ask Grok Bot · 2 it drafts · 3 it hands off in Phean · 4 the routine fires ·
+ *  5 Claude claims · 6–7 researches · 8 updates the draft · 9 hands it back · 10 Phean shows it back ·
+ *  11 Grok Bot hears · 12 reviews · 13 sends · 14 completes, in Phean · 15 the loop's end
  */
-export const HANDOFF_BEATS = [1000, 1800, 1800, 2000, 1600, 1600, 1400, 1200, 1200, 1800, 2200, 1200, 1800, 2400, 900] as const;
+export const HANDOFF_BEATS = [900, 1700, 1700, 2000, 1800, 1400, 1300, 1100, 1600, 1600, 1800, 1300, 1800, 1700, 2200, 900] as const;
 
 /** The beat everything is gone by: the loop's last. */
 export const HANDOFF_END = HANDOFF_BEATS.length - 1;
@@ -14,6 +18,32 @@ export const HANDOFF_END = HANDOFF_BEATS.length - 1;
 export const HANDOFF_REST = HANDOFF_END - 1;
 
 export const HANDOFF_LOOP_MS = HANDOFF_BEATS.reduce((sum, ms) => sum + ms, 0);
+
+/** The three apps on the stage. */
+export type HandoffWindow = "grok" | "claude" | "phean";
+
+/** The window whose part of the story is playing at each beat: it comes to the front. */
+export const HANDOFF_FRONT: readonly HandoffWindow[] = [
+  "grok",
+  "grok",
+  "grok",
+  "phean",
+  "claude",
+  "claude",
+  "claude",
+  "claude",
+  "claude",
+  "claude",
+  "phean",
+  "grok",
+  "grok",
+  "grok",
+  "phean",
+  "grok",
+];
+
+/** The beat each window opens at, where the windows overlap (a phone); all but the chat close at the loop's end. */
+export const HANDOFF_OPENS: Record<HandoffWindow, number> = { grok: 0, phean: 3, claude: 4 };
 
 /** The beat at `elapsed` milliseconds into the loop. */
 export function beatAt(elapsed: number): number {
@@ -25,19 +55,26 @@ export function beatAt(elapsed: number): number {
   return HANDOFF_END;
 }
 
+/** The windows open at a beat, as `data-open` lists them. */
+export function openAt(beat: number): string {
+  return (Object.keys(HANDOFF_OPENS) as HandoffWindow[]).filter((window) => window === "grok" || (beat >= HANDOFF_OPENS[window] && beat < HANDOFF_END)).join(" ");
+}
+
 /**
- * Shown from beat `from` until beat `to` (exclusive): the attributes the stylesheet reads to fade a
+ * Shown from beat `from` until beat `to` (exclusive): the attributes the stylesheet reads to bring a
  * piece of the stage in and out as the stage's `--beat` moves. `delay` staggers pieces within a beat;
- * `swap` replaces in place instead of rising, for states that take each other's place.
+ * `swap` replaces in place instead of rising, for states that take each other's place; `flow` takes
+ * no room until it arrives, for the lines of a conversation or a log that grows from the bottom.
  */
-export function shown(from: number, to: number = HANDOFF_END, { delay = 0, swap = false }: { delay?: number; swap?: boolean } = {}) {
+export function shown(from: number, to: number = HANDOFF_END, { delay = 0, swap = false, flow = false }: { delay?: number; swap?: boolean; flow?: boolean } = {}) {
   return {
-    "data-at": swap ? "swap" : "",
+    "data-at": swap ? "swap" : flow ? "flow" : "",
     style: {
       "--in": from,
       "--out": to,
-      // A piece that lasts to the end stays through the last beat, wiping away with the rest.
-      ...(to === HANDOFF_END && { "--hold": 1 }),
+      // A piece that lasts to the end stays through the last beat, wiping away with the rest. Always
+      // set, since custom properties inherit: a piece inside a held one must not be held itself.
+      "--hold": to === HANDOFF_END ? 1 : 0,
       ...(delay && { transitionDelay: `${delay}ms` }),
     } as CSSProperties,
   };
