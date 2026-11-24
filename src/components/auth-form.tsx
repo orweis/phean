@@ -2,8 +2,10 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useTransition, type FormEvent } from "react";
+import { useEffect, useState, useTransition, type FormEvent } from "react";
 
+import { track } from "@/lib/analytics";
+import { takeSignals } from "@/lib/analytics-signals";
 import { authClient } from "@/lib/auth-client";
 import { LIMITS } from "@/lib/domain";
 import { routes } from "@/lib/routes";
@@ -30,6 +32,13 @@ export function AuthForm({ mode, next, providers, initialError = null }: AuthFor
   const signingUp = mode === "sign-up";
   // In the desktop app a provider's page never loads in the window: the system browser signs in, then the app reloads.
   const desktop = useDesktopShell();
+
+  // A tick later, so on a fresh load the analytics loader (an ancestor) has applied consent.
+  useEffect(() => {
+    if (!signingUp) return;
+    const timer = window.setTimeout(() => track("sign_up_start"), 0);
+    return () => window.clearTimeout(timer);
+  }, [signingUp]);
 
   const continueWith = (provider: SocialProvider) =>
     startTransition(async () => {
@@ -61,11 +70,16 @@ export function AuthForm({ mode, next, providers, initialError = null }: AuthFor
         setError(failure.message ?? "Something went wrong. Please try again.");
         return;
       }
-      // Two-factor is on: the password was right, and the code comes next.
+      // Two-factor is on: the password was right, and the code comes next (and sends the `login`).
       if (data && "twoFactorRedirect" in data && data.twoFactorRedirect) {
+        // A provider's unfinished sign-in may have left its method waiting; this one is a password.
+        takeSignals();
         router.push(routes.twoFactor(next));
         return;
       }
+      // GitHub and Google sign-ups and sign-ins reach the next page as signals (`server/auth/analytics.ts`).
+      if (signingUp) track("sign_up", { method: "password" });
+      else track("login", { method: "password", two_factor: false });
       router.push(next);
       router.refresh();
     });

@@ -3,6 +3,7 @@ import { Check, RotateCcw, Trophy, X, type LucideIcon } from "lucide-react";
 import { setGoalStatusAction } from "@/app/w/[slug]/actions";
 import type { GoalStatus } from "@/lib/domain";
 import { pluralize } from "@/lib/format";
+import type { Tracked } from "@/lib/tracked";
 
 import type { ButtonSize, ButtonVariant } from "./ui/button";
 import { ActionButton } from "./ui/action-button";
@@ -13,17 +14,19 @@ interface Transition {
   icon: LucideIcon;
   variant: ButtonVariant;
   confirm?: string;
+  /** What analytics calls the decision (`goal_decide`); reopening is not one. */
+  decision?: "approve" | "reject" | "achieved" | "abandon";
 }
 
 /** The human decisions available from each goal status. */
 const TRANSITIONS: Record<GoalStatus, readonly Transition[]> = {
   proposed: [
-    { label: "Approve", to: "active", icon: Check, variant: "primary" },
-    { label: "Reject", to: "abandoned", icon: X, variant: "ghost" },
+    { label: "Approve", to: "active", icon: Check, variant: "primary", decision: "approve" },
+    { label: "Reject", to: "abandoned", icon: X, variant: "ghost", decision: "reject" },
   ],
   active: [
-    { label: "Mark achieved", to: "achieved", icon: Trophy, variant: "primary" },
-    { label: "Abandon", to: "abandoned", icon: X, variant: "ghost", confirm: "Abandon this goal? Its tasks stay where they are." },
+    { label: "Mark achieved", to: "achieved", icon: Trophy, variant: "primary", decision: "achieved" },
+    { label: "Abandon", to: "abandoned", icon: X, variant: "ghost", confirm: "Abandon this goal? Its tasks stay where they are.", decision: "abandon" },
   ],
   achieved: [{ label: "Reopen", to: "active", icon: RotateCcw, variant: "secondary" }],
   abandoned: [{ label: "Reactivate", to: "active", icon: RotateCcw, variant: "secondary" }],
@@ -41,13 +44,14 @@ interface GoalStatusActionsProps {
 export function GoalStatusActions({ goalId, status, slug, size = "md", openTasks = 0 }: GoalStatusActionsProps) {
   return (
     <div className="flex shrink-0 flex-wrap gap-1.5">
-      {TRANSITIONS[status].map(({ label, to, icon: Icon, variant, confirm }) => (
+      {TRANSITIONS[status].map(({ label, to, icon: Icon, variant, confirm, decision }) => (
         <ActionButton
           key={to}
           action={setGoalStatusAction}
           workspace={slug}
           fields={{ goalId, status: to }}
           confirm={to === "achieved" && openTasks > 0 ? `Mark achieved with ${pluralize(openTasks, "task")} still open?` : confirm}
+          analytics={decision ? ({ event: "goal_decide", params: { decision } } satisfies Tracked) : undefined}
           size={size}
           variant={variant}
         >

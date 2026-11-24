@@ -4,6 +4,7 @@ import { ArrowRight, Search, X } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 
+import { track } from "@/lib/analytics";
 import { cx } from "@/lib/cx";
 import { LIMITS } from "@/lib/domain";
 import { pluralize } from "@/lib/format";
@@ -35,6 +36,36 @@ const ACTIVE_OPTION = "bg-accent-tint text-accent-ink before:absolute before:ins
 
 /** How long typing must pause before suggestions are asked for, in milliseconds. */
 const SETTLE_MS = 120;
+
+/**
+ * How a workspace search was started, kept for the results page to report with `search_submit`
+ * once it knows whether anything matched (`SearchSubmitted`). Never the words.
+ */
+const SEARCH_INTENT = "phean-search-from";
+type SearchFrom = "shortcut" | "click";
+
+function noteSearch(from: SearchFrom) {
+  try {
+    sessionStorage.setItem(SEARCH_INTENT, from);
+  } catch {
+    // Without storage the search simply goes unreported.
+  }
+}
+
+/** On the Search page: sends `search_submit` for a search a `SearchForm` just ran, once, and nothing for a reload or a shared link. */
+export function SearchSubmitted({ hasResults }: { hasResults: boolean }) {
+  useEffect(() => {
+    let from: string | null = null;
+    try {
+      from = sessionStorage.getItem(SEARCH_INTENT);
+      sessionStorage.removeItem(SEARCH_INTENT);
+    } catch {
+      return;
+    }
+    if (from === "shortcut" || from === "click") track("search_submit", { has_results: hasResults, used_suggestion: false, from });
+  }, [hasResults]);
+  return null;
+}
 
 /**
  * A plain GET form, so results are linkable and the back button works. The capsule has a clear
@@ -83,7 +114,17 @@ export function SearchForm({ action, defaultValue, placeholder, keep = {}, autoF
   const expanded = open && options.length > 0;
   const optionId = (index: number) => `${id}-option-${index}`;
 
+  /** Whether `/` put the cursor here (`SearchShortcut` marks the box), for `search_submit`'s `from`. */
+  const searchFrom = (): SearchFrom => {
+    const from = input.current?.dataset.focusedBy === "shortcut" ? "shortcut" : "click";
+    delete input.current?.dataset.focusedBy;
+    return from;
+  };
+
   const go = (suggestion: Suggestion) => {
+    // The last option searches for the words, reported by the results page; any other is a suggestion taken.
+    if (suggestion.key === "search") noteSearch(searchFrom());
+    else track("search_submit", { has_results: true, used_suggestion: true, from: searchFrom() });
     setOpen(false);
     setActive(-1);
     // The header stays across pages, so its words would follow the person there; start it afresh.
@@ -134,7 +175,15 @@ export function SearchForm({ action, defaultValue, placeholder, keep = {}, autoF
   const groups = SUGGESTION_GROUPS.map((group) => ({ group, items: suggestions.filter((suggestion) => suggestion.group === group) })).filter(({ items }) => items.length);
 
   return (
-    <form action={action} role="search" aria-label={label} className={cx("relative w-full", placement === "page" ? "max-w-md" : "max-w-72")}>
+    <form
+      action={action}
+      role="search"
+      aria-label={label}
+      className={cx("relative w-full", placement === "page" ? "max-w-md" : "max-w-72")}
+      onSubmit={() => {
+        if (suggestFor) noteSearch(searchFrom());
+      }}
+    >
       {kept.map(([name, keptValue]) => (
         <input key={name} type="hidden" name={name} value={keptValue} />
       ))}
@@ -158,7 +207,10 @@ export function SearchForm({ action, defaultValue, placeholder, keep = {}, autoF
         }}
         onKeyDown={onKeyDown}
         onFocus={() => setOpen(true)}
-        onBlur={() => setOpen(false)}
+        onBlur={() => {
+          setOpen(false);
+          delete input.current?.dataset.focusedBy;
+        }}
         placeholder={placeholder}
         maxLength={LIMITS.query}
         autoFocus={autoFocus}

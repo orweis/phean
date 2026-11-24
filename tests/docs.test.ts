@@ -3,8 +3,8 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { headingId, plainHeading } from "@/lib/docs";
-import { DOC_SLUGS, isDocSlug, loadDoc, parseDoc, type DocPage } from "@/server/docs";
+import { copiedBlockOf, headingId, plainHeading, setupClientOf, skillsIn } from "@/lib/docs";
+import { DOC_SECTIONS, DOC_SLUGS, docSectionOf, isDocSlug, loadDoc, parseDoc, type DocPage } from "@/server/docs";
 import { TOOLS } from "@/server/mcp/tools";
 import { ROUTINE_API_VERSION, ROUTINE_BETA, ROUTINE_TEXT_MAX } from "@/server/webhooks/routines";
 
@@ -69,5 +69,44 @@ describe("the docs site", () => {
       { id: "first-code-part", title: "First code part" },
       { id: "rotating-better_auth_secret", title: "Rotating BETTER_AUTH_SECRET" },
     ]);
+  });
+});
+
+describe("the docs site's analytics", () => {
+  const agentPages: readonly string[] = DOC_SECTIONS.find((section) => section.title === "Agents")!.slugs;
+
+  it("names the section each page sits in", () => {
+    expect(docSectionOf("index")).toBe("start-here");
+    expect(docSectionOf("cursor")).toBe("agents");
+    expect(docSectionOf("webhooks")).toBe("building-on-phean");
+  });
+
+  it("maps every client's setup page, and connect-an-agent's client sections, to a client", () => {
+    for (const slug of agentPages.filter((slug) => slug !== "agents")) expect(setupClientOf(slug), slug).toBeDefined();
+    expect(setupClientOf("agents")).toBeUndefined();
+    expect(setupClientOf("toString")).toBeUndefined();
+    const connect = anchorsOf(pages.find((page) => page.slug === "connect-an-agent")!);
+    expect(["claude-code", "cursor", "vs-code"].filter((anchor) => connect.has(anchor))).toHaveLength(3);
+    expect(setupClientOf("vs-code")).toBe("vscode");
+  });
+
+  it("classifies the blocks the docs show, and the skills a block installs", () => {
+    const blocks = pages.flatMap((page) => [...page.body.matchAll(/^\s*```(\w*)\n([\s\S]*?)^\s*```/gm)].map(([, lang, text]) => ({ slug: page.slug, lang: lang || undefined, text: text! })));
+    const kinds = new Set(blocks.map((block) => copiedBlockOf(block.text, block.lang)));
+    expect([...kinds].sort()).toEqual(["code", "install_command", "mcp_url", "prompt"]);
+
+    expect(copiedBlockOf("claude mcp add --transport http phean-acme https://example.com/mcp/w/acme", "bash")).toBe("install_command");
+    expect(copiedBlockOf("mkdir -p ~/.claude/skills && cp -r skills/phean-decisions skills/phean-handoffs ~/.claude/skills/", "bash")).toBe("install_command");
+    expect(copiedBlockOf("https://<your-domain>/mcp/w/<slug>", "text")).toBe("mcp_url");
+    expect(copiedBlockOf('{ "mcpServers": { "phean": { "url": "https://example.com/mcp/w/acme" } } }', "json")).toBe("mcp_url");
+    expect(copiedBlockOf("Track work in Phean: sync up at the start of a session.", "text")).toBe("prompt");
+    expect(copiedBlockOf("/mcp__phean-acme__sync_up", "text")).toBe("prompt");
+    expect(copiedBlockOf("wss://<your-domain>/api/events", "text")).toBe("code");
+    expect(copiedBlockOf("pnpm db:migrate && next build", "bash")).toBe("code");
+    expect(copiedBlockOf("phean-decisions", undefined, true)).toBe("code");
+
+    expect(skillsIn("cp -r skills/phean-pipelines skills/phean-decisions ~/.claude/skills/")).toEqual(["phean-decisions", "phean-pipelines"]);
+    expect(skillsIn("skills/phean-decisions/SKILL.md")).toEqual(["phean-decisions"]);
+    expect(skillsIn("skills/phean-decisions-old")).toEqual([]);
   });
 });

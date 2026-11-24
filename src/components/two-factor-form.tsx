@@ -2,14 +2,17 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useTransition, type FormEvent } from "react";
+import { useEffect, useState, useTransition, type FormEvent } from "react";
 
+import { track } from "@/lib/analytics";
+import { takeSignals } from "@/lib/analytics-signals";
 import { authClient } from "@/lib/auth-client";
 import { authErrorMessage } from "@/lib/auth-errors";
 import { routes } from "@/lib/routes";
 import { normalizeCode, TRUST_DEVICE_DAYS } from "@/lib/two-factor";
 
 import { Button } from "./ui/button";
+import { sendSignals } from "./analytics-signals";
 import { Field, Input } from "./ui/field";
 
 /** An authenticator code, or one of the backup codes saved when two-factor was turned on. */
@@ -19,6 +22,12 @@ export function TwoFactorForm({ next }: { next: string }) {
   const [error, setError] = useState<string | null>(null);
   const [expired, setExpired] = useState(false);
   const [pending, startTransition] = useTransition();
+
+  // A tick later, so on a fresh load the analytics loader (an ancestor) has applied consent.
+  useEffect(() => {
+    const timer = window.setTimeout(() => track("two_factor_challenge", { result: "shown" }), 0);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -33,8 +42,15 @@ export function TwoFactorForm({ next }: { next: string }) {
       if (failure) {
         setExpired(failure.code === "INVALID_TWO_FACTOR_COOKIE" || failure.code === "TOO_MANY_ATTEMPTS_REQUEST_NEW_CODE");
         setError(authErrorMessage(failure));
+        track("two_factor_challenge", { result: "failed" });
         return;
       }
+      // A GitHub or Google sign-in left its method waiting before the challenge; otherwise it was a password.
+      const signals = takeSignals();
+      const provider = signals.find((signal) => signal.event === "login");
+      track("two_factor_challenge", { result: "passed" });
+      track("login", { method: provider?.method ?? "password", two_factor: true });
+      sendSignals(signals.filter((signal) => signal !== provider));
       router.push(next);
       router.refresh();
     });

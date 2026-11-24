@@ -18,7 +18,8 @@ import { forbidden, invalid, notFound } from "./errors";
 import { assertCan } from "./policy";
 import { DeviceEndpointInput, DeviceOptionsInput, DeviceRefInput, Empty, NotificationAnswerInput, NotificationUndoInput, RegisterDeviceInput } from "./schemas";
 import { personService, service } from "./service";
-import { answerInput, findTask, isAwaitingInput, retractAnswer } from "./tasks";
+import { trackAfterCommit } from "./analytics";
+import { answerInput, findTask, isAwaitingInput, isFirstAnswer, retractAnswer } from "./tasks";
 import { listMemberships } from "./tenants";
 
 export { PUSH_MAX_DEVICES };
@@ -368,6 +369,21 @@ export const answerFromNotification = service(NotificationAnswerInput, async (ct
     }
     // A stale request id, or none open, is refused by answerInput itself (conflict).
     await answerInput(tx, { taskId, requestId, answer: answer ?? "" });
+    // No page sees this answer, so the server reports it (a notification names its device; the desktop app does not).
+    if (open) {
+      await trackAfterCommit(tx, {
+        name: "decision_answer",
+        params: {
+          via: endpoint ? "notification" : "desktop",
+          kind: open.kind,
+          with_options: open.options.length > 0,
+          multiple: Boolean(open.multiple),
+          custom_answer: option === undefined,
+          is_pipeline: Boolean(open.pipeline),
+          first_answer: await isFirstAnswer(tx),
+        },
+      });
+    }
     // The answering device shows "Sent", with Undo: only the others have theirs replaced.
     if (endpoint) await settleOnDevice(tx, endpoint, requestId, "resolved");
     return { answer: answer ?? "", taskTitle: current.title, agentName: open ? askerName(open) : "" };

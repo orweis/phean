@@ -47,6 +47,8 @@ export default defineConfig({
       // Email is "set up" so the digest's form shows; the hourly send is never called in these tests.
       RESEND_API_KEY: "phean-e2e-resend-key",
       PHEAN_EMAIL_FROM: "Phean <digest@phean.test>",
+      // GA stays off unless a spec sets the phean-analytics-test cookie (e2e/analytics.spec.ts).
+      PHEAN_ANALYTICS_TEST_ID: "G-E2ETEST01",
     },
   },
 });

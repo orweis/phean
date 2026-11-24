@@ -3,8 +3,10 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { ActivityFeed } from "@/components/activity-feed";
+import { AnalyticsSignals } from "@/components/analytics-signals";
 import { AgentWorkload } from "@/components/agent-list";
 import { Timetable, TimetableLegend } from "@/components/charts/timetable";
+import { FirstTaskSeen } from "@/components/first-task-seen";
 import { GoalTree } from "@/components/goal-tree";
 import { HandoffList } from "@/components/handoffs";
 import { ManualEntry } from "@/components/manual-entry";
@@ -98,12 +100,15 @@ export default async function DashboardPage({ params }: PageProps<"/w/[slug]">) 
   const actions = nextActions.filter((task) => !task.inputRequest).slice(0, NEXT_ACTIONS);
   const merged = summary.awaitingInputTasks.length > 0 && proposed.length > 0 && summary.awaitingInputTasks.length + proposed.length <= MERGED_WAITING;
   const questions = (
-    <OpenQuestions tasks={summary.awaitingInputTasks} slug={slug} canAnswer={canWrite} />
+    <OpenQuestions tasks={summary.awaitingInputTasks} slug={slug} canAnswer={canWrite} via="inbox" />
   );
   const approvals = <PendingApprovals goals={proposed} slug={slug} canDecide={can(ctx.actor, "goal:decide")} />;
 
   return (
     <>
+      {/* Where creating a workspace or accepting an invitation lands: their analytics signals are sent here. */}
+      <AnalyticsSignals />
+      <FirstTaskSeen slug={slug} hasTasks={Object.values(summary.tasksByStatus).some((count) => count > 0)} />
       <PageHeader
         title={ctx.tenant.name}
         description={statusSentence(summary, slug)}

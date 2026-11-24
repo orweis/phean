@@ -1,6 +1,7 @@
 import { ArrowUpRight } from "lucide-react";
 import Link from "next/link";
 
+import { ConsentLink } from "@/components/analytics";
 import { AppearancePicker } from "@/components/appearance-picker";
 import { LogoMark } from "@/components/logo";
 import { ThemePicker } from "@/components/theme-picker";
@@ -62,7 +63,7 @@ export async function SiteFooter() {
               The decision center for your fleet of AI agents and personal assistants. Agents do the tasks; you make the calls.
             </p>
             <p className="mt-4 flex flex-wrap gap-x-4 gap-y-1 text-sm">
-              <Link href={routes.signUp()} className="font-semibold link">
+              <Link href={routes.signUp()} className="font-semibold link" data-cta="footer_create_workspace" data-cta-location="footer">
                 Create a workspace
               </Link>
               <a href={GITHUB_URL} target="_blank" rel="noopener noreferrer" className="text-ink-2 link hover:text-ink">
@@ -84,7 +85,8 @@ export async function SiteFooter() {
 
         <div className="mt-14 flex flex-col gap-6 border-t border-rule pt-8 md:flex-row md:items-end md:justify-between">
           <p className="text-sm text-muted">
-            Phean is open source under the MIT license. Names and marks of agents are their makers&apos; trademarks.
+            Phean is open source under the MIT license. Names and marks of agents are their makers&apos; trademarks.{" "}
+            <ConsentLink className="link text-ink-2 hover:text-ink" />
           </p>
           <div className="grid w-full gap-4 sm:w-80">
             <ThemePicker initial={theme} compact />

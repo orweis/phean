@@ -42,6 +42,8 @@ import {
   type StopResult,
   type StopVote,
 } from "../db/schema";
+import { durationBucket } from "../analytics";
+import { trackAfterCommit } from "./analytics";
 import { inTenant, inTransaction, tenantRow, type Ctx, type Tenant } from "./context";
 import { conflict, forbidden, invalid, isDomainError, notFound } from "./errors";
 import { recordEvent } from "./events";
@@ -596,6 +598,7 @@ async function rollRunUp(trip: Trip): Promise<void> {
     summary: `${status === "done" ? "finished" : "failed"} ${tripName(trip)}: ${clip(summary, 200)}`,
     data: { ...runRef(trip), status, endId: ending ?? null },
   });
+  await trackRunEnd(sys, ended);
   if (run.taskId) {
     const task = await findTask(sys, run.taskId);
     if (isOpenTaskStatus(task.status)) {
@@ -606,6 +609,13 @@ async function rollRunUp(trip: Trip): Promise<void> {
   }
   // An ad hoc pipeline's one trip is over.
   if (status === "done" && trip.pipeline.kind === "adhoc") await setPipelineStatus(sys, trip.pipeline, "archived");
+}
+
+/** `run_end` for a run that has just ended: how, and how long it took from its start, as a bucket. */
+async function trackRunEnd(ctx: Ctx, run: PipelineRun): Promise<void> {
+  if (run.status !== "done" && run.status !== "failed" && run.status !== "cancelled") return;
+  const duration = (run.endedAt ?? new Date()).getTime() - run.startedAt.getTime();
+  await trackAfterCommit(ctx, { name: "run_end", params: { outcome: run.status, duration_bucket: durationBucket(duration) } });
 }
 
 /** Pauses, resumes or archives a pipeline, logging the change. */
@@ -709,6 +719,8 @@ export async function beginRun(ctx: Ctx, pipelineId: string, start: RunStart): P
       summary: `started ${pipeline.name} #${number}${start.trigger === "schedule" || start.trigger === "event" || start.trigger === "webhook" ? ` (${start.trigger})` : ""}`,
       data: { pipelineId: pipeline.id, runId: run.id, taskId, number, trigger: start.trigger },
     });
+    // A manual start is a person's click, which the page reports; the server reports the rest.
+    if (start.trigger !== "manual") await trackAfterCommit(tx, { name: "run_start", params: { trigger: start.trigger } });
     const trip: Trip = { run, pipeline, definition, sys, notes: new Map() };
     await advance(trip);
     return trip.run;
@@ -880,6 +892,7 @@ export async function endRun(ctx: Ctx, runId: string, reason: string): Promise<P
       data: { ...runRef(trip), ...(reason && { reason }) },
     });
     await dropTask(trip, trip.run.taskId);
+    await trackRunEnd(tx, row!);
     return row!;
   });
 }

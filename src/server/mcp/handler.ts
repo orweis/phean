@@ -10,7 +10,7 @@ import { verifyOAuthToken as verifyDeploymentToken, type OAuthTokenVerifier } fr
 import { appUrl, mcpResourceTarget, mcpResourceUrl } from "../config";
 import type { Db } from "../db/client";
 import { agentRole } from "../domain/context";
-import { AGENT_NAME_HEADER, agentContext, authenticateAgentToken, resolveNamedSubagent, resolveOAuthAgent, type AgentPrincipal } from "../domain/agents";
+import { AGENT_NAME_HEADER, agentContext, authenticateAgentToken, noteToolCall, resolveNamedSubagent, resolveOAuthAgent, type AgentPrincipal } from "../domain/agents";
 import { forbidden } from "../domain/errors";
 import { PROMPTS, SERVER_INSTRUCTIONS } from "./guidance";
 import { toolAllowed, toolError, type PheanTool, type ToolContext } from "./tool";
@@ -64,6 +64,8 @@ function registerTool(server: McpServer, tool: PheanTool, getDb: () => Db): void
         if (!ctx) return toolError(new Error("MCP request reached a tool without verified agent credentials"));
         // The list is the token's level; a sub-agent named by actingAs may hold less, so check the one acting.
         if (!toolAllowed(tool, ctx.actor)) return toolError(forbidden("Your access level does not allow this tool. Ask a person to reconnect you with more access."));
+        // Analytics: the agent's first call, and its first of the day. Writes at most once a day per agent.
+        await noteToolCall(ctx);
         return tool.execute(ctx, input);
       } catch (error) {
         return toolError(error);

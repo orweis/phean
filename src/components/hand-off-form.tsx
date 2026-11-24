@@ -25,7 +25,7 @@ export function HandOffPopover({ task, slug, targets }: { task: TaskView; slug: 
   const people = targets.people.filter((person) => person.userId !== task.operatorUserId);
   return (
     <Popover label="Hand off" icon={<Handshake aria-hidden />} look="link" align="left" title="Hand off this task" triggerLabel={`Hand off ${task.title}`}>
-      <ActionForm action={handOffTaskAction} workspace={slug} className="space-y-3" notice={`Handing off “${task.title}”`} closeOnSuccess>
+      <ActionForm action={handOffTaskAction} workspace={slug} className="space-y-3" notice={`Handing off “${task.title}”`} analytics={{ event: "task_hand_off", params: { hand_back: false } }} closeOnSuccess>
         <input type="hidden" name="taskId" value={task.id} />
         <p className="text-xs text-ink-2">
           {task.operatorName

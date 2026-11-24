@@ -7,6 +7,7 @@ import { LIMITS, REQUEST_KIND_META } from "@/lib/domain";
 import { cx } from "@/lib/cx";
 import { timeAgo, truncate } from "@/lib/format";
 import { routes } from "@/lib/routes";
+import type { Tracked } from "@/lib/tracked";
 import type { PipelineRequestContext } from "@/server/domain/pipelines";
 import type { TaskView } from "@/server/domain/tasks";
 
@@ -25,6 +26,27 @@ import { Popover, PopoverCancel } from "./ui/popover";
 import type { UndoSpec } from "./ui/status-region";
 import { SubmitButton } from "./ui/submit-button";
 
+/** Where a request was answered, for `decision_answer`'s `via`. */
+export type AnswerVia = "page" | "inbox" | "pipeline_card";
+
+/**
+ * `decision_answer` for an answer to `request` from this list: what kind of request it was and how it
+ * was answered, never the words. The server adds `first_answer` (`answerInputAction`).
+ */
+export function answerEvent(request: InputRequest, via: AnswerVia, customAnswer: boolean): Tracked {
+  return {
+    event: "decision_answer",
+    params: {
+      via,
+      kind: request.kind,
+      with_options: request.options.length > 0,
+      multiple: Boolean(request.multiple),
+      custom_answer: customAnswer,
+      is_pipeline: Boolean(request.pipeline),
+    },
+  };
+}
+
 /** Taking the answer back reopens the question, until the agent has collected it. */
 const takeBack = (taskId: string, request: InputRequest): UndoSpec | undefined =>
   // A pipeline acts on its answer at once, so there is nothing to take back.
@@ -34,6 +56,7 @@ const takeBack = (taskId: string, request: InputRequest): UndoSpec | undefined =
         action: retractAnswerAction,
         fields: { taskId, requestId: request.id },
         done: `${request.agentName}'s question is open again.`,
+        analytics: { event: "decision_undo" },
       };
 
 /** What the status region says once an answer is sent: the receipt a person checks. */
@@ -77,7 +100,7 @@ function PipelineContext({ slug, request, context }: { slug: string; request: In
 }
 
 /** A short reply, written here; the panel repeats the question so it stays in view while typing. */
-function OtherAnswer({ taskId, slug, request }: { taskId: string; slug: string; request: InputRequest }) {
+function OtherAnswer({ taskId, slug, request, via }: { taskId: string; slug: string; request: InputRequest; via: AnswerVia }) {
   const field = `answer-${taskId}`;
   const decision = request.kind === "decision";
   return (
@@ -88,7 +111,7 @@ function OtherAnswer({ taskId, slug, request }: { taskId: string; slug: string; 
       phone="inline"
       title={decision ? "Your decision" : "Your answer"}
     >
-      <ActionForm action={answerInputAction} workspace={slug} className="space-y-3" notice={request.pipeline ? `Sent your answer to ${request.pipeline.pipelineName} #${request.pipeline.runNumber}; the run has it now` : `Sent your answer to ${request.agentName}`} undo={takeBack(taskId, request)} closeOnSuccess>
+      <ActionForm action={answerInputAction} workspace={slug} className="space-y-3" notice={request.pipeline ? `Sent your answer to ${request.pipeline.pipelineName} #${request.pipeline.runNumber}; the run has it now` : `Sent your answer to ${request.agentName}`} undo={takeBack(taskId, request)} analytics={answerEvent(request, via, true)} closeOnSuccess>
         <input type="hidden" name="taskId" value={taskId} />
         {/* Pinned to this request: a newer question on the task refuses the answer instead of taking it. */}
         <input type="hidden" name="requestId" value={request.id} />
@@ -119,6 +142,7 @@ function Snooze({ taskId, slug, request, title }: { taskId: string; slug: string
       fields={{ taskId, requestId: request.id }}
       notice={`Snoozed “${truncate(title, 60)}” to the back of the queue`}
       undo={{ action: snoozeRequestAction, fields: { taskId, requestId: request.id, undo: "true" }, done: `“${truncate(title, 60)}” is back in its place.` }}
+      analytics={{ event: "decision_snooze" }}
       data-snooze=""
       aria-keyshortcuts="S"
       aria-label={`Snooze ${title}`}
@@ -143,6 +167,7 @@ function MoreAnswers({ taskId, slug, request, title }: { taskId: string; slug: s
         confirm={`Mark ${request.agentName}'s question answered? Do this only if you answered it in their conversation.`}
         notice={`Marked ${request.agentName}'s question answered`}
         undo={takeBack(taskId, request)}
+        analytics={{ event: "decision_mark_answered" }}
         closeOnSuccess
         size="menu"
         variant="ghost"
@@ -159,7 +184,7 @@ function MoreAnswers({ taskId, slug, request, title }: { taskId: string; slug: s
  * full-width capsules. Each shows its number key. A request that takes several answers renders
  * `MultipleChoice` instead.
  */
-function OptionButtons({ taskId, slug, request }: { taskId: string; slug: string; request: InputRequest }) {
+function OptionButtons({ taskId, slug, request, via }: { taskId: string; slug: string; request: InputRequest; via: AnswerVia }) {
   return request.options.map((option, index) => (
     <ActionButton
       key={option}
@@ -168,6 +193,7 @@ function OptionButtons({ taskId, slug, request }: { taskId: string; slug: string
       fields={{ taskId, requestId: request.id, answer: option }}
       notice={sent(option, request)}
       undo={takeBack(taskId, request)}
+      analytics={answerEvent(request, via, false)}
       data-option={index < 9 ? String(index + 1) : undefined}
       aria-keyshortcuts={index < 9 ? String(index + 1) : undefined}
       variant="tinted"
@@ -206,6 +232,7 @@ export function OpenQuestions({
   focus,
   pipelines,
   keys = true,
+  via = "page",
 }: {
   tasks: readonly TaskView[];
   slug: string;
@@ -217,6 +244,8 @@ export function OpenQuestions({
   pipelines?: Record<string, PipelineRequestContext>;
   /** False when the page wraps several lists in one `DecisionKeys`, so one request is selected among them all. */
   keys?: boolean;
+  /** Where these requests are answered, for analytics: a page of their own, the overview's inbox, or a pipeline's card. */
+  via?: AnswerVia;
 }) {
   const list = (
     <ul>
@@ -291,11 +320,11 @@ export function OpenQuestions({
                   className="mt-2.5 flex flex-wrap items-center gap-x-1.5 gap-y-2 max-sm:[&>form:has([data-option])]:basis-full"
                 >
                   {request.multiple ? (
-                    <MultipleChoice taskId={task.id} slug={slug} request={request} title={task.title} />
+                    <MultipleChoice taskId={task.id} slug={slug} request={request} title={task.title} analytics={answerEvent(request, via, false)} />
                   ) : (
-                    <OptionButtons taskId={task.id} slug={slug} request={request} />
+                    <OptionButtons taskId={task.id} slug={slug} request={request} via={via} />
                   )}
-                  <OtherAnswer taskId={task.id} slug={slug} request={request} />
+                  <OtherAnswer taskId={task.id} slug={slug} request={request} via={via} />
                   <Snooze taskId={task.id} slug={slug} request={request} title={task.title} />
                   <span className="ml-1.5">
                     <Resume session={session} prominent={false} />
@@ -316,7 +345,7 @@ export function OpenQuestions({
                 <DocumentChips documents={task.documents} slug={slug} className="mt-2" />
                 <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-2">
                   <Resume session={session} prominent />
-                  {canAnswer && <OtherAnswer taskId={task.id} slug={slug} request={request} />}
+                  {canAnswer && <OtherAnswer taskId={task.id} slug={slug} request={request} via={via} />}
                   {canAnswer && <Snooze taskId={task.id} slug={slug} request={request} title={task.title} />}
                   {canAnswer && <MoreAnswers taskId={task.id} slug={slug} request={request} title={task.title} />}
                   <CopyLinkButton path={routes.request(slug, request.id)} subject={`link to the request on ${task.title}`} compact />

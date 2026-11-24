@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { isLinkableId, pathOf } from "@/lib/links";
+import { isLinkableId, linkKindOf, linkKindOfPath, pathOf } from "@/lib/links";
 import { routes } from "@/lib/routes";
 import { withUrls } from "@/server/mcp/links";
 
@@ -12,6 +12,21 @@ describe("links to things in Phean", () => {
     expect(pathOf("acme", "m_abc123")).toBe("/w/acme/memory?focus=m_abc123");
     expect(pathOf("acme", "q_abc123")).toBe("/w/acme/decisions?focus=q_abc123");
     expect(routes.link("acme", "t_abc123")).toBe("/w/acme/link/t_abc123");
+  });
+
+  it("names the kind of thing an id or a path shows, for analytics, never the id itself", () => {
+    expect(linkKindOf("t_abc123")).toBe("task");
+    expect(linkKindOf("ag_abc123")).toBeNull();
+    expect(linkKindOfPath(routes.task("acme", "t_abc123"))).toBe("task");
+    expect(linkKindOfPath(routes.goal("acme", "g_abc123"))).toBe("goal");
+    expect(linkKindOfPath(routes.request("acme", "q_abc123"))).toBe("request");
+    expect(linkKindOfPath(routes.memoryItem("acme", "m_abc123"))).toBe("memory");
+    expect(linkKindOfPath(routes.document("acme", "d_abc123"))).toBe("document");
+    expect(linkKindOfPath(routes.pipeline("acme", "p_abc123"))).toBe("pipeline");
+    expect(linkKindOfPath(routes.pipelineRun("acme", "r_abc123"))).toBe("run");
+    // A slug that looks like an id names nothing.
+    expect(linkKindOfPath("/w/t_abc/settings")).toBeNull();
+    expect(linkKindOfPath("/w/acme/tasks")).toBeNull();
   });
 
   it("links nothing else: agents, webhooks, malformed ids", () => {

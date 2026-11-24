@@ -3,6 +3,7 @@ import Link from "next/link";
 import { cache } from "react";
 
 import { TaskDetail } from "@/components/task-detail";
+import { TrackOnMount } from "@/components/track-on-mount";
 import { routes } from "@/lib/routes";
 import { requireWorkspace } from "@/server/auth/session";
 import { getTask } from "@/server/domain/tasks";
@@ -24,6 +25,7 @@ export default async function TaskPage({ params }: PageProps<"/w/[slug]/tasks/[i
   await loadTask(slug, id);
   return (
     <div className="max-w-4xl">
+      <TrackOnMount key={id} name="task_open_page" />
       <nav aria-label="Breadcrumb" className="mb-3 text-xs text-muted">
         <Link href={routes.board(slug)} className="hover:text-ink link">
           Board

@@ -8,6 +8,7 @@ import { ActivityFeed } from "@/components/activity-feed";
 import { LineMap } from "@/components/charts/line-map";
 import { CompactRun, RunTimeline, SelectedStop } from "@/components/pipelines/run-views";
 import { StopLegend } from "@/components/pipelines/stop-legend";
+import { TrackedLink } from "@/components/tracked-link";
 import { ActionButton } from "@/components/ui/action-button";
 import { ActionForm } from "@/components/ui/action-form";
 import { MetaBadge } from "@/components/ui/badge";
@@ -61,6 +62,7 @@ function RerunFrom({ view, slug }: { view: RunView; slug: string }) {
         workspace={slug}
         confirm="Run this stop and every stop after it again? Their tasks under way are dropped and handed out afresh."
         notice={`Run #${view.run.number} runs again`}
+        analytics={{ event: "run_rerun_from" }}
         closeOnSuccess
         className="space-y-3"
       >
@@ -166,6 +168,7 @@ export default async function RunPage({ params, searchParams }: PageProps<"/w/[s
               fields={{ runId: run.id }}
               confirm={`Cancel ${pipeline.name} #${run.number}? Its stops under way stop, their tasks are dropped, and it cannot go on.`}
               notice={`Cancelled ${pipeline.name} #${run.number}`}
+              analytics={{ event: "run_cancel" }}
               size="sm"
               variant="danger"
             >
@@ -210,6 +213,7 @@ export default async function RunPage({ params, searchParams }: PageProps<"/w/[s
                       fields={{ runId: run.id, stopId: selectedStop!.stopId }}
                       confirm={`Run “${selectedStop!.name}” and every stop after it again?`}
                       notice={`Re-running from “${selectedStop!.name}”`}
+                      analytics={{ event: "run_rerun_from" }}
                       size="sm"
                       variant="ghost"
                     >
@@ -230,16 +234,17 @@ export default async function RunPage({ params, searchParams }: PageProps<"/w/[s
           action={
             <ChipRail label="Run views" selected={current} className={cx(SEGMENTED, "w-fit max-w-full")}>
               {VIEWS.map(({ key, label, icon: Icon }) => (
-                <Link
+                <TrackedLink
                   key={key}
                   href={routes.pipelineRun(slug, run.id, { view: key === "compact" ? undefined : key, stop: stopParam })}
+                  analytics={key === current ? undefined : { event: "run_view", params: { view: key } }}
                   scroll={false}
                   aria-current={key === current ? "page" : undefined}
                   className={cx(segment(key === current), "inline-flex items-center gap-1.5 whitespace-nowrap")}
                 >
                   <Icon aria-hidden className="size-3.5" />
                   {label}
-                </Link>
+                </TrackedLink>
               ))}
             </ChipRail>
           }

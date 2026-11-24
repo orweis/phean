@@ -6,8 +6,11 @@ const modules = {
 "./links": function (exports, require) {
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.LINK_KINDS = void 0;
 exports.isLinkableId = isLinkableId;
 exports.pathOf = pathOf;
+exports.linkKindOf = linkKindOf;
+exports.linkKindOfPath = linkKindOfPath;
 const routes_1 = require("./routes");
 const LINKS = {
     t: (slug, id) => routes_1.routes.task(slug, id),
@@ -19,6 +22,7 @@ const LINKS = {
     r: (slug, id) => routes_1.routes.pipelineRun(slug, id),
 };
 const LINKABLE_ID = /^(t|g|d|m|q|p|r)_[A-Za-z0-9]+$/;
+exports.LINK_KINDS = { t: "task", g: "goal", d: "document", m: "memory", q: "request", p: "pipeline", r: "run" };
 function isLinkableId(id) {
     return typeof id === "string" && LINKABLE_ID.test(id);
 }
@@ -26,6 +30,13 @@ function pathOf(slug, id) {
     if (!isLinkableId(id))
         return null;
     return LINKS[id.slice(0, 1)](slug, id);
+}
+function linkKindOf(id) {
+    return isLinkableId(id) ? exports.LINK_KINDS[id.slice(0, 1)] : null;
+}
+function linkKindOfPath(path) {
+    const ids = path.replace(/^\/w\/[^/?#]+/, "").split(/[/?&=#]/).filter(isLinkableId);
+    return ids.length ? linkKindOf(ids.at(-1)) : null;
 }
 },
 "./push": function (exports, require) {

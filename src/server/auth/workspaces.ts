@@ -2,6 +2,8 @@ import "server-only";
 
 import { headers } from "next/headers";
 
+import { toMemberRole, type MemberRole } from "@/lib/domain";
+
 import type { Tenant } from "../domain/context";
 import { recordEvent } from "../domain/events";
 import { assertCan } from "../domain/policy";
@@ -39,7 +41,7 @@ export const inviteMember = service(InviteMemberInput, async (ctx, { email, role
     entityId: invitation.id,
     summary: `invited ${email} as ${role}`,
   });
-  return { id: invitation.id, email };
+  return { id: invitation.id, email, role };
 });
 
 export const cancelInvitation = service(InvitationRefInput, async (ctx, { invitationId }) => {
@@ -58,9 +60,9 @@ export const removeMember = service(MemberRefInput, async (ctx, { memberId }) =>
 });
 
 /** Joins the invited workspace; Better Auth checks the invitation is pending and addressed to this user. */
-export async function acceptInvitation(input: unknown): Promise<{ organizationId: string }> {
+export async function acceptInvitation(input: unknown): Promise<{ organizationId: string; role: MemberRole }> {
   const { invitationId } = parseInput(InvitationRefInput, input);
   const result = await auth.api.acceptInvitation({ body: { invitationId }, headers: await headers() });
   if (!result) throw new Error("Better Auth did not return the accepted invitation");
-  return { organizationId: result.invitation.organizationId };
+  return { organizationId: result.invitation.organizationId, role: toMemberRole(result.invitation.role) };
 }

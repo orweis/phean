@@ -3,6 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, type KeyboardEvent, type ReactNode } from "react";
 
+import { trackShortcut } from "./keyboard-shortcuts";
+
 /** Typing into a field must never pick an option; a tick box is not typing. */
 const TYPING = "input:not([type=checkbox]), textarea, select, [contenteditable]";
 
@@ -90,6 +92,7 @@ export function DecisionKeys({ children }: { children: ReactNode }) {
       const option = entry.querySelector<HTMLButtonElement | HTMLInputElement>(`[data-option="${key}"]:not(:disabled)`);
       if (!option) return;
       event.preventDefault();
+      trackShortcut("pick_option");
       option.click();
       // A tick box keeps focus, so Enter sends the picks from there.
       if (option.type === "checkbox") option.focus({ preventScroll: true });
@@ -100,6 +103,7 @@ export function DecisionKeys({ children }: { children: ReactNode }) {
       const form = target.closest("form");
       if (!form?.querySelector("input[data-option]:checked")) return;
       event.preventDefault();
+      trackShortcut("send_ticked");
       form.requestSubmit();
       return;
     }
@@ -114,6 +118,7 @@ export function DecisionKeys({ children }: { children: ReactNode }) {
       const snooze = entry.querySelector<HTMLButtonElement>("[data-snooze]:not(:disabled)");
       if (!snooze) return;
       event.preventDefault();
+      trackShortcut("snooze");
       snooze.click();
       return;
     }
@@ -122,6 +127,7 @@ export function DecisionKeys({ children }: { children: ReactNode }) {
     const next = entries[entries.indexOf(entry) + (key === "j" ? 1 : -1)];
     if (!next) return;
     event.preventDefault();
+    trackShortcut(key === "j" ? "next_request" : "previous_request");
     next.focus({ preventScroll: true });
     next.scrollIntoView({ block: "nearest", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
   };

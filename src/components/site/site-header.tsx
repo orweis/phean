@@ -11,6 +11,7 @@ import { hasSessionCookie } from "@/server/auth/session";
 
 import { MobileMenu } from "./mobile-menu";
 import { NavMenu } from "./nav-menu";
+import { SiteClicks } from "./site-analytics";
 import { AGENT_LINKS, DEVELOPER_LINKS, GITHUB_URL, PRODUCT, RESOURCE_LINKS, USE_CASE_LINKS, type SiteGroup, type SiteLink, type SiteSection } from "./site-links";
 
 /** An agent's mark beside its link in the Agents menu, where it has one. */
@@ -94,10 +95,11 @@ function SheetGroup({ group }: { group: SiteGroup }) {
  */
 export async function SiteHeader({ current, wide = true }: { current: SiteSection; wide?: boolean }) {
   const signedIn = await hasSessionCookie();
-  const start = signedIn ? { href: routes.app(), label: "Open Phean" } : { href: routes.signUp(), label: "Get started" };
+  const start = signedIn ? { href: routes.app(), label: "Open Phean", cta: "nav_open_phean" } : { href: routes.signUp(), label: "Get started", cta: "nav_get_started" };
 
   return (
     <header className="glass-bar text-ink">
+      <SiteClicks />
       <div className={cx("mx-auto flex h-16 items-center gap-2 px-4 sm:px-6", wide ? "max-w-7xl" : "max-w-5xl")}>
         <Logo className="shrink-0 lg:mr-4" />
         <nav aria-label="Site" className="flex items-center gap-0.5 max-lg:hidden">
@@ -130,11 +132,11 @@ export async function SiteHeader({ current, wide = true }: { current: SiteSectio
             GitHub<span className="sr-only"> (opens in a new tab)</span>
           </a>
           {!signedIn && (
-            <ButtonLink href={routes.signIn()} variant="ghost" className="max-sm:hidden">
+            <ButtonLink href={routes.signIn()} variant="ghost" className="max-sm:hidden" data-cta="nav_sign_in" data-cta-location="nav">
               Sign in
             </ButtonLink>
           )}
-          <ButtonLink href={start.href} variant="primary">
+          <ButtonLink href={start.href} variant="primary" data-cta={start.cta} data-cta-location="nav">
             {start.label}
           </ButtonLink>
         </nav>
@@ -162,10 +164,10 @@ export async function SiteHeader({ current, wide = true }: { current: SiteSectio
             ))}
             {!signedIn && (
               <div className="grid grid-cols-2 gap-2">
-                <ButtonLink href={routes.signIn()} variant="secondary" size="lg">
+                <ButtonLink href={routes.signIn()} variant="secondary" size="lg" data-cta="nav_sign_in" data-cta-location="nav">
                   Sign in
                 </ButtonLink>
-                <ButtonLink href={routes.signUp()} variant="primary" size="lg">
+                <ButtonLink href={routes.signUp()} variant="primary" size="lg" data-cta="nav_get_started" data-cta-location="nav">
                   Get started
                 </ButtonLink>
               </div>

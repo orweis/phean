@@ -70,7 +70,7 @@ export function NotificationsPrompt({ publicKey, member }: { publicKey: string |
     if (!result.ok) return setError(result.reason === "no-worker" ? "Notifications are not available on this page yet. Reload it and try again." : result.message);
     setOffered(false);
     const message = `Notifications are on for ${result.label}`;
-    if (status) status.announce({ message, undo: { action: forgetDeviceAction, fields: { deviceId: result.deviceId }, done: `Turned notifications off for ${result.label}` } });
+    if (status) status.announce({ message, undo: { action: forgetDeviceAction, fields: { deviceId: result.deviceId }, done: `Turned notifications off for ${result.label}`, analytics: { event: "push_disable" } } });
     router.refresh();
   }
 

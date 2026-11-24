@@ -59,6 +59,7 @@ function ForgetButton({ device, here }: { device: DeviceSummary; here: boolean }
       variant={here ? "secondary" : "ghost"}
       confirm={`Stop notifications on ${device.label}? Turn them on again from that browser.`}
       notice={`Forgot ${device.label}`}
+      analytics={{ event: "push_disable" }}
       aria-label={here ? undefined : `Forget ${device.label}`}
     >
       {here ? "Forget this device" : "Forget"}
@@ -122,7 +123,7 @@ export function PushDeviceSettings({ publicKey, devices, canSubscribe }: PushDev
     if (!result.ok) return result.reason === "no-worker" ? setSupport("no-worker") : setError(result.message);
     setEndpoint(result.endpoint);
     const message = `Notifications are on for ${result.label}`;
-    if (status) status.announce({ message, undo: { action: forgetDeviceAction, fields: { deviceId: result.deviceId }, done: `Turned notifications off for ${result.label}` } });
+    if (status) status.announce({ message, undo: { action: forgetDeviceAction, fields: { deviceId: result.deviceId }, done: `Turned notifications off for ${result.label}`, analytics: { event: "push_disable" } } });
     router.refresh();
   }
 

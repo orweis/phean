@@ -217,6 +217,16 @@ export function templateRefs(text: string): string[] {
 /** Whether a stop is followed by a choice, so its result or answer picks a branch. */
 export const choosesBranch = (stop: Pick<PipelineStop, "then">) => Boolean(stop.then.choice);
 
+/** A pipeline's shape, as analytics counts it (docs/ANALYTICS.md, `pipeline_create`): never a name or an id. */
+export function pipelineShape(definition: Pick<PipelineDefinition, "stops">): { stops_count: number; has_person_stop: boolean; has_fork: boolean; has_choice: boolean } {
+  return {
+    stops_count: definition.stops.length,
+    has_person_stop: definition.stops.some((stop) => stop.kind === "person"),
+    has_fork: definition.stops.some((stop) => (stop.then.fork?.length ?? 0) > 0),
+    has_choice: definition.stops.some(choosesBranch),
+  };
+}
+
 /**
  * A definition with its defaults filled in: the start is the first stop unless named, and a person
  * stop followed by a choice offers the choice's labels as its options unless it names its own.

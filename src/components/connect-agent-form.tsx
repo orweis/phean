@@ -1,10 +1,11 @@
 "use client";
 
 import { KeyRound, Plus, TriangleAlert } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import { createAgentAction } from "@/app/w/[slug]/actions";
 import { stringData } from "@/lib/action-state";
+import { track } from "@/lib/analytics";
 import { LIMITS } from "@/lib/domain";
 import { mcpClientSetups, type McpClientSetup } from "@/lib/mcp-config";
 
@@ -22,7 +23,7 @@ export function SignInSetup({ slug, mcpUrl }: { slug: string; mcpUrl: string }) 
   const setups = mcpClientSetups({ url: mcpUrl, workspace: slug });
   return (
     <div className="space-y-4">
-      <div>
+      <div data-onboarding="mcp-url">
         <p className="text-xs font-semibold text-ink-2">MCP endpoint</p>
         <p className="mt-0.5 mb-2 text-xs text-muted">Streamable HTTP. Clients sign in with OAuth; a bot can send a fixed key instead.</p>
         <CopyField value={mcpUrl} surface="fill" />
@@ -119,7 +120,9 @@ export function ConnectAgentForm({ slug, mcpUrl, parents = [] }: { slug: string;
   );
 }
 
+/** Shown once per key (it is keyed by the token), which is when the key was issued. */
 function TokenReveal({ token, agentName, slug, mcpUrl }: { token: string; agentName: string; slug: string; mcpUrl: string }) {
+  useEffect(() => track("agent_key_issue"), []);
   return (
     <div className="mt-4 space-y-4 rounded-lg border border-arrive/40 bg-arrive-tint p-4">
       <div>

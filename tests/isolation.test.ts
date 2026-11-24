@@ -12,6 +12,7 @@ import {
   findReconnectableAgent,
   findRenewableAgent,
   listOwnAgents,
+  noteToolCall,
   resolveNamedSubagent,
   resolveOAuthAgent,
   revokeAgent,
@@ -48,6 +49,7 @@ import { browseTasks, getBoard, getGoalDetail, getStatusSummary } from "@/server
 import { search, suggest } from "@/server/domain/search";
 import {
   answerInput,
+  answerInputFromPage,
   assignTasksToGoal,
   captureTasks,
   claimTask,
@@ -70,7 +72,7 @@ import { getWorkspaceOverviews, listMemberships } from "@/server/domain/tenants"
 import { createPheanMcpHandler } from "@/server/mcp/handler";
 import { deleteWebhook, registerWebhook, watch } from "@/server/domain/webhooks";
 
-import { addMember, createTestDb, seedUser, seedWorkspace, type TestDb, type Workspace } from "./support/db";
+import { addMember, asUser, createTestDb, seedUser, seedWorkspace, type TestDb, type Workspace } from "./support/db";
 import { connectMcpClient, dataOf, textOf } from "./support/mcp";
 import { connectOAuthAgent, createOAuthServer, OAUTH_BASE, OAUTH_RESOURCE } from "./support/oauth";
 import { deliveriesOf, deviceFor, fakePushService } from "./support/push";
@@ -144,6 +146,25 @@ describe("tenant isolation", () => {
     expect(await collectAnswers(globexAgent, { taskIds: [acmeTask.id] })).toEqual([]);
     expect((await listDecisions(globexOwner, {})).closed).toEqual([]);
     expect((await collectAnswers(acme.scout.ctx, {})).map((answer) => answer.answer)).toEqual(["Yes"]);
+  });
+
+  it("counts a person's first answer (for analytics) from their answers in this workspace only", async () => {
+    const sam = await seedUser(testDb.db, "Sam");
+    await addMember(testDb.db, acme.tenant, sam, "member");
+    await addMember(testDb.db, globex.tenant, sam, "member");
+    const [samAcme, samGlobex] = [asUser(testDb.db, acme.tenant, sam, "member"), asUser(testDb.db, globex.tenant, sam, "member")];
+    const [globexTask] = (await captureTasks(globexOwner, { tasks: [{ title: "Pick a vendor" }] })).created as [Task];
+
+    await requestInput(acme.scout.ctx, { taskId: acmeTask.id, question: "Ready?" });
+    expect((await answerInputFromPage(samAcme, { taskId: acmeTask.id, answer: "Yes" })).firstAnswer).toBe(true);
+    await requestInput(acme.scout.ctx, { taskId: acmeTask.id, question: "Ready now?" });
+    expect((await answerInputFromPage(samAcme, { taskId: acmeTask.id, answer: "Yes" })).firstAnswer).toBe(false);
+    // Acme's answers are not read from Globex, and the owner's own answers are not Sam's.
+    await requestInput(globex.scout.ctx, { taskId: globexTask.id, question: "Okafor?" });
+    expect((await answerInputFromPage(samGlobex, { taskId: globexTask.id, answer: "Yes" })).firstAnswer).toBe(true);
+    await requestInput(globex.scout.ctx, { taskId: globexTask.id, question: "Brandt?" });
+    expect((await answerInputFromPage(globexOwner, { taskId: globexTask.id, answer: "No" })).firstAnswer).toBe(true);
+    await expect(answerInputFromPage(samGlobex, { taskId: acmeTask.id, answer: "Me" })).rejects.toMatchObject({ code: "not_found" });
   });
 
   it("rejects writes that reference another tenant's records", async () => {
@@ -356,6 +377,16 @@ describe("tenant isolation", () => {
         createdByName: "x",
       }),
     ).rejects.toThrow();
+  });
+
+  it("notes an agent's tool calls (for analytics) only on its own workspace's row", async () => {
+    // A context that names another workspace's agent finds no row there, and writes none.
+    await noteToolCall({ ...globexAgent, actor: { ...globexAgent.actor, id: acme.scout.agentId } });
+    const day = async (id: string) => (await testDb.db.select({ day: agents.lastActiveDay }).from(agents).where(eq(agents.id, id)))[0]!.day;
+    expect(await day(acme.scout.agentId)).toBeNull();
+    await noteToolCall(globexAgent);
+    expect(await day(globex.scout.agentId)).not.toBeNull();
+    expect(await day(acme.scout.agentId)).toBeNull();
   });
 
   it("binds agent tokens to their own workspace", async () => {

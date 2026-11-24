@@ -1,10 +1,10 @@
 import { CalendarDays, KanbanSquare, Network, Table2 } from "lucide-react";
-import Link from "next/link";
 
 import { cx } from "@/lib/cx";
 import { routes } from "@/lib/routes";
 import { carriedFilters, TASK_LAYOUT_META, TASK_LAYOUTS, type TaskLayout, type TaskQuery } from "@/lib/task-views";
 
+import { TrackedLink } from "./tracked-link";
 import { ChipRail } from "./ui/chip-rail";
 import { segment, SEGMENTED } from "./ui/segmented";
 
@@ -21,16 +21,17 @@ export function TaskLayoutSwitcher({ slug, layout, query }: { slug: string; layo
       {TASK_LAYOUTS.map((key) => {
         const Icon = ICONS[key];
         return (
-          <Link
+          <TrackedLink
             key={key}
             href={routes.board(slug, { ...kept, view: key === "board" ? undefined : key })}
+            analytics={key === layout ? undefined : { event: "tasks_layout", params: { layout: key } }}
             aria-current={key === layout ? "page" : undefined}
             title={TASK_LAYOUT_META[key].hint}
             className={cx(segment(key === layout), "inline-flex items-center gap-1.5 whitespace-nowrap")}
           >
             <Icon aria-hidden className="size-3.5" />
             {TASK_LAYOUT_META[key].label}
-          </Link>
+          </TrackedLink>
         );
       })}
     </ChipRail>

@@ -16,6 +16,7 @@ import { cx } from "@/lib/cx";
 import { DELEGATION_META, isLate, isOpenTaskStatus, PRIORITY_META, SOURCE_META, TASK_STATUS_META, type TaskStatus } from "@/lib/domain";
 import { formatDueDate, relativeDue, timeAgo, truncate } from "@/lib/format";
 import { routes } from "@/lib/routes";
+import type { Tracked } from "@/lib/tracked";
 import { stageLabel, stageOf, visibleStages, type Workflow } from "@/lib/workflow";
 import { requireWorkspace } from "@/server/auth/session";
 import type { TaskView } from "@/server/domain/tasks";
@@ -50,8 +51,11 @@ const quoted = (task: TaskView) => `“${truncate(task.title, 60)}”`;
 /** The move that puts a task back where it stood: its own stage, or its old status when dropped. */
 export function moveBack(task: Pick<TaskView, "id" | "status" | "stage">, workflow: Workflow, restored: string): UndoSpec {
   const stage = stageOf(workflow, task);
-  return { action: updateTaskAction, fields: { taskId: task.id, ...(stage ? { stage: stage.key } : { status: task.status }) }, done: restored };
+  return { action: updateTaskAction, fields: { taskId: task.id, ...(stage ? { stage: stage.key } : { status: task.status }) }, done: restored, analytics: { event: "task_undo" } };
 }
+
+/** `task_move` for a button that moves a task from its status to another kind. */
+const moved = (task: Pick<TaskView, "status">, to: string): Tracked => ({ event: "task_move", params: { from_kind: task.status, to_kind: to, via: "button" } });
 
 /** The next step, as the one prominent action of a task; the rest wait in its ⋯ menu. */
 async function NextStep({ task, slug }: { task: TaskView; slug: string }) {
@@ -63,7 +67,7 @@ async function NextStep({ task, slug }: { task: TaskView; slug: string }) {
   // Starting a task makes the person who starts it its operator.
   if (task.status === "todo") {
     return (
-      <ActionButton action={takeTaskAction} workspace={slug} fields={{ taskId }} notice={next.notice(quoted(task))} undo={back} size="sm" variant="tinted">
+      <ActionButton action={takeTaskAction} workspace={slug} fields={{ taskId }} notice={next.notice(quoted(task))} undo={back} analytics={moved(task, next.status)} size="sm" variant="tinted">
         {next.label}
       </ActionButton>
     );
@@ -75,6 +79,7 @@ async function NextStep({ task, slug }: { task: TaskView; slug: string }) {
       fields={{ taskId }}
       notice={next.notice(quoted(task))}
       undo={back}
+      analytics={{ event: "task_done" }}
       exits
       pendingIcon={<Check className="motion-safe:animate-tick" aria-hidden />}
       size="sm"
@@ -89,6 +94,7 @@ async function NextStep({ task, slug }: { task: TaskView; slug: string }) {
       fields={{ taskId, status: next.status }}
       notice={next.notice(quoted(task))}
       undo={back}
+      analytics={moved(task, next.status)}
       size="sm"
       variant="tinted"
     >
@@ -126,6 +132,7 @@ async function MoreActions({ task, slug }: { task: TaskView; slug: string }) {
             fields={{ taskId, stage: stage.key }}
             notice={`Moved ${quoted(task)} to ${stage.label}`}
             undo={back}
+            analytics={moved(task, stage.kind)}
             closeOnSuccess
             size="menu"
             variant="ghost"
@@ -137,7 +144,7 @@ async function MoreActions({ task, slug }: { task: TaskView; slug: string }) {
       </div>
       {(canTake || task.operatorName || canDrop || canArchive) && <div className="my-1 border-t border-rule" />}
       {canTake && (
-        <ActionButton action={takeTaskAction} workspace={slug} fields={{ taskId }} notice={`You're working on ${quoted(task)}`} closeOnSuccess size="menu" variant="ghost">
+        <ActionButton action={takeTaskAction} workspace={slug} fields={{ taskId }} notice={`You're working on ${quoted(task)}`} analytics={{ event: "task_take" }} closeOnSuccess size="menu" variant="ghost">
           <UserCheck aria-hidden />
           {task.operatorName ? `Take over from ${task.operatorName}` : "Take it"}
         </ActionButton>
@@ -154,6 +161,7 @@ async function MoreActions({ task, slug }: { task: TaskView; slug: string }) {
           workspace={slug}
           fields={{ taskId }}
           notice={mine ? `You stopped working on ${quoted(task)}` : `Released ${quoted(task)} from ${task.operatorName}`}
+          analytics={{ event: "task_release" }}
           closeOnSuccess
           size="menu"
           variant="ghost"
@@ -169,6 +177,7 @@ async function MoreActions({ task, slug }: { task: TaskView; slug: string }) {
           fields={{ taskId, status: "dropped" }}
           notice={`Dropped ${quoted(task)}`}
           undo={back}
+          analytics={{ event: "task_drop" }}
           exits
           closeOnSuccess
           size="menu"
@@ -184,7 +193,7 @@ async function MoreActions({ task, slug }: { task: TaskView; slug: string }) {
           workspace={slug}
           fields={{ taskId }}
           notice={`Archived ${quoted(task)}`}
-          undo={{ action: unarchiveTaskAction, fields: { taskId }, done: `${quoted(task)} is back on the board.` }}
+          undo={{ action: unarchiveTaskAction, fields: { taskId }, done: `${quoted(task)} is back on the board.`, analytics: { event: "task_undo" } }}
           exits
           closeOnSuccess
           size="menu"

@@ -6,7 +6,9 @@ import type { ReactNode } from "react";
 import { ApproveAgentForm, DeclineConsentForm } from "@/components/approve-agent-form";
 import { CreateWorkspaceForm } from "@/components/create-workspace-form";
 import { Logo } from "@/components/logo";
+import { TrackOnMount } from "@/components/track-on-mount";
 import { Card } from "@/components/ui/card";
+import { clientHint } from "@/lib/analytics";
 import { todayIso } from "@/lib/dates";
 import { grantableLevels } from "@/lib/domain";
 import { authorizeRetryPath, clientDisplayName, issuableLevels, requestedLevels, type ConsentAgent } from "@/lib/oauth-consent";
@@ -19,9 +21,10 @@ import { findLastApprovedAgent, listOwnAgents } from "@/server/domain/agents";
 
 export const metadata: Metadata = { title: "Connect an agent" };
 
-function DialogPage({ title, children }: { title: string; children: ReactNode }) {
+function DialogPage({ title, clientName, children }: { title: string; /** The client's own name, only bucketed for analytics. */ clientName?: string; children: ReactNode }) {
   return (
     <main className="mx-auto flex min-h-dvh max-w-xl flex-col justify-center gap-4 px-4 py-8">
+      {clientName !== undefined && <TrackOnMount name="agent_connect_start" params={{ client_hint: clientHint(clientName) }} />}
       <Logo />
       <Card className="px-4 py-5 sm:px-5">
         <h1 className="text-lg font-bold wrap-anywhere text-ink">{title}</h1>
@@ -64,7 +67,7 @@ export default async function ApproveAgentPage({ searchParams }: PageProps<"/oau
   const memberships = (await ownMemberships(session.user)).filter(({ tenant }) => request.workspace === null || tenant.slug === request.workspace);
   if (request.workspace !== null && memberships.length === 0) {
     return (
-      <DialogPage title={`Connect ${called} to Phean`}>
+      <DialogPage title={`Connect ${called} to Phean`} clientName={clientName}>
         <p className="mt-1 text-sm text-ink-2">
           This client connects to the address of the workspace <strong className="font-semibold wrap-anywhere text-ink">{request.workspace}</strong>, and you are not a member of it. Ask
           someone in that workspace to connect it, or use the address on your own workspace&apos;s Agents page.
@@ -95,7 +98,7 @@ export default async function ApproveAgentPage({ searchParams }: PageProps<"/oau
   );
 
   return (
-    <DialogPage title={`Connect ${called} to Phean`}>
+    <DialogPage title={`Connect ${called} to Phean`} clientName={clientName}>
       <p className="mt-1 text-sm text-ink-2">
         Access goes to <strong className="font-semibold wrap-anywhere text-ink">{request.target.label}</strong>.{" "}
         {clientName ? (

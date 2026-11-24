@@ -6,11 +6,13 @@ import { resumeLabel, webUrl, type AgentSession, type InputRequest, type LinkKin
 import { cx } from "@/lib/cx";
 import { timeAgo, truncate } from "@/lib/format";
 import { routes } from "@/lib/routes";
+import type { Tracked } from "@/lib/tracked";
 
 import { Badge } from "./ui/badge";
 import { buttonClasses, type ButtonVariant } from "./ui/button";
 import { CopyButton } from "./ui/copy-button";
 import { Popover } from "./ui/popover";
+import { TrackedAnchor } from "./ui/tracked-anchor";
 
 const REFERENCES = [
   { key: "sessionId", label: "Session", subject: "session id" },
@@ -19,14 +21,22 @@ const REFERENCES = [
 ] as const;
 
 /** An outside link: web links open in a new tab, app links (cursor://, slack://) in their app. */
-export function OutsideLink({ href, className, children }: { href: string; className?: string; children: ReactNode }) {
+export function OutsideLink({ href, className, children, analytics }: { href: string; className?: string; children: ReactNode; analytics?: Tracked }) {
   const web = webUrl(href) !== null;
-  return (
-    <a href={href} className={className} rel="noopener noreferrer" {...(web && { target: "_blank" })}>
+  const content = (
+    <>
       {children}
       <ArrowUpRight aria-hidden />
       {web && <span className="sr-only"> (opens in a new tab)</span>}
-    </a>
+    </>
+  );
+  const props = { href, className, rel: "noopener noreferrer", ...(web && { target: "_blank" }) };
+  return analytics ? (
+    <TrackedAnchor {...props} analytics={analytics}>
+      {content}
+    </TrackedAnchor>
+  ) : (
+    <a {...props}>{content}</a>
   );
 }
 
@@ -34,7 +44,7 @@ export function OutsideLink({ href, className, children }: { href: string; class
 export function ResumeLink({ session, variant = "secondary" }: { session: AgentSession; variant?: ButtonVariant }) {
   if (!session.url) return null;
   return (
-    <OutsideLink href={session.url} className={buttonClasses(variant, "sm")}>
+    <OutsideLink href={session.url} className={buttonClasses(variant, "sm")} analytics={{ event: "resume_session_click", params: { kind: "link" } }}>
       {resumeLabel(session)}
     </OutsideLink>
   );
@@ -78,7 +88,7 @@ export function ResumePopover({ sessions }: { sessions: readonly AgentSession[] 
   if (sessions.length === 0) return null;
   return (
     // Narrower than the default panel at xl, so it opens inside the first of four board lanes.
-    <Popover label="Resume" icon={<History aria-hidden />} look="link" className="xl:w-72">
+    <Popover label="Resume" icon={<History aria-hidden />} look="link" className="xl:w-72" analytics={{ event: "resume_session_click", params: { kind: "popover" } }}>
       <p className="mb-3 text-xs font-semibold text-ink-2">Pick up where {sessions.length === 1 ? sessions[0]!.agentName : "an agent"} left off</p>
       <ul className="space-y-3">
         {sessions.map((session) => (

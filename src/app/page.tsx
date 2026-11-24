@@ -19,6 +19,7 @@ import { ProductFrame } from "@/components/marketing/product-frame";
 import { SiteFooter } from "@/components/site/site-footer";
 import { SiteHeader } from "@/components/site/site-header";
 import { JsonLd } from "@/components/site/json-ld";
+import { SectionViews } from "@/components/site/site-analytics";
 import { UseCases } from "@/components/marketing/use-cases";
 import { SampleTimetable } from "@/components/sample-timetable";
 import { ButtonLink } from "@/components/ui/button";
@@ -105,14 +106,18 @@ function ConnectCommand({ command }: { command: string }) {
     <div className="flex max-w-xl items-center gap-2.5 rounded-full bg-panel py-1 pr-1 pl-4 shadow-raised ring-1 ring-rule">
       <AgentMark mark="claude-code" name="Claude Code" className="size-4 text-ink-2" />
       <code className="min-w-0 flex-1 truncate font-mono text-xs text-ink">{command}</code>
-      <CopyButton value={command} subject="the Claude Code command" />
+      <span data-cta="hero_connect_agent" data-cta-location="hero" className="contents">
+        <CopyButton value={command} subject="the Claude Code command" />
+      </span>
     </div>
   );
 }
 
 export default async function LandingPage() {
   const signedIn = await hasSessionCookie();
-  const start = signedIn ? { href: routes.workspaces(), label: "Go to your workspaces" } : { href: routes.signUp(), label: "Create a workspace" };
+  const start = signedIn
+    ? { href: routes.workspaces(), label: "Go to your workspaces", cta: "open_phean" }
+    : { href: routes.signUp(), label: "Create a workspace", cta: "create_workspace" };
   const connect = `claude mcp add --transport http phean ${mcpResourceUrl()}`;
 
   return (
@@ -121,7 +126,8 @@ export default async function LandingPage() {
       <SiteHeader current="home" />
 
       <main>
-        <section aria-labelledby="hero-heading" className="relative isolate">
+        <SectionViews />
+        <section data-section="hero" aria-labelledby="hero-heading" className="relative isolate">
           {/* The hour: the hill at the turn of the light, the head set on its empty sky; the product rises out of its foot below. */}
           <div className="relative lg:min-h-[min(56.25vw,52rem)]">
             <div className="relative mx-auto max-w-7xl px-4 pt-12 sm:px-6 sm:pt-20 lg:pt-24 lg:pb-56">
@@ -134,10 +140,10 @@ export default async function LandingPage() {
                   in one place, with a way back to the agent.
                 </p>
                 <div className="mt-8 flex flex-wrap items-center gap-3">
-                  <ButtonLink href={start.href} variant="primary" size="lg">
+                  <ButtonLink href={start.href} variant="primary" size="lg" data-cta={`hero_${start.cta}`} data-cta-location="hero">
                     {start.label}
                   </ButtonLink>
-                  <ButtonLink href="#decisions" variant="secondary" size="lg">
+                  <ButtonLink href="#decisions" variant="secondary" size="lg" data-cta="hero_see_decisions" data-cta-location="hero">
                     See how decisions work
                   </ButtonLink>
                 </div>
@@ -160,7 +166,7 @@ export default async function LandingPage() {
           </div>
         </section>
 
-        <section aria-labelledby="works-heading" className="border-y border-rule bg-panel">
+        <section data-section="agents" aria-labelledby="works-heading" className="border-y border-rule bg-panel">
           <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6">
             <h2 id="works-heading" className="text-center text-sm font-semibold text-ink-2">
               Made for the agents you already run
@@ -192,7 +198,7 @@ export default async function LandingPage() {
           </div>
         </section>
 
-        <section id="name" aria-labelledby="name-heading" data-dusk className="dusk scroll-mt-16 overflow-hidden">
+        <section id="name" data-section="name" aria-labelledby="name-heading" data-dusk className="dusk scroll-mt-16 overflow-hidden">
           <div className="mx-auto max-w-7xl px-4 pt-24 sm:px-6 sm:pt-32">
             <SectionIntro
               id="name-heading"
@@ -220,7 +226,7 @@ export default async function LandingPage() {
           </div>
         </section>
 
-        <section id="flip" aria-labelledby="flip-heading" className="mx-auto max-w-7xl scroll-mt-20 px-4 py-24 sm:px-6 sm:py-32">
+        <section id="flip" data-section="flip" aria-labelledby="flip-heading" className="mx-auto max-w-7xl scroll-mt-20 px-4 py-24 sm:px-6 sm:py-32">
           <div className="grid grid-cols-1 items-center gap-x-16 gap-y-10 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
             <SectionIntro
               id="flip-heading"
@@ -236,7 +242,7 @@ export default async function LandingPage() {
           </div>
         </section>
 
-        <section id="assistants" aria-labelledby="assistants-heading" className="scroll-mt-16 border-t border-rule">
+        <section id="assistants" data-section="assistants" aria-labelledby="assistants-heading" className="scroll-mt-16 border-t border-rule">
           <div className="mx-auto grid max-w-7xl grid-cols-1 items-start gap-x-16 gap-y-14 px-4 py-24 sm:px-6 sm:py-32 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
             <div className="lg:pt-6">
               <SectionIntro
@@ -270,7 +276,7 @@ export default async function LandingPage() {
           </div>
         </section>
 
-        <section id="decisions" aria-labelledby="decisions-heading" data-dusk className="dusk scroll-mt-16">
+        <section id="decisions" data-section="decisions" aria-labelledby="decisions-heading" data-dusk className="dusk scroll-mt-16">
           <div className="mx-auto max-w-7xl px-4 py-24 sm:px-6 sm:py-32">
             <div className="grid grid-cols-1 items-center gap-x-16 gap-y-10 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
               <SectionIntro
@@ -302,7 +308,7 @@ export default async function LandingPage() {
           </div>
         </section>
 
-        <section id="handoffs" aria-labelledby="handoffs-heading" className="mx-auto max-w-7xl scroll-mt-20 px-4 pt-24 sm:px-6 sm:pt-32">
+        <section id="handoffs" data-section="handoffs" aria-labelledby="handoffs-heading" className="mx-auto max-w-7xl scroll-mt-20 px-4 pt-24 sm:px-6 sm:pt-32">
           <SectionIntro
             id="handoffs-heading"
             title="Agents pass the work along. You see the whole picture."
@@ -314,7 +320,7 @@ export default async function LandingPage() {
           <p className="mt-6 text-xs text-muted">Illustrative: a sample task – Grok Bot follows up with Dana at Acme after a pricing call, with research from Claude.</p>
         </section>
 
-        <section id="use-cases" aria-labelledby="use-cases-heading" className="mx-auto max-w-7xl scroll-mt-20 px-4 py-24 sm:px-6 sm:py-32">
+        <section id="use-cases" data-section="use-cases" aria-labelledby="use-cases-heading" className="mx-auto max-w-7xl scroll-mt-20 px-4 py-24 sm:px-6 sm:py-32">
           <SectionIntro
             id="use-cases-heading"
             title="For every team that runs agents."
@@ -325,7 +331,7 @@ export default async function LandingPage() {
           </div>
         </section>
 
-        <section aria-labelledby="line-heading" className="border-y border-rule bg-fill/60">
+        <section data-section="timeline" aria-labelledby="line-heading" className="border-y border-rule bg-fill/60">
           <div className="mx-auto max-w-7xl px-4 py-24 sm:px-6 sm:py-32">
             <SectionIntro
               id="line-heading"
@@ -343,7 +349,7 @@ export default async function LandingPage() {
           </div>
         </section>
 
-        <section id="features" aria-labelledby="features-heading" className="scroll-mt-16 mx-auto max-w-7xl px-4 py-24 sm:px-6 sm:py-32">
+        <section id="features" data-section="features" aria-labelledby="features-heading" className="scroll-mt-16 mx-auto max-w-7xl px-4 py-24 sm:px-6 sm:py-32">
           <SectionIntro
             id="features-heading"
             title="Built for agents first, readable by people."
@@ -354,7 +360,7 @@ export default async function LandingPage() {
           </div>
         </section>
 
-        <section id="get-started" aria-labelledby="steps-heading" className="scroll-mt-16 mx-auto max-w-7xl px-4 pb-24 sm:px-6 sm:pb-32">
+        <section id="get-started" data-section="get-started" aria-labelledby="steps-heading" className="scroll-mt-16 mx-auto max-w-7xl px-4 pb-24 sm:px-6 sm:pb-32">
           <h2 id="steps-heading" data-rise className="display text-[clamp(1.875rem,3.4vw,2.75rem)] text-ink">
             Connect your first agent in three steps.
           </h2>
@@ -375,7 +381,7 @@ export default async function LandingPage() {
           </p>
         </section>
 
-        <section aria-labelledby="close-heading" data-dusk className="dusk relative isolate overflow-hidden">
+        <section data-section="close" aria-labelledby="close-heading" data-dusk className="dusk relative isolate overflow-hidden">
           <Art id="cta-band" decorative sizes="100vw" className="absolute inset-0 -z-10 size-full object-cover object-[72%_50%]" />
           <div aria-hidden className="cta-scrim absolute inset-0 -z-10" />
           <div className="mx-auto max-w-7xl px-4 py-28 text-center sm:px-6 sm:py-40">
@@ -384,10 +390,17 @@ export default async function LandingPage() {
             </h2>
             <p className="mx-auto mt-5 max-w-xl text-lg text-dusk-muted">Connect your first agent in a minute. It will have work in your ledger before you finish reading the docs.</p>
             <div className="mt-9 flex flex-wrap justify-center gap-3">
-              <ButtonLink href={start.href} variant="signal" size="lg">
+              <ButtonLink href={start.href} variant="signal" size="lg" data-cta={`section_close_${start.cta}`} data-cta-location="section:close">
                 {start.label}
               </ButtonLink>
-              <ButtonLink href={routes.docs()} variant="dusk" size="lg" className="ring-1 ring-dusk-muted/40 ring-inset">
+              <ButtonLink
+                href={routes.docs()}
+                variant="dusk"
+                size="lg"
+                className="ring-1 ring-dusk-muted/40 ring-inset"
+                data-cta="section_close_read_docs"
+                data-cta-location="section:close"
+              >
                 Read the docs
               </ButtonLink>
             </div>

@@ -5,6 +5,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 
 import { IDLE, type ActionState } from "@/lib/action-state";
 import { cx } from "@/lib/cx";
+import { sendTracked, type Tracked } from "@/lib/tracked";
 
 import { buttonClasses } from "./button";
 
@@ -16,6 +17,8 @@ export interface UndoSpec {
   fields: Record<string, string>;
   /** What the region says once the undo has run, e.g. "Restored 'Read the thread'". */
   done?: string;
+  /** The analytics event to send once the undo has run (`task_undo`, `decision_undo`). */
+  analytics?: Tracked;
 }
 
 export interface Notice {
@@ -80,6 +83,7 @@ export function StatusRegion({ children }: { children: ReactNode }) {
     for (const [name, value] of Object.entries(spec.fields)) form.set(name, value);
     startTransition(async () => {
       const result = await spec.action(IDLE, form);
+      if (result.status !== "error") sendTracked(spec.analytics);
       announce(
         result.status === "error"
           ? { message: result.message ?? "Could not undo that.", tone: "error" }

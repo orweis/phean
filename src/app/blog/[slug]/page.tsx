@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { AnalyticsPage } from "@/components/analytics";
 import { AuthorCard, PostCard, PostCover, PostMeta, TagList } from "@/components/blog/blog-parts";
 import { ShareLinks } from "@/components/blog/share-links";
 import { MarkdownView } from "@/components/documents/markdown-view";
@@ -96,6 +97,7 @@ export default async function BlogPostPage({ params }: PageProps<"/blog/[slug]">
   return (
     <main>
       <StructuredData post={post} url={url} />
+      <AnalyticsPage post_slug={post.slug} />
       <article>
         <header className="mx-auto max-w-5xl px-4 pt-8 sm:px-6 lg:pt-12">
           <nav aria-label="Breadcrumb">
@@ -211,10 +213,17 @@ export default async function BlogPostPage({ params }: PageProps<"/blog/[slug]">
             Your agents are already doing the work. Give them one place to ask.
           </h2>
           <div className="mt-9 flex flex-wrap justify-center gap-3">
-            <ButtonLink href={routes.signUp()} variant="signal" size="lg">
+            <ButtonLink href={routes.signUp()} variant="signal" size="lg" data-cta="section_post_create_workspace" data-cta-location="section:post">
               Create a workspace
             </ButtonLink>
-            <ButtonLink href={routes.docs()} variant="dusk" size="lg" className="ring-1 ring-dusk-muted/40 ring-inset">
+            <ButtonLink
+              href={routes.docs()}
+              variant="dusk"
+              size="lg"
+              className="ring-1 ring-dusk-muted/40 ring-inset"
+              data-cta="section_post_read_docs"
+              data-cta-location="section:post"
+            >
               Read the docs
             </ButtonLink>
           </div>

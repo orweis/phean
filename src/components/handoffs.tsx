@@ -64,6 +64,7 @@ export function HandoffList({ tasks, slug, viewerId, canWrite }: { tasks: readon
                 workspace={slug}
                 fields={{ taskId: task.id }}
                 notice={`You're working on “${truncate(task.title, 60)}”`}
+                analytics={{ event: "task_take" }}
                 size="sm"
                 variant="tinted"
                 className="mt-2"

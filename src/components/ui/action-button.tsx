@@ -1,5 +1,8 @@
 import type { ComponentProps } from "react";
 
+import type { ActionState } from "@/lib/action-state";
+import type { TrackedEvents } from "@/lib/tracked";
+
 import { ActionForm, type FormAction } from "./action-form";
 import type { UndoSpec } from "./status-region";
 import { SubmitButton } from "./submit-button";
@@ -20,6 +23,8 @@ interface ActionButtonProps extends ComponentProps<typeof SubmitButton> {
   exits?: boolean;
   /** Close the menu or panel the button sits in once it worked. */
   closeOnSuccess?: boolean;
+  /** The analytics event(s) to send once the action succeeds (see `ActionForm`). From a server component, an object, not a function. */
+  analytics?: TrackedEvents | ((result: ActionState) => TrackedEvents | null | undefined);
 }
 
 /**
@@ -27,9 +32,9 @@ interface ActionButtonProps extends ComponentProps<typeof SubmitButton> {
  * (a card moves, a row goes) and, with a `notice`, in the workspace's status region with Undo;
  * failures are reported next to it.
  */
-export function ActionButton({ action, workspace, fields, confirm, notice, undo, exits, closeOnSuccess, ...button }: ActionButtonProps) {
+export function ActionButton({ action, workspace, fields, confirm, notice, undo, exits, closeOnSuccess, analytics, ...button }: ActionButtonProps) {
   return (
-    <ActionForm action={action} workspace={workspace} confirm={confirm} notice={notice} undo={undo} exits={exits} closeOnSuccess={closeOnSuccess} quiet>
+    <ActionForm action={action} workspace={workspace} confirm={confirm} notice={notice} undo={undo} exits={exits} closeOnSuccess={closeOnSuccess} analytics={analytics} quiet>
       {Object.entries(fields).map(([name, value]) => (
         <input key={name} type="hidden" name={name} value={value} />
       ))}

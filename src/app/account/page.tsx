@@ -1,21 +1,25 @@
 import type { Metadata } from "next";
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 
 import { PushDeviceSettings } from "@/components/account/push-device-settings";
 import { SignInMethods, type ProviderMethod } from "@/components/account/sign-in-methods";
 import { TwoFactorSettings } from "@/components/account/two-factor-settings";
+import { AnalyticsIdentity, ConsentLink } from "@/components/analytics";
 import { AppHeader } from "@/components/app-header";
 import { AppearancePicker } from "@/components/appearance-picker";
 import { PageHeader } from "@/components/page-header";
 import { PROVIDER_LABELS, type SocialProvider } from "@/components/provider-mark";
 import { SkipLink } from "@/components/skip-link";
 import { ThemePicker } from "@/components/theme-picker";
+import { TrackOnMount } from "@/components/track-on-mount";
+import { buttonClasses } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { StatusRegion } from "@/components/ui/status-region";
 import { callbackErrorMessage } from "@/lib/auth-errors";
 import { roleCan } from "@/lib/permissions";
-import { queryParam } from "@/lib/routes";
+import { queryParam, routes } from "@/lib/routes";
 import { auth } from "@/server/auth/auth";
+import { analyticsConfig, analyticsIdentity, ANALYTICS_TEST_COOKIE } from "@/server/analytics";
 import { getViewer } from "@/server/auth/session";
 import { oauthProviders, vapidConfig } from "@/server/config";
 import { listDevices } from "@/server/domain/notifications";
@@ -48,11 +52,13 @@ export default async function AccountPage({ searchParams }: PageProps<"/account"
   const failed = callbackErrorMessage(queryParam(params.error));
   const twoFactorEnabled = Boolean((viewer.user as { twoFactorEnabled?: boolean | null }).twoFactorEnabled);
   const [appearance, theme, devices] = await Promise.all([getAppearance(), getTheme(), listDevices(personCtx(viewer.user))]);
+  const analyticsOn = Boolean(analyticsConfig((await cookies()).get(ANALYTICS_TEST_COOKIE)?.value));
   const canSubscribe = viewer.memberships.some((membership) => roleCan(membership.role, "notify:subscribe"));
 
   return (
     <StatusRegion>
       <SkipLink />
+      <AnalyticsIdentity {...analyticsIdentity(viewer)} />
       <AppHeader user={viewer.user} />
       <main id="content" tabIndex={-1} className="mx-auto max-w-3xl space-y-6 px-4 py-6 outline-none sm:px-6 sm:py-8">
         <PageHeader title="Account" description="How you sign in to Phean, and the second step that keeps it yours. Agents never use these: they connect with their own tokens." />
@@ -64,6 +70,7 @@ export default async function AccountPage({ searchParams }: PageProps<"/account"
         {!failed && isProvider(connected) && providers.some((provider) => provider.id === connected && provider.connectedAt) && (
           <p role="status" className="rounded-md border border-arrive/30 bg-arrive-tint px-4 py-2.5 text-sm text-arrive-ink">
             Connected {PROVIDER_LABELS[connected]}. You can sign in with it from now on.
+            <TrackOnMount name="account_link" params={{ provider: connected }} />
           </p>
         )}
         <Card>
@@ -101,6 +108,20 @@ export default async function AccountPage({ searchParams }: PageProps<"/account"
             <AppearancePicker initial={appearance} className="sm:max-w-sm" />
           </CardBody>
         </Card>
+        {analyticsOn && (
+          <Card id="analytics">
+            <CardHeader
+              title="Analytics"
+              description="Whether this browser sends Google Analytics anonymous usage: which pages and features are used, never names, titles or what you write."
+            />
+            <CardBody className="flex flex-wrap items-center gap-3 text-sm">
+              <ConsentLink className={buttonClasses("secondary", "md")}>Change analytics choice</ConsentLink>
+              <a href={routes.privacy()} className="link">
+                What is sent
+              </a>
+            </CardBody>
+          </Card>
+        )}
       </main>
     </StatusRegion>
   );

@@ -2,6 +2,8 @@ import { Building2 } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { AnalyticsIdentity } from "@/components/analytics";
+import { AnalyticsSignals } from "@/components/analytics-signals";
 import { AppHeader } from "@/components/app-header";
 import { AutoRefresh } from "@/components/auto-refresh";
 import { FlowBar } from "@/components/charts/flow-bar";
@@ -16,6 +18,7 @@ import { OPEN_TASK_STATUSES, ROLE_META } from "@/lib/domain";
 import { cx } from "@/lib/cx";
 import { timeAgo } from "@/lib/format";
 import { routes } from "@/lib/routes";
+import { analyticsIdentity } from "@/server/analytics";
 import { getViewer } from "@/server/auth/session";
 import type { WorkspaceOverview } from "@/server/domain/tenants";
 import { workspaceOverviews } from "@/server/entry";
@@ -54,6 +57,8 @@ export default async function WorkspacesPage() {
   return (
     <>
       <SkipLink />
+      <AnalyticsIdentity {...analyticsIdentity(viewer)} />
+      <AnalyticsSignals />
       <AppHeader user={viewer.user} />
       <AutoRefresh />
       <main id="content" tabIndex={-1} className="mx-auto max-w-7xl space-y-6 px-4 py-6 outline-none sm:px-6 sm:py-8">

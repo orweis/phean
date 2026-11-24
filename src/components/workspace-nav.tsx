@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { useRef, useState } from "react";
 
 import { useChipRail } from "@/components/ui/chip-rail";
+import { track } from "@/lib/analytics";
 import { cx } from "@/lib/cx";
 import { WORKSPACE_PAGES, type WorkspacePageKey } from "@/lib/workspace-pages";
 
@@ -56,7 +57,7 @@ export function WorkspaceNav({ slug, counts }: { slug: string; counts: NavCounts
 
   return (
     <nav ref={rail} aria-label="Workspace" className="chip-rail relative -mx-1 flex gap-0.5 after:block after:w-1 after:shrink-0 after:content-['']">
-      {TABS.map(({ label, icon: Icon, href, ...tab }) => {
+      {TABS.map(({ key, label, icon: Icon, href, ...tab }) => {
         const target = href(slug);
         const here = "exact" in tab ? pathname === target : pathname.startsWith(target);
         const active = heading ? heading === target : here;
@@ -66,6 +67,7 @@ export function WorkspaceNav({ slug, counts }: { slug: string; counts: NavCounts
             key={label}
             href={target}
             onClick={(event) => {
+              if (!here) track("tab_open", { tab: key });
               if (!here && !event.metaKey && !event.ctrlKey && !event.shiftKey && event.button === 0) setClicked({ from: pathname, to: target });
             }}
             aria-current={active ? "page" : undefined}

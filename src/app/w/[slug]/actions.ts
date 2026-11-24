@@ -26,7 +26,7 @@ import { deleteWebhook } from "@/server/domain/webhooks";
 import { saveWorkflow } from "@/server/domain/workflow";
 import {
   addTask,
-  answerInput,
+  answerInputFromPage,
   archiveDoneTasks,
   archiveTask,
   cancelHandOff,
@@ -57,14 +57,19 @@ export const updateTaskAction = tenantAction(updateTask, { success: "Saved." });
 export const completeTaskAction = tenantAction(completeTask, { success: "Done." });
 export const releaseTaskAction = tenantAction(releaseTask, { success: "Released." });
 export const takeTaskAction = tenantAction(takeTask, { success: "It's yours." });
-export const handOffTaskAction = tenantAction(handOffTaskByChoice, { success: "Handing off." });
+export const handOffTaskAction = tenantAction(handOffTaskByChoice, {
+  success: "Handing off.",
+  // Who it went to, for the form's `task_hand_off`: the kind of recipient, never who.
+  data: (task) => ({ analytics: { to: task.delegateToAgentId ? "agent" : task.delegateToUserId ? "person" : "anyone" } }),
+});
 export const cancelHandOffAction = tenantAction(cancelHandOff, { success: "Handoff called off." });
 export const archiveTaskAction = tenantAction(archiveTask, { success: "Archived." });
 export const unarchiveTaskAction = tenantAction(unarchiveTask, { success: "Back on the board." });
 export const archiveDoneTasksAction = tenantAction(archiveDoneTasks, {
   success: ({ archived }) => (archived ? `Archived ${archived === 1 ? "1 done task" : `${archived} done tasks`}.` : "Nothing done to archive."),
 });
-export const answerInputAction = tenantAction(answerInput, { success: "Answered." });
+// `data.analytics` adds the server's params to the form's `decision_answer` (ActionForm).
+export const answerInputAction = tenantAction(answerInputFromPage, { success: "Answered.", data: ({ firstAnswer }) => ({ analytics: { first_answer: firstAnswer } }) });
 export const retractAnswerAction = tenantAction(retractAnswer, { success: "Answer taken back." });
 export const snoozeRequestAction = tenantAction(snoozeRequest, { success: "Snoozed." });
 
@@ -118,7 +123,7 @@ export const saveWorkflowAction = tenantAction(saveWorkflow, { success: "Saved t
 
 // Members
 export const inviteMemberAction = tenantAction(inviteMember, {
-  data: ({ id, email }) => ({ invitationId: id, email }),
+  data: ({ id, email, role }) => ({ invitationId: id, email, role }),
 });
 export const cancelInvitationAction = tenantAction(cancelInvitation, { success: "Invitation cancelled." });
 export const removeMemberAction = tenantAction(removeMember, { success: "Member removed." });

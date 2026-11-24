@@ -11,6 +11,7 @@ import { routes } from "@/lib/routes";
 
 import { newId } from "../db/ids";
 import { agents, pipelineRuns, pipelineRunStops, pipelines, pipelineTriggers, pipelineVersions, tasks, type PipelineVersionRow } from "../db/schema";
+import { pipelineShape, templateOf, trackAfterCommit } from "./analytics";
 import { createdByFields, inTenant, inTransaction, tenantRow, type Ctx } from "./context";
 import { conflict, forbidden, invalid, notFound } from "./errors";
 import { recordEvent, runActivity, type Activity } from "./events";
@@ -256,6 +257,10 @@ export const definePipeline = service(DefinePipelineInput, async (ctx, input): P
       entityId: pipeline.id,
       summary: `defined the ${input.kind === "adhoc" ? "ad hoc " : ""}pipeline "${pipeline.name}" (${definition.stops.length} stops)`,
       data: { pipelineId: pipeline.id, kind: pipeline.kind },
+    });
+    await trackAfterCommit(tx, {
+      name: "pipeline_create",
+      params: { kind: pipeline.kind, template: templateOf(definition), ...pipelineShape(definition), created_by: tx.actor.type === "user" ? "person" : "agent" },
     });
     const run = input.kind === "adhoc" || input.run ? await beginRun(tx, pipeline.id, startedBy(tx, input.run ?? RunOptionsInput.parse({}))) : undefined;
     return { pipeline, definition, triggers: await triggersOf(tx, pipeline.id), ...(webhookSecret && { webhookSecret }), ...(run && { run }) };

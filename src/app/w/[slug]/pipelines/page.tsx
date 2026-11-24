@@ -124,7 +124,7 @@ export default async function PipelinesPage({ params, searchParams }: PageProps<
           <Card id="waiting" tone="wait">
             <CardHeader tone="wait" title={`${pluralize(waiting.length, "run")} waiting on a person`} description="Pipeline decisions, longest waiting first. Answer here or on Decisions." />
             <CardBody className="py-1">
-              <OpenQuestions tasks={waiting} slug={slug} canAnswer={can(ctx.actor, "task:write")} pipelines={contexts} />
+              <OpenQuestions tasks={waiting} slug={slug} canAnswer={can(ctx.actor, "task:write")} pipelines={contexts} via="pipeline_card" />
             </CardBody>
           </Card>
         )}

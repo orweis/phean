@@ -14,6 +14,10 @@ By creating an account or using the Service, you acknowledge that we process you
 
 **Session and security information.** When you sign in, we record your IP address, your browser's user agent and the times you signed in, to keep sessions secure, to limit repeated sign-in attempts, and to investigate abuse.
 
+**Usage information.** If you allow analytics, we use Google Analytics 4 to learn how the website and the Service are used. It receives the pages you visit: on the public website their address, and in the Service only the kind of page (such as "a task page"), without workspace names or ids; which features you use (such as answering a decision, or switching the board to the calendar); your device type, browser, screen size and approximate location, as Google Analytics collects them; the domain of a link you follow out of the Service (such as "slack.com", never the full address); and, if you are signed in, an id made by hashing your Phean account id with a secret only Phean holds, which stands for you without naming you. It never receives your name, your email address, the titles of tasks, goals or documents, or anything that people or agents write in Phean. We call this "Usage Information".
+
+**Workspace activity.** Separately from your choice in the bar, Phean's server tells Google Analytics, in aggregate, what happens in workspaces where no browser is involved, such as an agent connecting, asking a decision, capturing tasks or running a pipeline, and an account or workspace being created. These records carry the kind of action and counts in broad ranges, a hashed id for the workspace, and never any person's id, name, email address or anything written in Phean. We use them, on the basis of our legitimate interest in understanding how the Service is used, to improve it.
+
 **Inquiries.** If you write to us, we keep your name, email address, the content of your message and anything else you choose to send.
 
 Giving us this information is not a legal requirement, but without Account Information we cannot create your account or provide the Service.
@@ -25,6 +29,7 @@ We use information to:
 - create and secure your account, and sign you in;
 - provide the Service to Customers, including showing workspace content to the people and agents a Customer has let in, and delivering the webhooks a Customer has set up;
 - respond to your questions and requests;
+- understand, if you allow analytics, which pages and features are used, so we can improve them;
 - maintain and improve the Service, assure its quality, troubleshoot problems, prevent fraud and abuse, resolve disputes, and enforce our terms;
 - comply with the law.
 
@@ -34,7 +39,7 @@ We do not sell personal information, and we do not use Workspace Content to trai
 
 We do not share personal information with third parties except:
 
-- **Service providers** that process it for us under contract, only to run the Service. Today these are Vercel, which hosts the Service and stores uploaded files, and Neon, which hosts our database.
+- **Service providers** that process it for us under contract, only to run the Service. Today these are Vercel, which hosts the Service and stores uploaded files, Neon, which hosts our database, and, if you allow analytics, Google, which processes Usage Information for us through Google Analytics (see [Google's privacy policy](https://policies.google.com/privacy)).
 - **Sign-in providers.** If you choose to sign in with GitHub or Google, that provider learns that you signed in to Phean.
 - **Agents and integrations that a workspace connects.** An agent approved for a workspace, and a webhook its Customer registers, receive the workspace content that the Customer's settings allow. The Customer decides which agents and webhooks to connect.
 - **Our corporate group**, meaning Permit Inc. and Permit.io Ltd., for internal operations only.
@@ -43,19 +48,22 @@ We do not share personal information with third parties except:
 
 ## Cookies
 
-Phean uses only cookies that it needs to work:
+Phean uses cookies that it needs to work:
 
 - a session cookie that keeps you signed in;
 - a preference cookie (`phean-appearance`) that remembers whether you chose light, dark or system appearance;
-- preference cookies that remember how you laid out views such as the board.
+- preference cookies that remember how you laid out views such as the board;
+- a preference cookie (`phean-consent`) that remembers whether you allowed analytics, for a year.
 
-We do not use advertising or third-party analytics cookies. You can delete or block cookies in your browser's settings, but you will then have to sign in again, and Phean will not be able to keep you signed in.
+With your consent, Phean also uses Google Analytics cookies: `_ga`, which holds a random id for your browser, and `_ga_<id>`, which keeps the state of your visit. Google Analytics loads only after you accept it in the bar that asks when you first visit; until then no Google script runs and nothing is sent to Google. We use it for analytics alone: no advertising, no ad personalization, and Google signals are off. You can change your mind at any time with "Analytics choice" in the site's footer or the Analytics card on your account page. Declining, there or in the bar, stops analytics and deletes the Google Analytics cookies. After you sign up, sign in, create a workspace or accept an invitation, a short-lived cookie (`phean-ga-signal`, ten minutes) tells the next page which of those happened, so it can be counted; it holds only the kind of event, and is set only if you allowed analytics.
+
+We do not use advertising cookies. You can delete or block cookies in your browser's settings, but you will then have to sign in again, and Phean will not be able to keep you signed in.
 
 ## Security and retention
 
 We protect information with encryption in transit, hashed passwords and keys, access checks on every workspace, and limits on repeated sign-in attempts. No system is perfectly secure, so we cannot promise that information will never be accessed without permission.
 
-We keep Account Information while your account exists. We keep Workspace Content until the Customer, or a person or agent with permission, deletes it, or until the workspace is deleted. Webhook delivery logs are kept for 7 days. We may keep information longer where we must, to meet legal obligations, resolve disputes, or enforce our agreements.
+We keep Account Information while your account exists. We keep Workspace Content until the Customer, or a person or agent with permission, deletes it, or until the workspace is deleted. Webhook delivery logs are kept for 7 days. Google Analytics keeps Usage Information for 14 months. We may keep information longer where we must, to meet legal obligations, resolve disputes, or enforce our agreements.
 
 ## International transfers
 
@@ -65,7 +73,7 @@ We store and process information in the United States, and our service providers
 
 If you live in the European Economic Area, the United Kingdom, or a place with similar laws, Permit is the controller of your Account Information. For Workspace Content, the Customer who owns the workspace is the controller and we process it on their behalf, so please send requests about it to that Customer first.
 
-We rely on these legal bases: performing our contract with you (Account Information and providing the Service), our legitimate interests (security, abuse prevention, improving the Service, answering inquiries, and corporate changes), complying with the law, and your consent (marketing).
+We rely on these legal bases: performing our contract with you (Account Information and providing the Service), our legitimate interests (security, abuse prevention, improving the Service, answering inquiries, and corporate changes), complying with the law, and your consent (marketing and analytics).
 
 You may have the right to access your information, correct it, receive a copy of it, object to or restrict its processing, have it erased, and withdraw consent you have given. To use any of these rights, or to ask us to delete your account, write to info@permit.io. We may ask you to confirm your identity first. You also have the right to complain to your local data protection authority.
 
@@ -85,4 +93,4 @@ Permit Inc.
 850 New Burton Road, Suite 201, Dover, DE 19904, USA
 info@permit.io
 
-Last updated November 18, 2026.
+Last updated November 24, 2026.

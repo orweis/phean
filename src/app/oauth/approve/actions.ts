@@ -94,7 +94,7 @@ export async function decideConsentAction(_previous: ActionState, formData: Form
     };
     const grant = { ...input, oauthClientId: request.clientId };
     const approval = chosen ? { level: grant.level, lifetimeDays: grant.lifetimeDays, oauthClientId: grant.oauthClientId, agentId: chosen.id } : grant;
-    return (await approveAgentThen(ctx, approval, consent)).issued;
+    return (await approveAgentThen(ctx, approval, consent, { tookOverWork: takeOver.length > 0 })).issued;
   });
   return allowed.ok ? goOn(allowed.value.url, "allowed") : allowed.state;
 }

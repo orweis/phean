@@ -1,4 +1,5 @@
 import { registerDeviceAction } from "@/app/account/actions";
+import { track } from "@/lib/analytics";
 import { deviceLabel } from "@/lib/device-label";
 
 /**
@@ -71,6 +72,7 @@ export async function subscribeThisDevice(publicKey: string): Promise<SubscribeR
     current ??= await ready.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key });
     const result = await registerDeviceAction({ ...current.toJSON(), label: deviceLabel(navigator.userAgent) });
     if (!result.ok) return { ok: false, reason: "message", message: result.message };
+    track("push_enable");
     return { ok: true, deviceId: result.deviceId, label: result.label, endpoint: current.endpoint };
   } catch {
     return { ok: false, reason: "message", message: "This browser could not subscribe to notifications. Try again, or use another browser." };

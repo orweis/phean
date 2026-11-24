@@ -7,6 +7,8 @@ import { generateRandomString } from "better-auth/crypto";
 import { routes } from "@/lib/routes";
 import { TRUST_DEVICE_DAYS, TWO_FACTOR_CHALLENGE_MINUTES } from "@/lib/two-factor";
 
+import type { ProviderCallbackContext } from "./analytics";
+
 /** The plugin's cookie names and lifetimes; the challenge below must read exactly as one it set itself. */
 const TWO_FACTOR_COOKIE = "two_factor";
 const TRUST_DEVICE_COOKIE = "trust_device";
@@ -43,9 +45,11 @@ function redirectTarget(returned: unknown, baseUrl: string): string | undefined 
  * cookie is set, and the person lands on the code page, which finishes through the plugin's
  * verify endpoints. A browser they told to trust skips it, as it does for a password sign-in.
  */
-export function providerSignInChallenge(baseUrl: string) {
+export function providerSignInChallenge(baseUrl: string, onSignIn?: (ctx: ProviderCallbackContext) => void) {
   return createAuthMiddleware(async (ctx) => {
     if (!ctx.path.startsWith("/callback/")) return;
+    // Before the challenge can end the session: analytics notes which provider it was (`signalProviderSignIn`).
+    onSignIn?.(ctx);
     const signedIn = ctx.context.newSession;
     if (!signedIn || !(signedIn.user as { twoFactorEnabled?: boolean | null }).twoFactorEnabled) return;
     const { user } = signedIn;

@@ -30,7 +30,7 @@ function Cards({ tasks, stage, slug, canWrite, goals }: LaneProps & { tasks: rea
   return tasks.map((task) => {
     const card = <TaskCard key={task.id} task={task} slug={slug} canWrite={canWrite} goals={goals} />;
     return canWrite ? (
-      <DraggableTask key={task.id} taskId={task.id} from={{ key: stage.key, label: stage.label }} title={task.title}>
+      <DraggableTask key={task.id} taskId={task.id} from={{ key: stage.key, label: stage.label, kind: task.status }} title={task.title}>
         {card}
       </DraggableTask>
     ) : (
