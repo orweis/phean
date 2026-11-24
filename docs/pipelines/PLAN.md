@@ -215,7 +215,20 @@ another branch; it is never "failed" while a branch is still alive.
 5. Insights and proposed improvements.
 6. Factory floor (planned).
 
-## Open questions
+## Decisions (Nov 24, 2026)
+
+- **Q1** Stops are real subtasks of the run's own task.
+- **Q2** Phean's engine advances runs: when a stop completes, it hands off by name to the next stop.
+- **Q3** Triggers in the first build: manual, by agent, on a schedule, and on events (a task captured with
+  a tag, an inbound webhook).
+- **Q4** First build: everything in steps 1–5 (model, engine, MCP, the views, Decisions, the structured
+  editor and templates, versions, insights and proposed improvements). The factory floor stays planned.
+- **Q5** (default, not asked) Members and Write agents define and start pipelines and runs; changing a
+  regular pipeline is its owner's or an admin's call, and an agent's change to one is a proposal a person
+  approves.
+- **Q6** The feature is called **Pipelines**; the transit map is its visual language.
+
+## Questions (answered above)
 
 - **Q1** Stops as subtasks of a run task (recommended), or separate run-step records?
 - **Q2** Does Phean's engine hand off to the next stop automatically when a stop completes (recommended),
