@@ -6,7 +6,7 @@ import { appUrl } from "@/server/config";
 export const dynamic = "force-dynamic";
 
 /** Where the app lives behind a sign-in, or answers machines only: nothing there is worth indexing. */
-export const PRIVATE_PATHS = ["/w/", "/workspaces", "/account", "/api/", "/oauth/", "/mcp", "/invite/", "/sign-in", "/sign-up"];
+export const PRIVATE_PATHS = ["/w/", "/workspaces", "/account", "/api/", "/oauth/", "/mcp", "/invite/", "/native/", "/offline", "/sign-in", "/sign-up"];
 
 /**
  * The public site (landing page, docs, blog, privacy) is open to search engines and to the answer

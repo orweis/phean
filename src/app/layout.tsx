@@ -1,9 +1,15 @@
 import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 
+import { cookies } from "next/headers";
+
+import { Analytics } from "@/components/analytics";
 import { ServiceWorker } from "@/components/service-worker";
+import { CONSENT_COOKIE, parseConsent } from "@/lib/analytics";
 import { COLOR_SCHEMES, colorSchemeFor } from "@/lib/appearance";
 import { themeColorFor } from "@/lib/themes";
+import { analyticsConfig, ANALYTICS_TEST_COOKIE } from "@/server/analytics";
+import { hasSessionCookie } from "@/server/auth/session";
 import { appUrl } from "@/server/config";
 import { getAppearance, getTheme } from "@/server/web";
 
@@ -39,12 +45,15 @@ export async function generateViewport(): Promise<Viewport> {
 }
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
-  const [appearance, theme] = await Promise.all([getAppearance(), getTheme()]);
+  const [appearance, theme, jar, signedIn] = await Promise.all([getAppearance(), getTheme(), cookies(), hasSessionCookie()]);
+  // Read from the environment and cookies only: the public site renders under this layout and never reads the database.
+  const analytics = analyticsConfig(jar.get(ANALYTICS_TEST_COOKIE)?.value);
   return (
     <html lang="en" data-appearance={appearance} data-theme={theme} className={display.variable}>
       <body className="min-h-dvh">
         {children}
         <ServiceWorker />
+        {analytics && <Analytics {...analytics} consent={parseConsent(jar.get(CONSENT_COOKIE)?.value)} signedIn={signedIn} />}
       </body>
     </html>
   );

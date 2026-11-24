@@ -1,6 +1,7 @@
 import { Eye } from "lucide-react";
 import type { Metadata } from "next";
 
+import { AnalyticsIdentity } from "@/components/analytics";
 import { AppHeader } from "@/components/app-header";
 import { AutoRefresh } from "@/components/auto-refresh";
 import { FaviconBadge } from "@/components/favicon-badge";
@@ -9,6 +10,7 @@ import { SearchShortcut } from "@/components/search-shortcut";
 import { SkipLink } from "@/components/skip-link";
 import { StatusRegion } from "@/components/ui/status-region";
 import { WorkspaceNav } from "@/components/workspace-nav";
+import { analyticsIdentity } from "@/server/analytics";
 import { requireWorkspace, visibleWorkspaces } from "@/server/auth/session";
 import { getWorkspaceStats } from "@/server/domain/overview";
 
@@ -28,6 +30,7 @@ export default async function WorkspaceLayout({ children, peek, params }: Layout
   return (
     <StatusRegion>
       <SkipLink />
+      <AnalyticsIdentity {...analyticsIdentity(viewer, membership)} />
       <AppHeader user={viewer.user} workspace={{ current: membership.tenant, all: workspaces }}>
         <WorkspaceNav slug={slug} counts={{ waitingOnYou: stats.waitingOnYou, decisions: stats.waitingOnYou, inbox: stats.inbox }} />
       </AppHeader>

@@ -1,6 +1,7 @@
 import { ArrowUpRight } from "lucide-react";
 import Link from "next/link";
 
+import { ConsentLink } from "@/components/analytics";
 import { AppearancePicker } from "@/components/appearance-picker";
 import { LogoMark } from "@/components/logo";
 import { ThemePicker } from "@/components/theme-picker";
@@ -84,7 +85,8 @@ export async function SiteFooter() {
 
         <div className="mt-14 flex flex-col gap-6 border-t border-rule pt-8 md:flex-row md:items-end md:justify-between">
           <p className="text-sm text-muted">
-            Phean is open source under the MIT license. Names and marks of agents are their makers&apos; trademarks.
+            Phean is open source under the MIT license. Names and marks of agents are their makers&apos; trademarks.{" "}
+            <ConsentLink className="link text-ink-2 hover:text-ink" />
           </p>
           <div className="grid w-full gap-4 sm:w-80">
             <ThemePicker initial={theme} compact />
