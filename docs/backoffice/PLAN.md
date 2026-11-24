@@ -185,7 +185,7 @@ Days are UTC calendar days (`lib/dates.ts`). "Today" is the UTC day now.
   and the seed call outside any transaction: migrations run in a transaction during the deploy, while
   the previous release still serves, and a plain `CREATE INDEX` on `events` would block its writes. A
   build cut off part way leaves an invalid index, which the next run drops and builds again.
-- **Cron**: `/api/admin/rollup`, hourly at minute 17 in `vercel.json`, authorized like the other crons
+- **Cron**: no cron of its own. The every-minute pipelines tick (`/api/pipelines/tick`) runs the rollup when the last one is an hour old (`rollUpUsageIfDue`); `/api/admin/rollup` runs it on demand, authorized like the other crons
   (`Authorization: Bearer $CRON_SECRET`, or any caller on a non-production deployment without one).
 - **`tool_calls_daily`** `(day, tenant_id, agent_id, tool) → calls, errors`: MCP calls counted by
   `scheduleToolCount` in the MCP handler, one upsert per call after the answer (`waitUntil`), never the
