@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { cleanParams, clientHint, registrableDomain, COMMON_PARAMS, countBucket, EVENTS, redactLocation, redactReferrer, USER_PROPERTIES, workspaceCountBucket } from "@/lib/analytics";
+import { cleanParams, clientHint, derivedEvents, registrableDomain, COMMON_PARAMS, countBucket, EVENTS, redactLocation, redactReferrer, USER_PROPERTIES, workspaceCountBucket } from "@/lib/analytics";
 import { routes } from "@/lib/routes";
 import { analyticsConfig, analyticsHash, serverEventBody } from "@/server/analytics";
 
@@ -35,7 +35,7 @@ describe("the analytics catalog", () => {
 
   it("marks the plan's key events", () => {
     const keys = Object.entries(EVENTS).filter(([, spec]) => "key" in spec && spec.key).map(([name]) => name);
-    expect(keys.sort()).toEqual(["agent_connect_approve", "decision_answer", "pipeline_create", "sign_up", "workspace_create"]);
+    expect(keys.sort()).toEqual(["agent_connect_approve", "first_decision_answer", "pipeline_create", "sign_up", "workspace_create"]);
   });
 
   it("keeps only the params an event lists, in their types", () => {
@@ -236,5 +236,18 @@ describe("the server side", () => {
     expect(serverEventBody({ name: "task_done" as never, userId: "u_1" })).toBeNull();
     vi.stubEnv("ANALYTICS_ID_SALT", "");
     expect(serverEventBody({ name: "decision_ask", userId: "u_1" })).toBeNull();
+  });
+
+  it("sends first_decision_answer beside a workspace's first decision_answer, on either side", () => {
+    expect(derivedEvents("decision_answer", { via: "inbox", first_answer: true })).toEqual([["first_decision_answer", { via: "inbox" }]]);
+    expect(derivedEvents("decision_answer", { via: "inbox", first_answer: false })).toEqual([]);
+    expect(derivedEvents("task_move", { first_answer: true })).toEqual([]);
+    vi.stubEnv("ANALYTICS_ID_SALT", "pepper");
+    const first = serverEventBody({ name: "decision_answer", params: { via: "desktop", kind: "decision", first_answer: true }, userId: "u_1", tenantId: "t_1" })!;
+    const events = first.events as { name: string; params: Record<string, unknown> }[];
+    expect(events.map((event) => event.name)).toEqual(["decision_answer", "first_decision_answer"]);
+    expect(events[1]!.params).toEqual({ via: "desktop", surface: "app", source_side: "server", engagement_time_msec: 1, workspace_hash: analyticsHash("workspace", "t_1") });
+    const later = serverEventBody({ name: "decision_answer", params: { via: "desktop", first_answer: false }, userId: "u_1", tenantId: "t_1" })!;
+    expect((later.events as unknown[]).length).toBe(1);
   });
 });

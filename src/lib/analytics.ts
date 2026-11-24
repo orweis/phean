@@ -104,10 +104,11 @@ export const EVENTS = {
       is_pipeline: BOOL,
       first_answer: BOOL,
     },
-    key: true,
     // Only for answers no page sees: from a notification or the desktop app.
     server: "also",
   },
+  // The key event: a workspace's first answer, sent beside its `decision_answer` (`derivedEvents`).
+  first_decision_answer: { params: { via: ["page", "inbox", "notification", "desktop", "pipeline_card"] }, key: true, server: "also" },
   decision_snooze: { params: {} },
   decision_undo: { params: {} },
   decision_mark_answered: { params: {} },
@@ -210,6 +211,15 @@ function allowed(type: ParamType, value: unknown): boolean {
 }
 
 /** The params of `params` the catalog allows for `name`, in the types it names. GA wants 0/1 for booleans in reports, but takes booleans fine. */
+/**
+ * The events one event implies, sent beside it with the same side (page or server): GA's own derived
+ * events cannot test a parameter, so a key event that is one event's special case is sent by name.
+ */
+export function derivedEvents(name: EventName, params: Record<string, unknown>): [EventName, Record<string, unknown>][] {
+  if (name === "decision_answer" && params.first_answer === true) return [["first_decision_answer", { via: params.via }]];
+  return [];
+}
+
 export function cleanParams(spec: Readonly<Record<string, ParamType>>, params: Record<string, unknown>): Record<string, string | number | boolean> {
   const clean: Record<string, string | number | boolean> = {};
   for (const [key, value] of Object.entries(params)) {
@@ -393,17 +403,22 @@ export function commonParams(surface: Surface = redactLocation(window.location.p
 export function track<N extends ClientEventName>(name: N, ...[params]: keyof EventParams<N> extends never ? [] : [EventParams<N>?]): void {
   if (typeof window === "undefined") return;
   try {
-    const clean = cleanParams(EVENTS[name].params, (params ?? {}) as Record<string, unknown>);
-    const payload = { ...commonParams(), ...clean };
+    const given = (params ?? {}) as Record<string, unknown>;
+    const clean = cleanParams(EVENTS[name].params, given);
+    const common = commonParams();
+    const events: [string, Record<string, unknown>][] = [
+      [name, { ...common, ...clean }],
+      ...derivedEvents(name, clean).map(([derived, extra]): [string, Record<string, unknown>] => [derived, { ...common, ...cleanParams(EVENTS[derived].params, extra) }]),
+    ];
     if (!state.ready) {
-      if (state.queue.length < MAX_QUEUED) state.queue.push([name, payload]);
+      for (const event of events) if (state.queue.length < MAX_QUEUED) state.queue.push(event);
       return;
     }
     const send = gtag();
     if (!send) return;
     // How a person signed up stays with them as a user property.
     if (name === "sign_up" && typeof clean.method === "string") send("set", "user_properties", { signup_method: clean.method });
-    send("event", name, payload);
+    for (const [event, payload] of events) send("event", event, payload);
   } catch {
     // Analytics never breaks the page.
   }
