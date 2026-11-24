@@ -311,7 +311,7 @@ export default async function LandingPage() {
           <div className="mt-10">
             <HandoffRelay />
           </div>
-          <p className="mt-6 text-xs text-muted">Illustrative: a sample task with fictional people, companies and sources.</p>
+          <p className="mt-6 text-xs text-muted">Illustrative: a sample task – Grok Bot follows up with Dana at Acme after a pricing call, with research from Claude.</p>
         </section>
 
         <section id="use-cases" aria-labelledby="use-cases-heading" className="mx-auto max-w-7xl scroll-mt-20 px-4 py-24 sm:px-6 sm:py-32">

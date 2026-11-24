@@ -7,7 +7,7 @@ import {
   Globe,
   Handshake,
   LoaderCircle,
-  Lock,
+  Server,
   Mail,
   MessageSquare,
   Plus,
@@ -25,7 +25,7 @@ import { DELEGATION_META, TASK_STATUS_META } from "@/lib/domain";
 
 import { AgentMark } from "./agent-logo";
 import { HANDOFF_END, shown, type HandoffWindow } from "./handoff-beats";
-import { HandoffPlayer } from "./handoff-player";
+import { HandoffHub, HandoffPlayer } from "./handoff-player";
 
 /*
  * Agents passing one task between them, through Phean (the landing page's #handoffs), each in its own
@@ -90,14 +90,23 @@ function Feed({ children, className }: { children: ReactNode; className?: string
 const PLACES: Record<HandoffWindow, string> = {
   grok: "z-[1] max-lg:top-0 max-lg:left-0 max-lg:h-[400px] lg:h-[27rem]",
   claude: "z-[2] max-lg:top-10 max-lg:left-[5%] max-lg:h-[440px] lg:h-[27rem]",
-  phean: "z-[3] max-lg:top-[92px] max-lg:left-[10%] max-lg:h-[488px] lg:col-span-2 lg:h-[29rem]",
+  phean: "z-[3] max-lg:top-[92px] max-lg:left-[10%] max-lg:h-[488px] lg:h-[33rem]",
 };
 
 /** An app's window on the stage: a title bar, then what the app shows. */
 function Window({ app, bar, children }: { app: HandoffWindow; bar: ReactNode; children: ReactNode }) {
   return (
-    <div data-window={app} className={cx("product-frame flex flex-col ring-1 ring-rule max-lg:absolute max-lg:w-[90%]", PLACES[app])}>
-      <div className="flex shrink-0 items-center gap-2.5 border-b border-rule px-3.5 py-2">{bar}</div>
+    <div aria-hidden data-window={app} className={cx("product-frame flex flex-col ring-1 ring-rule max-lg:absolute max-lg:w-[90%]", PLACES[app])}>
+      <div className="flex shrink-0 items-center gap-2.5 border-b border-rule px-3.5 py-2">
+        {/* A window's three buttons, in neutral tones: these are windows, whichever app is inside. */}
+        {/* From 640px: on a phone the title bars need the room, and the shadows say "window". */}
+        <span className="flex shrink-0 gap-1 max-sm:hidden">
+          {[0, 1, 2].map((dot) => (
+            <span key={dot} className="size-2 rounded-full bg-rule ring-1 ring-edge/40 ring-inset" />
+          ))}
+        </span>
+        {bar}
+      </div>
       {children}
     </div>
   );
@@ -466,7 +475,7 @@ const DRAFT_END = "Would Tuesday suit for 20 minutes to settle the details?";
 /** The email draft attached to the task, as it changes; shown where the windows sit side by side. */
 function Draft() {
   return (
-    <div {...shown(3)} className="flex flex-col rounded-lg border border-rule bg-panel max-lg:hidden">
+    <div {...shown(3)} className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-rule bg-panel max-lg:hidden">
       <div className="flex items-center gap-2 border-b border-rule px-3.5 py-2">
         <FileText aria-hidden className="size-3.5 text-muted" />
         <span className="flex-1 text-xs font-semibold text-ink">Email to Dana</span>
@@ -527,27 +536,33 @@ function Draft() {
   );
 }
 
+/** Phean's server glyph: a stack of servers with the boulder mark on it. */
+function ServerGlyph({ className = "size-9", mark = "size-5" }: { className?: string; mark?: string }) {
+  return (
+    <span className="relative inline-flex shrink-0">
+      <Server aria-hidden strokeWidth={1.5} className={cx("text-ink-2", className)} />
+      <LogoMark className={cx("absolute -right-1.5 -bottom-1", mark)} />
+    </span>
+  );
+}
+
 function PheanApp() {
   return (
     <Window
       app="phean"
       bar={
-        <span className="flex min-w-0 flex-1 items-center gap-1.5 rounded-full bg-fill px-3 py-1 text-xs text-ink-2">
-          <Lock aria-hidden className="size-3 shrink-0" />
-          <span>
-            <span className="text-ink">phean.ai</span>/w/globex/tasks
+        <>
+          <AppMark>
+            <Server aria-hidden className="size-3.5 text-ink-2" />
+          </AppMark>
+          <span className="min-w-0 flex-1 text-sm">
+            <span className="font-semibold text-ink">Phean</span> <span className="text-xs text-muted">· Globex</span>
           </span>
-        </span>
+          <span className="rounded-full bg-accent-tint px-2.5 py-0.5 text-xs font-semibold text-accent-ink">Tasks</span>
+        </>
       }
     >
-      <div className="flex shrink-0 items-center gap-2 border-b border-rule bg-glass px-3.5 py-2 text-xs">
-        <LogoMark className="size-4" />
-        <span className="font-semibold text-ink">Phean</span>
-        <span className="text-muted">/</span>
-        <span className="font-semibold text-ink-2">Globex</span>
-        <span className="ml-auto rounded-full bg-accent-tint px-2.5 py-0.5 font-semibold text-accent-ink">Tasks</span>
-      </div>
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 bg-paper p-3 sm:p-4 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]">
+      <div className="grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)] gap-4 bg-paper p-3 sm:p-4 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]">
         <div className="flex min-h-0 flex-col">
           <TaskCard />
           <Activity />
@@ -555,6 +570,135 @@ function PheanApp() {
         <Draft />
       </div>
     </Window>
+  );
+}
+
+/* --- Phean as the server, from 1024px -------------------------------------------------------------- */
+
+/** The node: the server glyph and its name. The hub makes it the button that shows the window. */
+function Node() {
+  return (
+    <span className="product-frame flex items-center gap-3 rounded-2xl px-4 py-3 ring-1 ring-rule">
+      <ServerGlyph />
+      <span className="text-left">
+        <span className="block text-md font-semibold text-ink">Phean</span>
+        <span className="block text-xs text-muted">Show the task</span>
+      </span>
+    </span>
+  );
+}
+
+/** Beside the node, on its left: the latest thing that happened to the task, from its activity. */
+function Latest() {
+  return (
+    <div className="text-right">
+      <p className="text-xs font-semibold text-muted">Latest</p>
+      <Slot className="mt-1 justify-items-end">
+        {ACTIVITY.map(({ from, who, text }, index) => (
+          <p
+            key={`${from}-${text}`}
+            {...shown(from, ACTIVITY[index + 1]?.from ?? END, { swap: true })}
+            className="flex items-center gap-1.5 text-sm text-ink-2"
+          >
+            <AgentMark {...who} className="size-3.5 text-ink" />
+            <span>
+              <span className="font-semibold text-ink">{who.name}</span> {text}
+            </span>
+          </p>
+        ))}
+      </Slot>
+    </div>
+  );
+}
+
+/** Beside the node, on its right: the task, its status, its handover and its operator. */
+function TaskState() {
+  return (
+    <div {...shown(3)} className="max-w-sm">
+      <p className="text-sm font-semibold text-ink">{TASK}</p>
+      <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+        <Slot>
+          <span {...shown(3, 14, { swap: true })}>
+            <Status status="in_progress" />
+          </span>
+          <span {...shown(14, END, { swap: true })}>
+            <Status status="done" />
+          </span>
+        </Slot>
+        <Slot>
+          <span {...shown(3, 5, { swap: true })}>
+            <Handover state="handing_off" to="Claude" />
+          </span>
+          <span {...shown(5, 6, { swap: true })}>
+            <Handover state="picking_up" />
+          </span>
+          <span {...shown(9, 11, { swap: true })}>
+            <Handover state="handing_off" to="Grok Bot" />
+          </span>
+          <span {...shown(11, 12, { swap: true })}>
+            <Handover state="picking_up" />
+          </span>
+        </Slot>
+      </div>
+      <Slot className="mt-1.5 text-xs text-muted">
+        <Operator name="Grok Bot" from={3} to={5} />
+        <Operator name="Claude" from={5} to={11} />
+        <Operator name="Grok Bot" from={11} to={END} />
+      </Slot>
+    </div>
+  );
+}
+
+/*
+ * The lines from the server down to each app, in a band 100 wide and 100 tall: Grok Bot's window
+ * sits under x 25, Claude's under x 75. A pulse runs along one as something travels on it.
+ */
+const TO_GROK = "M50 0 C 50 55, 25 45, 25 100";
+const TO_CLAUDE = "M50 0 C 50 55, 75 45, 75 100";
+const FROM_GROK = "M25 100 C 25 45, 50 55, 50 0";
+const FROM_CLAUDE = "M75 100 C 75 45, 50 55, 50 0";
+const PULSES = [
+  { beat: 3, d: FROM_GROK, label: "hand_off_task" },
+  { beat: 4, d: TO_CLAUDE, label: "webhook · handed_to_you" },
+  { beat: 9, d: FROM_CLAUDE, label: "hand_off_task · handBack" },
+  { beat: 11, d: TO_GROK, label: "webhook · handed_to_you" },
+];
+
+function Wires() {
+  return (
+    <div aria-hidden className="relative h-16 max-lg:hidden lg:col-span-2">
+      <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="absolute inset-0 size-full overflow-visible">
+        {[TO_GROK, TO_CLAUDE].map((d) => (
+          <path key={d} d={d} fill="none" className="stroke-edge" strokeWidth="1.5" strokeDasharray="3 5" vectorEffect="non-scaling-stroke" />
+        ))}
+        {PULSES.map(({ beat, d }) => (
+          <path
+            key={beat}
+            {...shown(beat, beat + 1, { pulse: true })}
+            d={d}
+           
+            fill="none"
+            className="stroke-accent"
+            strokeWidth="4"
+            strokeLinecap="round"
+            vectorEffect="non-scaling-stroke"
+          />
+        ))}
+      </svg>
+      {/* What is travelling, named on its line. */}
+      {PULSES.map(({ beat, d, label }) => (
+        <span
+          key={`label-${beat}`}
+          {...shown(beat, beat + 1, { swap: true })}
+          className={cx(
+            "absolute top-0 rounded-full bg-panel px-2 py-0.5 font-mono text-xs text-ink-2 ring-1 ring-rule",
+            d === TO_GROK || d === FROM_GROK ? "right-[60%]" : "left-[60%]",
+          )}
+        >
+          {label}
+        </span>
+      ))}
+    </div>
   );
 }
 
@@ -656,10 +800,17 @@ export function HandoffRelay() {
   return (
     <HandoffPlayer
       picture={
-        <div data-desk className="relative max-lg:h-[580px] lg:grid lg:grid-cols-2 lg:gap-5">
+        <div data-desk className="relative max-lg:h-[580px] lg:grid lg:grid-cols-2 lg:gap-x-5">
+          <HandoffHub
+            node={<Node />}
+            description="Phean, where the agents hand the task over. Shows the task as Phean has it: its handover, note and activity."
+            left={<Latest />}
+            right={<TaskState />}
+            tip={<PheanApp />}
+          />
+          <Wires />
           <GrokChat />
           <ClaudeSession />
-          <PheanApp />
         </div>
       }
       steps={<Steps />}

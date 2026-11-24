@@ -84,7 +84,7 @@ export const COLOR_TOKENS = [
 ] as const;
 export type ColorToken = (typeof COLOR_TOKENS)[number];
 
-export const SHADOW_TOKENS = ["float", "raised", "lift"] as const;
+export const SHADOW_TOKENS = ["float", "raised", "lift", "window", "window-behind"] as const;
 export type ShadowToken = (typeof SHADOW_TOKENS)[number];
 
 export interface Palette {
@@ -187,6 +187,8 @@ const DUSK_LIGHT = palette(
     float: "0 18px 40px -16px oklch(18% 0.03 268 / 0.3), 0 3px 10px -3px oklch(18% 0.03 268 / 0.14)",
     raised: "0 1px 2px oklch(21% 0.016 268 / 0.14), 0 1px 1px -0.5px oklch(21% 0.016 268 / 0.08)",
     lift: "0 40px 80px -32px oklch(18% 0.04 268 / 0.38), 0 12px 24px -12px oklch(18% 0.03 268 / 0.18), 0 0 0 1px oklch(21% 0.016 268 / 0.06)",
+    window: "0 0 0 0.5px oklch(18% 0.04 268 / 0.14), 0 2px 6px -1px oklch(18% 0.04 268 / 0.18), 0 18px 40px -8px oklch(18% 0.04 268 / 0.34)",
+    "window-behind": "0 0 0 0.5px oklch(18% 0.04 268 / 0.1), 0 1px 3px oklch(18% 0.04 268 / 0.1), 0 8px 20px -8px oklch(18% 0.04 268 / 0.18)",
   },
 );
 
@@ -250,6 +252,8 @@ const DUSK_DARK = palette(
     float: "0 18px 40px -16px oklch(8% 0.02 268 / 0.6)",
     raised: "none",
     lift: "0 40px 80px -32px oklch(5% 0.02 268 / 0.75), 0 0 0 1px oklch(100% 0 0 / 0.08)",
+    window: "0 0 0 1px oklch(100% 0 0 / 0.1), 0 2px 8px oklch(4% 0.02 268 / 0.55), 0 18px 44px -8px oklch(3% 0.02 268 / 0.8)",
+    "window-behind": "0 0 0 1px oklch(100% 0 0 / 0.07), 0 1px 4px oklch(4% 0.02 268 / 0.45), 0 8px 24px -8px oklch(3% 0.02 268 / 0.55)",
   },
 );
 
@@ -314,6 +318,8 @@ const LEDGER_LIGHT = palette(
     float: "0 18px 40px -16px oklch(22% 0.06 292 / 0.3), 0 3px 10px -3px oklch(22% 0.06 292 / 0.14)",
     raised: "0 1px 2px oklch(22% 0.04 295 / 0.14), 0 1px 1px -0.5px oklch(22% 0.04 295 / 0.08)",
     lift: "0 40px 80px -32px oklch(22% 0.08 292 / 0.38), 0 12px 24px -12px oklch(22% 0.06 292 / 0.18), 0 0 0 1px oklch(22% 0.04 295 / 0.06)",
+    window: "0 0 0 0.5px oklch(18% 0.08 292 / 0.14), 0 2px 6px -1px oklch(18% 0.08 292 / 0.18), 0 18px 40px -8px oklch(18% 0.08 292 / 0.34)",
+    "window-behind": "0 0 0 0.5px oklch(18% 0.08 292 / 0.1), 0 1px 3px oklch(18% 0.08 292 / 0.1), 0 8px 20px -8px oklch(18% 0.08 292 / 0.18)",
   },
 );
 
@@ -374,6 +380,8 @@ const LEDGER_DARK = over(
     float: "0 18px 40px -16px oklch(8% 0.02 292 / 0.6)",
     raised: "none",
     lift: "0 40px 80px -32px oklch(4% 0.02 292 / 0.75), 0 0 0 1px oklch(95% 0.01 300 / 0.08)",
+    window: "0 0 0 1px oklch(100% 0 0 / 0.1), 0 2px 8px oklch(4% 0.02 292 / 0.55), 0 18px 44px -8px oklch(3% 0.02 292 / 0.8)",
+    "window-behind": "0 0 0 1px oklch(100% 0 0 / 0.07), 0 1px 4px oklch(4% 0.02 292 / 0.45), 0 8px 24px -8px oklch(3% 0.02 292 / 0.55)",
   },
 );
 
@@ -442,6 +450,8 @@ const INK_LIGHT = palette(
     float: "0 20px 40px -16px oklch(20% 0 0 / 0.22), 0 3px 10px -3px oklch(20% 0 0 / 0.12)",
     raised: "0 1px 2px oklch(16% 0 0 / 0.14), 0 1px 1px -0.5px oklch(16% 0 0 / 0.08)",
     lift: "0 40px 80px -32px oklch(20% 0 0 / 0.32), 0 12px 24px -12px oklch(20% 0 0 / 0.16), 0 0 0 1px oklch(16% 0 0 / 0.08)",
+    window: "0 0 0 0.5px oklch(18% 0 0 / 0.14), 0 2px 6px -1px oklch(18% 0 0 / 0.18), 0 18px 40px -8px oklch(18% 0 0 / 0.34)",
+    "window-behind": "0 0 0 0.5px oklch(18% 0 0 / 0.1), 0 1px 3px oklch(18% 0 0 / 0.1), 0 8px 20px -8px oklch(18% 0 0 / 0.18)",
   },
 );
 
@@ -505,6 +515,8 @@ const INK_DARK = palette(
     float: "0 20px 40px -16px oklch(5% 0 0 / 0.65)",
     raised: "none",
     lift: "0 40px 80px -32px oklch(3% 0 0 / 0.75), 0 0 0 1px oklch(100% 0 0 / 0.08)",
+    window: "0 0 0 1px oklch(100% 0 0 / 0.1), 0 2px 8px oklch(4% 0 0 / 0.55), 0 18px 44px -8px oklch(3% 0 0 / 0.8)",
+    "window-behind": "0 0 0 1px oklch(100% 0 0 / 0.07), 0 1px 4px oklch(4% 0 0 / 0.45), 0 8px 24px -8px oklch(3% 0 0 / 0.55)",
   },
 );
 
@@ -574,6 +586,8 @@ const CONSOLE_LIGHT = palette(
     float: "0 18px 40px -16px oklch(19% 0.02 250 / 0.26), 0 3px 10px -3px oklch(19% 0.02 250 / 0.12)",
     raised: "0 1px 2px oklch(19% 0.01 250 / 0.14), 0 1px 1px -0.5px oklch(19% 0.01 250 / 0.08)",
     lift: "0 40px 80px -32px oklch(19% 0.03 250 / 0.34), 0 12px 24px -12px oklch(19% 0.02 250 / 0.16), 0 0 0 1px oklch(19% 0.01 250 / 0.07)",
+    window: "0 0 0 0.5px oklch(18% 0.03 250 / 0.14), 0 2px 6px -1px oklch(18% 0.03 250 / 0.18), 0 18px 40px -8px oklch(18% 0.03 250 / 0.34)",
+    "window-behind": "0 0 0 0.5px oklch(18% 0.03 250 / 0.1), 0 1px 3px oklch(18% 0.03 250 / 0.1), 0 8px 20px -8px oklch(18% 0.03 250 / 0.18)",
   },
 );
 
@@ -637,6 +651,8 @@ const CONSOLE_DARK = palette(
     float: "0 18px 40px -16px oklch(6% 0.01 250 / 0.6)",
     raised: "none",
     lift: "0 40px 80px -32px oklch(4% 0.01 250 / 0.75), 0 0 0 1px oklch(100% 0 0 / 0.07)",
+    window: "0 0 0 1px oklch(100% 0 0 / 0.1), 0 2px 8px oklch(4% 0.01 250 / 0.55), 0 18px 44px -8px oklch(3% 0.01 250 / 0.8)",
+    "window-behind": "0 0 0 1px oklch(100% 0 0 / 0.07), 0 1px 4px oklch(4% 0.01 250 / 0.45), 0 8px 24px -8px oklch(3% 0.01 250 / 0.55)",
   },
 );
 

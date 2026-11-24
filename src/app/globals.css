@@ -885,14 +885,32 @@
   [data-handoff]:is([data-front="phean"], :not([data-front])) [data-window="phean"] {
     z-index: 4;
   }
+
+  /* Windows cast a window's shadow, as on a Mac: soft and close behind, deeper under the one in front. */
+  [data-handoff] [data-window] {
+    box-shadow: 0 0 0 1px var(--color-rule), var(--shadow-window-behind);
+  }
+
+  [data-handoff][data-front="grok"] [data-window="grok"],
+  [data-handoff][data-front="claude"] [data-window="claude"],
+  [data-handoff]:is([data-front="phean"], :not([data-front])) [data-window="phean"] {
+    box-shadow: 0 0 0 1px var(--color-rule), var(--shadow-window);
+  }
 }
 
-/* The app whose part is playing: ringed in the brand, in either layout. */
+/* The app whose part is playing: ringed in the brand, in either layout (from 1024px Phean is the node). */
 [data-handoff][data-front="grok"] [data-window="grok"],
 [data-handoff][data-front="claude"] [data-window="claude"],
-[data-handoff][data-front="phean"] [data-window="phean"] {
+[data-handoff][data-front="phean"] :is([data-window="phean"], [data-node] > span) {
   outline: 2px solid var(--color-accent);
   outline-offset: -1px;
+}
+
+/* A pulse: a short stroke that runs once along its line when its beat starts, then is gone. */
+[data-handoff] [data-at="pulse"] {
+  /* A short dash, run from the line's start to past its end (lengths measured on the drawn lines). */
+  stroke-dasharray: 32 2000;
+  stroke-dashoffset: calc(32px - var(--shown) * 250px);
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -912,7 +930,14 @@
     transition:
       transform 450ms var(--ease-out),
       visibility 450ms,
+      box-shadow 450ms var(--ease-out),
       outline-color var(--dur-short) var(--ease-out);
+  }
+
+  [data-handoff] [data-at="pulse"] {
+    clip-path: none;
+    translate: none;
+    transition: stroke-dashoffset 1600ms ease-in-out;
   }
 
   /* Grok Bot typing: three dots that breathe while the story plays. */

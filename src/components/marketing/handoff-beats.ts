@@ -9,7 +9,8 @@ import type { CSSProperties } from "react";
  *  5 Claude claims · 6–7 researches · 8 updates the draft · 9 hands it back · 10 Phean shows it back ·
  *  11 Grok Bot hears · 12 reviews · 13 sends · 14 completes, in Phean · 15 the loop's end
  */
-export const HANDOFF_BEATS = [900, 1700, 1700, 2000, 1800, 1400, 1300, 1100, 1600, 1600, 1800, 1300, 1800, 1700, 2200, 900] as const;
+// About 32 seconds: the moments to read (a message, a note, a result) hold longer than the steps between them.
+export const HANDOFF_BEATS = [1000, 2400, 2400, 2800, 2500, 1600, 1500, 1300, 2200, 2200, 2500, 1500, 2500, 2000, 3000, 1000] as const;
 
 /** The beat everything is gone by: the loop's last. */
 export const HANDOFF_END = HANDOFF_BEATS.length - 1;
@@ -57,18 +58,25 @@ export function beatAt(elapsed: number): number {
 
 /** The windows open at a beat, as `data-open` lists them. */
 export function openAt(beat: number): string {
-  return (Object.keys(HANDOFF_OPENS) as HandoffWindow[]).filter((window) => window === "grok" || (beat >= HANDOFF_OPENS[window] && beat < HANDOFF_END)).join(" ");
+  return (Object.keys(HANDOFF_OPENS) as HandoffWindow[])
+    .filter((window) => window === "grok" || (beat >= HANDOFF_OPENS[window] && beat < HANDOFF_END))
+    .join(" ");
 }
 
 /**
  * Shown from beat `from` until beat `to` (exclusive): the attributes the stylesheet reads to bring a
  * piece of the stage in and out as the stage's `--beat` moves. `delay` staggers pieces within a beat;
  * `swap` replaces in place instead of rising, for states that take each other's place; `flow` takes
- * no room until it arrives, for the lines of a conversation or a log that grows from the bottom.
+ * no room until it arrives, for the lines of a conversation or a log that grows from the bottom;
+ * `pulse` is a stroke that runs once along its line as the beat starts (a handoff or webhook on its way).
  */
-export function shown(from: number, to: number = HANDOFF_END, { delay = 0, swap = false, flow = false }: { delay?: number; swap?: boolean; flow?: boolean } = {}) {
+export function shown(
+  from: number,
+  to: number = HANDOFF_END,
+  { delay = 0, swap = false, flow = false, pulse = false }: { delay?: number; swap?: boolean; flow?: boolean; pulse?: boolean } = {},
+) {
   return {
-    "data-at": swap ? "swap" : flow ? "flow" : "",
+    "data-at": swap ? "swap" : flow ? "flow" : pulse ? "pulse" : "",
     style: {
       "--in": from,
       "--out": to,
