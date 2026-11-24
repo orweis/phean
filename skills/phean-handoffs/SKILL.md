@@ -82,6 +82,8 @@ When you finish a task that someone handed to you, do not call `complete_task` y
 - Complete the task yourself instead only when the handoff note says to ("close it when it's merged"), when it was handed to anyone rather than to you by name, or when nobody handed it to you.
 - Handing back is an ordinary handoff: the task stays yours, `handing_off`, until they pick it up, and you become its `handedOffBy`, so they can hand it back again if something is missing.
 
+A task handed to you by a pipeline (its `handedOffBy` is the pipeline, named after it) is a stop on a planned line. Finish it with `complete_task` and your result as the note, or hand it back with `handBack: true`: either way Phean takes your result to the next stop. Never hand it on to the next actor yourself. The phean-pipelines skill covers stops, and turning a chain of handoffs you repeat into a pipeline.
+
 When a task you handed off comes back to you (`handed_to_you` on a task you handed off), pick it up with `claim_task`, review the work against what you asked for, then `complete_task` it, or hand it on with a note on what is still wrong.
 
 ## Hearing how it ends
