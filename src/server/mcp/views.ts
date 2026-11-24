@@ -1,6 +1,7 @@
 import { GOAL_STATUS_META, TASK_STATUS_META } from "@/lib/domain";
 import { truncate } from "@/lib/format";
 import { toTree, type TreeNode } from "@/lib/goal-tree";
+import type { PipelineDefinition } from "@/lib/pipelines";
 
 import type { GoalWithProgress } from "../domain/goals";
 import type { Board } from "../domain/overview";
@@ -82,4 +83,30 @@ export function timelineMermaid(tasks: readonly TaskView[]): string {
 
 export function fenced(mermaid: string): string {
   return `\`\`\`mermaid\n${mermaid}\n\`\`\``;
+}
+
+/**
+ * A pipeline as a left-to-right map: stops as boxes (a person's as a rounded box, with its kind and
+ * who serves it), ends as circles, forks and choices as their edges (a choice's labelled), and, given
+ * a run's stops, each stop's state for that run.
+ */
+export function pipelineMermaid(definition: PipelineDefinition, states?: ReadonlyMap<string, string>): string {
+  const lines = ["flowchart LR"];
+  const node = (id: string) => `s_${id}`;
+  const end = (id: string) => `e_${id}`;
+  for (const stop of definition.stops) {
+    const who = stop.kind === "agent" ? stop.agent! : stop.kind === "person" ? (stop.person ?? `any ${stop.role}`) : "any agent";
+    const state = states?.get(stop.id);
+    const text = `${label(stop.name, 40)}<br/>${label(who, 30)}${state ? ` · ${label(state, 20)}` : ""}`;
+    lines.push(stop.kind === "person" ? `  ${node(stop.id)}("${text}")` : `  ${node(stop.id)}["${text}"]`);
+  }
+  for (const finish of definition.ends) lines.push(`  ${end(finish.id)}(("${label(finish.name, 30)}"))`);
+  for (const stop of definition.stops) {
+    const { then } = stop;
+    if (then.next) lines.push(`  ${node(stop.id)} --> ${node(then.next)}`);
+    for (const target of then.fork ?? []) lines.push(`  ${node(stop.id)} --> ${node(target)}`);
+    for (const branch of then.choice ?? []) lines.push(`  ${node(stop.id)} -- "${label(branch.label, 30)}" --> ${branch.to ? node(branch.to) : end(branch.end!)}`);
+    if (then.end) lines.push(`  ${node(stop.id)} --> ${end(then.end)}`);
+  }
+  return lines.join("\n");
 }

@@ -18,12 +18,19 @@ export const ACTIONS = [
   "workflow:manage",
   "digest:subscribe",
   "notify:subscribe",
+  "pipeline:write",
+  "pipeline:manage",
 ] as const;
 export type Action = (typeof ACTIONS)[number];
 
 export type PolicyRole = "owner" | "admin" | "member" | "platform_admin" | "agent_read" | "agent_write" | "agent_admin";
 
-const CONTRIBUTE: readonly Action[] = ["workspace:read", "goal:write", "task:write", "memory:write", "document:write"];
+/**
+ * `pipeline:write` defines pipelines and starts, cancels and reruns their runs, and changes ad hoc
+ * ones; a regular pipeline is changed by its owner or a holder of `pipeline:manage` (owners and
+ * admins), and an agent's change to one is a proposal a person approves.
+ */
+const CONTRIBUTE: readonly Action[] = ["workspace:read", "goal:write", "task:write", "memory:write", "document:write", "pipeline:write"];
 
 /**
  * The whole authorization model. `goal:decide` (approve, achieve, abandon) is human-only:

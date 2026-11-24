@@ -15,8 +15,10 @@ const LINKS = {
     d: (slug, id) => routes_1.routes.document(slug, id),
     m: (slug, id) => routes_1.routes.memoryItem(slug, id),
     q: (slug, id) => routes_1.routes.request(slug, id),
+    p: (slug, id) => routes_1.routes.pipeline(slug, id),
+    r: (slug, id) => routes_1.routes.pipelineRun(slug, id),
 };
-const LINKABLE_ID = /^(t|g|d|m|q)_[A-Za-z0-9]+$/;
+const LINKABLE_ID = /^(t|g|d|m|q|p|r)_[A-Za-z0-9]+$/;
 function isLinkableId(id) {
     return typeof id === "string" && LINKABLE_ID.test(id);
 }
@@ -255,6 +257,10 @@ exports.routes = {
     task: (slug, taskId) => `/w/${slug}/tasks/${taskId}`,
     memory: (slug, filters) => withQuery(`/w/${slug}/memory`, filters),
     memoryItem: (slug, memoryId) => withQuery(`/w/${slug}/memory`, { focus: memoryId }),
+    pipelines: (slug) => `/w/${slug}/pipelines`,
+    pipeline: (slug, pipelineId) => `/w/${slug}/pipelines/${pipelineId}`,
+    pipelineRun: (slug, runId) => `/w/${slug}/pipelines/runs/${runId}`,
+    pipelineTrigger: (pipelineId) => `/api/pipelines/${pipelineId}/trigger`,
     link: (slug, id) => `/w/${slug}/link/${id}`,
     documents: (slug, query) => withQuery(`/w/${slug}/documents`, { q: query }),
     document: (slug, documentId, mode) => withQuery(`/w/${slug}/documents/${documentId}`, { mode }),

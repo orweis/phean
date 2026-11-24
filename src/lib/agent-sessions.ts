@@ -49,6 +49,21 @@ export const REQUEST_KINDS = ["question", "decision"] as const;
 export type RequestKind = (typeof REQUEST_KINDS)[number];
 
 /** A question an agent needs a person to answer before it can go on. */
+/**
+ * A request a pipeline asked (a person stop's decision, or what to do about a stop that failed), so
+ * the Decisions page can badge and sort it and a notification can say "Pipeline". Its asker is the
+ * workspace's pipelines agent, named after the pipeline.
+ */
+export interface PipelineRequestRef {
+  pipelineId: string;
+  pipelineName: string;
+  runId: string;
+  runNumber: number;
+  /** The stop's id in the run's definition, and its name. */
+  stopId: string;
+  stopName: string;
+}
+
 export interface InputRequest {
   /** Stable id for the request; older rows were backfilled by migration 0003. */
   id: string;
@@ -69,6 +84,8 @@ export interface InputRequest {
   askedAt: string;
   /** ISO timestamp a person last snoozed it: it waits behind everything asked before then. */
   snoozedAt?: string;
+  /** Set when a pipeline asked it; only the pipeline engine sets it. */
+  pipeline?: PipelineRequestRef;
 }
 
 /** Where an open request stands in the queue: when it was asked, or when it was last snoozed. */

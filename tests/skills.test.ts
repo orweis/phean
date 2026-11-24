@@ -8,8 +8,24 @@ import { describe, expect, it } from "vitest";
 
 import { LINK_KINDS, REQUEST_KINDS } from "@/lib/agent-sessions";
 import { DOCUMENT_FORMATS } from "@/lib/documents";
-import { DELEGATION_STATES } from "@/lib/domain";
-import { AskInput, AttachDocumentInput, HandOffInput, ListTasksInput, MAX_WAIT_SECONDS, RegisterWebhookInput, WaitForAnswersInput } from "@/server/domain/schemas";
+import { DEFINABLE_PIPELINE_KINDS, DELEGATION_STATES, FAILURE_ACTIONS, JOIN_MODES, STOP_KINDS, STOP_STATES } from "@/lib/domain";
+import { EVENT_INPUTS } from "@/server/domain/pipeline-engine";
+import {
+  AskInput,
+  AttachDocumentInput,
+  DefinePipelineInput,
+  FailureRuleInput,
+  HandOffInput,
+  ListTasksInput,
+  MAX_WAIT_SECONDS,
+  PipelineStopInput,
+  PipelineTriggersInput,
+  RegisterWebhookInput,
+  RerunFromInput,
+  StartRunInput,
+  StopThenInput,
+  WaitForAnswersInput,
+} from "@/server/domain/schemas";
 import { SERVER_INSTRUCTIONS } from "@/server/mcp/guidance";
 import { TOOLS } from "@/server/mcp/tools";
 import { AGENT_INACTIVE, backoffSeconds, MAX_CONSECUTIVE_FAILURES, REQUEST_TIMEOUT_MS } from "@/server/webhooks/dispatch";
@@ -21,12 +37,13 @@ const SKILLS = {
   "phean-webhooks": read("phean-webhooks"),
   "phean-documents": read("phean-documents"),
   "phean-handoffs": read("phean-handoffs"),
+  "phean-pipelines": read("phean-pipelines"),
 };
 const TOOL_NAMES = new Set(TOOLS.map((tool) => tool.name));
 /** Delivery reasons and the delivery error look like tool names (snake_case) but are payload values. */
 const REASONS = ["asked_by_you", "handed_to_you", "handed_off_by_you", "in_watched_goal", "about_watched_task", AGENT_INACTIVE];
-/** Field values that also look like tool names: the delegation states and the handed_to_me filter. */
-const VALUES = [...REASONS, ...DELEGATION_STATES, "handed_to_me", "handed_off_by_me"];
+/** Field values that also look like tool names: the delegation states, the handed_to_me filter, and pipelines' kinds, states and event inputs. */
+const VALUES = [...REASONS, ...DELEGATION_STATES, "handed_to_me", "handed_off_by_me", ...STOP_KINDS, ...FAILURE_ACTIONS, ...STOP_STATES, ...EVENT_INPUTS];
 
 const codeBlock = (skill: string, language: string) => new RegExp("```" + language + "\\n([\\s\\S]+?)\\n```").exec(skill)![1]!;
 
@@ -178,5 +195,39 @@ print(json.dumps([verify_phean(${JSON.stringify(secret)}, body.encode(), header,
     const run = spawnSync("python3", ["-I", "-c", script], { input: JSON.stringify(cases.map(([, payload, header, at]) => [payload, header, at])), encoding: "utf8" });
     expect(run.stderr).toBe("");
     expect(JSON.parse(run.stdout)).toEqual(cases.map(([, , , , valid]) => valid));
+  });
+});
+
+describe("the phean-pipelines skill", () => {
+  const SKILL = SKILLS["phean-pipelines"];
+  const PIPELINE_TOOLS = ["define_pipeline", "update_pipeline", "list_pipelines", "get_pipeline", "start_run", "get_run", "list_runs", "cancel_run", "rerun_from"];
+
+  it("names every pipeline tool, and each is one the server has", () => {
+    for (const tool of PIPELINE_TOOLS) {
+      expect(TOOL_NAMES.has(tool), tool).toBe(true);
+      expect(SKILL).toContain(`\`${tool}\``);
+    }
+  });
+
+  it("names every field, kind, rule, join and state the server accepts", () => {
+    const fields = [DefinePipelineInput, PipelineStopInput, StopThenInput, FailureRuleInput, PipelineTriggersInput, StartRunInput, RerunFromInput].flatMap((schema) => Object.keys(schema.shape));
+    for (const field of fields) expect(SKILL, field).toContain(`\`${field}\``);
+    for (const value of [...DEFINABLE_PIPELINE_KINDS, ...STOP_KINDS, ...FAILURE_ACTIONS, ...JOIN_MODES, ...STOP_STATES, "upcoming", ...EVENT_INPUTS]) expect(SKILL, value).toContain(`\`${value}\``);
+  });
+
+  it("carries an example definition the server would accept", () => {
+    const example = JSON.parse(codeBlock(SKILL, "json"));
+    const parsed = DefinePipelineInput.safeParse(example);
+    expect(parsed.error?.issues ?? []).toEqual([]);
+    expect(parsed.data?.definition.stops.map((stop) => stop.kind)).toEqual(expect.arrayContaining(["agent", "person"]));
+  });
+
+  it("teaches finishing a stop with a result rather than handing it on, as the server's guidance does", () => {
+    for (const text of [SKILL, SERVER_INSTRUCTIONS]) {
+      expect(text).toMatch(/Do not hand it on yourself/);
+      expect(text).toContain("complete_task");
+      expect(text).toContain("handBack: true");
+      expect(text).toContain("phean-pipelines");
+    }
   });
 });

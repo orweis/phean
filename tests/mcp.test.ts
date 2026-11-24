@@ -110,7 +110,7 @@ describe("MCP surface", () => {
   it("advertises every tool with annotations, plus prompts and instructions", async () => {
     const { tools } = await scout.listTools();
     expect(tools.map((tool) => tool.name).sort()).toEqual(TOOLS.filter((tool) => !tool.adminOnly).map((tool) => tool.name).sort());
-    expect(tools).toHaveLength(44);
+    expect(tools).toHaveLength(53);
     const byName = new Map(tools.map((tool) => [tool.name, tool]));
     expect(byName.get("list_tasks")?.annotations?.readOnlyHint).toBe(true);
     expect(byName.get("forget")?.annotations?.destructiveHint).toBe(true);
@@ -522,6 +522,11 @@ describe("tools by access level", () => {
     delete_webhook: {},
     watch: { entityType: "task", entityId: "t_x" },
     unwatch: { entityType: "task", entityId: "t_x" },
+    define_pipeline: { name: "P", definition: { stops: [{ id: "a", name: "A", kind: "any_agent", then: { end: "done" } }], ends: [{ id: "done", name: "Done" }] } },
+    update_pipeline: { pipelineId: "p_x", name: "P" },
+    start_run: { pipelineId: "p_x" },
+    cancel_run: { runId: "r_x" },
+    rerun_from: { runId: "r_x", stopId: "a" },
   };
   const changing = TOOLS.filter((tool) => !tool.annotations.readOnlyHint);
 
@@ -644,5 +649,59 @@ describe("what agents are told about addresses and sub-agents", () => {
     } finally {
       await admin.client.close();
     }
+  });
+});
+
+describe("pipelines over MCP", () => {
+  it("defines a pipeline, starts a run, and two agents finish their stops until the run ends", async () => {
+    const definition = {
+      inputs: [{ name: "topic", required: true }],
+      stops: [
+        { id: "research", name: "Research", kind: "agent", agent: "Scout", instructions: "Find three sources on {{input.topic}}.", outputs: ["a source list"], then: { next: "write" } },
+        { id: "write", name: "Write", kind: "agent", agent: "Closer", instructions: "Write it up from: {{stops.research.result}}", then: { choice: [{ label: "published", end: "published" }, { label: "parked", end: "parked" }] } },
+      ],
+      ends: [
+        { id: "published", name: "Published" },
+        { id: "parked", name: "Parked" },
+      ],
+    };
+    const refused = await call(scout, "define_pipeline", { name: "Brief", definition: { ...definition, stops: [{ ...definition.stops[0], then: { next: "nowhere" } }, definition.stops[1]] } });
+    expect(refused.isError).toBe(true);
+    expect(textOf(refused)).toMatch(/goes next to "nowhere", which is not a stop/);
+
+    const defined = dataOf<{ pipeline: { id: string; url: string }; map: string }>(await call(scout, "define_pipeline", { name: "Brief", definition }));
+    const base = `${TEST_ORIGIN}/w/${ws.tenant.slug}`;
+    expect(defined.pipeline.url).toBe(`${base}/pipelines/${defined.pipeline.id}`);
+    expect(defined.map).toContain("flowchart LR");
+    expect(defined.map).toContain('s_write -- "published" --> e_published');
+
+    const started = dataOf<{ run: { id: string; url: string; status: string }; headline: string }>(await call(scout, "start_run", { pipelineId: defined.pipeline.id, inputs: { topic: "agent memory" } }));
+    expect(started).toMatchObject({ headline: "At Research", run: { status: "running", url: `${base}/pipelines/runs/${started.run.id}` } });
+
+    // Each agent finds its stop the way it finds any handoff, and completes it with a result.
+    const mine = async (client: Client) => dataOf<{ tasks: { id: string; delegationNote: string }[] }>(await call(client, "list_tasks", { claimed: "handed_to_me" })).tasks;
+    const [research] = await mine(scout);
+    expect(research!.delegationNote).toContain("Find three sources on agent memory.");
+    dataOf(await call(scout, "claim_task", { taskId: research!.id }));
+    dataOf(await call(scout, "complete_task", { taskId: research!.id, note: "Sources: A, B, C" }));
+
+    const [write] = await mine(closer);
+    expect(write!.delegationNote).toContain("Write it up from: Sources: A, B, C");
+    dataOf(await call(closer, "claim_task", { taskId: write!.id }));
+    dataOf(await call(closer, "complete_task", { taskId: write!.id, note: "Published: https://blog.example.com/memory" }));
+
+    const ended = dataOf<{ run: { status: string; endName: string }; headline: string; stops: { stopId: string; state: string; task: { url: string } }[]; map: string }>(
+      await call(scout, "get_run", { runId: started.run.id }),
+    );
+    expect(ended).toMatchObject({ headline: "Ended: Published", run: { status: "done", endName: "Published" } });
+    expect(ended.stops.map((stop) => [stop.stopId, stop.state])).toEqual([
+      ["research", "done"],
+      ["write", "done"],
+    ]);
+    expect(ended.stops[0]!.task.url).toMatch(`${base}/tasks/`);
+    const { runs } = dataOf<{ runs: { id: string }[] }>(await call(closer, "list_runs", { pipelineId: defined.pipeline.id }));
+    expect(runs.map((run) => run.id)).toEqual([started.run.id]);
+    const { pipelines } = dataOf<{ pipelines: { id: string; runs: { total: number } }[] }>(await call(closer, "list_pipelines"));
+    expect(pipelines.find((pipeline) => pipeline.id === defined.pipeline.id)?.runs.total).toBe(1);
   });
 });

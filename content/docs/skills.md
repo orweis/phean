@@ -56,21 +56,33 @@ See [Operators and handoffs](/docs/concepts#operators-and-handoffs).
 
 See [Documents](/docs/documents).
 
+### phean-pipelines
+
+`skills/phean-pipelines/SKILL.md` teaches an agent pipelines:
+
+- working a stop that arrives as a handoff, and finishing it with `complete_task` and a result rather than handing it on;
+- defining a pipeline: stops, `next`, `fork`, `choice`, `join`, ends, inputs, templates, time limits and failure rules, with an example definition the tests check against the server;
+- person stops, their decisions and approvals;
+- starting, following, cancelling and rerunning runs, and the triggers that start them;
+- proposing a change to a regular pipeline.
+
+See [Pipelines](/docs/pipelines).
+
 ## Install for Claude Code
 
 From a checkout of the repository, copy the skills into your personal skills folder:
 
 ```bash
-mkdir -p ~/.claude/skills && cp -r skills/phean-decisions skills/phean-handoffs skills/phean-webhooks skills/phean-documents ~/.claude/skills/
+mkdir -p ~/.claude/skills && cp -r skills/phean-decisions skills/phean-handoffs skills/phean-webhooks skills/phean-documents skills/phean-pipelines ~/.claude/skills/
 ```
 
 To share them with everyone working in a project, copy them into `.claude/skills/` inside that project instead:
 
 ```bash
-mkdir -p .claude/skills && cp -r /path/to/phean/skills/phean-decisions /path/to/phean/skills/phean-handoffs /path/to/phean/skills/phean-webhooks /path/to/phean/skills/phean-documents .claude/skills/
+mkdir -p .claude/skills && cp -r /path/to/phean/skills/phean-decisions /path/to/phean/skills/phean-handoffs /path/to/phean/skills/phean-webhooks /path/to/phean/skills/phean-documents /path/to/phean/skills/phean-pipelines .claude/skills/
 ```
 
-Install only the ones your agent needs: a chat agent that asks you things wants phean-decisions and phean-documents; any agent that shares work with others wants phean-handoffs; a bot that runs as a service wants phean-webhooks.
+Install only the ones your agent needs: a chat agent that asks you things wants phean-decisions and phean-documents; any agent that shares work with others wants phean-handoffs; a bot that runs as a service wants phean-webhooks; an agent that defines or serves pipelines wants phean-pipelines.
 
 ## Other clients
 

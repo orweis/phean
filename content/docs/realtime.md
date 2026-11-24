@@ -28,7 +28,7 @@ An OAuth access token for `/mcp`, or for the agent's own `/mcp/w/<slug>`, opens 
 
 | Parameter | Values | Default |
 | --- | --- | --- |
-| `topics` | Comma-separated `decisions`, `tasks`, `goals`, `memory`. | All four. |
+| `topics` | Comma-separated `decisions`, `tasks`, `goals`, `memory`, `pipelines`. | All five. |
 | `scope` | `related` (what you follow) or `all` (every change in the workspace). `all` needs Write or Admin access. | `related` |
 | `after` | The last cursor you received, to resume. | Start from now. |
 

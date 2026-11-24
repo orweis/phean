@@ -17,7 +17,19 @@ export function agentRole(level: AgentAccessLevel): AgentRole {
 
 export type Actor =
   | { type: "user"; id: string; name: string; role: UserRole }
-  | { type: "agent"; id: string; name: string; role: AgentRole };
+  | {
+      type: "agent";
+      id: string;
+      name: string;
+      role: AgentRole;
+      /**
+       * Set only by the pipeline engine (`pipelineContext`), never from a credential: Phean itself,
+       * acting as the workspace's pipelines agent to run a pipeline. Its decisions are the run's, so
+       * it may move a stop's task whoever operates it, and the task services do not report its own
+       * changes back to the engine.
+       */
+      system?: true;
+    };
 
 export type Role = Actor["role"];
 

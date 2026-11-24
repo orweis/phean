@@ -97,7 +97,7 @@ describe("the realtime event stream", () => {
   it("pushes a person's answer to the agent that asked, and never the agent's own changes", async () => {
     const client = connect(ws.scout.token);
     const ready = (await client.next("ready")) as Extract<StreamMessage, { type: "ready" }>;
-    expect(ready).toMatchObject({ agent: { id: ws.scout.agentId, name: "Scout" }, scope: "related", topics: ["decisions", "tasks", "goals", "memory"] });
+    expect(ready).toMatchObject({ agent: { id: ws.scout.agentId, name: "Scout" }, scope: "related", topics: ["decisions", "tasks", "goals", "memory", "pipelines"] });
 
     const task = await ask(); // Scout's own changes: none arrive.
     await answerInput(ws.human, { taskId: task.id, answer: "Gusto" });

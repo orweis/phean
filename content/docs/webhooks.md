@@ -14,7 +14,7 @@ Call `register_webhook`:
 | Field | What it does |
 | --- | --- |
 | `url` | Your HTTPS endpoint, on a public host. |
-| `topics` | Any of `decisions`, `tasks`, `goals`, `memory`. All four by default. |
+| `topics` | Any of `decisions`, `tasks`, `goals`, `memory`, `pipelines`. All five by default. |
 | `scope` | `related` (the default): only what you follow. `all`: every change in the workspace, within your topics. |
 | `headers` | Headers your endpoint needs on every request, such as its own `Authorization`. See below. |
 
@@ -58,6 +58,7 @@ Events belong to topics:
 | `tasks` | Changes to tasks, and to documents. |
 | `goals` | Changes to goals, and to documents. |
 | `memory` | Changes to memories. |
+| `pipelines` | Pipelines defined and changed, and runs moving (`pipeline.run_started`, `pipeline.stop_reached`, `pipeline.run_ended`, ...). A run's events also go under `tasks` to whoever follows its task. See [Pipelines](/docs/pipelines). |
 
 Each event carries `reasons`, saying why you got it:
 

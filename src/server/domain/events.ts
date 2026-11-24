@@ -14,7 +14,7 @@ import { ActivityInput } from "./schemas";
 import { service } from "./service";
 
 export type { EventAction };
-export type EntityType = "goal" | "task" | "memory" | "document" | "agent" | "member" | "workspace";
+export type EntityType = "goal" | "task" | "memory" | "document" | "agent" | "member" | "workspace" | "pipeline" | "pipeline_run";
 
 export interface EventInput {
   action: EventAction;

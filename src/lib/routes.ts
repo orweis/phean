@@ -61,7 +61,15 @@ export const routes = {
   memory: (slug: string, filters?: { kind?: string; q?: string }) => withQuery(`/w/${slug}/memory`, filters),
   /** One memory, brought into view on the Memory page. */
   memoryItem: (slug: string, memoryId: string) => withQuery(`/w/${slug}/memory`, { focus: memoryId }),
-  /** A permalink for anything with a Phean id (`t_`, `g_`, `d_`, `m_`, `q_`): it redirects to where that thing is shown. */
+  /** Every pipeline in the workspace (the page comes with the Pipelines tab). */
+  pipelines: (slug: string) => `/w/${slug}/pipelines`,
+  /** One pipeline: its map, runs and definition. */
+  pipeline: (slug: string, pipelineId: string) => `/w/${slug}/pipelines/${pipelineId}`,
+  /** One run of a pipeline (a trip down the line). */
+  pipelineRun: (slug: string, runId: string) => `/w/${slug}/pipelines/runs/${runId}`,
+  /** A pipeline's inbound webhook: POST here with its secret to start a run. */
+  pipelineTrigger: (pipelineId: string) => `/api/pipelines/${pipelineId}/trigger`,
+  /** A permalink for anything with a Phean id (`t_`, `g_`, `d_`, `m_`, `q_`, `p_`, `r_`): it redirects to where that thing is shown. */
   link: (slug: string, id: string) => `/w/${slug}/link/${id}`,
   documents: (slug: string, query?: string) => withQuery(`/w/${slug}/documents`, { q: query }),
   document: (slug: string, documentId: string, mode?: "edit") => withQuery(`/w/${slug}/documents/${documentId}`, { mode }),

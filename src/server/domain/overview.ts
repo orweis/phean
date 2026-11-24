@@ -81,7 +81,7 @@ export async function getWorkspaceStats(db: Db, tenantIds: readonly string[]): P
         active: countWhere(sql`${agents.revokedAt} is null and ${agents.lastSeenAt} > now() - interval '1 day'`),
       })
       .from(agents)
-      .where(inArray(agents.tenantId, ids))
+      .where(and(inArray(agents.tenantId, ids), sql`${agents.authKind} <> 'system'`))
       .groupBy(agents.tenantId),
     db
       .select({ tenantId: events.tenantId, lastActivityAt: max(events.createdAt) })

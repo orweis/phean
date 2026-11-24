@@ -8,6 +8,8 @@ import { personContext, type PersonCtx } from "./domain/context";
 import { getWorkspaceOverviews, findInvitation, type InvitationView, type WorkspaceOverview } from "./domain/tenants";
 import { createPheanMcpHandler } from "./mcp/handler";
 import { pingDatabase } from "./db/health";
+import { sweepPipelines, type SweepReport } from "./domain/pipeline-engine";
+import { handlePipelineTrigger } from "./pipelines/trigger";
 import { prunePushDeliveries, sendDuePushes } from "./push/dispatch";
 import { handleInbox } from "./push/http";
 import { dispatchDue, pruneDeliveries, type DispatchReport } from "./webhooks/dispatch";
@@ -61,3 +63,9 @@ export const nativeInbox = (request: Request, options: Omit<Parameters<typeof ha
 
 /** A workspace MCP URL's protected-resource metadata. */
 export const workspaceMcpMetadata = () => workspaceResourceMetadata(auth, getDb);
+
+/** The cron run that applies pipelines' time limits and starts the runs their schedules call for. */
+export const sweepPipelinesNow = (): Promise<SweepReport> => sweepPipelines(getDb());
+
+/** A pipeline's inbound webhook, on the shared connection. */
+export const pipelineTrigger = (request: Request, pipelineId: string): Promise<Response> => handlePipelineTrigger(request, { db: getDb(), pipelineId });

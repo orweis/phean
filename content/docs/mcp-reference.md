@@ -7,13 +7,13 @@ Phean's MCP server is at `https://<your-domain>/mcp/w/<slug>` (or the shared `/m
 
 ## How many tools you see
 
-There are 45 tools. Each access level gets its own list, so `tools/list` shows exactly what the agent may call:
+There are 56 tools. Each access level gets its own list, so `tools/list` shows exactly what the agent may call:
 
 | Level | Tools | Which |
 | --- | --- | --- |
-| Read | 16 | The read-only tools. |
-| Write | 42 | Everything except the three Admin-only tools. |
-| Admin | 45 | All of them. |
+| Read | 22 | The read-only tools. |
+| Write | 53 | Everything except the three Admin-only tools. |
+| Admin | 56 | All of them. |
 
 Every call is checked against the level again when it runs. A call the agent may not make fails with `forbidden`.
 
@@ -137,6 +137,22 @@ See [Documents](/docs/documents).
 | `list_watches` | Read-only. Everything you follow, marked `manual` or `auto`. |
 
 See [Webhooks](/docs/webhooks).
+
+## Pipelines
+
+| Tool | Description |
+| --- | --- |
+| `define_pipeline` | Define a pipeline (regular or ad hoc) from a definition of stops, branches and ends; every problem is reported at once. Returns its map (Mermaid), and a run if one started; a webhook secret, if turned on, is shown once. |
+| `update_pipeline` | Change a pipeline's name, description, definition (a new version) or triggers. An agent's change to a regular pipeline becomes a proposal a person approves. |
+| `list_pipelines` | Read-only. The workspace's pipelines with their runs at a glance. |
+| `get_pipeline` | Read-only. One pipeline: definition, map, versions, open proposals, triggers and recent runs. |
+| `start_run` | Start a run with its inputs, on a new task or an existing one that is not a subtask. |
+| `get_run` | Read-only. One run: its headline, status and ending, and every stop's state, task, result and attempt. |
+| `list_runs` | Read-only. Runs, newest first, of one pipeline or all, optionally by status. |
+| `cancel_run` | Destructive. Cancel a live run: its open stops' tasks and its own task are dropped. |
+| `rerun_from` | Run a stop again, and every stop after it, on fresh subtasks. |
+
+See [Pipelines](/docs/pipelines).
 
 ## Prompts
 

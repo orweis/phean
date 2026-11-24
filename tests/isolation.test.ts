@@ -23,6 +23,8 @@ import { createGoal, findGoal, listGoals, updateGoal, type Goal } from "@/server
 import { attachDocument, deleteDocument, getDocument, listDocuments, updateDocument } from "@/server/domain/documents";
 import { countMemoryKinds, forget, recall, remember, type Memory } from "@/server/domain/memory";
 import { getWorkflow, saveWorkflow } from "@/server/domain/workflow";
+import { cancelRun, definePipeline, getPipeline, getRun, listPipelines, listRuns, rerunFrom, startRun, updatePipeline } from "@/server/domain/pipelines";
+import { pipelineRuns } from "@/server/db/schema";
 import { answerFromNotification, muteWorkspace, openDecisions, undoFromNotification } from "@/server/domain/notifications";
 import { sendDuePushes } from "@/server/push/dispatch";
 import { handlePushAnswer, inboxFeed } from "@/server/push/http";
@@ -269,6 +271,38 @@ describe("tenant isolation", () => {
     await done;
     const pushed = sent.map((data) => JSON.parse(data) as { type: string; events?: { summary: string }[] }).flatMap((message) => message.events ?? []);
     expect(pushed.map((event) => event.summary).join("\n")).not.toMatch(/merger|Bluebird/i);
+  });
+
+  it("keeps pipelines, their runs, their stops and their triggers inside their workspace", async () => {
+    const definition = { stops: [{ id: "draft", name: "Draft the memo", kind: "agent" as const, agent: "Scout", then: { end: "done" } }], ends: [{ id: "done", name: "Done" }] };
+    const { pipeline } = await definePipeline(acmeOwner, { name: "Merger memo", definition, triggers: { events: [{ tag: "merger" }] } });
+    const run = await startRun(acmeOwner, { pipelineId: pipeline.id });
+    for (const ctx of [globexOwner, globexAgent]) {
+      expect(await listPipelines(ctx, {})).toEqual([]);
+      expect(await listRuns(ctx, {})).toEqual([]);
+      await expect(getPipeline(ctx, { pipelineId: pipeline.id })).rejects.toMatchObject({ code: "not_found" });
+      await expect(getRun(ctx, { runId: run.run.id })).rejects.toMatchObject({ code: "not_found" });
+      await expect(startRun(ctx, { pipelineId: pipeline.id })).rejects.toMatchObject({ code: "not_found" });
+      await expect(cancelRun(ctx, { runId: run.run.id })).rejects.toMatchObject({ code: "not_found" });
+      await expect(rerunFrom(ctx, { runId: run.run.id, stopId: "draft" })).rejects.toMatchObject({ code: "not_found" });
+      await expect(updatePipeline(ctx, { pipelineId: pipeline.id, name: "Mine" })).rejects.toMatchObject({ code: "not_found" });
+    }
+    // A stop names an agent of its own workspace: Globex's Scout is not Acme's, and Acme's is not Globex's.
+    const handed = await listTasks(acme.scout.ctx, { claimed: "handed_to_me" });
+    expect(handed.map((task) => task.title)).toEqual(["Draft the memo"]);
+    expect(await listTasks(globexAgent, { claimed: "handed_to_me" })).toEqual([]);
+    await expect(
+      definePipeline(globexOwner, { name: "Poach", definition: { ...definition, stops: [{ ...definition.stops[0]!, agent: acme.closer.agentId }] } }),
+    ).rejects.toMatchObject({ code: "invalid", message: expect.stringContaining("no connected agent") });
+    // Another workspace's event trigger does not hear Globex's tasks.
+    await captureTasks(globexAgent, { tasks: [{ title: "Globex merger", tags: ["merger"] }] });
+    expect(await listRuns(acmeOwner, { pipelineId: pipeline.id })).toHaveLength(1);
+    // A run cannot point at another workspace's task, even by a direct insert.
+    const [globexTask] = (await captureTasks(globexOwner, { tasks: [{ title: "Globex work" }] })).created as [Task];
+    await expect(startRun(acmeOwner, { pipelineId: pipeline.id, taskId: globexTask.id })).rejects.toMatchObject({ code: "not_found" });
+    await expect(
+      testDb.db.insert(pipelineRuns).values({ id: "r_crosstenant", tenantId: globexOwner.tenant.id, pipelineId: pipeline.id, version: 1, number: 9, trigger: "manual", triggeredByType: "user", triggeredByName: "x" }),
+    ).rejects.toThrow();
   });
 
   it("keeps each workspace's stages its own", async () => {

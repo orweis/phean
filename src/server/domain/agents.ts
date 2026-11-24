@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 
-import { and, asc, count, eq, inArray, isNotNull, isNull, lt, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, count, eq, inArray, isNotNull, isNull, lt, ne, or, sql, type SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import type { z } from "zod";
 
@@ -40,7 +40,8 @@ export type ListedAgent = Agent & AgentStanding;
 /** Every agent in the workspace, oldest first, with whether it may act now and at what level. */
 export const listAgents = service(Empty, async (ctx): Promise<ListedAgent[]> => {
   assertCan(ctx, "workspace:read");
-  const rows = await selectStanding(ctx.db, inTenant(ctx, agents)).orderBy(asc(agents.createdAt));
+  // The pipelines agent is Phean itself, not an agent anyone connected.
+  const rows = await selectStanding(ctx.db, and(inTenant(ctx, agents), ne(agents.authKind, "system"))).orderBy(asc(agents.createdAt));
   return rows.map((row) => ({ ...row.agent, ...standingOf(row) }));
 });
 
@@ -390,7 +391,7 @@ function assertCanRevoke(ctx: Ctx, target: RevokeTarget, parent: RevokeTarget | 
 export const revokeAgent = service(AgentRefInput, async (ctx, { agentId }): Promise<Agent> => {
   if (!can(ctx.actor, "agent:connect") && !can(ctx.actor, "agent:delegate")) assertCan(ctx, "agent:manage");
   return inTransaction(ctx, async (tx) => {
-    const [target] = await tx.db.select(agentColumns).from(agents).where(and(inTenant(tx, agents), eq(agents.id, agentId), isNull(agents.revokedAt)));
+    const [target] = await tx.db.select(agentColumns).from(agents).where(and(inTenant(tx, agents), eq(agents.id, agentId), isNull(agents.revokedAt), ne(agents.authKind, "system")));
     if (!target) throw notFound("active agent", agentId);
     const [parent] = target.parentAgentId
       ? await tx.db.select(agentColumns).from(agents).where(and(inTenant(tx, agents), eq(agents.id, target.parentAgentId)))
@@ -483,7 +484,7 @@ const approver = alias(member, "approver");
 const parentApprover = alias(member, "parent_approver");
 
 /** A grant, capped by what its approver can grant now. A key has no approver to cap it. */
-function grantedLevel(level: AgentAccessLevel, authKind: "key" | "oauth", approverRole: string | null): AgentAccessLevel {
+function grantedLevel(level: AgentAccessLevel, authKind: Agent["authKind"], approverRole: string | null): AgentAccessLevel {
   return authKind === "oauth" ? lowerLevel(level, highestGrantableLevel(toMemberRole(approverRole))) : level;
 }
 
