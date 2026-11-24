@@ -3,7 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 
 import { waitUntil } from "@vercel/functions";
 
-import { cleanParams, EVENTS, workspaceCountBucket, type AnalyticsIdentityParams, type EventName, type EventParams } from "@/lib/analytics";
+import { cleanParams, derivedEvents, EVENTS, workspaceCountBucket, type AnalyticsIdentityParams, type EventName, type EventParams } from "@/lib/analytics";
 
 /**
  * Google Analytics on the server (docs/ANALYTICS.md): whether pages load it, the salted hashes that
@@ -166,17 +166,20 @@ export function serverEventBody(event: ServerEvent): Record<string, unknown> | n
   // asked of them here): a workspace's events share its hash, and one with no workspace (a sign-up)
   // gets a random id of its own.
   const subject = workspaceHash ?? randomUUID();
-  const params: Record<string, unknown> = {
-    ...cleanParams(spec.params, (event.params ?? {}) as Record<string, unknown>),
+  const common = {
     surface: "app",
     source_side: "server",
     engagement_time_msec: 1,
     ...(workspaceHash ? { workspace_hash: workspaceHash } : {}),
   };
+  const clean = cleanParams(spec.params, (event.params ?? {}) as Record<string, unknown>);
   return {
     client_id: `srv.${subject}`,
     non_personalized_ads: true,
-    events: [{ name: event.name, params }],
+    events: [
+      { name: event.name, params: { ...clean, ...common } },
+      ...derivedEvents(event.name, clean).map(([name, extra]) => ({ name, params: { ...cleanParams(EVENTS[name].params, extra), ...common } })),
+    ],
   };
 }
 

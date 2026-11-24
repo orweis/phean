@@ -36,6 +36,11 @@ The pages' Content Security Policy (`next.config.ts`) sets no `script-src` or `c
 change to it. If a `script-src` is ever added, allow `https://www.googletagmanager.com` and, for
 `connect-src`, `https://*.google-analytics.com` and `https://*.analytics.google.com`.
 
+GA wrapped the stream's Google tag in a Tag Manager container (`GTM-T8ZX68T5`, "Configure tag settings" on
+the stream). Its Google tag must keep `send_page_view` set to `false` and "Ignore duplicate instances of
+on-page configuration" unticked (published as version 2): otherwise it sends a `page_view` of its own,
+with the unredacted address, before the page's redacted one. Check both after any change there.
+
 ## Consent
 
 - Consent Mode v2. Every ad signal (`ad_storage`, `ad_user_data`, `ad_personalization`) is always denied;
@@ -151,7 +156,8 @@ server sends it (**only**); server copies carry `source_side=server`, and key-ev
 | Event | When | Params | Key | Server |
 | --- | --- | --- | --- | --- |
 | `decision_view` | The Decisions page is viewed | `pending_count_bucket` | | |
-| `decision_answer` | A person answers a request | `via` (`page`, `inbox`, `notification`, `desktop`, `pipeline_card`), `kind` (`decision`, `question`), `with_options`, `multiple`, `custom_answer`, `is_pipeline`, `first_answer` (the person's first answer in this workspace, from the server; a person-wide count would read across workspaces) | **key** (the funnel uses `first_answer`) | also (answers from a notification or the desktop app, which no page sees) |
+| `decision_answer` | A person answers a request | `via` (`page`, `inbox`, `notification`, `desktop`, `pipeline_card`), `kind` (`decision`, `question`), `with_options`, `multiple`, `custom_answer`, `is_pipeline`, `first_answer` (the person's first answer in this workspace, from the server; a person-wide count would read across workspaces) | | also (answers from a notification or the desktop app, which no page sees) |
+| `first_decision_answer` | Sent beside a `decision_answer` whose `first_answer` is true, from the same side (`derivedEvents`): GA's own derived events cannot test a parameter | `via` | **key** | also (beside the server's `decision_answer`) |
 | `decision_snooze` | A request is snoozed | | | |
 | `decision_undo` | An answer is taken back | | | |
 | `decision_mark_answered` | A request is marked answered | | | |
@@ -230,7 +236,7 @@ whether a person accepted analytics, so there is no `user_id`, and the client id
 | `hand_off` | An agent hands work to an agent or a person | `to` | | only |
 | `run_end` | A pipeline run ends | `outcome` (`done`, `failed`, `cancelled`), `duration_bucket` | | only |
 
-`sign_up`, `workspace_create`, `agent_connect_approve`, `pipeline_create`, `run_start` (not manual) and `decision_answer` (notifications and the desktop only) have server copies too (above).
+`sign_up`, `workspace_create`, `agent_connect_approve`, `pipeline_create`, `run_start` (not manual) `decision_answer` (notifications and the desktop only) and its `first_decision_answer` have server copies too (above).
 
 A key event that both the page and the server send counts twice in GA's standard key-event totals. Count those with `source_side = server` (the server copies), and use the page copies for funnels and paths, which need the session.
 
@@ -257,7 +263,7 @@ reports use (listed in the property); the rest are still in the raw events and i
 ## Reports (GA Explore)
 
 1. **Acquisition funnel** (closed, by session source and medium): marketing `page_view`, `cta_click`,
-   `sign_up`, `workspace_create`, `agent_connect_approve`, `decision_answer` with `first_answer`.
+   `sign_up`, `workspace_create`, `agent_connect_approve`, `first_decision_answer`.
 2. **Docs engagement**: docs pages by views, engagement time and `docs_copy`; docs to sign-up paths; top
    `client_setup_view` clients; Search Console queries to docs pages.
 3. **Activation and retention**: cohorts by first `workspace_create` week, returning on `decision_answer`
