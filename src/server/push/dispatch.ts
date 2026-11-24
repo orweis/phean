@@ -9,12 +9,14 @@ import { vapidConfig, type VapidConfig } from "../config";
 import type { Db } from "../db/client";
 import { queryRows } from "../db/raw";
 import { events, member, organization, pushDeliveries, pushDevices, pushMutes, tasks } from "../db/schema";
-import { inTenant, tenantRow, type Ctx } from "../domain/context";
+import { inTenant, personContext, tenantRow, type Ctx } from "../domain/context";
+import { notificationPreferencesOf } from "../domain/notifications";
 import { backoffSeconds, REQUEST_TIMEOUT_MS } from "../webhooks/dispatch";
 import { decryptSecret } from "../webhooks/signing";
 import { resolveHost, type Resolver } from "../webhooks/url-safety";
 import { assertPushEndpointSafe } from "./endpoints";
 import { requestPayload, resolvedPayload, resolvedReason, type PushPayload } from "./payload";
+import { pushTopicOf, wantsTopic } from "./routing";
 
 /** A push service keeps an undelivered notification this long; a decision a day old is better read in the app. */
 export const PUSH_TTL_SECONDS = 24 * 60 * 60;
@@ -167,12 +169,22 @@ async function payloadFor(db: Db, row: Claimed, device: { userId: string; answer
   // Read as the recipient, inside the tenant, so a push shows only what they could open.
   const ctx: Ctx = { db, tenant, actor: { type: "user", id: device.userId, name: "", role: toMemberRole(membership.role) } };
 
+  // Checked again now: no one hears of their own doing, nor of what they turned off since.
+  const [event] = await ctx.db
+    .select({ action: events.action, by: events.actorName, actorType: events.actorType, actorId: events.actorId })
+    .from(events)
+    .where(and(inTenant(ctx, events), eq(events.id, row.event_id)));
+  if (event?.actorType === "user" && event.actorId === device.userId) return "own_action";
+  if (!wantsTopic(await notificationPreferencesOf(personContext(db, { id: device.userId, name: "" })), pushTopicOf(row.kind, event?.action))) return "preference";
+
   if (row.kind === "resolved") {
-    const [event] = await ctx.db
-      .select({ action: events.action, by: events.actorName })
-      .from(events)
-      .where(and(inTenant(ctx, events), eq(events.id, row.event_id)));
-    return resolvedPayload(tenant.slug, row.request_id, { reason: resolvedReason(event?.action), by: event?.by ?? null }, device);
+    // What it was about: the request, archived on its task once it closed (or still open, if a race reopened it).
+    const [task] = await ctx.db.select({ request: tasks.inputRequest, answers: tasks.inputAnswers }).from(tasks).where(tenantRow(ctx, tasks, row.task_id));
+    const closed = task?.answers.find((entry) => entry.id === row.request_id) ?? (task?.request?.id === row.request_id ? task.request : undefined);
+    return resolvedPayload(tenant.slug, row.request_id, { reason: resolvedReason(event?.action), by: event?.by ?? null }, device, {
+      workspaceName: tenant.name,
+      question: closed?.question ?? null,
+    });
   }
   if (row.closed_at) return "closed";
   const [muted] = await db.select({ userId: pushMutes.userId }).from(pushMutes).where(and(eq(pushMutes.tenantId, row.tenant_id), eq(pushMutes.userId, device.userId)));

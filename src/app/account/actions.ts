@@ -10,7 +10,7 @@ import { routes } from "@/lib/routes";
 import { attempt, personAction } from "@/server/actions";
 import { auth } from "@/server/auth/auth";
 import { getSession } from "@/server/auth/session";
-import { forgetBrowserDevice, forgetDevice, registerDevice, setDeviceOptions, tieDevice } from "@/server/domain/notifications";
+import { forgetBrowserDevice, forgetDevice, registerDevice, setDeviceOptions, setNotificationPreferences, tieDevice } from "@/server/domain/notifications";
 import { personCtx } from "@/server/entry";
 
 export type SetPasswordResult = { ok: true } | { ok: false; message: string };
@@ -70,3 +70,4 @@ export async function forgetBrowserDeviceAction(endpoint: string): Promise<void>
 
 export const forgetDeviceAction = personAction(forgetDevice);
 export const setDeviceOptionsAction = personAction(setDeviceOptions);
+export const setNotificationPreferencesAction = personAction(setNotificationPreferences);

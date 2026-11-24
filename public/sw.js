@@ -34,6 +34,7 @@ exports.parsePushPayload = parsePushPayload;
 exports.readNotificationData = readNotificationData;
 exports.optionIndexOf = optionIndexOf;
 exports.requestNotification = requestNotification;
+exports.quotedSubject = quotedSubject;
 exports.notificationFor = notificationFor;
 exports.notificationUrl = notificationUrl;
 exports.isSameOrigin = isSameOrigin;
@@ -76,7 +77,8 @@ function parsePushPayload(text) {
     const { slug, requestId } = raw;
     if (raw.type === "resolved") {
         const reason = typeof raw.reason === "string" && RESOLVED_REASONS.includes(raw.reason) ? raw.reason : null;
-        return { type: "resolved", slug, requestId, reason, by: isText(raw.by) ? raw.by : null, closedBy: isText(raw.closedBy) ? raw.closedBy : null };
+        const text = (value) => (isText(value) ? value : null);
+        return { type: "resolved", slug, requestId, reason, by: text(raw.by), closedBy: text(raw.closedBy), workspaceName: text(raw.workspaceName), question: text(raw.question) };
     }
     if (raw.type !== "request" || !isTaskId(raw.taskId) || !isText(raw.workspaceName))
         return null;
@@ -99,8 +101,8 @@ function readNotificationData(raw) {
         request: request?.type === "request" && !request.private && request.slug === raw.slug && request.requestId === raw.requestId ? request : null,
     };
 }
-function spec(tag, title, data, extra = {}) {
-    return { title, options: { tag, icon: NOTIFICATION_ICON, badge: NOTIFICATION_ICON, data, actions: [], ...extra } };
+function spec(tag, title, data, { badge = "request", ...extra } = {}) {
+    return { title, options: { tag, icon: NOTIFICATION_ICON, badge: routes_1.routes.notificationBadge(badge), data, actions: [], ...extra } };
 }
 const optionAction = (index) => `option-${index}`;
 exports.optionAction = optionAction;
@@ -117,19 +119,41 @@ function requestNotification(push) {
     const actions = push.answerable ? push.options.map((title, index) => ({ action: (0, exports.optionAction)(index), title })) : [];
     return spec(push.requestId, (0, exports.requestTitle)(push), data, { body: push.question, actions });
 }
-function resolvedTitle(push) {
+const SUBJECT_CHARS = 80;
+function quotedSubject(question) {
+    const cut = question.length > SUBJECT_CHARS ? `${question.slice(0, SUBJECT_CHARS - 1).trimEnd()}…` : question;
+    return `“${cut}”`;
+}
+function resolvedWhat(push) {
     if (push.reason === "replaced")
         return "Replaced by a new question";
     if (push.reason === "closed")
         return push.closedBy ? `Closed by ${push.closedBy}` : "Closed";
     return push.by ? `Answered by ${push.by}` : "Answered elsewhere";
 }
+function resolvedSentence(push, workspaceName) {
+    if (push.reason === "replaced")
+        return `A decision in ${workspaceName} was replaced by a new question`;
+    if (push.reason === "closed")
+        return `A decision in ${workspaceName} was closed`;
+    return `A decision in ${workspaceName} was answered`;
+}
+function resolvedNotification(push, previous) {
+    const question = push.question ?? previous?.request?.question ?? null;
+    const workspaceName = push.workspaceName ?? previous?.request?.workspaceName ?? null;
+    if (question)
+        return { title: workspaceName ? `${resolvedWhat(push)} · ${workspaceName}` : resolvedWhat(push), body: question };
+    if (workspaceName)
+        return { title: resolvedSentence(push, workspaceName) };
+    return { title: resolvedWhat(push) };
+}
 function notificationFor(push, previous = null) {
     if (!push)
         return spec("phean", "Phean", null, { body: "Something changed in Phean." });
     if (push.type === "resolved") {
         const data = { slug: push.slug, requestId: push.requestId, taskId: previous?.taskId ?? null, request: null };
-        return spec(push.requestId, resolvedTitle(push), data, { body: previous?.request?.question, silent: true });
+        const { title, body } = resolvedNotification(push, previous);
+        return spec(push.requestId, title, data, { body, silent: true, badge: "resolved" });
     }
     if (push.private) {
         return spec(push.requestId, `A decision is waiting in ${push.workspaceName}`, { slug: push.slug, requestId: push.requestId, taskId: push.taskId, request: null });
@@ -168,18 +192,23 @@ function parseAnswerResult(raw) {
 }
 function answeredNotification(data, result) {
     return spec(data.requestId, `Sent “${result.answer}” to ${result.agentName}`, data, {
-        body: result.taskTitle || undefined,
+        badge: "resolved",
+        body: data.request?.question || result.taskTitle || undefined,
         actions: [{ action: exports.UNDO_ACTION, title: "Undo" }],
         silent: true,
     });
 }
 function answerFailedNotification(data, status, message) {
     const forClick = { ...data, request: null };
-    if (status === 409)
-        return spec(data.requestId, "Already answered", forClick, { body: message || "This request was answered or replaced before your answer arrived.", silent: true });
-    if (status === 401)
-        return spec(data.requestId, "Sign in to answer", forClick, { body: "Open Phean on this device to sign in again.", silent: true });
-    return spec(data.requestId, "Your answer was not sent", forClick, { body: "Open the request to answer it in Phean.", silent: true });
+    const subject = data.request ? quotedSubject(data.request.question) : null;
+    if (status === 409) {
+        const body = message || (subject ? `${subject} was answered or replaced before your answer arrived.` : "This request was answered or replaced before your answer arrived.");
+        return spec(data.requestId, "Already answered", forClick, { body, silent: true, badge: "resolved" });
+    }
+    if (status === 401) {
+        return spec(data.requestId, "Sign in to answer", forClick, { body: subject ? `Open Phean on this device to sign in again, then answer ${subject}.` : "Open Phean on this device to sign in again.", silent: true });
+    }
+    return spec(data.requestId, "Your answer was not sent", forClick, { body: subject ? `Open ${subject} to answer it in Phean.` : "Open the request to answer it in Phean.", silent: true });
 }
 function undoneNotification(data) {
     if (data.request) {
@@ -190,10 +219,11 @@ function undoneNotification(data) {
 }
 function undoFailedNotification(data, status) {
     const agent = data.request?.agentName ?? "The agent";
+    const subject = data.request ? quotedSubject(data.request.question) : null;
     const forClick = { ...data, request: null };
     if (status === 409)
-        return spec(data.requestId, "Too late to undo", forClick, { body: `${agent} already has the answer.`, silent: true });
-    return spec(data.requestId, "Undo did not go through", forClick, { body: "Open the request to change your answer in Phean.", silent: true });
+        return spec(data.requestId, "Too late to undo", forClick, { body: subject ? `${agent} already has your answer to ${subject}.` : `${agent} already has the answer.`, silent: true });
+    return spec(data.requestId, "Undo did not go through", forClick, { body: subject ? `Open ${subject} to change your answer in Phean.` : "Open the request to change your answer in Phean.", silent: true });
 }
 function isPageNavigation(request) {
     return request.mode === "navigate" && request.method === "GET";
@@ -214,7 +244,7 @@ function isOfflineAsset(path) {
 "./routes": function (exports, require) {
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.routes = exports.APP_ICON_SIZES = void 0;
+exports.routes = exports.NOTIFICATION_BADGE_SIZE = exports.NOTIFICATION_BADGES = exports.APP_ICON_SIZES = void 0;
 exports.queryParam = queryParam;
 exports.queryStringOf = queryStringOf;
 exports.safeNextPath = safeNextPath;
@@ -227,6 +257,8 @@ function withQuery(path, query = {}) {
     return search ? `${path}?${search}` : path;
 }
 exports.APP_ICON_SIZES = [192, 512];
+exports.NOTIFICATION_BADGES = ["request", "resolved"];
+exports.NOTIFICATION_BADGE_SIZE = 96;
 exports.routes = {
     home: () => "/",
     docs: (slug) => (slug ? `/docs/${slug}` : "/docs"),
@@ -277,6 +309,7 @@ exports.routes = {
     offline: () => "/offline",
     serviceWorker: () => "/sw.js",
     appIcon: (size) => `/icons/${size}.png`,
+    notificationBadge: (kind) => `/icons/badge-${kind}.png`,
 };
 function queryParam(value) {
     const first = Array.isArray(value) ? value[0] : value;

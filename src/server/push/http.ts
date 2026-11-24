@@ -3,7 +3,8 @@ import { createHash } from "node:crypto";
 import type { Db } from "../db/client";
 import type { Ctx } from "../domain/context";
 import { isDomainError, type DomainErrorCode } from "../domain/errors";
-import { answerFromNotification, INBOX_LIMIT, openDecisions, undoFromNotification, type InboxItem } from "../domain/notifications";
+import { personContext } from "../domain/context";
+import { answerFromNotification, INBOX_LIMIT, notificationPreferencesOf, openDecisions, undoFromNotification, type InboxItem } from "../domain/notifications";
 import { listMemberships, userContext } from "../domain/tenants";
 
 /**
@@ -102,25 +103,35 @@ export async function handlePushUndo(request: Request, workspace: WorkspaceResol
   }
 }
 
+/** A feed item, with whether the desktop should notify for it (CONTRACTS.md, added after 0.1.0: older shells ignore it). */
+export interface InboxFeedItem extends InboxItem {
+  notify: boolean;
+}
+
 export interface InboxFeed {
   pending: number;
   minShellVersion: string;
-  items: InboxItem[];
+  items: InboxFeedItem[];
 }
 
 /**
  * Every open request in the workspaces the person is a member of (never a platform admin's
  * read-only ones), each read with that workspace's own `Ctx`. A muted workspace still counts in
- * `pending` but lists nothing.
+ * `pending` but lists nothing. Each item's `notify` follows the person's "New requests from agents"
+ * preference, so the desktop lists a request without announcing it when they turned that off.
  */
 export async function inboxFeed(db: Db, person: { id: string; name: string }): Promise<InboxFeed> {
   const memberships = await listMemberships(db, person.id);
-  const decisions = await Promise.all(memberships.map((membership) => openDecisions(userContext(db, membership, person), {})));
+  const [decisions, preferences] = await Promise.all([
+    Promise.all(memberships.map((membership) => openDecisions(userContext(db, membership, person), {}))),
+    notificationPreferencesOf(personContext(db, person)),
+  ]);
   const items = decisions
     .filter((workspace) => !workspace.muted)
     .flatMap((workspace) => workspace.items)
     .sort((a, b) => b.askedAt.localeCompare(a.askedAt) || b.requestId.localeCompare(a.requestId))
-    .slice(0, INBOX_LIMIT);
+    .slice(0, INBOX_LIMIT)
+    .map((item) => ({ ...item, notify: preferences.requests }));
   return { pending: decisions.reduce((sum, workspace) => sum + workspace.pending, 0), minShellVersion: MIN_SHELL_VERSION, items };
 }
 

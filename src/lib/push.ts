@@ -1,5 +1,5 @@
 import { isLinkableId } from "./links";
-import { APP_ICON_SIZES, routes } from "./routes";
+import { APP_ICON_SIZES, routes, type NotificationBadge } from "./routes";
 
 /**
  * The service worker's pure parts: a Web Push payload (docs/apps/CONTRACTS.md, "Web Push payload")
@@ -23,7 +23,7 @@ export const OFFLINE_CACHE = "phean-offline-v1";
 /** Every call the worker makes to Phean says who it is, which also forces a CORS preflight no other origin passes. */
 export const PUSH_CLIENT_HEADERS = { "Content-Type": "application/json", "Phean-Client": "web" } as const;
 
-/** A notification shows the app icon, and the same for the status bar's small one. */
+/** A notification shows the colourful app icon. */
 const NOTIFICATION_ICON = routes.appIcon(APP_ICON_SIZES[0]);
 
 export interface RequestPush {
@@ -65,6 +65,10 @@ export interface ResolvedPush {
   by: string | null;
   /** Who closed it, when it was not answered. */
   closedBy: string | null;
+  /** The workspace it was in; null from a server older than the field. */
+  workspaceName: string | null;
+  /** The request's question; null on a private device, or from an older server. */
+  question: string | null;
 }
 
 export type PushPayload = RequestPush | PrivatePush | ResolvedPush;
@@ -131,7 +135,8 @@ export function parsePushPayload(text: string | null | undefined): PushPayload |
   const { slug, requestId } = raw;
   if (raw.type === "resolved") {
     const reason = typeof raw.reason === "string" && RESOLVED_REASONS.includes(raw.reason) ? (raw.reason as ResolvedReason) : null;
-    return { type: "resolved", slug, requestId, reason, by: isText(raw.by) ? raw.by : null, closedBy: isText(raw.closedBy) ? raw.closedBy : null };
+    const text = (value: unknown) => (isText(value) ? value : null);
+    return { type: "resolved", slug, requestId, reason, by: text(raw.by), closedBy: text(raw.closedBy), workspaceName: text(raw.workspaceName), question: text(raw.question) };
   }
   if (raw.type !== "request" || !isTaskId(raw.taskId) || !isText(raw.workspaceName)) return null;
   const base = { type: "request" as const, slug, requestId, taskId: raw.taskId, workspaceName: raw.workspaceName };
@@ -153,8 +158,18 @@ export function readNotificationData(raw: unknown): NotificationData | null {
   };
 }
 
-function spec(tag: string, title: string, data: NotificationData | null, extra: Partial<NotificationSpec["options"]> = {}): NotificationSpec {
-  return { title, options: { tag, icon: NOTIFICATION_ICON, badge: NOTIFICATION_ICON, data, actions: [], ...extra } };
+/**
+ * A notification's spec. The status bar's small icon (`badge`) is a white silhouette, since Android
+ * keeps only its alpha: the boulder on its slope while a request waits, a check once it is settled
+ * (answered, sent from here, or closed).
+ */
+function spec(
+  tag: string,
+  title: string,
+  data: NotificationData | null,
+  { badge = "request", ...extra }: Partial<Omit<NotificationSpec["options"], "badge">> & { badge?: NotificationBadge } = {},
+): NotificationSpec {
+  return { title, options: { tag, icon: NOTIFICATION_ICON, badge: routes.notificationBadge(badge), data, actions: [], ...extra } };
 }
 
 /** An option button's action name, and back. */
@@ -177,11 +192,38 @@ export function requestNotification(push: RequestPush): NotificationSpec {
   return spec(push.requestId, requestTitle(push), data, { body: push.question, actions });
 }
 
-/** What replaced a request says happened to it. Only a person ever "answered" it. */
-function resolvedTitle(push: ResolvedPush): string {
+/** A request's question as the subject of a sentence, cut to fit a notification line. */
+const SUBJECT_CHARS = 80;
+export function quotedSubject(question: string): string {
+  const cut = question.length > SUBJECT_CHARS ? `${question.slice(0, SUBJECT_CHARS - 1).trimEnd()}…` : question;
+  return `“${cut}”`;
+}
+
+/** What happened to a request, as a title. Only a person ever "answered" it. */
+function resolvedWhat(push: ResolvedPush): string {
   if (push.reason === "replaced") return "Replaced by a new question";
   if (push.reason === "closed") return push.closedBy ? `Closed by ${push.closedBy}` : "Closed";
   return push.by ? `Answered by ${push.by}` : "Answered elsewhere";
+}
+
+/** The same, as a sentence about a decision in a workspace, for when no question can be shown (a private device). */
+function resolvedSentence(push: ResolvedPush, workspaceName: string): string {
+  if (push.reason === "replaced") return `A decision in ${workspaceName} was replaced by a new question`;
+  if (push.reason === "closed") return `A decision in ${workspaceName} was closed`;
+  return `A decision in ${workspaceName} was answered`;
+}
+
+/**
+ * What replaced a request's notification says: what happened, where, and to what. The question
+ * comes from the payload, or else from the notification it replaces; with neither (a private
+ * device), the workspace is the subject: "A decision in Acme was closed".
+ */
+function resolvedNotification(push: ResolvedPush, previous: NotificationData | null): Pick<NotificationSpec, "title"> & { body?: string } {
+  const question = push.question ?? previous?.request?.question ?? null;
+  const workspaceName = push.workspaceName ?? previous?.request?.workspaceName ?? null;
+  if (question) return { title: workspaceName ? `${resolvedWhat(push)} · ${workspaceName}` : resolvedWhat(push), body: question };
+  if (workspaceName) return { title: resolvedSentence(push, workspaceName) };
+  return { title: resolvedWhat(push) };
 }
 
 /**
@@ -193,7 +235,8 @@ export function notificationFor(push: PushPayload | null, previous: Notification
   if (!push) return spec("phean", "Phean", null, { body: "Something changed in Phean." });
   if (push.type === "resolved") {
     const data: NotificationData = { slug: push.slug, requestId: push.requestId, taskId: previous?.taskId ?? null, request: null };
-    return spec(push.requestId, resolvedTitle(push), data, { body: previous?.request?.question, silent: true });
+    const { title, body } = resolvedNotification(push, previous);
+    return spec(push.requestId, title, data, { body, silent: true, badge: "resolved" });
   }
   if (push.private) {
     return spec(push.requestId, `A decision is waiting in ${push.workspaceName}`, { slug: push.slug, requestId: push.requestId, taskId: push.taskId, request: null });
@@ -249,7 +292,8 @@ export function parseAnswerResult(raw: unknown): AnswerResult | null {
 /** After an answer: what was sent and to whom, with Undo. */
 export function answeredNotification(data: NotificationData, result: AnswerResult): NotificationSpec {
   return spec(data.requestId, `Sent “${result.answer}” to ${result.agentName}`, data, {
-    body: result.taskTitle || undefined,
+    badge: "resolved",
+    body: data.request?.question || result.taskTitle || undefined,
     actions: [{ action: UNDO_ACTION, title: "Undo" }],
     silent: true,
   });
@@ -258,9 +302,15 @@ export function answeredNotification(data: NotificationData, result: AnswerResul
 /** An answer that did not land: answered already (409), signed out (401), or anything else. A click opens the request. */
 export function answerFailedNotification(data: NotificationData, status: number, message?: string): NotificationSpec {
   const forClick: NotificationData = { ...data, request: null };
-  if (status === 409) return spec(data.requestId, "Already answered", forClick, { body: message || "This request was answered or replaced before your answer arrived.", silent: true });
-  if (status === 401) return spec(data.requestId, "Sign in to answer", forClick, { body: "Open Phean on this device to sign in again.", silent: true });
-  return spec(data.requestId, "Your answer was not sent", forClick, { body: "Open the request to answer it in Phean.", silent: true });
+  const subject = data.request ? quotedSubject(data.request.question) : null;
+  if (status === 409) {
+    const body = message || (subject ? `${subject} was answered or replaced before your answer arrived.` : "This request was answered or replaced before your answer arrived.");
+    return spec(data.requestId, "Already answered", forClick, { body, silent: true, badge: "resolved" });
+  }
+  if (status === 401) {
+    return spec(data.requestId, "Sign in to answer", forClick, { body: subject ? `Open Phean on this device to sign in again, then answer ${subject}.` : "Open Phean on this device to sign in again.", silent: true });
+  }
+  return spec(data.requestId, "Your answer was not sent", forClick, { body: subject ? `Open ${subject} to answer it in Phean.` : "Open the request to answer it in Phean.", silent: true });
 }
 
 /** After Undo: the request again, so another option can be picked. */
@@ -275,9 +325,10 @@ export function undoneNotification(data: NotificationData): NotificationSpec {
 /** Undo refused: the agent already collected the answer (409), or the call failed. */
 export function undoFailedNotification(data: NotificationData, status: number): NotificationSpec {
   const agent = data.request?.agentName ?? "The agent";
+  const subject = data.request ? quotedSubject(data.request.question) : null;
   const forClick: NotificationData = { ...data, request: null };
-  if (status === 409) return spec(data.requestId, "Too late to undo", forClick, { body: `${agent} already has the answer.`, silent: true });
-  return spec(data.requestId, "Undo did not go through", forClick, { body: "Open the request to change your answer in Phean.", silent: true });
+  if (status === 409) return spec(data.requestId, "Too late to undo", forClick, { body: subject ? `${agent} already has your answer to ${subject}.` : `${agent} already has the answer.`, silent: true });
+  return spec(data.requestId, "Undo did not go through", forClick, { body: subject ? `Open ${subject} to change your answer in Phean.` : "Open the request to change your answer in Phean.", silent: true });
 }
 
 /** True for the requests the worker handles: a page load (a GET navigation). Everything else passes straight to the network. */

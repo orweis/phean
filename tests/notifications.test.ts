@@ -8,18 +8,21 @@ import {
   forgetDevice,
   listDevices,
   muteWorkspace,
+  notificationPreferencesOf,
   openDecisions,
   PUSH_MAX_DEVICES,
   PUSH_REGISTRATIONS_PER_MINUTE,
   registerDevice,
   setDeviceOptions,
+  setNotificationPreferences,
   undoFromNotification,
   unmuteWorkspace,
 } from "@/server/domain/notifications";
 import { answerInput, captureTasks, collectAnswers, completeTask, requestInput, resolveInput, retractAnswer } from "@/server/domain/tasks";
 import { PUSH_GIVE_UP_MS, PUSH_MAX_FAILURES, sendDuePushes } from "@/server/push/dispatch";
 import { isPushServiceHost } from "@/server/push/endpoints";
-import { PUSH_OPTION_CHARS, PUSH_PAYLOAD_MAX_BYTES, requestPayload } from "@/server/push/payload";
+import { inboxFeed } from "@/server/push/http";
+import { PUSH_OPTION_CHARS, PUSH_PAYLOAD_MAX_BYTES, requestPayload, resolvedPayload } from "@/server/push/payload";
 import { setPushScheduler } from "@/server/push/trigger";
 import type { InputRequest } from "@/lib/agent-sessions";
 
@@ -180,7 +183,7 @@ describe("routing", () => {
     }
   });
 
-  it("replaces the notification on every device once a person answers on the web, and drops it where it was never sent", async () => {
+  it("replaces the notification on everyone else's devices once a person answers on the web, never their own, and drops it where it was never sent", async () => {
     const push = fakePushService();
     const danaDevice = await deviceFor(testDb.db, dana);
     const samDevice = await deviceFor(testDb.db, sam);
@@ -189,17 +192,20 @@ describe("routing", () => {
     expect(push.sent.map((message) => message.body.type)).toEqual(["request", "request"]);
 
     await answerInput(ws.human, { taskId, answer: "Okafor" });
-    // Dana answered on the web: her own devices are cleared too, and every device is told by whom.
-    expect((await deliveriesOf(testDb.db, danaDevice.id)).map((row) => row.kind)).toEqual(["request", "resolved"]);
+    // Dana answered on the web: she is not told what she did; Sam is told by whom.
+    expect((await deliveriesOf(testDb.db, danaDevice.id)).map((row) => row.kind)).toEqual(["request"]);
     expect((await deliveriesOf(testDb.db, samDevice.id)).map((row) => row.kind)).toEqual(["request", "resolved"]);
     await sendDuePushes(testDb.db, push.deps);
-    expect(push.sent.at(-1)).toMatchObject({ topic: requestId, body: { v: 1, type: "resolved", slug: ws.tenant.slug, requestId, reason: "answered", by: "Dana" } });
+    expect(push.sent.at(-1)).toMatchObject({ endpoint: samDevice.endpoint, topic: requestId, body: { v: 1, type: "resolved", slug: ws.tenant.slug, requestId, reason: "answered", by: "Dana" } });
 
-    // Dana takes the answer back: the request is open again, and every device hears of it again.
+    // Dana takes the answer back: the request is open again for Sam, while Dana's row is written already dead.
     await retractAnswer(ws.human, { taskId, requestId });
     expect((await deliveriesOf(testDb.db, samDevice.id)).map((row) => row.kind)).toEqual(["request", "resolved", "request"]);
-    expect((await deliveriesOf(testDb.db, danaDevice.id)).map((row) => row.kind)).toEqual(["request", "resolved", "request"]);
-    // Sam answers before that push went out: it is dropped, with nothing to replace.
+    expect((await deliveriesOf(testDb.db, danaDevice.id)).map((row) => [row.kind, row.status, row.lastError])).toEqual([
+      ["request", "sent", null],
+      ["request", "dead", "own_action"],
+    ]);
+    // Sam answers before that push went out: it is dropped, with nothing to replace, and Sam hears nothing of his own answer.
     await answerInput(samCtx, { taskId, answer: "Lindqvist" });
     const rows = await deliveriesOf(testDb.db, samDevice.id);
     expect(rows.map((row) => [row.kind, row.status])).toEqual([
@@ -207,9 +213,11 @@ describe("routing", () => {
       ["resolved", "sent"],
       ["request", "dead"],
     ]);
+    await sendDuePushes(testDb.db, push.deps);
+    expect(push.sent.filter((message) => message.endpoint === danaDevice.endpoint).map((message) => message.body.type)).toEqual(["request"]);
   });
 
-  it("replaces the notification on every device but the one that answered from it", async () => {
+  it("replaces the notification on other people's devices when a person answers from a notification, and on none of theirs", async () => {
     const push = fakePushService();
     const phone = await deviceFor(testDb.db, dana, { answerFromNotification: true });
     const laptop = await deviceFor(testDb.db, dana, { label: "Firefox on Linux" });
@@ -218,29 +226,44 @@ describe("routing", () => {
     await sendDuePushes(testDb.db, push.deps);
 
     await answerFromNotification(ws.human, { taskId, requestId, option: 0, endpoint: phone.endpoint });
-    // The phone shows "Sent", with Undo; Dana's laptop and Sam's device have theirs replaced.
-    expect((await deliveriesOf(testDb.db, phone.id)).map((row) => [row.kind, row.status])).toEqual([
-      ["request", "sent"],
-      ["resolved", "dead"],
-    ]);
-    for (const device of [laptop, samDevice]) expect((await deliveriesOf(testDb.db, device.id)).map((row) => [row.kind, row.status])).toEqual([["request", "sent"], ["resolved", "pending"]]);
+    // The phone shows "Sent", with Undo; Dana's laptop is not told what she did; Sam's device has its notification replaced.
+    for (const device of [phone, laptop]) expect((await deliveriesOf(testDb.db, device.id)).map((row) => [row.kind, row.status])).toEqual([["request", "sent"]]);
+    expect((await deliveriesOf(testDb.db, samDevice.id)).map((row) => [row.kind, row.status])).toEqual([["request", "sent"], ["resolved", "pending"]]);
 
-    // Undo from the phone: the request is open again everywhere, and the phone, which shows it already, is not sent it.
+    // Undo from the phone: the request is open again for Sam; the phone shows it itself and counts it as shown; the laptop hears nothing.
     await undoFromNotification(ws.human, { taskId, requestId, endpoint: phone.endpoint });
     expect((await deliveriesOf(testDb.db, phone.id)).at(-1)).toMatchObject({ kind: "request", status: "sent" });
+    expect((await deliveriesOf(testDb.db, laptop.id)).at(-1)).toMatchObject({ kind: "request", status: "dead", lastError: "own_action" });
     await sendDuePushes(testDb.db, push.deps);
     expect(push.sent.filter((message) => message.endpoint === phone.endpoint).map((message) => message.body.type)).toEqual(["request"]);
-    expect(push.sent.filter((message) => message.endpoint === laptop.endpoint).map((message) => message.body.type)).toEqual(["request", "resolved", "request"]);
+    expect(push.sent.filter((message) => message.endpoint === laptop.endpoint).map((message) => message.body.type)).toEqual(["request"]);
+    expect(push.sent.filter((message) => message.endpoint === samDevice.endpoint).map((message) => message.body.type)).toEqual(["request", "resolved", "request"]);
 
-    // Someone else answers now: the phone's notification (the request again) is replaced too.
+    // Someone else answers now: the phone's notification (the request again) is replaced; the laptop, never sent it again, is not.
     await answerInput(samCtx, { taskId, answer: "Lindqvist" });
     expect((await deliveriesOf(testDb.db, phone.id)).at(-1)).toMatchObject({ kind: "resolved", status: "pending" });
+    expect((await deliveriesOf(testDb.db, laptop.id)).at(-1)).toMatchObject({ kind: "request", status: "dead" });
 
-    // Another person's endpoint names nothing of Dana's: a web answer, or a stranger's endpoint, clears every device.
+    // Another person's endpoint names nothing of Dana's: her answer still clears only other people's devices.
     const second = await ask("Which bank?");
     await sendDuePushes(testDb.db, push.deps);
     await answerFromNotification(ws.human, { ...second, option: 0, endpoint: samDevice.endpoint });
-    for (const device of [phone, laptop, samDevice]) expect((await deliveriesOf(testDb.db, device.id)).at(-1)).toMatchObject({ kind: "resolved", requestId: second.requestId, status: "pending" });
+    expect((await deliveriesOf(testDb.db, samDevice.id)).at(-1)).toMatchObject({ kind: "resolved", requestId: second.requestId, status: "pending" });
+    for (const device of [phone, laptop]) expect((await deliveriesOf(testDb.db, device.id)).at(-1)).toMatchObject({ kind: "request", requestId: second.requestId });
+  });
+
+  it("checks again at send time that no one is sent what they did themselves", async () => {
+    const push = fakePushService();
+    const danaDevice = await deviceFor(testDb.db, dana);
+    const { taskId, requestId } = await ask();
+    await sendDuePushes(testDb.db, push.deps);
+    await answerInput(ws.human, { taskId, answer: "Okafor" });
+    // A resolved push for Dana queued all the same (by an older server, say) is dropped when it would go out.
+    const [answered] = await testDb.db.select({ id: events.id }).from(events).where(eq(events.action, "task.input_answered"));
+    await testDb.db.insert(pushDeliveries).values({ tenantId: ws.tenant.id, deviceId: danaDevice.id, eventId: answered!.id, kind: "resolved", taskId, requestId });
+    await sendDuePushes(testDb.db, push.deps);
+    expect(push.sent.map((message) => message.body.type)).toEqual(["request"]);
+    expect((await deliveriesOf(testDb.db, danaDevice.id)).at(-1)).toMatchObject({ kind: "resolved", status: "dead", lastError: "own_action" });
   });
 
   it("pushes an agent's new question on the same task, and says the old one was replaced, not answered", async () => {
@@ -258,7 +281,7 @@ describe("routing", () => {
     await sendDuePushes(testDb.db, push.deps);
     expect(push.sent.map((message) => message.body)).toEqual([
       expect.objectContaining({ type: "request", requestId: first.requestId }),
-      { v: 1, type: "resolved", slug: ws.tenant.slug, requestId: first.requestId, reason: "replaced" },
+      { v: 1, type: "resolved", slug: ws.tenant.slug, requestId: first.requestId, reason: "replaced", workspaceName: ws.tenant.name, question: "Which auditor?" },
       expect.objectContaining({ type: "request", requestId: newer, question: "Okafor or Brandt?" }),
     ]);
   });
@@ -275,6 +298,11 @@ describe("routing", () => {
     await completeTask(ws.scout.ctx, { taskId: second.taskId });
     await sendDuePushes(testDb.db, push.deps);
 
+    // Each names what it closed, and where.
+    expect(push.sent.filter((message) => message.body.type === "resolved").map((message) => [message.body.question, message.body.workspaceName])).toEqual([
+      ["Which auditor?", ws.tenant.name],
+      ["Which bank?", ws.tenant.name],
+    ]);
     // Closed by the agent, never "answered" by it: `by` is only ever a person who answered.
     expect(push.sent.map((message) => [message.body.type, message.body.requestId, message.body.reason ?? null, message.body.by ?? null, message.body.closedBy ?? null])).toEqual([
       ["request", first.requestId, null, null, null],
@@ -298,9 +326,67 @@ describe("routing", () => {
     await resolveInput(ws.scout.ctx, { taskId: second.taskId });
     await sendDuePushes(testDb.db, push.deps);
     expect(push.sent.filter((message) => message.body.type === "resolved").map((message) => message.body)).toEqual([
-      { v: 1, type: "resolved", slug: ws.tenant.slug, requestId: first.requestId, reason: "answered" },
-      { v: 1, type: "resolved", slug: ws.tenant.slug, requestId: second.requestId, reason: "closed" },
+      // The workspace, as a private device's request push names it; never the question or who.
+      { v: 1, type: "resolved", slug: ws.tenant.slug, requestId: first.requestId, reason: "answered", workspaceName: ws.tenant.name },
+      { v: 1, type: "resolved", slug: ws.tenant.slug, requestId: second.requestId, reason: "closed", workspaceName: ws.tenant.name },
     ]);
+  });
+});
+
+describe("preferences", () => {
+  it("starts with everything on, changes only what is posted, and refuses a change that changes nothing", async () => {
+    const ctx = personContext(testDb.db, dana);
+    expect(await notificationPreferencesOf(ctx)).toEqual({ requests: true, reopened: true, resolved: true });
+    expect(await setNotificationPreferences(ctx, { resolved: "false" })).toEqual({ requests: true, reopened: true, resolved: false });
+    expect(await setNotificationPreferences(ctx, { requests: false })).toEqual({ requests: false, reopened: true, resolved: false });
+    await expect(setNotificationPreferences(ctx, { requests: false, resolved: false })).rejects.toMatchObject({ code: "invalid" });
+    await expect(setNotificationPreferences(ctx, {})).rejects.toMatchObject({ code: "invalid" });
+    // A person's choices are theirs alone.
+    expect(await notificationPreferencesOf(personContext(testDb.db, sam))).toEqual({ requests: true, reopened: true, resolved: true });
+  });
+
+  it("queues no new request for someone who turned requests off, and still tells them an answer was taken back", async () => {
+    const samDevice = await deviceFor(testDb.db, sam);
+    await setNotificationPreferences(personContext(testDb.db, sam), { requests: false });
+    const { taskId, requestId } = await ask();
+    expect(await deliveriesOf(testDb.db, samDevice.id)).toEqual([]);
+    await answerInput(ws.human, { taskId, answer: "Okafor" });
+    await retractAnswer(ws.human, { taskId, requestId });
+    expect((await deliveriesOf(testDb.db, samDevice.id)).map((row) => [row.kind, row.status])).toEqual([["request", "pending"]]);
+
+    await setNotificationPreferences(personContext(testDb.db, sam), { reopened: false });
+    await answerInput(ws.human, { taskId, answer: "Okafor" });
+    await retractAnswer(ws.human, { taskId, requestId });
+    expect((await deliveriesOf(testDb.db, samDevice.id)).filter((row) => row.status === "pending")).toEqual([]);
+  });
+
+  it("leaves a notification in place for someone who turned resolved updates off", async () => {
+    const push = fakePushService();
+    const samDevice = await deviceFor(testDb.db, sam);
+    const { taskId } = await ask();
+    await sendDuePushes(testDb.db, push.deps);
+    await setNotificationPreferences(personContext(testDb.db, sam), { resolved: false });
+    await answerInput(ws.human, { taskId, answer: "Okafor" });
+    expect((await deliveriesOf(testDb.db, samDevice.id)).map((row) => row.kind)).toEqual(["request"]);
+  });
+
+  it("drops at send time what the person turned off after it was queued", async () => {
+    const push = fakePushService();
+    const samDevice = await deviceFor(testDb.db, sam);
+    await ask();
+    await setNotificationPreferences(personContext(testDb.db, sam), { requests: false });
+    await sendDuePushes(testDb.db, push.deps);
+    expect(push.sent).toEqual([]);
+    expect(await deliveriesOf(testDb.db, samDevice.id)).toEqual([expect.objectContaining({ status: "dead", lastError: "preference" })]);
+  });
+
+  it("tells the desktop feed not to announce requests when they are turned off, and still lists them", async () => {
+    const { requestId } = await ask();
+    expect((await inboxFeed(testDb.db, sam)).items).toEqual([expect.objectContaining({ requestId, notify: true })]);
+    await setNotificationPreferences(personContext(testDb.db, sam), { requests: false });
+    const feed = await inboxFeed(testDb.db, sam);
+    expect(feed).toMatchObject({ pending: 1, items: [expect.objectContaining({ requestId, notify: false })] });
+    expect((await inboxFeed(testDb.db, dana)).items).toEqual([expect.objectContaining({ notify: true })]);
   });
 });
 
@@ -427,6 +513,23 @@ describe("payload", () => {
     // The question is cut to fit; the buttons never are.
     expect(payload).toMatchObject({ type: "request", answerable: true, options: heaviest });
     expect(JSON.stringify(requestPayload(workspace, "t_1", request, { answerFromNotification: true, private: false }))).not.toMatch(/Secret|example\.com|url/);
+  });
+
+  it("names what a resolved push closed, cut to fit, and gives a private device only the workspace", () => {
+    const long = { reason: "closed" as const, by: "S".repeat(500) };
+    const subject = { workspaceName: "W".repeat(500), question: "Q".repeat(5000) };
+    const payload = resolvedPayload("acme", request.id, long, { private: false }, subject);
+    expect(Buffer.byteLength(JSON.stringify(payload))).toBeLessThan(PUSH_PAYLOAD_MAX_BYTES);
+    expect(payload.question!.length).toBeLessThanOrEqual(300);
+    expect(payload).toMatchObject({ reason: "closed", closedBy: expect.any(String), workspaceName: expect.any(String) });
+    expect(resolvedPayload("acme", request.id, long, { private: true }, { workspaceName: "Acme", question: "Which auditor?" })).toEqual({
+      v: 1,
+      type: "resolved",
+      slug: "acme",
+      requestId: request.id,
+      reason: "closed",
+      workspaceName: "Acme",
+    });
   });
 
   it("sends no buttons when an option is longer than a button shows, rather than a cut label", () => {

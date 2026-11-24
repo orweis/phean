@@ -191,7 +191,7 @@ describe("public/sw.js", () => {
     expect(sw.shown[0]).toMatchObject({ title: "A decision is waiting in Acme", options: { tag: "q_abc123", actions: [] } });
     await sw.push(PUSH);
     await sw.push({ v: 1, type: "resolved", slug: "acme", requestId: "q_abc123", by: "Dana" });
-    expect(sw.shown.at(-1)).toMatchObject({ title: "Answered by Dana", options: { tag: "q_abc123", body: "Which auditor?", actions: [] } });
+    expect(sw.shown.at(-1)).toMatchObject({ title: "Answered by Dana · Acme", options: { tag: "q_abc123", body: "Which auditor?", actions: [] } });
   });
 
   it("opens the request from a click, built from the ids, never from a URL in the payload", async () => {

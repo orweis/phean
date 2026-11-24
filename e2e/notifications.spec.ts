@@ -37,4 +37,19 @@ test("a person mutes a workspace's notifications from Decisions, and finds the d
     await expect(notifications).toContainText("Notifications are not configured on this Phean server yet");
     await expect(notifications.getByRole("button", { name: "Notify me on this device" })).toHaveCount(0);
   });
+
+  await test.step("the account page chooses what notifies the person, on every device, and keeps it across a reload", async () => {
+    const choices = card(page, "What notifies you");
+    await expect(choices).toContainText("You are never notified about what you did yourself");
+    const resolved = choices.getByRole("checkbox", { name: /Answered or closed elsewhere/ });
+    await expect(resolved).toBeChecked();
+    await resolved.click();
+    await expect(status).toContainText("Turned off “Answered or closed elsewhere”");
+    await page.reload();
+    await expect(card(page, "What notifies you").getByRole("checkbox", { name: /Answered or closed elsewhere/ })).not.toBeChecked();
+    await expect(card(page, "What notifies you").getByRole("checkbox", { name: /New requests from agents/ })).toBeChecked();
+
+    await card(page, "What notifies you").getByRole("checkbox", { name: /Answered or closed elsewhere/ }).click();
+    await expect(status).toContainText("Turned on “Answered or closed elsewhere”");
+  });
 });

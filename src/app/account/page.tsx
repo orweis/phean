@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 
+import { NotificationPreferencesSettings } from "@/components/account/notification-preferences";
 import { PushDeviceSettings } from "@/components/account/push-device-settings";
 import { SignInMethods, type ProviderMethod } from "@/components/account/sign-in-methods";
 import { TwoFactorSettings } from "@/components/account/two-factor-settings";
@@ -18,7 +19,7 @@ import { queryParam } from "@/lib/routes";
 import { auth } from "@/server/auth/auth";
 import { getViewer } from "@/server/auth/session";
 import { oauthProviders, vapidConfig } from "@/server/config";
-import { listDevices } from "@/server/domain/notifications";
+import { listDevices, notificationPreferencesOf } from "@/server/domain/notifications";
 import { getAppearance, getTheme } from "@/server/web";
 import { personCtx } from "@/server/entry";
 
@@ -47,7 +48,8 @@ export default async function AccountPage({ searchParams }: PageProps<"/account"
   const connected = queryParam(params.connected);
   const failed = callbackErrorMessage(queryParam(params.error));
   const twoFactorEnabled = Boolean((viewer.user as { twoFactorEnabled?: boolean | null }).twoFactorEnabled);
-  const [appearance, theme, devices] = await Promise.all([getAppearance(), getTheme(), listDevices(personCtx(viewer.user))]);
+  const person = personCtx(viewer.user);
+  const [appearance, theme, devices, preferences] = await Promise.all([getAppearance(), getTheme(), listDevices(person), notificationPreferencesOf(person)]);
   const canSubscribe = viewer.memberships.some((membership) => roleCan(membership.role, "notify:subscribe"));
 
   return (
@@ -94,6 +96,14 @@ export default async function AccountPage({ searchParams }: PageProps<"/account"
             />
           </CardBody>
         </Card>
+        {canSubscribe && (
+          <Card id="notification-preferences">
+            <CardHeader title="What notifies you" description="For all your devices at once: this browser and any other, the Android app and Phean desktop." />
+            <CardBody>
+              <NotificationPreferencesSettings preferences={preferences} />
+            </CardBody>
+          </Card>
+        )}
         <Card>
           <CardHeader title="Appearance" description="A colour theme, and Light, Dark or System, which follows your device. Both apply at once and stay with this browser." />
           <CardBody className="space-y-5">

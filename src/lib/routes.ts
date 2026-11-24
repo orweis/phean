@@ -13,6 +13,16 @@ function withQuery(path: string, query: Query = {}): string {
 /** The square sizes the app icon is drawn in (`routes.appIcon`), for the web app manifest and notifications. */
 export const APP_ICON_SIZES = [192, 512] as const;
 
+/**
+ * The notification kinds that carry their own status-bar badge (`routes.notificationBadge`): an
+ * agent asking, and a request closed elsewhere.
+ */
+export const NOTIFICATION_BADGES = ["request", "resolved"] as const;
+export type NotificationBadge = (typeof NOTIFICATION_BADGES)[number];
+
+/** The side of a badge PNG: Android draws it at 24dp, so 96px stays sharp at 4x. */
+export const NOTIFICATION_BADGE_SIZE = 96;
+
 /** Every in-app path, built in one place so pages, redirects, and MCP links agree. */
 export const routes = {
   home: () => "/",
@@ -98,6 +108,11 @@ export const routes = {
   serviceWorker: () => "/sw.js",
   /** The app icon as a square PNG, for the web app manifest and notifications (`APP_ICON_SIZES`). */
   appIcon: (size: number) => `/icons/${size}.png`,
+  /**
+   * A notification's small status-bar icon: a white silhouette on transparency, since Android
+   * reads only its alpha and shows an opaque image as a white square.
+   */
+  notificationBadge: (kind: NotificationBadge) => `/icons/badge-${kind}.png`,
 } as const;
 
 /** A single non-empty search param value; Next passes repeated keys as arrays. */

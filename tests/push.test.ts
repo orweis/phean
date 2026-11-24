@@ -7,6 +7,7 @@ import {
   isOfflineAsset,
   isPageNavigation,
   notificationFor,
+  quotedSubject,
   notificationUrl,
   offlineAssets,
   optionIndexOf,
@@ -17,7 +18,7 @@ import {
   undoneNotification,
   type RequestPush,
 } from "@/lib/push";
-import { routes } from "@/lib/routes";
+import { APP_ICON_SIZES, routes } from "@/lib/routes";
 
 const ORIGIN = "https://phean.example";
 
@@ -56,6 +57,12 @@ describe("parsePushPayload", () => {
       reason: "answered",
       by: "Dana",
       closedBy: null,
+      workspaceName: null,
+      question: null,
+    });
+    expect(parsed({ v: 1, type: "resolved", slug: "acme", requestId: "q_abc123", reason: "closed", closedBy: "Scout", workspaceName: "Acme", question: "Which auditor?" })).toMatchObject({
+      workspaceName: "Acme",
+      question: "Which auditor?",
     });
     // From a server older than the reason, and with a reason this worker does not know.
     expect(parsed({ v: 1, type: "resolved", slug: "acme", requestId: "q_abc123", by: "Dana" })).toMatchObject({ reason: null, by: "Dana" });
@@ -86,6 +93,16 @@ describe("notificationFor", () => {
     expect(options.data).toMatchObject({ slug: "acme", requestId: "q_abc123", taskId: "t_def456" });
   });
 
+  it("keeps the colourful icon large and gives the status bar a monochrome badge for the kind", () => {
+    const asked = notificationFor(request());
+    expect(asked.options.icon).toBe(routes.appIcon(APP_ICON_SIZES[0]));
+    expect(asked.options.badge).toBe(routes.notificationBadge("request"));
+    expect(asked.options.badge).not.toBe(asked.options.icon);
+    const settled = notificationFor(parsed({ v: 1, type: "resolved", slug: "acme", requestId: "q_abc123", by: "Dana" }), asked.options.data);
+    expect(settled.options.badge).toBe(routes.notificationBadge("resolved"));
+    expect(notificationFor(null).options.badge).toBe(routes.notificationBadge("request"));
+  });
+
   it("shows no buttons when the device may not answer from notifications", () => {
     expect(notificationFor(parsed({ ...REQUEST, answerable: false })).options.actions).toEqual([]);
     expect(notificationFor(parsed({ ...REQUEST, options: [] })).options.actions).toEqual([]);
@@ -99,22 +116,34 @@ describe("notificationFor", () => {
     expect(JSON.stringify(shown)).not.toContain("auditor");
   });
 
-  it("replaces the request's notification when it was answered elsewhere, keeping its question", () => {
+  it("replaces the request's notification when it was answered elsewhere, naming the question and the workspace", () => {
     const previous = notificationFor(request()).options.data;
     const shown = notificationFor(parsed({ v: 1, type: "resolved", slug: "acme", requestId: "q_abc123", by: "Dana" }), previous);
-    expect(shown).toMatchObject({ title: "Answered by Dana", options: { tag: "q_abc123", body: "Which auditor?", actions: [], silent: true } });
+    expect(shown).toMatchObject({ title: "Answered by Dana · Acme", options: { tag: "q_abc123", body: "Which auditor?", actions: [], silent: true } });
+    // From an older server with nothing left to replace, it says what it can.
     expect(notificationFor(parsed({ v: 1, type: "resolved", slug: "acme", requestId: "q_abc123" })).title).toBe("Answered elsewhere");
+  });
+
+  it("names what was closed even when the notification it replaces is gone", () => {
+    const resolved = (extra: object) => notificationFor(parsed({ v: 1, type: "resolved", slug: "acme", requestId: "q_abc123", workspaceName: "Acme", ...extra }));
+    expect(resolved({ reason: "closed", closedBy: "Scout", question: "Which auditor?" })).toMatchObject({ title: "Closed by Scout · Acme", options: { body: "Which auditor?" } });
+    expect(resolved({ reason: "answered", by: "Dana", question: "Which bank?" })).toMatchObject({ title: "Answered by Dana · Acme", options: { body: "Which bank?" } });
+    expect(resolved({ reason: "replaced", question: "Which auditor?" })).toMatchObject({ title: "Replaced by a new question · Acme", options: { body: "Which auditor?" } });
+    // A private device gets the workspace only: the workspace is the subject.
+    expect(resolved({ reason: "closed" })).toMatchObject({ title: "A decision in Acme was closed", options: { body: undefined } });
+    expect(resolved({ reason: "answered" }).title).toBe("A decision in Acme was answered");
+    expect(resolved({ reason: "replaced" }).title).toBe("A decision in Acme was replaced by a new question");
   });
 
   it("never says an agent answered: its new question replaced the old one, or it closed it", () => {
     const previous = notificationFor(request()).options.data;
     const resolved = (extra: object) => notificationFor(parsed({ v: 1, type: "resolved", slug: "acme", requestId: "q_abc123", ...extra }), previous);
-    expect(resolved({ reason: "replaced" })).toMatchObject({ title: "Replaced by a new question", options: { body: "Which auditor?", silent: true } });
-    expect(resolved({ reason: "closed", closedBy: "Scout" }).title).toBe("Closed by Scout");
-    expect(resolved({ reason: "closed" }).title).toBe("Closed");
-    expect(resolved({ reason: "answered", by: "Dana" }).title).toBe("Answered by Dana");
+    expect(resolved({ reason: "replaced" })).toMatchObject({ title: "Replaced by a new question · Acme", options: { body: "Which auditor?", silent: true } });
+    expect(resolved({ reason: "closed", closedBy: "Scout" }).title).toBe("Closed by Scout · Acme");
+    expect(resolved({ reason: "closed" }).title).toBe("Closed · Acme");
+    expect(resolved({ reason: "answered", by: "Dana" }).title).toBe("Answered by Dana · Acme");
     // A `by` is only a person's: even sent with another reason, it is not read as one.
-    expect(resolved({ reason: "replaced", by: "Scout" }).title).toBe("Replaced by a new question");
+    expect(resolved({ reason: "replaced", by: "Scout" }).title).toBe("Replaced by a new question · Acme");
   });
 
   it("still shows something for a payload it cannot read, as Chrome requires", () => {
@@ -156,20 +185,29 @@ describe("answering from a notification", () => {
 
   it("says what it sent and to whom, with Undo", () => {
     const sent = answeredNotification(data(), { answer: "Okafor", taskTitle: "Pick the auditor", agentName: "Scout" });
-    expect(sent).toMatchObject({ title: "Sent “Okafor” to Scout", options: { tag: "q_abc123", body: "Pick the auditor", actions: [{ action: "undo", title: "Undo" }] } });
+    expect(sent).toMatchObject({ title: "Sent “Okafor” to Scout", options: { tag: "q_abc123", body: "Which auditor?", actions: [{ action: "undo", title: "Undo" }] } });
     expect(undoCall(sent.options.data)).toEqual({ path: routes.pushUndo("acme"), body: { taskId: "t_def456", requestId: "q_abc123" } });
   });
 
   it("says when the request was already answered, or the answer did not go", () => {
-    expect(answerFailedNotification(data(), 409).title).toBe("Already answered");
+    expect(answerFailedNotification(data(), 409)).toMatchObject({ title: "Already answered", options: { body: "“Which auditor?” was answered or replaced before your answer arrived." } });
     expect(answerFailedNotification(data(), 409, "Dana answered first.").options.body).toBe("Dana answered first.");
-    expect(answerFailedNotification(data(), 401).title).toBe("Sign in to answer");
-    expect(answerFailedNotification(data(), 500).options.actions).toEqual([]);
+    expect(answerFailedNotification(data(), 401)).toMatchObject({ title: "Sign in to answer", options: { body: "Open Phean on this device to sign in again, then answer “Which auditor?”." } });
+    expect(answerFailedNotification(data(), 500)).toMatchObject({ title: "Your answer was not sent", options: { body: "Open “Which auditor?” to answer it in Phean.", actions: [] } });
   });
 
   it("shows the request again after Undo, and says when Undo is too late", () => {
     expect(undoneNotification(data()).options.actions).toHaveLength(2);
-    expect(undoFailedNotification(data(), 409)).toMatchObject({ title: "Too late to undo", options: { body: "Scout already has the answer." } });
+    expect(undoFailedNotification(data(), 409)).toMatchObject({ title: "Too late to undo", options: { body: "Scout already has your answer to “Which auditor?”." } });
+    expect(undoFailedNotification(data(), 500)).toMatchObject({ title: "Undo did not go through", options: { body: "Open “Which auditor?” to change your answer in Phean." } });
+  });
+
+  it("cuts a long question to fit, never the words around it", () => {
+    const long = "Which of the auditors on the shortlist should run the year-end audit for the European subsidiaries next spring?";
+    const subject = quotedSubject(long);
+    expect(subject.length).toBeLessThanOrEqual(82);
+    expect(subject.endsWith("…”")).toBe(true);
+    expect(quotedSubject("Which auditor?")).toBe("“Which auditor?”");
   });
 
   it("reads back only data it can trust", () => {

@@ -586,6 +586,24 @@ export const pushMutes = pgTable(
 );
 
 /**
+ * What a person chooses to be notified about (`NOTIFICATION_TOPICS`), on every device: their Web
+ * Push devices and Phean desktop (the inbox feed's `notify`). Person-level, like `push_devices`;
+ * no row means the defaults (everything on).
+ */
+export const notificationPreferences = pgTable("notification_preferences", {
+  userId: text("user_id")
+    .primaryKey()
+    .references(() => user.id, { onDelete: "cascade" }),
+  /** An agent asked. */
+  requests: boolean("requests").notNull().default(true),
+  /** Someone else took their answer back, so the request is open again. */
+  reopened: boolean("reopened").notNull().default(true),
+  /** A request was answered or closed elsewhere: its notification is replaced. */
+  resolved: boolean("resolved").notNull().default(true),
+  ...timestamps,
+});
+
+/**
  * The push outbox, like `webhook_deliveries`: one row per (device, event, kind), written by
  * `recordEvents` in the caller's transaction. A `request` row tells a device an agent asked; a
  * `resolved` row replaces that notification once the request is closed elsewhere. An agent asking

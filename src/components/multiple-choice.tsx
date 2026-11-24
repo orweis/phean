@@ -3,10 +3,11 @@
 import { Send } from "lucide-react";
 import { useState } from "react";
 
-import { answerInputAction, retractAnswerAction } from "@/app/w/[slug]/actions";
+import { answerInputAction } from "@/app/w/[slug]/actions";
 import type { InputRequest } from "@/lib/agent-sessions";
 import { cx } from "@/lib/cx";
 
+import { askedAbout, takeBack } from "./decision-notices";
 import { buttonClasses } from "./ui/button";
 import { ActionForm } from "./ui/action-form";
 import { SubmitButton } from "./ui/submit-button";
@@ -22,8 +23,8 @@ export function MultipleChoice({ taskId, slug, request, title }: { taskId: strin
     <ActionForm
       action={answerInputAction}
       workspace={slug}
-      notice={`Sent your picks to ${request.agentName}`}
-      undo={{ action: retractAnswerAction, fields: { taskId, requestId: request.id }, done: `${request.agentName}'s question is open again.` }}
+      notice={`Sent your picks to ${request.agentName} for ${askedAbout(request)}`}
+      undo={takeBack(taskId, request)}
       className="flex flex-wrap items-center gap-x-1.5 gap-y-2"
     >
       <input type="hidden" name="taskId" value={taskId} />

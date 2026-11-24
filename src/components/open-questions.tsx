@@ -1,7 +1,7 @@
 import { AlarmClock, Bot, Check, Ellipsis } from "lucide-react";
 import Link from "next/link";
 
-import { answerInputAction, retractAnswerAction, snoozeRequestAction } from "@/app/w/[slug]/actions";
+import { answerInputAction, snoozeRequestAction } from "@/app/w/[slug]/actions";
 import { askedInApp, askerName, sessionOfAsker, type AgentSession, type InputRequest } from "@/lib/agent-sessions";
 import { LIMITS, REQUEST_KIND_META } from "@/lib/domain";
 import { cx } from "@/lib/cx";
@@ -11,6 +11,7 @@ import type { TaskView } from "@/server/domain/tasks";
 
 import { ResumeLink, ResumePopover, TaskLinks } from "./agent-sessions";
 import { DecisionKeys } from "./decision-keys";
+import { askedAbout, takeBack } from "./decision-notices";
 import { DocumentChips } from "./documents/document-chips";
 import { GoalLink } from "./goal-link";
 import { MultipleChoice } from "./multiple-choice";
@@ -21,18 +22,10 @@ import { CopyLinkButton } from "./ui/copy-link-button";
 import { CountedTextarea } from "./ui/counted-textarea";
 import { Field } from "./ui/field";
 import { Popover, PopoverCancel } from "./ui/popover";
-import type { UndoSpec } from "./ui/status-region";
 import { SubmitButton } from "./ui/submit-button";
 
-/** Taking the answer back reopens the question, until the agent has collected it. */
-const takeBack = (taskId: string, request: InputRequest): UndoSpec => ({
-  action: retractAnswerAction,
-  fields: { taskId, requestId: request.id },
-  done: `${request.agentName}'s question is open again.`,
-});
-
-/** What the status region says once an answer is sent: the receipt a person checks. */
-const sent = (answer: string, request: InputRequest) => `Sent “${truncate(answer, 60)}” to ${request.agentName}`;
+/** What the status region says once an answer is sent: the receipt a person checks, naming the question it answered. */
+const sent = (answer: string, request: InputRequest) => `Sent “${truncate(answer, 60)}” to ${request.agentName} for ${askedAbout(request)}`;
 
 /** A short reply, written here; the panel repeats the question so it stays in view while typing. */
 function OtherAnswer({ taskId, slug, request }: { taskId: string; slug: string; request: InputRequest }) {
@@ -46,7 +39,7 @@ function OtherAnswer({ taskId, slug, request }: { taskId: string; slug: string; 
       phone="inline"
       title={decision ? "Your decision" : "Your answer"}
     >
-      <ActionForm action={answerInputAction} workspace={slug} className="space-y-3" notice={`Sent your answer to ${request.agentName}`} undo={takeBack(taskId, request)} closeOnSuccess>
+      <ActionForm action={answerInputAction} workspace={slug} className="space-y-3" notice={`Sent your answer to ${request.agentName} for ${askedAbout(request)}`} undo={takeBack(taskId, request)} closeOnSuccess>
         <input type="hidden" name="taskId" value={taskId} />
         {/* Pinned to this request: a newer question on the task refuses the answer instead of taking it. */}
         <input type="hidden" name="requestId" value={request.id} />
@@ -99,7 +92,7 @@ function MoreAnswers({ taskId, slug, request, title }: { taskId: string; slug: s
         workspace={slug}
         fields={{ taskId, requestId: request.id }}
         confirm={`Mark ${request.agentName}'s question answered? Do this only if you answered it in their conversation.`}
-        notice={`Marked ${request.agentName}'s question answered`}
+        notice={`Marked ${askedAbout(request)} answered`}
         undo={takeBack(taskId, request)}
         closeOnSuccess
         size="menu"
