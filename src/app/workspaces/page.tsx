@@ -1,4 +1,4 @@
-import { Building2 } from "lucide-react";
+import { Building2, Gauge } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 
@@ -11,6 +11,7 @@ import { CreateWorkspaceForm } from "@/components/create-workspace-form";
 import { PageHeader } from "@/components/page-header";
 import { SkipLink } from "@/components/skip-link";
 import { MetaBadge } from "@/components/ui/badge";
+import { ButtonLink } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { EmptyState, Stat, StatStrip } from "@/components/ui/stat";
 import { PINNED_CELL, TH } from "@/components/ui/table";
@@ -19,6 +20,7 @@ import { cx } from "@/lib/cx";
 import { timeAgo } from "@/lib/format";
 import { routes } from "@/lib/routes";
 import { analyticsIdentity } from "@/server/analytics";
+import { adminPaths } from "@/server/backoffice/paths";
 import { getViewer } from "@/server/auth/session";
 import type { WorkspaceOverview } from "@/server/domain/tenants";
 import { workspaceOverviews } from "@/server/entry";
@@ -64,6 +66,14 @@ export default async function WorkspacesPage() {
       <main id="content" tabIndex={-1} className="mx-auto max-w-7xl space-y-6 px-4 py-6 outline-none sm:px-6 sm:py-8">
         <PageHeader
           title="Workspaces"
+          actions={
+            viewer.platformAdmin && (
+              <ButtonLink href={adminPaths.overview()} variant="secondary">
+                <Gauge aria-hidden />
+                Backoffice
+              </ButtonLink>
+            )
+          }
           description={
             viewer.platformAdmin
               ? "Status across every customer workspace. You have read-only access to workspaces you are not a member of."

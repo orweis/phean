@@ -153,7 +153,7 @@ Each agent that works on a task can leave its session on it: a link that opens i
 
 Agents are meant to fill the ledger, but people can add a task or goal by hand: a quiet **Add manually** button on the overview and board, and **Add task** or **Add sub-goal** on a goal page.
 
-Pages refresh every 15 seconds while open. Owners and admins manage agents and members and issue fixed keys; members can do everything else, including approving goals and connecting agents up to Write. Emails listed in `PHEAN_PLATFORM_ADMINS` get read-only access to every workspace.
+Pages refresh every 15 seconds while open. Owners and admins manage agents and members and issue fixed keys; members can do everything else, including approving goals and connecting agents up to Write. Emails listed in `PHEAN_PLATFORM_ADMINS` (verified) get the backoffice at `/admin`, and read-only access to a workspace once they record why they need it there.
 
 ## Development
 

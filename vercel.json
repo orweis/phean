@@ -3,6 +3,7 @@
   "crons": [
     { "path": "/api/webhooks/dispatch", "schedule": "* * * * *" },
     { "path": "/api/digest", "schedule": "2 * * * *" },
-    { "path": "/api/pipelines/tick", "schedule": "* * * * *" }
+    { "path": "/api/pipelines/tick", "schedule": "* * * * *" },
+    { "path": "/api/admin/rollup", "schedule": "17 * * * *" }
   ]
 }

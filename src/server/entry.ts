@@ -13,6 +13,8 @@ import { handlePipelineTrigger } from "./pipelines/trigger";
 import { prunePushDeliveries, sendDuePushes } from "./push/dispatch";
 import { handleInbox } from "./push/http";
 import { dispatchDue, pruneDeliveries, type DispatchReport } from "./webhooks/dispatch";
+import { ensureBackofficeIndexes } from "./backoffice/indexes";
+import { rollUpUsage, type RollupReport } from "./backoffice/rollup";
 
 /**
  * Where pages and route handlers reach server work that needs the database. They never open it
@@ -69,3 +71,11 @@ export const sweepPipelinesNow = (): Promise<SweepReport> => sweepPipelines(getD
 
 /** A pipeline's inbound webhook, on the shared connection. */
 export const pipelineTrigger = (request: Request, pipelineId: string): Promise<Response> => handlePipelineTrigger(request, { db: getDb(), pipelineId });
+
+/** The hourly cron run that rolls the event log up into the backoffice's daily usage counts. */
+export async function rollUpUsageNow(): Promise<RollupReport & { indexesBuilt: string[] }> {
+  const db = getDb();
+  // Outside any transaction, so the indexes build concurrently (see backoffice/indexes.ts).
+  const indexesBuilt = await ensureBackofficeIndexes(db);
+  return { ...(await rollUpUsage(db)), indexesBuilt };
+}

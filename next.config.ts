@@ -15,7 +15,7 @@ const APP_CSP = ["object-src 'none'", "base-uri 'self'", "frame-ancestors 'none'
  */
 const WORKSPACE_CSP = APP_CSP.replace("object-src 'none'", "object-src 'self'");
 
-const APP_PAGES = ["/workspaces/:path*", "/account/:path*", "/invite/:path*", "/sign-in/:path*", "/sign-up/:path*", "/offline"];
+const APP_PAGES = ["/workspaces/:path*", "/account/:path*", "/admin/:path*", "/invite/:path*", "/sign-in/:path*", "/sign-up/:path*", "/offline"];
 
 /** Every workspace page, but not a document's bytes (`/w/[slug]/documents/[id]/file`), which set a stricter policy of their own. */
 const WORKSPACE_PAGES = ["/w/:slug", "/w/:slug/:rest((?!documents/[^/]+/file$).*)"];

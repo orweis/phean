@@ -12,6 +12,7 @@ import type { Db } from "../db/client";
 import { agentRole } from "../domain/context";
 import { AGENT_NAME_HEADER, agentContext, authenticateAgentToken, noteToolCall, resolveNamedSubagent, resolveOAuthAgent, type AgentPrincipal } from "../domain/agents";
 import { forbidden } from "../domain/errors";
+import { scheduleToolCount } from "../domain/usage";
 import { PROMPTS, SERVER_INSTRUCTIONS } from "./guidance";
 import { toolAllowed, toolError, type PheanTool, type ToolContext } from "./tool";
 import { TOOLS } from "./tools";
@@ -63,11 +64,21 @@ function registerTool(server: McpServer, tool: PheanTool, getDb: () => Db): void
         const ctx = await toolContext(getDb(), call, actingAs || undefined);
         if (!ctx) return toolError(new Error("MCP request reached a tool without verified agent credentials"));
         // The list is the token's level; a sub-agent named by actingAs may hold less, so check the one acting.
-        if (!toolAllowed(tool, ctx.actor)) return toolError(forbidden("Your access level does not allow this tool. Ask a person to reconnect you with more access."));
+        if (!toolAllowed(tool, ctx.actor)) {
+          const refused = toolError(forbidden("Your access level does not allow this tool. Ask a person to reconnect you with more access."));
+          scheduleToolCount(ctx, tool.name, true);
+          return refused;
+        }
         // Analytics: the agent's first call, and its first of the day. Writes at most once a day per agent.
         await noteToolCall(ctx);
-        return tool.execute(ctx, input);
+        const result = await tool.execute(ctx, input);
+        // Usage for the backoffice, counted after the answer; a failed count never fails the call.
+        scheduleToolCount(ctx, tool.name, result.isError === true);
+        return result;
       } catch (error) {
+        // A call that threw (a revoked actingAs name, say) counts as an error, against the credential's agent.
+        const extra = call.http?.authInfo?.extra as PheanAuthExtra | undefined;
+        if (extra) scheduleToolCount(agentContext(getDb(), extra.principal), tool.name, true);
         return toolError(error);
       }
     },

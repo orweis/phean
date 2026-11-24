@@ -11,6 +11,9 @@ import { platformAdminEmails } from "../config";
 import { getDb } from "../db/client";
 import type { Ctx } from "../domain/context";
 import { findTenantBySlug, listAllTenants, listMemberships, userContext, type Membership } from "../domain/tenants";
+import { platformContext } from "../backoffice/context";
+import { adminPaths } from "../backoffice/paths";
+import { platformWorkspaceAccess } from "../backoffice/workspace-access";
 import { auth, type Session } from "./auth";
 
 export type SessionUser = Session["user"];
@@ -91,14 +94,22 @@ export interface WorkspaceAccess {
 
 /**
  * Resolves a workspace slug to a domain context for the signed-in user, or renders 404.
- * Non-members get the same 404 as a missing workspace, so slugs cannot be probed.
+ * Non-members get the same 404 as a missing workspace, so slugs cannot be probed. A platform admin
+ * reads a workspace they are not in only within a "Show content" grant (`platformWorkspaceAccess`);
+ * without one they are sent to its backoffice page to give a reason.
  */
 export const requireWorkspace = cache(async (slug: string): Promise<WorkspaceAccess> => {
   const viewer = await getViewer();
   let membership = viewer.memberships.find((candidate) => candidate.tenant.slug === slug);
   if (!membership && viewer.platformAdmin) {
     const tenant = await findTenantBySlug(getDb(), slug);
-    if (tenant) membership = { tenant, role: "platform_admin" };
+    if (tenant) {
+      // A workspace a platform admin does not belong to opens only as the backoffice's content does:
+      // with two-factor when required, a reason given for it, and a row in the audit trail.
+      const access = await platformWorkspaceAccess(platformContext(getDb(), viewer.user), tenant.id);
+      if (access === "granted") membership = { tenant, role: "platform_admin" };
+      else if (access !== "not_admin") redirect(adminPaths.workspaceContent(slug));
+    }
   }
   if (!membership) notFound();
   return { ctx: userContext(getDb(), membership, viewer.user), viewer, membership };

@@ -11,6 +11,8 @@ import { agentContext, authenticateAgentToken, createAgent, listAgents, revokeAg
 import { answerInput } from "@/server/domain/tasks";
 import { SERVER_INSTRUCTIONS } from "@/server/mcp/guidance";
 import { createPheanMcpHandler } from "@/server/mcp/handler";
+import { toolCallsDaily } from "@/server/db/schema";
+import { setToolCountScheduler } from "@/server/domain/usage";
 import { toolAllowed } from "@/server/mcp/tool";
 import { TOOLS } from "@/server/mcp/tools";
 import { dispatchDue } from "@/server/webhooks/dispatch";
@@ -703,5 +705,36 @@ describe("pipelines over MCP", () => {
     expect(runs.map((run) => run.id)).toEqual([started.run.id]);
     const { pipelines } = dataOf<{ pipelines: { id: string; runs: { total: number } }[] }>(await call(closer, "list_pipelines"));
     expect(pipelines.find((pipeline) => pipeline.id === defined.pipeline.id)?.runs.total).toBe(1);
+  });
+});
+
+describe("tool call counts", () => {
+  it("counts each call after answering it, and a call that threw as an error", async () => {
+    const pending: Promise<void>[] = [];
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    // Hold every count until the calls have answered: the answer must not wait for its count.
+    setToolCountScheduler((run) => pending.push(gate.then(run)));
+    try {
+      await call(scout, "whoami");
+      await call(scout, "get_task", { taskId: "t_missing" });
+      await call(scout, "whoami", { actingAs: "Grok research" });
+      const { listAgents, revokeAgent } = await import("@/server/domain/agents");
+      const sub = (await listAgents(ws.human, {})).find((row) => row.name === "Grok research")!;
+      await revokeAgent(ws.human, { agentId: sub.id });
+      expect((await call(scout, "whoami", { actingAs: "Grok research" })).isError).toBe(true);
+      expect(pending).toHaveLength(4);
+      expect(await testDb.db.select().from(toolCallsDaily).where(eq(toolCallsDaily.tenantId, ws.tenant.id))).toEqual([]);
+      release();
+      await Promise.all(pending);
+    } finally {
+      setToolCountScheduler();
+    }
+    const rows = await testDb.db.select().from(toolCallsDaily).where(eq(toolCallsDaily.tenantId, ws.tenant.id));
+    const of = (agentId: string, tool: string) => rows.find((row) => row.agentId === agentId && row.tool === tool);
+    // Scout's own whoami, and the refused call under the revoked name, filed against Scout as an error.
+    expect(of(ws.scout.agentId, "whoami")).toMatchObject({ calls: 2, errors: 1 });
+    expect(of(ws.scout.agentId, "get_task")).toMatchObject({ calls: 1, errors: 1 });
+    expect(rows.filter((row) => row.tool === "whoami").reduce((sum, row) => sum + row.calls, 0)).toBe(3);
   });
 });

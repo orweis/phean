@@ -20,5 +20,5 @@ export function proxy(request: NextRequest) {
 const PUSH_ROUTE = /^\/w\/[^/]+\/push\/(answer|undo)$/;
 
 export const config = {
-  matcher: ["/account/:path*", "/workspaces/:path*", "/w/:path*", "/invite/:path*", "/oauth/:path*"],
+  matcher: ["/account/:path*", "/workspaces/:path*", "/w/:path*", "/invite/:path*", "/oauth/:path*", "/admin/:path*"],
 };

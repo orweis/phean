@@ -47,6 +47,9 @@ export default defineConfig({
       // Email is "set up" so the digest's form shows; the hourly send is never called in these tests.
       RESEND_API_KEY: "phean-e2e-resend-key",
       PHEAN_EMAIL_FROM: "Phean <digest@phean.test>",
+      // The seeded operator (scripts/demo-account.ts) is a platform admin, for the backoffice specs; two-factor is not required.
+      PHEAN_PLATFORM_ADMINS: "ops@phean.dev",
+      PHEAN_ADMIN_REQUIRE_2FA: "0",
       // GA stays off unless a spec sets the phean-analytics-test cookie (e2e/analytics.spec.ts).
       PHEAN_ANALYTICS_TEST_ID: "G-E2ETEST01",
     },

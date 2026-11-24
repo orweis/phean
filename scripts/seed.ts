@@ -16,18 +16,27 @@ import { getDb } from "../src/server/db/client";
 import { user } from "../src/server/db/schema";
 import { createAgent } from "../src/server/domain/agents";
 import { findTenantBySlug, listMemberships, userContext } from "../src/server/domain/tenants";
-import { DEMO_USER, DEMO_WORKSPACES as WORKSPACES, SAMPLE_HISTORY_SLUG } from "./demo-account";
+import { ensureBackofficeIndexes } from "../src/server/backoffice/indexes";
+import { rollUpUsage } from "../src/server/backoffice/rollup";
+import { DEMO_ADMIN, DEMO_USER, DEMO_WORKSPACES as WORKSPACES, SAMPLE_HISTORY_SLUG } from "./demo-account";
+import { seedSampleCustomers } from "./sample-customers";
 import { seedSampleHistory } from "./sample-history";
 import { seedSamplePipelines } from "./sample-pipelines";
+
+// Demo accounts with known passwords, and sample customers: never on a production deployment.
+if (process.env.VERCEL_ENV === "production") {
+  console.error("Refusing to seed: VERCEL_ENV is production. The seed creates demo accounts with known passwords.");
+  process.exit(1);
+}
 
 const AGENT_NAMES = ["Inbox sweeper", "Calendar planner"];
 
 const db = getDb();
 
-async function ensureUser() {
-  const [existing] = await db.select().from(user).where(eq(user.email, DEMO_USER.email));
+async function ensureUser(person: { name: string; email: string; password: string } = DEMO_USER) {
+  const [existing] = await db.select().from(user).where(eq(user.email, person.email));
   if (existing) return existing;
-  const { user: created } = await auth.api.signUpEmail({ body: DEMO_USER });
+  const { user: created } = await auth.api.signUpEmail({ body: person });
   return created;
 }
 
@@ -51,10 +60,20 @@ const history = memberships.find((membership) => membership.tenant.slug === SAMP
 const sampled = history ? await seedSampleHistory(db, history.tenant, owner) : 0;
 const pipelineRuns = history ? await seedSamplePipelines(db, userContext(db, history, owner)) : 0;
 
+// The backoffice: an operator whose address counts as verified, twelve weeks of sample customers, and the rollup.
+const admin = await ensureUser(DEMO_ADMIN);
+await db.update(user).set({ emailVerified: true }).where(eq(user.id, admin.id));
+const customers = await seedSampleCustomers(db);
+await ensureBackofficeIndexes(db);
+// Every day again, not only the ones after the last run: the samples above are backdated.
+await rollUpUsage(db, new Date(), { full: true });
+
 console.log(`Sign in as ${DEMO_USER.email} / ${DEMO_USER.password}`);
 console.log(`Workspaces: ${memberships.map((membership) => `/w/${membership.tenant.slug}`).join(", ")}`);
 if (sampled) console.log(`Added ${sampled} sample tasks with three weeks of history to /w/${SAMPLE_HISTORY_SLUG}`);
 if (pipelineRuns) console.log(`Added a sample pipeline with ${pipelineRuns} runs to /w/${SAMPLE_HISTORY_SLUG}/pipelines`);
+if (customers) console.log(`Added ${customers} sample customers with twelve weeks of history for the backoffice`);
+console.log(`Backoffice: sign in as ${DEMO_ADMIN.email} / ${DEMO_ADMIN.password} with PHEAN_PLATFORM_ADMINS=${DEMO_ADMIN.email} (and PHEAN_ADMIN_REQUIRE_2FA=0, or turn on two-factor), then open /admin`);
 console.log(`Agent tokens for /w/${primary.tenant.slug} (shown once):`);
 for (const { agent, token } of tokens) console.log(`  ${agent.name}: ${token}`);
 process.exit(0);
