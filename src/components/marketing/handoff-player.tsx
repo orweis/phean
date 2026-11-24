@@ -1,7 +1,7 @@
 "use client";
 
 import { Pause, Play } from "lucide-react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 
@@ -85,11 +85,113 @@ export function HandoffPlayer({ picture, steps }: { picture: ReactNode; steps: R
           {paused ? "Play the handoff" : "Pause the handoff"}
         </Button>
       </div>
-      {/* The picture is decoration; the steps below it are the story in words. */}
-      <div aria-hidden className="motion-reduce:hidden">
-        {picture}
-      </div>
+      {/* The picture is decoration (each app in it is hidden from screen readers); the steps below it are the story in words. */}
+      <div className="motion-reduce:hidden">{picture}</div>
       {steps}
+    </div>
+  );
+}
+
+/**
+ * Phean as the server both agents talk to, from 1024px: a node with the task's state beside it
+ * (`left`, `right`), and the Phean window (`tip`) shown under it while the node is hovered, focused
+ * from the keyboard, or tapped, and closed by Escape, a second tap, or a tap elsewhere. It opens
+ * above the node when there is no room below. Under 1024px the node goes, and the window takes its
+ * place among the cascaded windows (the wrappers are `display: contents` there).
+ */
+export function HandoffHub({
+  node,
+  description,
+  left,
+  right,
+  tip,
+}: {
+  node: ReactNode;
+  description: string;
+  left: ReactNode;
+  right: ReactNode;
+  tip: ReactNode;
+}) {
+  const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const [pinned, setPinned] = useState(false);
+  const [above, setAbove] = useState(false);
+  const anchor = useRef<HTMLDivElement>(null);
+  const panel = useRef<HTMLDivElement>(null);
+  const tipId = useId();
+  const descriptionId = useId();
+  const open = hovered || focused || pinned;
+
+  // Room below the node for the window, or else above it.
+  useEffect(() => {
+    if (!open || !anchor.current || !panel.current) return;
+    const node = anchor.current.getBoundingClientRect();
+    const height = panel.current.offsetHeight + 16;
+    setAbove(node.bottom + height > innerHeight && node.top - height > 0);
+  }, [open]);
+
+  // A tap elsewhere closes a pinned window.
+  useEffect(() => {
+    if (!pinned) return;
+    const away = (event: PointerEvent) => {
+      if (!anchor.current?.contains(event.target as Node)) setPinned(false);
+    };
+    document.addEventListener("pointerdown", away);
+    return () => document.removeEventListener("pointerdown", away);
+  }, [pinned]);
+
+  const close = () => {
+    setHovered(false);
+    setFocused(false);
+    setPinned(false);
+  };
+
+  return (
+    <div className="max-lg:contents lg:col-span-2 lg:grid lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] lg:items-center lg:gap-8">
+      <div aria-hidden className="justify-self-end max-lg:hidden">
+        {left}
+      </div>
+      <div
+        ref={anchor}
+        className="max-lg:contents lg:relative"
+        onPointerEnter={(event) => event.pointerType === "mouse" && setHovered(true)}
+        onPointerLeave={(event) => event.pointerType === "mouse" && setHovered(false)}
+        onKeyDown={(event) => {
+          if (event.key === "Escape" && open) {
+            event.stopPropagation();
+            close();
+          }
+        }}
+      >
+        <button
+          type="button"
+          data-node
+          aria-expanded={open}
+          aria-controls={tipId}
+          aria-describedby={descriptionId}
+          onClick={() => setPinned(!pinned)}
+          onFocus={(event) => setFocused(event.currentTarget.matches(":focus-visible"))}
+          onBlur={() => setFocused(false)}
+          className="max-lg:hidden"
+        >
+          {node}
+        </button>
+        <span id={descriptionId} className="sr-only">
+          {description}
+        </span>
+        <div
+          ref={panel}
+          id={tipId}
+          data-tip={open ? "open" : undefined}
+          data-above={above || undefined}
+          className="max-lg:contents lg:invisible lg:absolute lg:left-1/2 lg:z-30 lg:w-[54rem] lg:max-w-[calc(100vw-3rem)] lg:-translate-x-1/2 lg:glass-float lg:rounded-2xl lg:p-2 lg:data-[above]:bottom-full lg:data-[above]:mb-3 lg:not-data-[above]:top-full lg:not-data-[above]:mt-3 lg:data-[tip=open]:visible lg:data-[tip=open]:animate-glass-in"
+        >
+          {tip}
+        </div>
+      </div>
+      <div aria-hidden className="max-lg:hidden">
+        {right}
+      </div>
     </div>
   );
 }

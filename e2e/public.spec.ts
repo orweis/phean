@@ -143,6 +143,42 @@ test("the landing page shows agents handing a task between them, and tells it in
   await expect.poll(beat, { timeout: 5000 }).not.toBe(held);
 });
 
+test("on a desktop the handoff shows Phean as the server, and its window on hover, focus or tap", async ({ page }) => {
+  await page.goto("/#handoffs");
+  const section = page.getByRole("region", { name: "Agents pass the work along. You see the whole picture." });
+  const node = section.getByRole("button", { name: /^Phean/ });
+  await expect(node).toBeVisible();
+  await expect(node).toHaveAccessibleDescription(/where the agents hand the task over/);
+  const tip = page.locator(`[id="${await node.getAttribute("aria-controls")}"]`);
+  const window = tip.locator('[data-window="phean"]');
+  await expect(window).toBeHidden();
+
+  // From the keyboard: focus shows it, Escape puts it away and keeps the focus.
+  await expect(async () => {
+    await node.focus();
+    await expect(node).toHaveAttribute("aria-expanded", "true", { timeout: 1000 });
+  }).toPass();
+  await expect(window).toBeVisible();
+  await expect(window).toContainText("Follow up with Dana at Acme");
+  await page.keyboard.press("Escape");
+  await expect(node).toHaveAttribute("aria-expanded", "false");
+  await expect(window).toBeHidden();
+  await expect(node).toBeFocused();
+
+  // With a mouse: hovering shows it, and it goes when the pointer leaves.
+  await node.hover();
+  await expect(window).toBeVisible();
+  await page.mouse.move(5, 5);
+  await expect(window).toBeHidden();
+
+  // With a tap: it stays until a tap elsewhere.
+  await node.click();
+  await page.mouse.move(5, 5);
+  await expect(window).toBeVisible();
+  await page.mouse.click(5, 5);
+  await expect(window).toBeHidden();
+});
+
 test("on a phone the handoff's apps are windows on a small desktop, about one screen tall", async ({ browser }) => {
   const phone = await browser.newContext({ viewport: { width: 375, height: 740 } });
   const page = await phone.newPage();
@@ -157,7 +193,13 @@ test("on a phone the handoff's apps are windows on a small desktop, about one sc
   const boxes = await desk.locator("[data-window]").evaluateAll((windows) =>
     windows.map((window) => {
       const element = window as HTMLElement;
-      return { left: element.offsetLeft, top: element.offsetTop, right: element.offsetLeft + element.offsetWidth, bottom: element.offsetTop + element.offsetHeight };
+      return {
+        app: element.dataset.window,
+        left: element.offsetLeft,
+        top: element.offsetTop,
+        right: element.offsetLeft + element.offsetWidth,
+        bottom: element.offsetTop + element.offsetHeight,
+      };
     }),
   );
   expect(boxes).toHaveLength(3);
@@ -166,8 +208,10 @@ test("on a phone the handoff's apps are windows on a small desktop, about one sc
     expect(box.right).toBeLessThanOrEqual(width + 1);
     expect(box.bottom).toBeLessThanOrEqual(height + 1);
   }
-  expect(boxes[1]!.top).toBeGreaterThan(boxes[0]!.top);
-  expect(boxes[2]!.top).toBeGreaterThan(boxes[1]!.top);
+  // Cascaded: the chat at the back, then Claude's session, then Phean, each a step lower.
+  const top = (app: string) => boxes.find((box) => box.app === app)!.top;
+  expect(top("claude")).toBeGreaterThan(top("grok"));
+  expect(top("phean")).toBeGreaterThan(top("claude"));
   // Everything on it reads at 12px or more.
   const small = await desk.evaluate((element) =>
     [...element.querySelectorAll("*")]
