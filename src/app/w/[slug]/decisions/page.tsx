@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import { AnsweredDecisions } from "@/components/answered-decisions";
+import { DecisionKeys } from "@/components/decision-keys";
 import { NotificationMute } from "@/components/notification-mute";
 import { NotificationsPrompt } from "@/components/notifications-prompt";
 import { OpenQuestions } from "@/components/open-questions";
@@ -30,6 +31,17 @@ function answeredSummary(closed: readonly DecisionRecord[]): string {
   const waiting = delivered.filter(({ request }) => !request.collected).length;
   const pickup = waiting ? ` ${waiting} not picked up by ${waiting === 1 ? "its agent" : "their agents"} yet.` : delivered.length ? " Every answer has reached its agent." : "";
   return `${kinds} settled.${pickup}`;
+}
+
+/** The open requests' cards, under one keyboard selection when the person can answer. */
+function OpenRequests({ canAnswer, children }: { canAnswer: boolean; children: React.ReactNode }) {
+  return canAnswer ? (
+    <DecisionKeys>
+      <div className="space-y-6">{children}</div>
+    </DecisionKeys>
+  ) : (
+    <>{children}</>
+  );
 }
 
 export default async function DecisionsPage({ params, searchParams }: PageProps<"/w/[slug]/decisions">) {
@@ -78,6 +90,8 @@ export default async function DecisionsPage({ params, searchParams }: PageProps<
             </CardBody>
           </Card>
         )}
+        {/* One keyboard selection across the pinned pipeline decisions and the rest: J and K move through both. */}
+        <OpenRequests canAnswer={canAnswer}>
         {pinned.length > 0 && (
           <Card id="pipelines" tone="wait" className="scroll-mt-32">
             <CardHeader
@@ -86,7 +100,7 @@ export default async function DecisionsPage({ params, searchParams }: PageProps<
               description="Each holds its run until you decide. Under each option, where the run goes next; at the time limit, the run takes its default."
             />
             <CardBody className="py-1">
-              <OpenQuestions tasks={pinned} slug={slug} canAnswer={canAnswer} showGoal focus={focus} pipelines={contexts} />
+              <OpenQuestions tasks={pinned} slug={slug} canAnswer={canAnswer} showGoal focus={focus} pipelines={contexts} keys={false} />
             </CardBody>
           </Card>
         )}
@@ -104,7 +118,7 @@ export default async function DecisionsPage({ params, searchParams }: PageProps<
             />
             {rest.length > 0 ? (
               <CardBody className="py-1">
-                <OpenQuestions tasks={rest} slug={slug} canAnswer={canAnswer} showGoal focus={focus} />
+                <OpenQuestions tasks={rest} slug={slug} canAnswer={canAnswer} showGoal focus={focus} keys={false} />
               </CardBody>
             ) : (
               <CardBody className="pt-0">
@@ -120,6 +134,7 @@ export default async function DecisionsPage({ params, searchParams }: PageProps<
             )}
           </Card>
         ) : null}
+        </OpenRequests>
         {proposed.length > 0 && (
           <Card id="approvals" tone="wait" className="scroll-mt-32">
             <CardHeader

@@ -52,7 +52,7 @@ function PipelineContext({ slug, request, context }: { slug: string; request: In
           {context.steps.map((step) => (
             <li key={step.option}>
               <span className="font-semibold text-ink">{step.option}</span> <span aria-hidden>→</span>
-              <span className="sr-only">leads to</span> {step.next}
+              <span className="sr-only"> leads to</span> {step.next}
             </li>
           ))}
         </ul>
@@ -205,6 +205,7 @@ export function OpenQuestions({
   showGoal = false,
   focus,
   pipelines,
+  keys = true,
 }: {
   tasks: readonly TaskView[];
   slug: string;
@@ -214,6 +215,8 @@ export function OpenQuestions({
   focus?: string;
   /** For decisions pipelines asked: where each run stands, by `${runId}:${stopId}`. */
   pipelines?: Record<string, PipelineRequestContext>;
+  /** False when the page wraps several lists in one `DecisionKeys`, so one request is selected among them all. */
+  keys?: boolean;
 }) {
   const list = (
     <ul>
@@ -325,5 +328,5 @@ export function OpenQuestions({
       })}
     </ul>
   );
-  return canAnswer ? <DecisionKeys>{list}</DecisionKeys> : list;
+  return canAnswer && keys ? <DecisionKeys>{list}</DecisionKeys> : list;
 }

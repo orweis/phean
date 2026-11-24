@@ -20,7 +20,7 @@ export function StartRun({ slug, pipelineId, name, inputs, variant = "tinted" }:
   const [values, setValues] = useState<Record<string, string>>({});
   if (inputs.length === 0) {
     return (
-      <ActionButton action={startRunAction} workspace={slug} fields={{ pipelineId }} size="sm" variant={variant} aria-label={`Start a run of ${name}`}>
+      <ActionButton action={startRunAction} workspace={slug} fields={{ pipelineId }} size="sm" variant={variant} aria-label={`Start run of ${name}`}>
         <Play aria-hidden />
         Start run
       </ActionButton>
@@ -28,7 +28,7 @@ export function StartRun({ slug, pipelineId, name, inputs, variant = "tinted" }:
   }
   const filled = Object.fromEntries(Object.entries(values).filter(([, value]) => value.trim()));
   return (
-    <Popover variant={variant === "primary" ? "primary" : "tinted"} icon={<Play aria-hidden />} label="Start run" triggerLabel={`Start a run of ${name}`} title={`Start ${name}`} className="sm:w-80">
+    <Popover variant={variant === "primary" ? "primary" : "tinted"} icon={<Play aria-hidden />} label="Start run" triggerLabel={`Start run of ${name}`} title={`Start ${name}`} className="sm:w-80">
       <ActionForm action={startRunAction} workspace={slug} className="space-y-3">
         <input type="hidden" name="pipelineId" value={pipelineId} />
         <input type="hidden" name="inputs" value={JSON.stringify(filled)} />

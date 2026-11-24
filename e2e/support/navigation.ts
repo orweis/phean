@@ -8,6 +8,7 @@ const TABS = {
   Tasks: routes.board,
   Goals: routes.goals,
   Timeline: routes.timeline,
+  Pipelines: routes.pipelines,
   Memory: routes.memory,
   Documents: routes.documents,
   Search: routes.search,

@@ -55,7 +55,7 @@ export function WorkspaceNav({ slug, counts }: { slug: string; counts: NavCounts
   useChipRail(rail, heading ?? pathname);
 
   return (
-    <nav ref={rail} aria-label="Workspace" className="chip-rail relative -mx-1 flex gap-0.5">
+    <nav ref={rail} aria-label="Workspace" className="chip-rail relative -mx-1 flex gap-0.5 after:block after:w-1 after:shrink-0 after:content-['']">
       {TABS.map(({ label, icon: Icon, href, ...tab }) => {
         const target = href(slug);
         const here = "exact" in tab ? pathname === target : pathname.startsWith(target);
