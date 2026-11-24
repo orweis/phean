@@ -58,7 +58,7 @@ async function throughGitHub(client: Browser, start: "/sign-in/social" | "/link-
 
 let testDb: TestDb;
 let auth: Auth;
-let sent: { user_id?: string; events: { name: string; params: Record<string, unknown> }[] }[];
+let sent: { user_id?: string; client_id?: string; events: { name: string; params: Record<string, unknown> }[] }[];
 
 /** Lets the after-commit hooks and the capture's promises settle. */
 const settle = () => new Promise((resolve) => setTimeout(resolve, 20));
@@ -86,13 +86,15 @@ afterEach(async () => {
 });
 
 describe("sign_up from the server", () => {
-  it("sends one for a password sign-up, with the hashed person and no email", async () => {
+  it("sends one for a password sign-up, naming no person and no email", async () => {
     const client = browser(auth);
     expect((await client.post("/sign-up/email", { name: "Dana", email: "dana@example.com", password: PASSWORD })).status).toBe(200);
     await settle();
     expect(sent).toHaveLength(1);
     expect(sent[0]!.events[0]).toMatchObject({ name: "sign_up", params: { method: "password", source_side: "server" } });
-    expect(sent[0]!.user_id).toMatch(/^[0-9a-f]{32}$/);
+    // The server cannot know whether the person accepted analytics: no user id, and a random client id.
+    expect(sent[0]).not.toHaveProperty("user_id");
+    expect(sent[0]!.client_id).toMatch(/^srv\.[0-9a-f-]{36}$/);
     expect(JSON.stringify(sent)).not.toContain("dana");
   });
 

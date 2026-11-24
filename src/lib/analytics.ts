@@ -105,6 +105,8 @@ export const EVENTS = {
       first_answer: BOOL,
     },
     key: true,
+    // Only for answers no page sees: from a notification or the desktop app.
+    server: "also",
   },
   decision_snooze: { params: {} },
   decision_undo: { params: {} },
@@ -246,6 +248,15 @@ export function clientHint(name: string | null | undefined): (typeof KNOWN_CLIEN
   return "other";
 }
 
+/** The registrable part of a host (`acme.slack.com` → `slack.com`), so an app link's customer-specific subdomain is never sent. */
+export function registrableDomain(host: string): string {
+  const labels = host.toLowerCase().split(".").filter(Boolean);
+  if (labels.length <= 2 || /^\d+$/.test(labels.at(-1)!)) return labels.length > 2 ? "ip" : labels.join(".");
+  // Two-letter country codes often take a second level (co.uk, com.au).
+  const take = labels.at(-1)!.length === 2 && labels.at(-2)!.length <= 3 ? 3 : 2;
+  return labels.slice(-take).join(".");
+}
+
 // ---------------------------------------------------------------------------------------------------
 // The browser side
 // ---------------------------------------------------------------------------------------------------
@@ -269,16 +280,50 @@ export interface AnalyticsIdentityParams {
   user_properties?: { -readonly [K in keyof typeof USER_PROPERTIES]?: ValueOf<(typeof USER_PROPERTIES)[K]> };
 }
 
-const state: { consent: ConsentChoice | null; signedIn: boolean; identity: AnalyticsIdentityParams; page: Record<string, string> } = {
+const state: {
+  consent: ConsentChoice | null;
+  /** Whether the loader has said what the visitor chose; until then events wait in `queue`. */
+  ready: boolean;
+  queue: [string, Record<string, unknown>][];
+  signedIn: boolean;
+  identity: AnalyticsIdentityParams;
+  page: Record<string, string>;
+} = {
   consent: null,
+  ready: false,
+  queue: [],
   signedIn: false,
   identity: {},
   page: {},
 };
 
-/** Called by the loader: what the visitor chose, so `track` knows whether it may send. */
+/** At most this many events wait for the loader on a fresh load; anything older is dropped. */
+const MAX_QUEUED = 20;
+
+/**
+ * Called by the loader: what the visitor chose, so `track` knows whether it may send. On a fresh load a
+ * page's own effects run before the loader's, so their events wait for this; they are sent once gtag
+ * is set up (`flushAnalyticsQueue`) if the visitor had already accepted, and dropped otherwise.
+ */
 export function setAnalyticsConsent(choice: ConsentChoice | null): void {
   state.consent = choice;
+  state.ready = true;
+  if (choice !== "granted") state.queue = [];
+}
+
+/** Sends the events that waited for the loader, now that gtag is set up with the page's redacted location. */
+export function flushAnalyticsQueue(): void {
+  const waiting = state.queue;
+  state.queue = [];
+  const send = gtag();
+  if (!send) return;
+  for (const [name, params] of waiting) {
+    try {
+      send("event", name, params);
+    } catch {
+      // Analytics never breaks the page.
+    }
+  }
 }
 
 /** Called by the loader: whether a session cookie was present when the page was served (the public site never reads the session). */
@@ -316,7 +361,7 @@ export function analyticsPage(): Record<string, string> {
 
 function gtag(): Gtag | undefined {
   if (typeof window === "undefined" || state.consent !== "granted") return undefined;
-  return window.gtag;
+  return typeof window.gtag === "function" ? window.gtag : undefined;
 }
 
 /** Which app the page runs in: the desktop shell, the Android app (an installed, standalone window), or a browser. */
@@ -342,36 +387,64 @@ export function commonParams(surface: Surface = redactLocation(window.location.p
 
 /**
  * Sends one event with only the params its catalog entry allows, plus the common ones. Does nothing
- * on the server, before consent, or where GA is not loaded (dev, tests, a visitor who declined).
+ * on the server, before consent, or where GA is not loaded (dev, tests, a visitor who declined). On a
+ * fresh load, before the loader has read the visitor's choice, the event waits (`flushAnalyticsQueue`).
  */
 export function track<N extends ClientEventName>(name: N, ...[params]: keyof EventParams<N> extends never ? [] : [EventParams<N>?]): void {
-  const send = gtag();
-  if (!send) return;
+  if (typeof window === "undefined") return;
   try {
-    send("event", name, { ...commonParams(), ...cleanParams(EVENTS[name].params, (params ?? {}) as Record<string, unknown>) });
+    const clean = cleanParams(EVENTS[name].params, (params ?? {}) as Record<string, unknown>);
+    const payload = { ...commonParams(), ...clean };
+    if (!state.ready) {
+      if (state.queue.length < MAX_QUEUED) state.queue.push([name, payload]);
+      return;
+    }
+    const send = gtag();
+    if (!send) return;
+    // How a person signed up stays with them as a user property.
+    if (name === "sign_up" && typeof clean.method === "string") send("set", "user_properties", { signup_method: clean.method });
+    send("event", name, payload);
   } catch {
     // Analytics never breaks the page.
   }
 }
 
+/** The page fields GA reports for the page on screen: the route pattern, never the address or a private title. */
+export function pageContext(previousPath: string | null): { page_location: string; page_path: string; page_title: string; page_referrer: string } {
+  const { origin, pathname, search } = window.location;
+  const location = redactLocation(pathname, search);
+  return {
+    page_location: `${origin}${location.path}${location.search}`,
+    page_path: location.path,
+    // A public page's title is public; an app page's names the workspace or a task, so it is the pattern.
+    page_title: location.surface === "app" || location.surface === "oauth" || location.surface === "auth" ? location.template : document.title,
+    // Always set, even empty, so gtag never falls back to `document.referrer`.
+    page_referrer: previousPath ? `${origin}${previousPath}` : (redactReferrer(document.referrer, origin) ?? ""),
+  };
+}
+
 /**
- * Sends the `page_view` for the page on screen, with the redacted location and title, and makes that
- * location the one every later event (scrolls included) reports. Called by the loader on navigation.
+ * Makes the redacted page fields the ones every later event reports (gtag's own included). Called by
+ * the loader as soon as gtag is set up and on every navigation, before any event of the new page.
  */
+export function applyPageContext(previousPath: string | null): void {
+  const send = gtag();
+  if (!send) return;
+  try {
+    send("set", pageContext(previousPath));
+  } catch {
+    // Analytics never breaks the page.
+  }
+}
+
+/** Sends the `page_view` for the page on screen, with the redacted location and title. Called by the loader on navigation. */
 export function trackPageView(previousPath: string | null): void {
   const send = gtag();
   if (!send) return;
   try {
-    const { origin, pathname, search } = window.location;
-    const location = redactLocation(pathname, search);
-    const page = {
-      page_location: `${origin}${location.path}${location.search}`,
-      page_path: location.path,
-      // A public page's title is public; an app page's names the workspace or a task, so it is the pattern.
-      page_title: location.surface === "app" || location.surface === "oauth" || location.surface === "auth" ? location.template : document.title,
-      page_referrer: previousPath ? `${origin}${previousPath}` : redactReferrer(document.referrer, origin),
-    };
+    const page = pageContext(previousPath);
     send("set", page);
+    const location = redactLocation(window.location.pathname);
     const extra = cleanParams(EVENTS.page_view.params, { content_group: location.surface, page_template: location.template, ...state.page });
     send("event", "page_view", { ...page, ...commonParams(location.surface), ...extra });
   } catch {

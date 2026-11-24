@@ -977,13 +977,18 @@ export const answerInput = service(AnswerInput, async (ctx, { taskId, answer: wr
  */
 export const answerInputFromPage = service(AnswerInput, async (ctx, input): Promise<{ task: Task; firstAnswer: boolean }> => {
   const task = await answerInput(ctx, input);
+  return { task, firstAnswer: await isFirstAnswer(ctx) };
+});
+
+/** Whether the acting person has answered exactly one request in this workspace: the one just answered. */
+export async function isFirstAnswer(ctx: Ctx): Promise<boolean> {
   const answers = await ctx.db
     .select({ id: events.id })
     .from(events)
     .where(and(inTenant(ctx, events), eq(events.action, "task.input_answered"), eq(events.actorType, ctx.actor.type), eq(events.actorId, ctx.actor.id)))
     .limit(2);
-  return { task, firstAnswer: answers.length === 1 };
-});
+  return answers.length === 1;
+}
 
 /**
  * A person sends an open request to the back of the queue, to come back to it after the others; or,

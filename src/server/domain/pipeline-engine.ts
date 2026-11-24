@@ -719,7 +719,8 @@ export async function beginRun(ctx: Ctx, pipelineId: string, start: RunStart): P
       summary: `started ${pipeline.name} #${number}${start.trigger === "schedule" || start.trigger === "event" || start.trigger === "webhook" ? ` (${start.trigger})` : ""}`,
       data: { pipelineId: pipeline.id, runId: run.id, taskId, number, trigger: start.trigger },
     });
-    await trackAfterCommit(tx, { name: "run_start", params: { trigger: start.trigger } });
+    // A manual start is a person's click, which the page reports; the server reports the rest.
+    if (start.trigger !== "manual") await trackAfterCommit(tx, { name: "run_start", params: { trigger: start.trigger } });
     const trip: Trip = { run, pipeline, definition, sys, notes: new Map() };
     await advance(trip);
     return trip.run;

@@ -270,7 +270,8 @@ export async function approveAgentThen<T>(
   facts: ApprovalFacts = {},
 ): Promise<{ agent: Agent; renewed: boolean; issued: T }> {
   const approved = await approve(ctx, input, issue);
-  await trackApproval(ctx, approved.agent, approved.renewed, facts);
+  // The approval is committed and its code issued: analytics must never turn that into an error.
+  await trackApproval(ctx, approved.agent, approved.renewed, facts).catch(() => {});
   return approved;
 }
 

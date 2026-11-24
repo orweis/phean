@@ -1,6 +1,5 @@
-import "server-only";
 
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 import { waitUntil } from "@vercel/functions";
 
@@ -70,7 +69,11 @@ export function analyticsIdentity(viewer: { user: { id: string }; memberships: r
 export interface ServerEvent<N extends EventName = EventName> {
   name: N;
   params?: EventParams<N>;
-  /** The internal id of the person it is about (the agent's approver), hashed before it is sent. */
+  /**
+   * The person it is about (the actor, or the agent's approver). Never sent: the server cannot know
+   * whether that person accepted analytics, so its events are about workspaces, not people. Only
+   * used to limit how many are sent.
+   */
   userId?: string | null;
   /** The internal id of the workspace, hashed before it is sent. */
   tenantId?: string | null;
@@ -156,11 +159,13 @@ export function durationBucket(ms: number): string {
 export function serverEventBody(event: ServerEvent): Record<string, unknown> | null {
   const spec = EVENTS[event.name];
   if (!("server" in spec)) return null;
-  const userHash = event.userId ? analyticsHash("user", event.userId) : undefined;
+  // No salt, nothing sent: without it a hash could be joined back to Phean's ids.
+  if (!process.env.ANALYTICS_ID_SALT) return null;
   const workspaceHash = event.tenantId ? analyticsHash("workspace", event.tenantId) : undefined;
-  const subject = userHash ?? workspaceHash;
-  // GA needs a client id; the server's events have no browser, so it is the hash they are about.
-  if (!subject) return null;
+  // GA needs a client id. The server's events have no browser and name no person (no consent was
+  // asked of them here): a workspace's events share its hash, and one with no workspace (a sign-up)
+  // gets a random id of its own.
+  const subject = workspaceHash ?? randomUUID();
   const params: Record<string, unknown> = {
     ...cleanParams(spec.params, (event.params ?? {}) as Record<string, unknown>),
     surface: "app",
@@ -170,7 +175,6 @@ export function serverEventBody(event: ServerEvent): Record<string, unknown> | n
   };
   return {
     client_id: `srv.${subject}`,
-    ...(userHash ? { user_id: userHash } : {}),
     non_personalized_ads: true,
     events: [{ name: event.name, params }],
   };

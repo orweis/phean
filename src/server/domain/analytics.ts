@@ -1,48 +1,27 @@
-import { and, eq } from "drizzle-orm";
-import { alias } from "drizzle-orm/pg-core";
-
 import type { EventName } from "@/lib/analytics";
 import { PIPELINE_TEMPLATE_META, PIPELINE_TEMPLATES } from "@/lib/pipeline-templates";
 import { normalizeDefinition, targetsOf, type PipelineDefinition } from "@/lib/pipelines";
 
 import { sendServerEvents, serverAnalyticsActive, type ServerEvent } from "../analytics";
-import { agents } from "../db/schema";
-import { onCommit, tenantRow, type Ctx } from "./context";
+import { onCommit, type Ctx } from "./context";
 
 /**
  * Server-side analytics for the services (docs/ANALYTICS.md, "Server only"): what agents do over MCP,
  * sent through the Measurement Protocol once the change commits. Params are enums, booleans and
- * buckets only; who and where are the hashed person and workspace `sendServerEvents` adds.
+ * buckets only; where is the hashed workspace `sendServerEvents` adds. No person is named.
  */
 
 /** One event as a service names it; the person and workspace come from its `Ctx`. */
 export type DomainEvent = { [N in EventName]: Omit<ServerEvent<N>, "userId" | "tenantId"> }[EventName];
 
-const parentAgent = alias(agents, "parent_agent");
-
-/**
- * The person an event is about: the person acting, or the person who approved the acting agent (its
- * parent's approver, for a sub-agent). Phean's own pipelines agent stands for no one.
- */
-export async function analyticsUserOf(ctx: Ctx): Promise<string | null> {
-  const { actor } = ctx;
-  if (actor.type === "user") return actor.id;
-  if (actor.system) return null;
-  const [row] = await ctx.db
-    .select({ own: agents.createdByUserId, parent: parentAgent.createdByUserId })
-    .from(agents)
-    .leftJoin(parentAgent, and(eq(parentAgent.tenantId, agents.tenantId), eq(parentAgent.id, agents.parentAgentId)))
-    .where(tenantRow(ctx, agents, actor.id));
-  return row?.own ?? row?.parent ?? null;
-}
-
 /**
  * Sends `events` once the work done through `ctx` commits (never if it rolls back), in the
- * background. Does nothing, not even the lookup of who the agent works for, where analytics is off.
+ * background. Does nothing where analytics is off, and never throws.
  */
 export async function trackAfterCommit(ctx: Ctx, ...events: DomainEvent[]): Promise<void> {
   if (events.length === 0 || !serverAnalyticsActive()) return;
-  const userId = await analyticsUserOf(ctx);
+  // Server events name no person (`serverEventBody`), so no lookup can fail the service here.
+  const userId = ctx.actor.type === "user" ? ctx.actor.id : null;
   const tenantId = ctx.tenant.id;
   onCommit(ctx, () => sendServerEvents(...events.map((event): ServerEvent => ({ ...event, userId, tenantId }) as ServerEvent)));
 }

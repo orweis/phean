@@ -44,7 +44,8 @@ change to it. If a `script-src` is ever added, allow `https://www.googletagmanag
 - Until someone accepts, no Google script loads and nothing is sent (no cookieless pings).
 - The choice is the `phean-consent` cookie (`granted` or `denied`, a year). The bar asks once; "Analytics
   choice" in the site footer and the Analytics card on `/account` ask again. Declining after accepting
-  stops sending and deletes the `_ga` cookies.
+  sets gtag's `ga-disable-<id>` switch (nothing more is sent, not even cookieless pings) and deletes the
+  `_ga` cookies.
 - `/privacy` describes what is sent and how to opt out.
 - What only the server sees happen (a sign-up or sign-in through GitHub or Google, a workspace created or an
   invitation accepted by an action that redirects) reaches the next page through the `phean-ga-signal`
@@ -57,14 +58,17 @@ GA is told the route pattern, never the address (`redactLocation` in `src/lib/an
 
 - `page_location`, `page_path` and `page_referrer` are the pattern: `/w/acme/tasks/t_123` becomes
   `/w/[slug]/tasks/[id]`, `/invite/abc` becomes `/invite/[id]`, OAuth and sign-in queries are dropped.
-  Every later event on the page (scrolls included) reports the same redacted location.
+  The redacted location, title and referrer are `set` before gtag sends anything and again on every
+  navigation before the new page's events, so every event (gtag's own included) reports them. Events a
+  page sends before the loader has read the consent cookie wait for it (`flushAnalyticsQueue`).
 - App, auth and OAuth pages send the pattern as `page_title` too, since their titles name workspaces and tasks.
-- Public pages (landing, docs, blog, privacy) keep their path and only the `utm_*` and `ref` query keys,
-  plus `q` on the docs and blog for GA's site search. An unknown top-level path is `/[other]`.
+- Public pages (landing, docs, blog, privacy) keep their path and only the `utm_*` and `ref` query keys.
+  No search term is ever sent, so the stream's site search is off. An unknown top-level path is `/[other]`.
 - A referrer from another site is its origin only.
-- Outbound clicks are Phean's own `click` event: the URL on public pages, only the domain in the app, where
-  links are agents' and may be private. GA's enhanced measurement of outbound clicks, file downloads, form
-  interactions and history-based page changes stays off.
+- Outbound clicks are Phean's own `click` event: the URL on public pages; in the app only the registrable
+  domain (`acme.slack.com` is `slack.com`), since agents' links and their subdomains can name a customer. GA's enhanced measurement of outbound clicks, file downloads, form
+  interactions, video, site search and history-based page changes must stay off in the stream's settings
+  (only scrolls stay on): gtag cannot turn them off from code, and each would send raw addresses.
 - People and workspaces are `SHA-256(ANALYTICS_ID_SALT:kind:id)`, cut to 32 hex characters, computed on the
   server. No salt, no id. Emails, names, slugs, titles, notes, questions, answers, URLs from the app and
   search terms are never sent.
@@ -82,7 +86,7 @@ Every event carries these (`commonParams`):
 | `workspace_hash` | Workspace pages |
 | `role` | `owner`, `admin`, `member`; workspace pages |
 
-User-scoped properties: `plan` (when plans exist), `signup_method`, `workspace_count_bucket` (`1`, `2-3`, `4+`).
+User-scoped properties: `plan` (when plans exist), `signup_method` (set with `sign_up`, on the page and the server copy), `workspace_count_bucket` (`1`, `2-3`, `4+`, on app pages).
 `user_id` is the hashed person on signed-in app pages.
 
 Counts are always buckets (`countBucket`: `0`, `1`, `2-3`, `4-9`, `10-24`, `25+`), never exact figures.
@@ -114,8 +118,8 @@ server sends it (**only**); server copies carry `source_side=server`, and key-ev
 | Event | When | Params | Key | Server |
 | --- | --- | --- | --- | --- |
 | `docs_copy` | Text is copied from a docs code block or inline code (the docs have no copy buttons; the text is classified in the browser and never sent) | `doc_slug`, `block` (`code`, `mcp_url`, `install_command`, `prompt`), `lang` | | |
-| `docs_search` | The docs are searched (only if they have search) | `results_count` | | |
-| `docs_feedback` | A "was this helpful" answer (only if the control exists) | `doc_slug`, `helpful` | | |
+| `docs_search` | The docs are searched (not sent: the docs have no search yet) | `results_count` | | |
+| `docs_feedback` | A "was this helpful" answer (not sent: there is no such control yet) | `doc_slug`, `helpful` | | |
 | `skill_install_click` | A skill's install command or path is copied from the docs | `skill` (`phean-decisions`, `phean-handoffs`, `phean-pipelines`, `phean-webhooks`, `phean-documents`) | | |
 | `client_setup_view` | A client's setup page is viewed, or its section on Connect an agent is opened by its anchor | `client` (`claude_code`, `claude_desktop`, `cursor`, `vscode`, `chatgpt`, `other`) | | |
 
@@ -147,7 +151,7 @@ server sends it (**only**); server copies carry `source_side=server`, and key-ev
 | Event | When | Params | Key | Server |
 | --- | --- | --- | --- | --- |
 | `decision_view` | The Decisions page is viewed | `pending_count_bucket` | | |
-| `decision_answer` | A person answers a request | `via` (`page`, `inbox`, `notification`, `desktop`, `pipeline_card`), `kind` (`decision`, `question`), `with_options`, `multiple`, `custom_answer`, `is_pipeline`, `first_answer` (the person's first answer in this workspace, from the server; a person-wide count would read across workspaces) | **key** (the funnel uses `first_answer`) | |
+| `decision_answer` | A person answers a request | `via` (`page`, `inbox`, `notification`, `desktop`, `pipeline_card`), `kind` (`decision`, `question`), `with_options`, `multiple`, `custom_answer`, `is_pipeline`, `first_answer` (the person's first answer in this workspace, from the server; a person-wide count would read across workspaces) | **key** (the funnel uses `first_answer`) | also (answers from a notification or the desktop app, which no page sees) |
 | `decision_snooze` | A request is snoozed | | | |
 | `decision_undo` | An answer is taken back | | | |
 | `decision_mark_answered` | A request is marked answered | | | |
@@ -157,7 +161,7 @@ server sends it (**only**); server copies carry `source_side=server`, and key-ev
 | Event | When | Params | Key | Server |
 | --- | --- | --- | --- | --- |
 | `task_create_manual` | A person adds a task or goal by hand | `as` (`task`, `goal`) | | |
-| `task_move` | A task changes lane | `from_kind`, `to_kind` (task status kinds), `via` (`drag`, `button`, `keyboard`) | | |
+| `task_move` | A task changes lane | `from_kind`, `to_kind` (task status kinds), `via` (`drag`, `button`; `keyboard` once the board has a keyboard move) | | |
 | `task_done` | Done | | | |
 | `task_drop` | Drop | | | |
 | `task_undo` | A task action is undone | | | |
@@ -207,13 +211,15 @@ server sends it (**only**); server copies carry `source_side=server`, and key-ev
 | `two_factor_enable` | Two-factor is turned on | | | |
 | `account_link` | GitHub or Google is connected to the account | `provider` | | |
 | `workflow_save` | The board's stages are saved | `stages_count` | | |
-| `webhook_view` | A webhook's details are viewed | | | |
+| `webhook_view` | A webhook's details are viewed (not sent yet: webhooks show only as a cell on the Agents page) | | | |
 
 ### Server only (Measurement Protocol)
 
 Agents act over MCP with no page, so the server sends these, after the change commits, never awaited and
-never throwing (`sendServerEvents`), and at most 60 a minute per workspace per server process. They carry `workspace_hash`, and `user_id` is the hashed person who
-approved the agent where there is one. They are sent only from production.
+never throwing (`sendServerEvents`), and at most 60 a minute per workspace per server process. They are
+sent only from production. They carry `workspace_hash` and never name a person: the server cannot know
+whether a person accepted analytics, so there is no `user_id`, and the client id is `srv.<workspace hash>`
+(or a random one for an event with no workspace, a sign-up). /privacy discloses them as workspace activity.
 
 | Event | When | Params | Key | Server |
 | --- | --- | --- | --- | --- |
@@ -224,7 +230,9 @@ approved the agent where there is one. They are sent only from production.
 | `hand_off` | An agent hands work to an agent or a person | `to` | | only |
 | `run_end` | A pipeline run ends | `outcome` (`done`, `failed`, `cancelled`), `duration_bucket` | | only |
 
-`sign_up`, `workspace_create`, `agent_connect_approve`, `pipeline_create` and `run_start` have server copies too (above).
+`sign_up`, `workspace_create`, `agent_connect_approve`, `pipeline_create`, `run_start` (not manual) and `decision_answer` (notifications and the desktop only) have server copies too (above).
+
+A key event that both the page and the server send counts twice in GA's standard key-event totals. Count those with `source_side = server` (the server copies), and use the page copies for funnels and paths, which need the session.
 
 ## Custom definitions in GA
 

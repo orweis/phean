@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { cleanParams, clientHint, COMMON_PARAMS, countBucket, EVENTS, redactLocation, redactReferrer, USER_PROPERTIES, workspaceCountBucket } from "@/lib/analytics";
+import { cleanParams, clientHint, registrableDomain, COMMON_PARAMS, countBucket, EVENTS, redactLocation, redactReferrer, USER_PROPERTIES, workspaceCountBucket } from "@/lib/analytics";
 import { routes } from "@/lib/routes";
 import { analyticsConfig, analyticsHash, serverEventBody } from "@/server/analytics";
 
@@ -43,6 +43,14 @@ describe("the analytics catalog", () => {
     expect(cleanParams(EVENTS.task_move.params, { via: "telepathy" })).toEqual({});
     expect(cleanParams(EVENTS.workflow_save.params, { stages_count: "5" })).toEqual({});
     expect(cleanParams(EVENTS.cta_click.params, { cta_id: "x".repeat(101) })).toEqual({});
+  });
+
+  it("keeps only the registrable part of an app link's host", () => {
+    expect(registrableDomain("acme-corp.slack.com")).toBe("slack.com");
+    expect(registrableDomain("jane.laptop.tailnet.ts.net")).toBe("ts.net");
+    expect(registrableDomain("acme.sharepoint.co.uk")).toBe("sharepoint.co.uk");
+    expect(registrableDomain("github.com")).toBe("github.com");
+    expect(registrableDomain("10.0.0.12")).toBe("ip");
   });
 
   it("buckets counts, and names clients", () => {
@@ -137,9 +145,9 @@ describe("redaction", () => {
     }
   });
 
-  it("keeps campaign tags on public pages, and site search only on the docs and blog", () => {
+  it("keeps campaign tags on public pages, and never a search term", () => {
     expect(redactLocation("/", "utm_source=x&utm_medium=y&ref=hn&email=a@b.c").search).toBe("?utm_source=x&utm_medium=y&ref=hn");
-    expect(redactLocation("/docs", "q=webhooks").search).toBe("?q=webhooks");
+    expect(redactLocation("/docs", "q=jane@acme.com").search).toBe("");
     expect(redactLocation("/", "q=webhooks").search).toBe("");
     expect(redactLocation("/w/acme/search", "q=x&utm_source=y").search).toBe("");
     expect(redactLocation("/sign-up", "utm_source=y").search).toBe("");
@@ -205,16 +213,26 @@ describe("the server side", () => {
     expect(hash).not.toContain("u_1");
   });
 
-  it("builds Measurement Protocol bodies with hashed ids and catalog params only", () => {
+  it("builds Measurement Protocol bodies under the hashed workspace, naming no person, with catalog params only", () => {
     vi.stubEnv("ANALYTICS_ID_SALT", "pepper");
     const body = serverEventBody({ name: "decision_ask", params: { kind: "decision", with_options: true, question: "Fire Bob?" } as never, userId: "u_1", tenantId: "t_1" })!;
-    expect(body.user_id).toBe(analyticsHash("user", "u_1"));
-    expect(body.client_id).toBe(`srv.${analyticsHash("user", "u_1")}`);
+    // The server cannot know whether the person accepted analytics, so its events name none.
+    expect(body).not.toHaveProperty("user_id");
+    expect(body.client_id).toBe(`srv.${analyticsHash("workspace", "t_1")}`);
+    expect(JSON.stringify(body)).not.toContain(analyticsHash("user", "u_1")!);
     const [event] = body.events as { name: string; params: Record<string, unknown> }[];
     expect(event!.name).toBe("decision_ask");
     expect(event!.params).toMatchObject({ kind: "decision", with_options: true, workspace_hash: analyticsHash("workspace", "t_1"), source_side: "server" });
     expect(JSON.stringify(body)).not.toContain("Fire Bob");
     expect(JSON.stringify(body)).not.toContain("u_1");
+    expect(JSON.stringify(body)).not.toContain("t_1");
+    // With no workspace (a sign-up) the client id is random, and still names no one.
+    const lone = serverEventBody({ name: "sign_up", params: { method: "password" }, userId: "u_1" })!;
+    expect(lone).not.toHaveProperty("user_id");
+    expect(lone.client_id).toMatch(/^srv\.[0-9a-f-]{36}$/);
+    expect(lone.client_id).not.toBe(serverEventBody({ name: "sign_up", params: { method: "password" }, userId: "u_1" })!.client_id);
+    expect((lone.events as { params: Record<string, unknown> }[])[0]!.params).not.toHaveProperty("workspace_hash");
+    expect(JSON.stringify(lone)).not.toContain("u_1");
     expect(serverEventBody({ name: "task_done" as never, userId: "u_1" })).toBeNull();
     vi.stubEnv("ANALYTICS_ID_SALT", "");
     expect(serverEventBody({ name: "decision_ask", userId: "u_1" })).toBeNull();

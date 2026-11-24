@@ -37,9 +37,8 @@ const STATIC_SEGMENTS = new Set(["two-factor", "reset-password", "forgot-passwor
 /** A public page's slug (a doc, a post, a tag, a writer) is public: keep it when it looks like one. */
 const PUBLIC_SLUG = /^[a-z0-9][a-z0-9-]{0,80}(\.xml|\.txt)?$/;
 
-/** Query keys kept on public pages: campaign tags, and the docs' site search (`q`). */
+/** Query keys kept on public pages: campaign tags only. A search term (`q`) is never sent. */
 const PUBLIC_QUERY = /^(utm_[a-z_]+|ref)$/;
-const SEARCHABLE = new Set(["docs", "blog"]);
 
 export interface RedactedLocation {
   /** The route pattern, e.g. `/w/[slug]/tasks/[id]`. */
@@ -98,7 +97,7 @@ function keptQuery(search: string, surface: Surface): string {
   if (surface !== "marketing" && surface !== "docs" && surface !== "blog") return "";
   const kept = new URLSearchParams();
   for (const [key, value] of new URLSearchParams(search)) {
-    if (PUBLIC_QUERY.test(key) || (key === "q" && SEARCHABLE.has(surface))) kept.append(key, value.slice(0, 100));
+    if (PUBLIC_QUERY.test(key)) kept.append(key, value.slice(0, 100));
   }
   const query = kept.toString();
   return query ? `?${query}` : "";

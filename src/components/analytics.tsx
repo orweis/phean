@@ -7,7 +7,11 @@ import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import {
   applyAnalyticsIdentity,
+  applyPageContext,
   consentCookie,
+  flushAnalyticsQueue,
+  pageContext,
+  registrableDomain,
   redactLocation,
   setAnalyticsConsent,
   setAnalyticsIdentity,
@@ -54,9 +58,16 @@ function clearGoogleCookies() {
   }
 }
 
+/** gtag.js's own off switch: while set, it sends nothing at all, not even cookieless pings. */
+function setDisabled(measurementId: string, disabled: boolean) {
+  (window as unknown as Record<string, boolean>)[`ga-disable-${measurementId}`] = disabled;
+}
+
 function initGtag(measurementId: string, debug: boolean) {
+  setDisabled(measurementId, false);
   window.dataLayer = window.dataLayer ?? [];
-  if (!window.gtag) {
+  // The loader script's element id must never be "gtag": an element id is also a global, and would shadow this function.
+  if (typeof window.gtag !== "function") {
     window.gtag = function gtag() {
       // gtag.js reads the Arguments object itself, not an array.
       // eslint-disable-next-line prefer-rest-params
@@ -68,11 +79,12 @@ function initGtag(measurementId: string, debug: boolean) {
   window.gtag("consent", "update", { ...denied, analytics_storage: "granted" });
   window.gtag("set", "ads_data_redaction", true);
   window.gtag("js", new Date());
-  const { origin, pathname, search } = window.location;
-  const here = redactLocation(pathname, search);
+  // Before anything is sent, so gtag never reports the raw address, title or referrer.
+  const page = pageContext(null);
+  window.gtag("set", page);
   window.gtag("config", measurementId, {
     send_page_view: false,
-    page_location: `${origin}${here.path}${here.search}`,
+    ...page,
     allow_google_signals: false,
     allow_ad_personalization_signals: false,
     ...(debug ? { debug_mode: true } : {}),
@@ -95,6 +107,7 @@ export function Analytics({ measurementId, debug, consent: initial, signedIn }: 
   const pathname = usePathname();
   const previous = useRef<string | null>(null);
   const started = useRef(false);
+  const viewed = useRef<string | null>(null);
 
   useEffect(() => {
     setAvailable(true);
@@ -115,7 +128,9 @@ export function Analytics({ measurementId, debug, consent: initial, signedIn }: 
       started.current = true;
       initGtag(measurementId, debug);
       applyAnalyticsIdentity();
+      flushAnalyticsQueue();
     } else {
+      setDisabled(measurementId, false);
       window.gtag?.("consent", "update", { analytics_storage: "granted" });
     }
   }, [consent, measurementId, debug]);
@@ -123,7 +138,12 @@ export function Analytics({ measurementId, debug, consent: initial, signedIn }: 
   // One page_view per App Router navigation, a tick later so the page's own `AnalyticsPage` and `AnalyticsIdentity` are in place.
   useEffect(() => {
     if (consent !== "granted") return;
+    // The new page's location now, before any of its events; its page_view a tick later, once per
+    // page (accepting again after declining on the same page sends none).
+    applyPageContext(previous.current);
     const timer = window.setTimeout(() => {
+      if (viewed.current === pathname) return;
+      viewed.current = pathname;
       trackPageView(previous.current);
       previous.current = redactLocation(window.location.pathname).path;
     }, 0);
@@ -145,7 +165,7 @@ export function Analytics({ measurementId, debug, consent: initial, signedIn }: 
       if (url.origin === location.origin || !/^https?:$/.test(url.protocol)) return;
       const { surface } = redactLocation(location.pathname);
       const isPublic = surface === "marketing" || surface === "docs" || surface === "blog";
-      track("click", { outbound: true, link_domain: url.hostname, ...(isPublic ? { link_url: `${url.origin}${url.pathname}`.slice(0, 100) } : {}) });
+      track("click", { outbound: true, link_domain: isPublic ? url.hostname : registrableDomain(url.hostname), ...(isPublic ? { link_url: `${url.origin}${url.pathname}`.slice(0, 100) } : {}) });
     };
     document.addEventListener("click", onClick, { capture: true });
     return () => document.removeEventListener("click", onClick, { capture: true });
@@ -157,6 +177,7 @@ export function Analytics({ measurementId, debug, consent: initial, signedIn }: 
     if (choice === "denied" && consent === "granted") {
       track("consent_change", { analytics: "denied" });
       window.gtag?.("consent", "update", { analytics_storage: "denied" });
+      setDisabled(measurementId, true);
       clearGoogleCookies();
     }
     setConsent(choice);
@@ -165,7 +186,7 @@ export function Analytics({ measurementId, debug, consent: initial, signedIn }: 
 
   return (
     <>
-      {consent === "granted" && <Script id="gtag" src={`https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(measurementId)}`} strategy="afterInteractive" />}
+      {consent === "granted" && <Script id="phean-gtag-loader" src={`https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(measurementId)}`} strategy="afterInteractive" />}
       {asking && <ConsentBar onChoose={choose} current={consent} />}
     </>
   );
