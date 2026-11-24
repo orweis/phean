@@ -3,6 +3,8 @@
 import { Keyboard, X } from "lucide-react";
 import { useEffect, useRef } from "react";
 
+import { track } from "@/lib/analytics";
+
 import { buttonClasses } from "./ui/button";
 
 /** Asks the legend to open, from anywhere (the account menu's entry, say). */
@@ -14,27 +16,35 @@ const GROUPS = [
   {
     title: "Anywhere",
     keys: [
-      { keys: ["?"], what: "Show these shortcuts" },
-      { keys: ["/"], what: "Search: the page's own search box, or the Search tab" },
-      { keys: ["Tab"], what: "First stop: skip past the header to the page" },
-      { keys: ["Esc"], what: "Close the open panel or menu" },
+      { keys: ["?"], what: "Show these shortcuts", id: "show_shortcuts" },
+      { keys: ["/"], what: "Search: the page's own search box, or the Search tab", id: "search" },
+      { keys: ["Tab"], what: "First stop: skip past the header to the page", id: null },
+      { keys: ["Esc"], what: "Close the open panel or menu", id: null },
     ],
   },
   {
     title: "Decisions and the overview",
     keys: [
-      { keys: ["1", "–", "9"], what: "Pick the selected request's option" },
-      { keys: ["Enter"], what: "Send the ticked options, where a request takes several" },
-      { keys: ["J"], what: "Next request" },
-      { keys: ["K"], what: "Previous request" },
-      { keys: ["S"], what: "Snooze the selected request to the back of the queue" },
+      { keys: ["1", "–", "9"], what: "Pick the selected request's option", id: "pick_option" },
+      { keys: ["Enter"], what: "Send the ticked options, where a request takes several", id: "send_ticked" },
+      { keys: ["J"], what: "Next request", id: "next_request" },
+      { keys: ["K"], what: "Previous request", id: "previous_request" },
+      { keys: ["S"], what: "Snooze the selected request to the back of the queue", id: "snooze" },
     ],
   },
   {
     title: "Tasks board",
-    keys: [{ keys: ["Tab"], what: "In a lane's header: skip to the next lane" }],
+    keys: [{ keys: ["Tab"], what: "In a lane's header: skip to the next lane", id: null }],
   },
 ] as const;
+
+/** The legend's action names for the shortcuts Phean handles itself (Tab and Escape are the browser's): `keyboard_shortcut`'s `shortcut`. */
+export type ShortcutId = Exclude<(typeof GROUPS)[number]["keys"][number]["id"], null>;
+
+/** Sends `keyboard_shortcut` for a shortcut in the legend, by its action name. */
+export function trackShortcut(shortcut: ShortcutId): void {
+  track("keyboard_shortcut", { shortcut });
+}
 
 /**
  * The legend of keyboard shortcuts, a glass sheet over the page: `?` opens it from anywhere
@@ -52,6 +62,7 @@ export function KeyboardShortcuts() {
       if ((event.target as Element | null)?.closest?.(TYPING)) return;
       event.preventDefault();
       open();
+      trackShortcut("show_shortcuts");
     };
     document.addEventListener("keydown", onKeyDown);
     window.addEventListener(OPEN_SHORTCUTS_EVENT, open);

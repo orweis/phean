@@ -1,3 +1,4 @@
+import { TaskPeekOpened } from "@/components/peek-analytics";
 import { TaskDetail } from "@/components/task-detail";
 import { Peek } from "@/components/ui/peek";
 import { routes } from "@/lib/routes";
@@ -7,6 +8,7 @@ export default async function TaskPeek({ params }: PageProps<"/w/[slug]/tasks/[i
   const { slug, id } = await params;
   return (
     <Peek label="Task" layout="side" pageHref={routes.task(slug, id)}>
+      <TaskPeekOpened key={id} />
       <TaskDetail slug={slug} taskId={id} headingLevel={2} />
     </Peek>
   );

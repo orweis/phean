@@ -462,7 +462,13 @@ export function PipelineEditor({ slug, pipelineId, pipelineName, initial, agents
             <LineMap definition={normalized} label={`Preview of ${pipelineName}'s line`} servedBy={servedBy} />
           ) : null}
         </section>
-        <ActionForm action={updatePipelineAction} workspace={slug} notice={`Saved “${pipelineName}”; new runs ride the new version`} className="surface space-y-3 rounded-lg border border-rule p-4">
+        <ActionForm
+          action={updatePipelineAction}
+          workspace={slug}
+          notice={`Saved “${pipelineName}”; new runs ride the new version`}
+          analytics={{ event: "pipeline_save_version", params: { stops_count: normalized.stops.length } }}
+          className="surface space-y-3 rounded-lg border border-rule p-4"
+        >
           <input type="hidden" name="pipelineId" value={pipelineId} />
           <input type="hidden" name="definition" value={JSON.stringify(normalized)} />
           {problems.length > 0 ? (

@@ -4,6 +4,7 @@ import { X } from "lucide-react";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, type ReactNode } from "react";
 
 import { cx } from "@/lib/cx";
+import { sendTracked, type Tracked } from "@/lib/tracked";
 
 import { buttonClasses, type ButtonVariant } from "./button";
 
@@ -29,6 +30,8 @@ interface PopoverProps {
   menu?: boolean;
   className?: string;
   triggerClassName?: string;
+  /** The analytics event to send each time the panel opens (`resume_session_click`, say). */
+  analytics?: Tracked;
 }
 
 interface PopoverApi {
@@ -86,8 +89,14 @@ export function Popover({
   menu = false,
   className,
   triggerClassName,
+  analytics,
 }: PopoverProps) {
   const ref = useRef<HTMLDetailsElement>(null);
+  // Read when the panel opens, so a new object each render does not re-run the effect below.
+  const opened = useRef(analytics);
+  useEffect(() => {
+    opened.current = analytics;
+  });
   const panel = useRef<HTMLDivElement>(null);
 
   const close = useCallback(() => {
@@ -116,6 +125,7 @@ export function Popover({
     };
     const onToggle = () => {
       if (!details.open) return;
+      sendTracked(opened.current);
       const trigger = details.querySelector("summary")!.getBoundingClientRect();
       const below = window.innerHeight - trigger.bottom;
       details.dataset.side = below < ROOM_BELOW && trigger.top > below ? "top" : "bottom";

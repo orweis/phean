@@ -1,10 +1,12 @@
 import { Eye } from "lucide-react";
 import type { Metadata } from "next";
+import { Suspense } from "react";
 
 import { AnalyticsIdentity } from "@/components/analytics";
 import { AppHeader } from "@/components/app-header";
 import { AutoRefresh } from "@/components/auto-refresh";
 import { FaviconBadge } from "@/components/favicon-badge";
+import { PeekOriginTracker } from "@/components/peek-analytics";
 import { RememberWorkspace } from "@/components/remember-workspace";
 import { SearchShortcut } from "@/components/search-shortcut";
 import { SkipLink } from "@/components/skip-link";
@@ -44,6 +46,9 @@ export default async function WorkspaceLayout({ children, peek, params }: Layout
       <FaviconBadge count={stats.waitingOnYou + stats.inbox} />
       <SearchShortcut slug={slug} />
       <RememberWorkspace slug={slug} />
+      <Suspense fallback={null}>
+        <PeekOriginTracker />
+      </Suspense>
       <main id="content" tabIndex={-1} className="mx-auto max-w-7xl px-4 py-6 outline-none sm:px-6 sm:py-8">
         {children}
       </main>

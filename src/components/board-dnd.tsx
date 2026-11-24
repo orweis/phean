@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, useTransition, type DragEvent, type ReactN
 
 import { updateTaskAction } from "@/app/w/[slug]/actions";
 import { IDLE } from "@/lib/action-state";
+import { track } from "@/lib/analytics";
 import { cx } from "@/lib/cx";
 import { truncate } from "@/lib/format";
 import type { Stage } from "@/lib/workflow";
@@ -25,8 +26,8 @@ const LANDED_MS = 1800;
 
 interface Dragged {
   taskId: string;
-  /** The stage the card left, so Undo can put it back. */
-  from: { key: string; label: string };
+  /** The stage the card left, so Undo can put it back; its kind is what analytics reports (`task_move`). */
+  from: { key: string; label: string; kind?: string };
   title: string;
 }
 
@@ -73,7 +74,7 @@ function readDragged(event: DragEvent): Dragged | null {
     const value = JSON.parse(event.dataTransfer.getData(TASK_MIME)) as Partial<Dragged>;
     const from = value.from;
     return typeof value.taskId === "string" && from && typeof from.key === "string" && typeof from.label === "string"
-      ? { taskId: value.taskId, from: { key: from.key, label: from.label }, title: typeof value.title === "string" ? value.title : "" }
+      ? { taskId: value.taskId, from: { key: from.key, label: from.label, ...(typeof from.kind === "string" && { kind: from.kind }) }, title: typeof value.title === "string" ? value.title : "" }
       : null;
   } catch {
     return null;
@@ -96,7 +97,7 @@ function moveTo(slug: string, taskId: string, stage: string) {
  * line; once the move lands, the card is scrolled into view with a brief ring, and the status
  * region says where it went, with Undo to put it back.
  */
-export function DropLane({ stage, slug, className, children }: { stage: Pick<Stage, "key" | "label">; slug: string; className?: string; children: ReactNode }) {
+export function DropLane({ stage, slug, className, children }: { stage: Pick<Stage, "key" | "label" | "kind">; slug: string; className?: string; children: ReactNode }) {
   const [over, setOver] = useState(false);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -126,11 +127,12 @@ export function DropLane({ stage, slug, className, children }: { stage: Pick<Sta
         return;
       }
       landed.current = taskId;
+      track("task_move", { ...(from.kind && { from_kind: from.kind }), to_kind: stage.kind, via: "drag" });
       const name = title ? `“${truncate(title, 60)}”` : "the task";
       region?.announce({
         message: `Moved ${name} to ${stage.label}`,
         workspace: slug,
-        undo: { action: updateTaskAction, fields: { taskId, stage: from.key }, done: `${name} is back in ${from.label}.` },
+        undo: { action: updateTaskAction, fields: { taskId, stage: from.key }, done: `${name} is back in ${from.label}.`, analytics: { event: "task_undo" } },
       });
     });
   };

@@ -82,13 +82,21 @@ function Proposal({ slug, proposal, base, canDecide }: { slug: string; proposal:
             workspace={slug}
             fields={{ pipelineId: proposal.pipelineId, version: String(proposal.number) }}
             notice={`Approved version ${proposal.number}; new runs ride it`}
+            analytics={{ event: "proposal_decide", params: { result: "approve" } }}
             size="sm"
             variant="tinted"
           >
             Approve
           </ActionButton>
           <Popover variant="ghost" label="Reject" title={`Reject version ${proposal.number}`} align="left">
-            <ActionForm action={rejectPipelineVersionAction} workspace={slug} notice={`Rejected version ${proposal.number}`} closeOnSuccess className="space-y-3">
+            <ActionForm
+              action={rejectPipelineVersionAction}
+              workspace={slug}
+              notice={`Rejected version ${proposal.number}`}
+              analytics={{ event: "proposal_decide", params: { result: "reject" } }}
+              closeOnSuccess
+              className="space-y-3"
+            >
               <input type="hidden" name="pipelineId" value={proposal.pipelineId} />
               <input type="hidden" name="version" value={proposal.number} />
               <Field label="Why" htmlFor={`reject-${proposal.number}`} hint={`${proposal.createdByName} reads this.`}>
@@ -179,7 +187,8 @@ export default async function PipelinePage({ params, searchParams }: PageProps<"
                   workspace={slug}
                   fields={{ pipelineId: pipeline.id }}
                   notice={`Paused “${pipeline.name}”: no new runs`}
-                  undo={{ action: resumePipelineAction, fields: { pipelineId: pipeline.id }, done: `“${pipeline.name}” is running again.` }}
+                  undo={{ action: resumePipelineAction, fields: { pipelineId: pipeline.id }, done: `“${pipeline.name}” is running again.`, analytics: { event: "pipeline_resume" } }}
+                  analytics={{ event: "pipeline_pause" }}
                   closeOnSuccess
                   size="menu"
                   variant="ghost"
@@ -193,7 +202,8 @@ export default async function PipelinePage({ params, searchParams }: PageProps<"
                   workspace={slug}
                   fields={{ pipelineId: pipeline.id }}
                   notice={`Resumed “${pipeline.name}”`}
-                  undo={{ action: pausePipelineAction, fields: { pipelineId: pipeline.id }, done: `“${pipeline.name}” is paused again.` }}
+                  undo={{ action: pausePipelineAction, fields: { pipelineId: pipeline.id }, done: `“${pipeline.name}” is paused again.`, analytics: { event: "pipeline_pause" } }}
+                  analytics={{ event: "pipeline_resume" }}
                   closeOnSuccess
                   size="menu"
                   variant="ghost"
@@ -208,6 +218,7 @@ export default async function PipelinePage({ params, searchParams }: PageProps<"
                 fields={{ pipelineId: pipeline.id }}
                 confirm={`Archive “${pipeline.name}”? It starts no more runs, and cannot be brought back. Runs under way go on.`}
                 notice={`Archived “${pipeline.name}”`}
+                analytics={{ event: "pipeline_archive" }}
                 closeOnSuccess
                 size="menu"
                 variant="ghost"

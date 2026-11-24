@@ -11,6 +11,7 @@ import { PageHeader } from "@/components/page-header";
 import { PROVIDER_LABELS, type SocialProvider } from "@/components/provider-mark";
 import { SkipLink } from "@/components/skip-link";
 import { ThemePicker } from "@/components/theme-picker";
+import { TrackOnMount } from "@/components/track-on-mount";
 import { buttonClasses } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { StatusRegion } from "@/components/ui/status-region";
@@ -69,6 +70,7 @@ export default async function AccountPage({ searchParams }: PageProps<"/account"
         {!failed && isProvider(connected) && providers.some((provider) => provider.id === connected && provider.connectedAt) && (
           <p role="status" className="rounded-md border border-arrive/30 bg-arrive-tint px-4 py-2.5 text-sm text-arrive-ink">
             Connected {PROVIDER_LABELS[connected]}. You can sign in with it from now on.
+            <TrackOnMount name="account_link" params={{ provider: connected }} />
           </p>
         )}
         <Card>

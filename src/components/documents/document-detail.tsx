@@ -12,6 +12,7 @@ import { can } from "@/server/domain/policy";
 import { findTask } from "@/server/domain/tasks";
 import { orNotFound } from "@/server/web";
 
+import { TrackOnMount } from "../track-on-mount";
 import { ActionButton } from "../ui/action-button";
 import { Badge } from "../ui/badge";
 import { ButtonLink } from "../ui/button";
@@ -37,6 +38,7 @@ export async function DocumentDetail({ slug, documentId, editing, headingLevel =
 
   return (
     <article data-document-detail={document.id}>
+      <TrackOnMount key={document.id} name="document_open" params={{ format: document.format === "markdown" || document.format === "html" ? document.format : "file" }} />
       <div className="mb-5 flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
         <div className="min-w-0 flex-1 basis-72">
           <div className="flex flex-wrap items-center gap-2">

@@ -112,6 +112,11 @@ export const agents = pgTable(
     sharesParentKey: boolean("shares_parent_key").notNull().default(false),
     createdAt: timestampTz("created_at").notNull().defaultNow(),
     lastSeenAt: timestampTz("last_seen_at"),
+    /**
+     * The last UTC day it called an MCP tool, for analytics (`noteToolCall`): null until its first
+     * call. Unlike `last_seen_at`, issuing a token or opening a stream does not set it.
+     */
+    lastActiveDay: date("last_active_day", { mode: "string" }),
     revokedAt: timestampTz("revoked_at"),
     /**
      * When an OAuth agent was last renewed. An access token issued in an earlier second (its `iat`)

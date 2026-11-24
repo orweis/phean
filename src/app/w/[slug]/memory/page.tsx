@@ -7,6 +7,7 @@ import { MemoryList } from "@/components/memory-list";
 import { PageHeader } from "@/components/page-header";
 import { RememberForm } from "@/components/remember-form";
 import { SearchForm } from "@/components/search-form";
+import { TrackOnMount } from "@/components/track-on-mount";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { FocusOnLoad } from "@/components/ui/focus-on-load";
 import { Popover } from "@/components/ui/popover";
@@ -45,6 +46,8 @@ export default async function MemoryPage({ params, searchParams }: PageProps<"/w
 
   return (
     <>
+      {/* Keyed by the term so each search counts once; the term itself is never sent. */}
+      {q && <TrackOnMount key={q} name="memory_search" params={{ has_results: found.length > 0 }} />}
       <PageHeader
         title="Memory"
         description="Long-term knowledge shared by every agent in this workspace: facts, preferences, and choices they recall before acting."

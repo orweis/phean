@@ -7,10 +7,12 @@ import { NotificationsPrompt } from "@/components/notifications-prompt";
 import { OpenQuestions } from "@/components/open-questions";
 import { PageHeader } from "@/components/page-header";
 import { PendingApprovals } from "@/components/pending-approvals";
+import { TrackOnMount } from "@/components/track-on-mount";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { FocusOnLoad } from "@/components/ui/focus-on-load";
 import { EmptyState } from "@/components/ui/stat";
 import { DELIVERED_OUTCOMES } from "@/lib/agent-sessions";
+import { countBucket } from "@/lib/analytics";
 import { pluralize } from "@/lib/format";
 import { queryParam } from "@/lib/routes";
 import { requireWorkspace } from "@/server/auth/session";
@@ -75,6 +77,7 @@ export default async function DecisionsPage({ params, searchParams }: PageProps<
         actions={muted === null ? undefined : <NotificationMute slug={slug} workspaceName={ctx.tenant.name} muted={muted} />}
       />
       <FocusOnLoad id={focus} />
+      <TrackOnMount name="decision_view" params={{ pending_count_bucket: countBucket(open.length) }} />
       <div className="space-y-6">
         {muted !== null && <NotificationsPrompt publicKey={vapidConfig()?.publicKey ?? null} member />}
         {focus && !linked && (

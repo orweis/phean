@@ -4,15 +4,18 @@ import { and, asc, count, eq, inArray, isNotNull, isNull, lt, ne, or, sql, type 
 import { alias } from "drizzle-orm/pg-core";
 import type { z } from "zod";
 
-import { addDays } from "@/lib/dates";
+import { clientHint } from "@/lib/analytics";
+import { addDays, DAY_MS, todayIso } from "@/lib/dates";
 import { ACCESS_LEVEL_META, AGENT_TOKEN_PREFIX, agentAccessEnds, grantableLevels, highestGrantableLevel, LIMITS, lowerLevel, OPEN_TASK_STATUSES, toMemberRole, type AgentAccessLevel } from "@/lib/domain";
 
 import type { Db } from "../db/client";
 import { publicColumns } from "../db/columns";
 import { newId } from "../db/ids";
-import { agents, member, oauthRefreshToken, organization, tasks, user, verification, type AgentRow } from "../db/schema";
+import { serverAnalyticsActive } from "../analytics";
+import { agents, member, oauthClient, oauthRefreshToken, organization, tasks, user, verification, type AgentRow } from "../db/schema";
 import { liveAgent } from "./agent-liveness";
-import { agentRole, inTenant, inTransaction, type Actor, type Ctx, type Tenant } from "./context";
+import { trackAfterCommit, type DomainEvent } from "./analytics";
+import { agentRole, inTenant, inTransaction, tenantRow, type Actor, type Ctx, type Tenant } from "./context";
 import { conflict, forbidden, invalid, notFound } from "./errors";
 import { recordEvent, recordEvents } from "./events";
 import { assertCan, can } from "./policy";
@@ -261,6 +264,40 @@ function pendingCodesOf(agentId: string): SQL {
  * check its access tokens), so an `issue` that fails leaves the old connection exactly as it was.
  */
 export async function approveAgentThen<T>(
+  ctx: Ctx,
+  input: z.input<typeof ApproveAgentInput> | z.input<typeof ReconnectAgentInput>,
+  issue: (agentId: string) => Promise<T>,
+  facts: ApprovalFacts = {},
+): Promise<{ agent: Agent; renewed: boolean; issued: T }> {
+  const approved = await approve(ctx, input, issue);
+  await trackApproval(ctx, approved.agent, approved.renewed, facts);
+  return approved;
+}
+
+/** What only the dialog knows about an approval, for analytics. */
+export interface ApprovalFacts {
+  /** The approved agent took over other agents' open claims. */
+  tookOverWork?: boolean;
+}
+
+/** The name an OAuth client registered with, which `clientHint` turns into one of the clients GA knows. */
+async function clientNameOf(ctx: Ctx, oauthClientId: string | null): Promise<string | null> {
+  if (!oauthClientId) return null;
+  const [client] = await ctx.db.select({ name: oauthClient.name }).from(oauthClient).where(eq(oauthClient.clientId, oauthClientId));
+  return client?.name ?? null;
+}
+
+/** `agent_connect_approve`, once the agent is approved and its client has its code. */
+async function trackApproval(ctx: Ctx, agent: Agent, renewed: boolean, facts: ApprovalFacts): Promise<void> {
+  if (!serverAnalyticsActive() || agent.accessExpiresAt === null) return;
+  const lifetimeDays = Math.round((agent.accessExpiresAt.getTime() - (agent.tokensNotBefore ?? agent.createdAt).getTime()) / DAY_MS);
+  await trackAfterCommit(ctx, {
+    name: "agent_connect_approve",
+    params: { level: agent.accessLevel, lifetime_days: lifetimeDays, reconnect: renewed, took_over_work: facts.tookOverWork ?? false, client_hint: clientHint(await clientNameOf(ctx, agent.oauthClientId)) },
+  });
+}
+
+async function approve<T>(
   ctx: Ctx,
   input: z.input<typeof ApproveAgentInput> | z.input<typeof ReconnectAgentInput>,
   issue: (agentId: string) => Promise<T>,
@@ -657,6 +694,49 @@ export async function resolveNamedSubagent(db: Db, principal: AgentPrincipal, ra
     [sub] = await find();
   }
   return sub ? resolvePrincipal(db, eq(agents.id, sub.id)) : null;
+}
+
+/** The day each agent last called a tool, as this process knows it, so most calls need no query at all. */
+const activeDays = new Map<string, string>();
+
+/**
+ * Notes an agent's MCP tool call, for analytics: its first of the UTC day sends `agent_active_day`,
+ * and an approved OAuth agent's first ever sends `agent_first_call` too. A compare-and-set on
+ * `last_active_day` decides, so of concurrent calls (on any server) exactly one sends each, and it
+ * writes at most once a day per agent. Never throws: analytics never fails a tool call.
+ */
+export async function noteToolCall(ctx: Ctx): Promise<void> {
+  const { actor } = ctx;
+  if (actor.type !== "agent" || actor.system) return;
+  const today = todayIso();
+  if (activeDays.get(actor.id) === today) return;
+  try {
+    const [row] = await ctx.db
+      .select({ lastActiveDay: agents.lastActiveDay, authKind: agents.authKind, parentAgentId: agents.parentAgentId, oauthClientId: agents.oauthClientId })
+      .from(agents)
+      .where(tenantRow(ctx, agents, actor.id));
+    if (!row) return;
+    if (activeDays.size > 10_000) activeDays.clear();
+    activeDays.set(actor.id, today);
+    if (row.lastActiveDay === today) return;
+    const previous = row.lastActiveDay;
+    const [won] = await ctx.db
+      .update(agents)
+      .set({ lastActiveDay: today })
+      .where(and(tenantRow(ctx, agents, actor.id), previous === null ? isNull(agents.lastActiveDay) : eq(agents.lastActiveDay, previous)))
+      .returning({ id: agents.id });
+    if (!won) return;
+
+    const events: DomainEvent[] = [{ name: "agent_active_day" }];
+    if (previous === null && row.authKind === "oauth" && !row.parentAgentId && serverAnalyticsActive()) {
+      const level = actor.role.slice("agent_".length) as AgentAccessLevel;
+      events.unshift({ name: "agent_first_call", params: { client_hint: clientHint(await clientNameOf(ctx, row.oauthClientId)), level } });
+    }
+    await trackAfterCommit(ctx, ...events);
+  } catch {
+    // The day is noted again on the next call.
+    activeDays.delete(actor.id);
+  }
 }
 
 export function agentContext(db: Db, principal: AgentPrincipal): Ctx {

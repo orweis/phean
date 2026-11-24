@@ -4,7 +4,7 @@ import { Link2, UserPlus } from "lucide-react";
 
 import { inviteMemberAction } from "@/app/w/[slug]/actions";
 import { stringData } from "@/lib/action-state";
-import { INVITABLE_ROLES, ROLE_META } from "@/lib/domain";
+import { INVITABLE_ROLES, MEMBER_ROLES, ROLE_META, type MemberRole } from "@/lib/domain";
 import { routes } from "@/lib/routes";
 
 import { ActionForm } from "./ui/action-form";
@@ -15,7 +15,14 @@ import { SubmitButton } from "./ui/submit-button";
 /** Phean does not send email: the invite is a link the inviter shares, accepted by signing in with that address. */
 export function InviteMemberForm({ slug, origin }: { slug: string; origin: string }) {
   return (
-    <ActionForm action={inviteMemberAction} workspace={slug}>
+    <ActionForm
+      action={inviteMemberAction}
+      workspace={slug}
+      analytics={({ data }) => {
+        const role = data?.role;
+        return (MEMBER_ROLES as readonly unknown[]).includes(role) ? { event: "invite_send", params: { role: role as MemberRole } } : null;
+      }}
+    >
       {(state) => {
         const invitation = stringData(state, "invitationId", "email");
         const link = invitation && new URL(routes.invite(invitation.invitationId), origin).toString();

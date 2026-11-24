@@ -24,7 +24,7 @@ function parentChoices(goals: readonly GoalWithProgress[], moving?: Goal): GoalW
 
 export function NewGoalForm({ slug, goals, parentGoalId }: { slug: string; goals: readonly GoalWithProgress[]; parentGoalId?: string }) {
   return (
-    <ActionForm action={createGoalAction} workspace={slug} className="space-y-3">
+    <ActionForm action={createGoalAction} workspace={slug} className="space-y-3" analytics={[{ event: "goal_create" }, { event: "task_create_manual", params: { as: "goal" } }]}>
       <Field label="Title" htmlFor="new-goal-title">
         <Input id="new-goal-title" name="title" required maxLength={LIMITS.title} placeholder="Close Q3 books" />
       </Field>

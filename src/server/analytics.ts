@@ -90,9 +90,10 @@ async function postToGoogle(body: unknown): Promise<void> {
 
 let sender: Sender | null = null;
 
-/** Tests capture what would be sent; `null` restores the real sender. */
+/** Tests capture what would be sent; `null` restores the real sender. Either way the flood limits start afresh. */
 export function setAnalyticsSender(capture: Sender | null): void {
   sender = capture;
+  buckets.clear();
 }
 
 /** The server sends only on production (where `GA_API_SECRET` lives), or to a test's sender. */
@@ -100,6 +101,55 @@ function activeSender(): Sender | null {
   if (sender) return sender;
   if (process.env.VERCEL_ENV !== "production" || !process.env.GA_API_SECRET || !process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID) return null;
   return postToGoogle;
+}
+
+/** Whether anything would be sent, so a caller can skip the work of building events that would be dropped. */
+export function serverAnalyticsActive(): boolean {
+  return activeSender() !== null;
+}
+
+/**
+ * The flood limit: each workspace (or, without one, each person) may send `ANALYTICS_BURST` events at
+ * once and `ANALYTICS_PER_MINUTE` a minute after that, per server process. A busy agent's loop is
+ * one workload in GA's quota, not all of it; what goes past the limit is dropped, never queued.
+ */
+export const ANALYTICS_BURST = 60;
+export const ANALYTICS_PER_MINUTE = 60;
+const MAX_BUCKETS = 10_000;
+
+const buckets = new Map<string, { tokens: number; at: number }>();
+
+/** Takes one token from `key`'s bucket, refilled continuously; false when it is empty. */
+export function takeAnalyticsToken(key: string, now = Date.now()): boolean {
+  const bucket = buckets.get(key);
+  if (!bucket) {
+    // A process that has seen this many workspaces in its life starts over rather than grow without end.
+    if (buckets.size >= MAX_BUCKETS) buckets.clear();
+    buckets.set(key, { tokens: ANALYTICS_BURST - 1, at: now });
+    return true;
+  }
+  const tokens = Math.min(ANALYTICS_BURST, bucket.tokens + ((now - bucket.at) / 60_000) * ANALYTICS_PER_MINUTE);
+  bucket.at = now;
+  if (tokens < 1) {
+    bucket.tokens = tokens;
+    return false;
+  }
+  bucket.tokens = tokens - 1;
+  return true;
+}
+
+const DURATIONS: readonly [number, string][] = [
+  [60_000, "<1m"],
+  [10 * 60_000, "1-10m"],
+  [60 * 60_000, "10-60m"],
+  [6 * 3_600_000, "1-6h"],
+  [24 * 3_600_000, "6-24h"],
+  [7 * 86_400_000, "1-7d"],
+];
+
+/** A span of time as the bucket GA keeps (`run_end`'s `duration_bucket`), never the exact figure. */
+export function durationBucket(ms: number): string {
+  return DURATIONS.find(([limit]) => ms < limit)?.[1] ?? "7d+";
 }
 
 /** The Measurement Protocol body for one event, with the catalog's params only. Exported for the tests. */
@@ -141,6 +191,8 @@ export function sendServerEvents(...events: ServerEvent[]): void {
       continue;
     }
     if (!body) continue;
+    const limitKey = event.tenantId ? `w:${event.tenantId}` : `u:${event.userId}`;
+    if (!takeAnalyticsToken(limitKey)) continue;
     const delivery = send(body).catch(() => {});
     try {
       waitUntil(delivery);

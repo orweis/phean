@@ -1,8 +1,9 @@
 "use client";
 
 import { ChevronDown, Plus } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type MouseEvent, type ReactNode } from "react";
 
+import { track } from "@/lib/analytics";
 import { cx } from "@/lib/cx";
 
 import { buttonClasses } from "./ui/button";
@@ -29,6 +30,16 @@ export function ConnectAgentSection({
 }) {
   const [open, setOpen] = useState(!collapsed);
   const shown = open || !collapsed;
+  // The empty workspace's onboarding: the card leads while no agent is connected yet. A tick
+  // later, so on a fresh load the analytics loader (an ancestor, whose effects run after ours) is ready.
+  useEffect(() => {
+    if (collapsed) return;
+    const timer = window.setTimeout(() => track("onboarding_step", { step: "connect_agent_viewed" }), 0);
+    return () => window.clearTimeout(timer);
+  }, [collapsed]);
+  const onClickCapture = (event: MouseEvent<HTMLDivElement>) => {
+    if (!collapsed && (event.target as Element).closest?.("[data-onboarding='mcp-url'] button")) track("onboarding_step", { step: "mcp_url_copied" });
+  };
   return (
     <Card className="mb-6" data-connect={shown ? "open" : "folded"}>
       <CardHeader
@@ -49,7 +60,7 @@ export function ConnectAgentSection({
           )
         }
       />
-      <div hidden={!shown} className={cx(!shown && "hidden")}>
+      <div hidden={!shown} className={cx(!shown && "hidden")} onClickCapture={onClickCapture}>
         <CardBody>{children}</CardBody>
       </div>
     </Card>

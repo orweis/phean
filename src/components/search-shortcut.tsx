@@ -5,6 +5,8 @@ import { useEffect } from "react";
 
 import { routes } from "@/lib/routes";
 
+import { trackShortcut } from "./keyboard-shortcuts";
+
 const TYPING = "input, textarea, select, [contenteditable]";
 
 /**
@@ -18,11 +20,14 @@ export function SearchShortcut({ slug }: { slug: string }) {
       if (event.key !== "/" || event.metaKey || event.ctrlKey || event.altKey || event.defaultPrevented) return;
       if ((event.target as Element | null)?.closest?.(TYPING)) return;
       event.preventDefault();
+      trackShortcut("search");
       // The page's own box first (Memory filters itself), then the header's, then the Search tab.
       const box = [...document.querySelectorAll<HTMLInputElement>('[data-search-input="page"], [data-search-input="header"]')]
         .filter((candidate) => candidate.offsetParent !== null)
         .sort((a, b) => Number(b.dataset.searchInput === "page") - Number(a.dataset.searchInput === "page"))[0];
       if (box) {
+        // A search run from here reports `from: "shortcut"` (`SearchForm`).
+        box.dataset.focusedBy = "shortcut";
         box.focus();
         box.select();
       } else {

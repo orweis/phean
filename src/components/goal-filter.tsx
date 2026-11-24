@@ -6,7 +6,7 @@ import { QueryFilter } from "./query-filter";
 /** Filters the current page by goal through the `?goal=` query parameter. */
 export function GoalFilter({ goals }: { goals: readonly GoalOption[] }) {
   return (
-    <QueryFilter name="goal" label="Goal" description="Filter by goal" className="w-64 max-sm:w-full">
+    <QueryFilter name="goal" label="Goal" description="Filter by goal" className="w-64 max-sm:w-full" analytics={{ event: "filter_apply", params: { filter: "goal" } }}>
       <option value="">All goals</option>
       <GoalOptions goals={goals} />
     </QueryFilter>

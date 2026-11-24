@@ -18,7 +18,7 @@ export function DocArticle({ page, previous, next }: { page: DocPage; previous: 
           <h1 className="text-[1.75rem] leading-[2.15rem] font-bold tracking-title text-ink">{page.title}</h1>
           {page.description && <p className="mt-2 text-md text-ink-2">{page.description}</p>}
         </header>
-        <div className="docs-body mt-6">
+        <div className="docs-body mt-6" data-docs-body>
           <MarkdownView source={page.body} headings="anchored" agentMarks />
         </div>
         {(previous || next) && (

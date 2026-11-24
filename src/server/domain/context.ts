@@ -70,9 +70,16 @@ export function personContext(db: Db, person: { id: string; name: string }): Per
  * with `onCommit` run after the outermost transaction commits, and never if it rolls back.
  */
 export async function inTransaction<T>(ctx: Ctx, fn: (tx: Ctx) => Promise<T>): Promise<T> {
-  // Nested: a savepoint inside the outer transaction, whose commit is the one that counts.
-  if (ctx.afterCommit) return ctx.db.transaction((db) => fn({ ...ctx, db }));
   const hooks: CommitHook[] = [];
+  // Nested: a savepoint inside the outer transaction, whose commit is the one that counts. Its hooks
+  // join the outer ones only if the savepoint is released, so work a caller caught and rolled back
+  // (a trigger that failed to start its run) queues nothing.
+  const outer = ctx.afterCommit;
+  if (outer) {
+    const result = await ctx.db.transaction((db) => fn({ ...ctx, db, afterCommit: (hook) => hooks.push(hook) }));
+    for (const hook of hooks) outer(hook);
+    return result;
+  }
   const result = await ctx.db.transaction((db) => fn({ ...ctx, db, afterCommit: (hook) => hooks.push(hook) }));
   for (const hook of hooks) hook(ctx.db);
   return result;

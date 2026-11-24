@@ -28,6 +28,12 @@ export interface DocPage {
 
 const CONTENT = path.join(process.cwd(), "content", "docs");
 
+/** The sidebar section a page sits in, as its anchor-style name (`start-here`), for analytics. */
+export function docSectionOf(slug: DocSlug): string {
+  const section = DOC_SECTIONS.find((candidate) => (candidate.slugs as readonly string[]).includes(slug));
+  return section ? headingId(section.title) : "other";
+}
+
 export function isDocSlug(slug: string): slug is DocSlug {
   return (DOC_SLUGS as readonly string[]).includes(slug);
 }

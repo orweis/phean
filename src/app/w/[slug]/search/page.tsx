@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import { PageHeader } from "@/components/page-header";
-import { SearchForm } from "@/components/search-form";
+import { SearchForm, SearchSubmitted } from "@/components/search-form";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/stat";
@@ -80,6 +80,7 @@ export default async function SearchPage({ params, searchParams }: PageProps<"/w
         <SearchForm action={routes.search(slug)} defaultValue={q} placeholder="Search goals, tasks, and memory…" autoFocus={!q} suggestFor={slug} />
       </div>
 
+      {result?.ok && <SearchSubmitted key={q} hasResults={result.value.length > 0} />}
       {result && !result.ok && <p className="text-sm text-late-ink">{result.state.message}</p>}
       {result?.ok && result.value.length === 0 && (
         <EmptyState icon={<Search />} title={`Nothing matches "${q}"`}>

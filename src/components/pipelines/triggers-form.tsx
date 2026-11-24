@@ -9,6 +9,7 @@ import { LIMITS, SOURCE_META, SOURCES, type Source } from "@/lib/domain";
 import { formatDay } from "@/lib/format";
 import { nextFiring } from "@/lib/pipeline-stats";
 import { cronProblem, isTimeZone } from "@/lib/pipelines";
+import { sendTracked, type Tracked } from "@/lib/tracked";
 
 import { CopyField } from "../ui/copy-button";
 import { ActionForm } from "../ui/action-form";
@@ -43,9 +44,26 @@ export function TriggersForm({ slug, pipelineId, triggers, origin }: { slug: str
     events: events.filter((event) => event.tag.trim() || event.source).map((event) => ({ ...(event.tag.trim() && { tag: event.tag.trim() }), ...(event.source && { source: event.source }) })),
     webhook,
   };
+  // One `trigger_edit` per kind of trigger this save changes.
+  const before = { schedule: triggers.schedule, events: triggers.events.map((event) => ({ ...(event.tag && { tag: event.tag }), ...(event.source && { source: event.source }) })) };
+  const edited: Tracked[] = [
+    JSON.stringify(value.schedule) !== JSON.stringify(before.schedule) && ("schedule" as const),
+    JSON.stringify(value.events) !== JSON.stringify(before.events) && ("event" as const),
+    webhook !== Boolean(triggers.webhook) && ("webhook" as const),
+  ]
+    .filter((type) => type !== false)
+    .map((type) => ({ event: "trigger_edit", params: { trigger_type: type } }));
 
   return (
-    <ActionForm action={updatePipelineAction} workspace={slug} className="space-y-4">
+    <ActionForm
+      action={updatePipelineAction}
+      workspace={slug}
+      analytics={() => {
+        edited.slice(1).forEach(sendTracked);
+        return edited[0];
+      }}
+      className="space-y-4"
+    >
       {(state) => {
         const secret = stringData(state, "webhookSecret");
         return (

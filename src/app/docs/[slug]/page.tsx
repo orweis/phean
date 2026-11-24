@@ -2,10 +2,11 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { DocArticle } from "@/components/doc-article";
+import { DocsAnalytics } from "@/components/docs-analytics";
 import { JsonLd } from "@/components/site/json-ld";
 import { routes } from "@/lib/routes";
 import { docSchema } from "@/server/site-schema";
-import { DOC_SLUGS, isDocSlug, loadDoc, loadDocIndex } from "@/server/docs";
+import { DOC_SLUGS, docSectionOf, isDocSlug, loadDoc, loadDocIndex } from "@/server/docs";
 
 export const dynamicParams = false;
 
@@ -30,6 +31,7 @@ export default async function DocsPage({ params }: PageProps<"/docs/[slug]">) {
   return (
     <>
       <JsonLd data={docSchema(page.title, page.description, routes.docs(slug), [{ name: "Docs", path: routes.docs() }])} />
+      <DocsAnalytics slug={slug} section={docSectionOf(slug)} />
       <DocArticle page={page} previous={pages[at - 1]} next={pages[at + 1]} />
     </>
   );

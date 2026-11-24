@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import { track } from "@/lib/analytics";
 import { appearanceCookie, colorSchemeFor, parseAppearance, type Appearance } from "@/lib/appearance";
 import { parseTheme, themeColorFor, themeCookie, type ThemeId } from "@/lib/themes";
 
@@ -32,6 +33,7 @@ export function applyAppearance(appearance: Appearance) {
     root.dataset.appearance = appearance;
     document.cookie = appearanceCookie(appearance, secure());
   });
+  track("appearance_change", { appearance });
 }
 
 export function applyTheme(theme: ThemeId) {
@@ -39,6 +41,7 @@ export function applyTheme(theme: ThemeId) {
     root.dataset.theme = theme;
     document.cookie = themeCookie(theme, secure());
   });
+  track("theme_change", { theme });
 }
 
 /**

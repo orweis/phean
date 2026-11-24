@@ -62,7 +62,14 @@ export function WorkflowEditor({ slug, stages, canEdit }: { slug: string; stages
   const payload = JSON.stringify(drafts.map(({ key, label, kind, hidden }) => ({ ...(key && { key }), label: label.trim(), kind, hidden })));
 
   return (
-    <ActionForm action={saveWorkflowAction} workspace={slug} notice="Saved the board's stages" className="space-y-6">
+    <ActionForm
+      action={saveWorkflowAction}
+      workspace={slug}
+      notice="Saved the board's stages"
+      // The lanes the board shows: a hidden stage is not one.
+      analytics={{ event: "workflow_save", params: { stages_count: drafts.filter((draft) => !draft.hidden).length } }}
+      className="space-y-6"
+    >
       <input type="hidden" name="stages" value={payload} />
       {LANE_ORDER.map((kind) => {
         const rows = drafts.filter((draft) => draft.kind === kind);

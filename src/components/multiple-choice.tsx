@@ -6,6 +6,7 @@ import { useState } from "react";
 import { answerInputAction, retractAnswerAction } from "@/app/w/[slug]/actions";
 import type { InputRequest } from "@/lib/agent-sessions";
 import { cx } from "@/lib/cx";
+import type { Tracked } from "@/lib/tracked";
 
 import { buttonClasses } from "./ui/button";
 import { ActionForm } from "./ui/action-form";
@@ -16,14 +17,15 @@ import { SubmitButton } from "./ui/submit-button";
  * delivers the ones ticked as one answer. Number keys tick and untick (see `DecisionKeys`), and
  * Enter on a ticked box sends. A capsule shows it is ticked by its box, its tint and a ring.
  */
-export function MultipleChoice({ taskId, slug, request, title }: { taskId: string; slug: string; request: InputRequest; title: string }) {
+export function MultipleChoice({ taskId, slug, request, title, analytics }: { taskId: string; slug: string; request: InputRequest; title: string; analytics?: Tracked }) {
   const [ticked, setTicked] = useState(0);
   return (
     <ActionForm
       action={answerInputAction}
       workspace={slug}
       notice={`Sent your picks to ${request.agentName}`}
-      undo={{ action: retractAnswerAction, fields: { taskId, requestId: request.id }, done: `${request.agentName}'s question is open again.` }}
+      undo={{ action: retractAnswerAction, fields: { taskId, requestId: request.id }, done: `${request.agentName}'s question is open again.`, analytics: { event: "decision_undo" } }}
+      analytics={analytics}
       className="flex flex-wrap items-center gap-x-1.5 gap-y-2"
     >
       <input type="hidden" name="taskId" value={taskId} />

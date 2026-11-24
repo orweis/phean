@@ -17,12 +17,14 @@ import { LIMITS, WORKSPACE_SLUG_PATTERN } from "@/lib/domain";
 import { routes } from "@/lib/routes";
 
 import { appUrl, mcpResourceUrl, oauthAuthorizeLimit, oauthProviders, oauthRegisterLimit, trustedOrigins } from "../config";
+import { sendServerEvents } from "../analytics";
 import { lazyDb, type Db } from "../db/client";
 import * as authSchema from "../db/schema/auth";
 import { oauthResource } from "../db/schema/auth";
 import { resolveOAuthAgent } from "../domain/agents";
 import { findTenantBySlug } from "../domain/tenants";
 import { forgetAllDevices } from "../domain/notifications";
+import { reportSignUp, signalProviderSignIn } from "./analytics";
 import { pruneUnusedClients } from "./clients";
 import { nativeSignIn } from "./native";
 import { pushDeviceSessions } from "./push-devices";
@@ -101,6 +103,10 @@ export function createAuth(database: Db, baseUrl: string) {
       },
     },
     socialProviders: socialProviders(),
+    databaseHooks: {
+      // Runs once the account is committed; only a person's first account is a sign-up.
+      account: { create: { after: (created) => reportSignUp(database, created) } },
+    },
     account: {
       // People connect GitHub or Google from their account page while signed in, so the provider's
       // address may differ from their Phean one; the provider must still have verified it.
@@ -129,12 +135,19 @@ export function createAuth(database: Db, baseUrl: string) {
           throw new APIError("BAD_REQUEST", { error: "invalid_client_metadata", error_description: 'Phean registers public clients only. Register with token_endpoint_auth_method "none".' });
         }
       }),
-      after: providerSignInChallenge(baseUrl),
+      after: providerSignInChallenge(baseUrl, (ctx) => signalProviderSignIn(ctx, baseUrl)),
     },
     plugins: [
       // Organizations are Phean tenants ("workspaces"). Invitations are shared as links,
       // so no email delivery is configured.
-      organization({ creatorRole: "owner", invitationExpiresIn: SEVEN_DAYS_IN_SECONDS }),
+      organization({
+        creatorRole: "owner",
+        invitationExpiresIn: SEVEN_DAYS_IN_SECONDS,
+        // The plugin writes the workspace and its owner without a transaction, so both are durable here.
+        organizationHooks: {
+          afterCreateOrganization: async ({ organization: created, user }) => sendServerEvents({ name: "workspace_create", userId: user.id, tenantId: created.id }),
+        },
+      }),
       jwt({ disableSettingJwtHeader: true }),
       // An authenticator app with backup codes. Passwordless people (GitHub or Google only) may turn
       // it on too; `challengeProviderSignIn` asks for it after a provider sign-in.

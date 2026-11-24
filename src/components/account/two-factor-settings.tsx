@@ -4,6 +4,7 @@ import { Download, ShieldCheck } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition, type FormEvent } from "react";
 
+import { track } from "@/lib/analytics";
 import { authClient } from "@/lib/auth-client";
 import { authErrorMessage } from "@/lib/auth-errors";
 import { LIMITS } from "@/lib/domain";
@@ -179,6 +180,7 @@ export function TwoFactorSettings({ enabled, hasPassword }: TwoFactorSettingsPro
     startTransition(async () => {
       const { error: failure } = await authClient.twoFactor.verifyTotp({ code });
       if (failure) return setError(authErrorMessage(failure));
+      track("two_factor_enable");
       setSetup({ step: "save", backupCodes: setup.backupCodes });
     });
   };

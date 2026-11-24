@@ -11,6 +11,11 @@ per-workspace data dumps.
   bar, `AnalyticsIdentity`, `AnalyticsPage`, `ConsentLink`), rendered by the root layout.
 - The server side is `src/server/analytics.ts`: whether pages load GA, the salted hashes, and the
   Measurement Protocol for what agents do with no page open.
+- Call sites: `track` in a client handler; the `analytics` prop (a `Tracked` from `src/lib/tracked.ts`) on
+  `ActionForm`, `ActionButton`, an undo, `Popover` and `QueryFilter`, which sends only on success (a server
+  action may add params it decides, such as `first_answer`, in `data.analytics`); `TrackOnMount` for a server
+  page; `TrackedLink` and `TrackedAnchor` for links. The server sends through `trackAfterCommit(ctx, …)` in
+  `server/domain/analytics.ts`, which runs after the transaction commits.
 - Every new user-facing surface or action adds its events to `EVENTS` and to this dictionary
   (`tests/analytics.test.ts` checks that each event is here).
 
@@ -41,6 +46,10 @@ change to it. If a `script-src` is ever added, allow `https://www.googletagmanag
   choice" in the site footer and the Analytics card on `/account` ask again. Declining after accepting
   stops sending and deletes the `_ga` cookies.
 - `/privacy` describes what is sent and how to opt out.
+- What only the server sees happen (a sign-up or sign-in through GitHub or Google, a workspace created or an
+  invitation accepted by an action that redirects) reaches the next page through the `phean-ga-signal`
+  cookie (`lib/analytics-signals.ts`): catalog enums only, ten minutes, set only for a visitor who accepted,
+  and read and deleted by `AnalyticsSignals` on `/workspaces` and a workspace's overview.
 
 ## Redaction
 
@@ -95,20 +104,20 @@ server sends it (**only**); server copies carry `source_side=server`, and key-ev
 
 | Event | When | Params | Key | Server |
 | --- | --- | --- | --- | --- |
-| `cta_click` | A primary or secondary call to action is clicked | `cta_id` (`hero_open_phean`, `hero_connect_agent`, `nav_open_phean`, `nav_sign_in`, `footer_*`, `section_*`), `location` (`hero`, `nav`, `section:<id>`, `footer`) | | |
+| `cta_click` | A primary or secondary call to action is clicked | `cta_id` (`hero_open_phean`, `hero_create_workspace`, `hero_see_decisions`, `hero_connect_agent`, `nav_open_phean`, `nav_get_started`, `nav_sign_in`, `footer_*`, `section_*`; the `data-cta` attributes), `location` (`hero`, `nav`, `section:<id>`, `footer`) | | |
 | `section_view` | A landing section is half visible, once per page view | `section_id` | | |
-| `demo_interact` | The hero's boulder prompt is answered, or the handoffs section's server tooltip opened | `demo` (`boulder`, `handoff_relay`), `action` | | |
+| `demo_interact` | The boulder card in the "Why Phean" hill scene is answered, or the handoffs section's server window opened or paused | `demo` (`boulder`: `decide_now`, `hold_week`; `handoff_relay`: `hover_server`, `open_tooltip`, `pause`, `play`), `action` | | |
 | `docs_nav` | A link from the marketing site into the docs | `target` (doc slug) | | |
 
 ### Docs
 
 | Event | When | Params | Key | Server |
 | --- | --- | --- | --- | --- |
-| `docs_copy` | A copy button is used | `doc_slug`, `block` (`code`, `mcp_url`, `install_command`, `prompt`), `lang` | | |
+| `docs_copy` | Text is copied from a docs code block or inline code (the docs have no copy buttons; the text is classified in the browser and never sent) | `doc_slug`, `block` (`code`, `mcp_url`, `install_command`, `prompt`), `lang` | | |
 | `docs_search` | The docs are searched (only if they have search) | `results_count` | | |
 | `docs_feedback` | A "was this helpful" answer (only if the control exists) | `doc_slug`, `helpful` | | |
-| `skill_install_click` | An install link for a skill | `skill` (`phean-decisions`, `phean-handoffs`, `phean-pipelines`, `phean-webhooks`, `phean-documents`) | | |
-| `client_setup_view` | A client's setup tab or section is opened | `client` (`claude_code`, `claude_desktop`, `cursor`, `vscode`, `chatgpt`, `other`) | | |
+| `skill_install_click` | A skill's install command or path is copied from the docs | `skill` (`phean-decisions`, `phean-handoffs`, `phean-pipelines`, `phean-webhooks`, `phean-documents`) | | |
+| `client_setup_view` | A client's setup page is viewed, or its section on Connect an agent is opened by its anchor | `client` (`claude_code`, `claude_desktop`, `cursor`, `vscode`, `chatgpt`, `other`) | | |
 
 ### Auth and onboarding
 
@@ -138,7 +147,7 @@ server sends it (**only**); server copies carry `source_side=server`, and key-ev
 | Event | When | Params | Key | Server |
 | --- | --- | --- | --- | --- |
 | `decision_view` | The Decisions page is viewed | `pending_count_bucket` | | |
-| `decision_answer` | A person answers a request | `via` (`page`, `inbox`, `notification`, `desktop`, `pipeline_card`), `kind` (`decision`, `question`), `with_options`, `multiple`, `custom_answer`, `is_pipeline`, `first_answer` (the person's first answer ever, from the server) | **key** (the funnel uses `first_answer`) | |
+| `decision_answer` | A person answers a request | `via` (`page`, `inbox`, `notification`, `desktop`, `pipeline_card`), `kind` (`decision`, `question`), `with_options`, `multiple`, `custom_answer`, `is_pipeline`, `first_answer` (the person's first answer in this workspace, from the server; a person-wide count would read across workspaces) | **key** (the funnel uses `first_answer`) | |
 | `decision_snooze` | A request is snoozed | | | |
 | `decision_undo` | An answer is taken back | | | |
 | `decision_mark_answered` | A request is marked answered | | | |
@@ -203,13 +212,13 @@ server sends it (**only**); server copies carry `source_side=server`, and key-ev
 ### Server only (Measurement Protocol)
 
 Agents act over MCP with no page, so the server sends these, after the change commits, never awaited and
-never throwing (`sendServerEvents`). They carry `workspace_hash`, and `user_id` is the hashed person who
+never throwing (`sendServerEvents`), and at most 60 a minute per workspace per server process. They carry `workspace_hash`, and `user_id` is the hashed person who
 approved the agent where there is one. They are sent only from production.
 
 | Event | When | Params | Key | Server |
 | --- | --- | --- | --- | --- |
 | `agent_first_call` | A newly approved agent's first MCP call | `client_hint`, `level` | | only |
-| `agent_active_day` | An agent used MCP today (at most once per agent per UTC day) | `tools_used_bucket` | | only |
+| `agent_active_day` | An agent's first MCP tool call of the UTC day (once per agent per day, `agents.last_active_day`) | `tools_used_bucket` (not sent yet: the day's count is unknown at its first call) | | only |
 | `decision_ask` | An agent asks a person | `kind`, `with_options`, `is_pipeline` | | only |
 | `task_capture` | Agents capture tasks | `count_bucket`, `source` | | only |
 | `hand_off` | An agent hands work to an agent or a person | `to` | | only |

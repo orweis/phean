@@ -329,6 +329,7 @@ export default async function AgentsPage({ params, searchParams }: PageProps<"/w
                                 action={revokeAgentAction}
                                 workspace={slug}
                                 fields={{ agentId: agent.id }}
+                                analytics={{ event: "agent_revoke", params: { is_subagent: Boolean(agent.parentAgentId) } }}
                                 confirm={
                                   running > 0
                                     ? `Revoke ${agent.name} and its ${pluralize(running, "sub-agent")}? They lose access immediately; their past work stays.`

@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useFormStatus } from "react-dom";
 
 import { decideConsentAction } from "@/app/oauth/approve/actions";
 import type { ActionState } from "@/lib/action-state";
+import { clientHint, track, type EventParams } from "@/lib/analytics";
 import { cx } from "@/lib/cx";
 import { addDays, dayOf } from "@/lib/dates";
 import { ACCESS_LEVEL_META, AGENT_ACCESS_LEVELS, AGENT_LIFETIME_DAYS, DEFAULT_AGENT_LIFETIME_DAYS, LIMITS, lifetimeLabel, type AgentAccessLevel } from "@/lib/domain";
@@ -18,8 +19,21 @@ import { RADIO_SEGMENT, SEGMENTED } from "./ui/segmented";
 
 const DEFAULT_LEVEL: AgentAccessLevel = "write";
 
-/** Sends the browser on. A custom scheme leaves this page on screen, so it says what happened instead of keeping a live Allow. */
-function Leaving({ navigate, text }: { navigate: string; text: string }) {
+type ApprovedParams = Omit<EventParams<"agent_connect_approve">, "client_hint">;
+
+/**
+ * Sends the browser on. A custom scheme leaves this page on screen, so it says what happened instead
+ * of keeping a live Allow. The analytics event goes first, while the page is still here (gtag sends it
+ * by beacon); the server's copy of `agent_connect_approve` is the one to trust.
+ */
+function Leaving({ navigate, text, outcome, clientName, approved }: { navigate: string; text: string; outcome: ConsentOutcome; clientName: string; approved?: ApprovedParams }) {
+  const tracked = useRef(false);
+  useEffect(() => {
+    if (tracked.current) return;
+    tracked.current = true;
+    if (outcome === "allowed") track("agent_connect_approve", { ...approved, client_hint: clientHint(clientName) });
+    else if (outcome === "declined") track("agent_connect_deny");
+  }, [outcome, clientName, approved]);
   useEffect(() => {
     window.location.assign(navigate);
   }, [navigate]);
@@ -30,12 +44,25 @@ function Leaving({ navigate, text }: { navigate: string; text: string }) {
   );
 }
 
-function ConsentForm({ oauthQuery, clientName, children }: { oauthQuery: string; clientName: string; children: (state: ActionState) => ReactNode }) {
+function ConsentForm({
+  oauthQuery,
+  clientName,
+  approved,
+  children,
+}: {
+  oauthQuery: string;
+  clientName: string;
+  /** What Allow chose, for analytics: never a name or an id. */
+  approved?: ApprovedParams;
+  children: (state: ActionState) => ReactNode;
+}) {
   return (
     <ActionForm action={decideConsentAction} quiet>
       {(state) => {
         const { navigate, outcome } = state.data ?? {};
-        if (state.status === "success" && typeof navigate === "string") return <Leaving navigate={navigate} text={consentLeavingText(outcome as ConsentOutcome, clientName)} />;
+        if (state.status === "success" && typeof navigate === "string") {
+          return <Leaving navigate={navigate} text={consentLeavingText(outcome as ConsentOutcome, clientName)} outcome={outcome as ConsentOutcome} clientName={clientName} approved={approved} />;
+        }
         return (
           <>
             <input type="hidden" name="oauthQuery" value={oauthQuery} />
@@ -180,8 +207,10 @@ export function ApproveAgentForm({ oauthQuery, clientName, defaultName, workspac
     ? `Revoke ${quotedList(revoking.map((candidate) => candidate.name))}? ${revoking.length === 1 ? "It and its sub-agents lose" : "They and their sub-agents lose"} access at once, and this cannot be undone.`
     : undefined;
 
+  const approved: ApprovedParams = { level, lifetime_days: days, reconnect: Boolean(becomes), took_over_work: others.some((candidate) => takeOver.includes(candidate.id)) };
+
   return (
-    <ConsentForm oauthQuery={oauthQuery} clientName={clientName}>
+    <ConsentForm oauthQuery={oauthQuery} clientName={clientName} approved={approved}>
       {(state) => {
         const key = workspace && !reconnecting ? renewalKey(workspace, name) : null;
         const prompted = key !== null && state.data?.replaces === key;

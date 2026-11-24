@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import { AnalyticsIdentity } from "@/components/analytics";
+import { AnalyticsSignals } from "@/components/analytics-signals";
 import { AppHeader } from "@/components/app-header";
 import { AutoRefresh } from "@/components/auto-refresh";
 import { FlowBar } from "@/components/charts/flow-bar";
@@ -57,6 +58,7 @@ export default async function WorkspacesPage() {
     <>
       <SkipLink />
       <AnalyticsIdentity {...analyticsIdentity(viewer)} />
+      <AnalyticsSignals />
       <AppHeader user={viewer.user} />
       <AutoRefresh />
       <main id="content" tabIndex={-1} className="mx-auto max-w-7xl space-y-6 px-4 py-6 outline-none sm:px-6 sm:py-8">

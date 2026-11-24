@@ -4,6 +4,7 @@ import { Check, Scale } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
+import { track } from "@/lib/analytics";
 
 /** What the card and the scene say to each other, as events on the figure (`[data-hill]`). */
 export const HILL_HOLD = "hill:hold";
@@ -35,7 +36,10 @@ export function HillCard() {
     return () => figure.removeEventListener(HILL_HOLD, held);
   }, []);
 
-  const answer = (choice: HillAnswer) => card.current?.closest("[data-hill]")?.dispatchEvent(new CustomEvent<HillAnswer>(HILL_ANSWER, { detail: choice }));
+  const answer = (choice: HillAnswer) => {
+    track("demo_interact", { demo: "boulder", action: choice === "ship" ? "decide_now" : "hold_week" });
+    card.current?.closest("[data-hill]")?.dispatchEvent(new CustomEvent<HillAnswer>(HILL_ANSWER, { detail: choice }));
+  };
 
   return (
     <div

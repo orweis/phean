@@ -4,6 +4,7 @@ import { Pause, Play } from "lucide-react";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
+import { track } from "@/lib/analytics";
 
 import { beatAt, HANDOFF_FRONT, HANDOFF_LOOP_MS, openAt } from "./handoff-beats";
 
@@ -80,7 +81,15 @@ export function HandoffPlayer({ picture, steps }: { picture: ReactNode; steps: R
   return (
     <div ref={stage} data-handoff>
       <div className="mb-3 flex justify-end motion-reduce:hidden">
-        <Button size="sm" variant="ghost" aria-pressed={paused} onClick={() => setPaused(!paused)}>
+        <Button
+          size="sm"
+          variant="ghost"
+          aria-pressed={paused}
+          onClick={() => {
+            track("demo_interact", { demo: "handoff_relay", action: paused ? "play" : "pause" });
+            setPaused(!paused);
+          }}
+        >
           {paused ? <Play aria-hidden /> : <Pause aria-hidden />}
           {paused ? "Play the handoff" : "Pause the handoff"}
         </Button>
@@ -121,6 +130,12 @@ export function HandoffHub({
   const tipId = useId();
   const descriptionId = useId();
   const open = hovered || focused || pinned;
+  // What opened the window, for analytics: sent when it opens, not while it stays open.
+  const opener = useRef<"hover_server" | "open_tooltip">("open_tooltip");
+
+  useEffect(() => {
+    if (open) track("demo_interact", { demo: "handoff_relay", action: opener.current });
+  }, [open]);
 
   // Room below the node for the window, or else above it.
   useEffect(() => {
@@ -154,7 +169,11 @@ export function HandoffHub({
       <div
         ref={anchor}
         className="max-lg:contents lg:relative"
-        onPointerEnter={(event) => event.pointerType === "mouse" && setHovered(true)}
+        onPointerEnter={(event) => {
+          if (event.pointerType !== "mouse") return;
+          if (!open) opener.current = "hover_server";
+          setHovered(true);
+        }}
         onPointerLeave={(event) => event.pointerType === "mouse" && setHovered(false)}
         onKeyDown={(event) => {
           if (event.key === "Escape" && open) {
@@ -169,8 +188,14 @@ export function HandoffHub({
           aria-expanded={open}
           aria-controls={tipId}
           aria-describedby={descriptionId}
-          onClick={() => setPinned(!pinned)}
-          onFocus={(event) => setFocused(event.currentTarget.matches(":focus-visible"))}
+          onClick={() => {
+            if (!open) opener.current = "open_tooltip";
+            setPinned(!pinned);
+          }}
+          onFocus={(event) => {
+            if (!open) opener.current = "open_tooltip";
+            setFocused(event.currentTarget.matches(":focus-visible"));
+          }}
           onBlur={() => setFocused(false)}
           className="max-lg:hidden"
         >

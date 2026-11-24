@@ -1,9 +1,9 @@
 import { BarChart3, ListOrdered, Map as MapIcon, PencilRuler } from "lucide-react";
-import Link from "next/link";
 
 import { cx } from "@/lib/cx";
 import { routes } from "@/lib/routes";
 
+import { TrackedLink } from "../tracked-link";
 import { ChipRail } from "../ui/chip-rail";
 import { segment, SEGMENTED } from "../ui/segmented";
 
@@ -21,9 +21,10 @@ export function PipelineTabs({ slug, pipelineId, tab, proposals }: { slug: strin
   return (
     <ChipRail label="Pipeline views" selected={tab} className={cx(SEGMENTED, "mb-5 w-fit max-w-full")}>
       {TABS.map(({ key, label, icon: Icon }) => (
-        <Link
+        <TrackedLink
           key={key}
           href={routes.pipeline(slug, pipelineId, key === "map" ? undefined : { tab: key })}
+          analytics={key === tab ? undefined : { event: "pipeline_tab", params: { tab: key } }}
           aria-current={key === tab ? "page" : undefined}
           className={cx(segment(key === tab), "inline-flex items-center gap-1.5 whitespace-nowrap")}
         >
@@ -35,7 +36,7 @@ export function PipelineTabs({ slug, pipelineId, tab, proposals }: { slug: strin
               <span className="sr-only"> {proposals === 1 ? "proposal" : "proposals"}</span>
             </span>
           )}
-        </Link>
+        </TrackedLink>
       ))}
     </ChipRail>
   );

@@ -15,6 +15,7 @@ import { GoalTree } from "@/components/goal-tree";
 import { MemoryList } from "@/components/memory-list";
 import { RememberForm } from "@/components/remember-form";
 import { TaskRow } from "@/components/task-card";
+import { TrackOnMount } from "@/components/track-on-mount";
 import { MetaBadge } from "@/components/ui/badge";
 import { ButtonLink } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
@@ -70,6 +71,7 @@ export default async function GoalPage({ params }: PageProps<"/w/[slug]/goals/[i
 
   return (
     <>
+      <TrackOnMount key={goal.id} name="goal_open" />
       {/* A path that reads as one: the workspace, each goal above this one, then this goal. */}
       <nav aria-label="Breadcrumb" className="mb-3">
         <ol className="flex flex-wrap items-center gap-1 text-xs text-muted">

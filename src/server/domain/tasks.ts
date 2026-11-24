@@ -16,7 +16,8 @@ import {
   type RequestOutcome,
   type TaskLink,
 } from "@/lib/agent-sessions";
-import { isOpenTaskStatus, OPEN_TASK_STATUSES, SOURCE_META, TASK_STATUS_META, type TaskStatus } from "@/lib/domain";
+import { countBucket } from "@/lib/analytics";
+import { isOpenTaskStatus, OPEN_TASK_STATUSES, SOURCE_META, TASK_STATUS_META, type Source, type TaskStatus } from "@/lib/domain";
 import type { DocumentRef } from "@/lib/documents";
 import { isBuiltIn, stageLabel, type Stage } from "@/lib/workflow";
 import { truncate } from "@/lib/format";
@@ -26,6 +27,7 @@ import { newId } from "../db/ids";
 import { agents, events, goals, member, tasks, user, watches, type TaskRow } from "../db/schema";
 import { liveAgent } from "./agent-liveness";
 import { assertCanTransferClaims } from "./agents";
+import { trackAfterCommit } from "./analytics";
 import { createdByFields, inTenant, inTransaction, tenantRow, type Ctx } from "./context";
 import { conflict, forbidden, invalid, notFound } from "./errors";
 import { recordEvent, recordEvents, taskActivity, type Activity } from "./events";
@@ -443,6 +445,12 @@ async function capture(ctx: Ctx, drafts: z.output<typeof TaskDraft>[]): Promise<
 
     // A pipeline whose trigger matches a new task starts a run on it.
     if (!isPipelineActor(tx)) await onTasksCaptured(tx, created);
+    // What agents capture, by source (a fixed list); people's quick adds are counted on the page.
+    if (tx.actor.type === "agent" && !isPipelineActor(tx)) {
+      const bySource = new Map<Source, number>();
+      for (const task of created) bySource.set(task.source, (bySource.get(task.source) ?? 0) + 1);
+      await trackAfterCommit(tx, ...[...bySource].map(([source, count]) => ({ name: "task_capture" as const, params: { count_bucket: countBucket(count), source } })));
+    }
 
     return {
       created,
@@ -761,6 +769,10 @@ export const handOffTask = service(HandOffInput, async (ctx, { taskId, toAgent, 
     });
     // Handing a pipeline stop back to the pipeline that handed it over finishes the stop with the note.
     if (handBack && !isPipelineActor(tx)) await onTaskFinished(tx, task!, { kind: "handed_back", note });
+    // An agent passing work on; people's handoffs are counted on the page, the engine's are the run's.
+    if (tx.actor.type === "agent" && !isPipelineActor(tx)) {
+      await trackAfterCommit(tx, { name: "hand_off", params: { to: target?.agentId ? "agent" : target?.userId ? "person" : "anyone" } });
+    }
     return task!;
   });
 });
@@ -881,6 +893,8 @@ export const requestInput = service(AskInput, async (ctx, { taskId, question, ki
       summary: `${kind === "decision" ? "asked for a decision on" : "asked about"} "${current.title}": ${truncate(question, 120)}`,
       data: { goalId: current.goalId, requestId: inputRequest.id, kind, question, ...(multiple && { multiple: true }), ...(next && { session: sessionData(next) }) },
     });
+    // A pipeline's person stop asks through here too, as Phean's pipelines agent.
+    await trackAfterCommit(tx, { name: "decision_ask", params: { kind, with_options: choices.length > 0, is_pipeline: isPipelineActor(tx) } });
     return task!;
   });
 });
@@ -953,6 +967,22 @@ export const answerInput = service(AnswerInput, async (ctx, { taskId, answer: wr
     if (open.pipeline) await onRequestAnswered(tx, task!, record);
     return task!;
   });
+});
+
+/**
+ * `answerInput` as the app's forms run it: the answered task, and whether this was the person's
+ * first answer in this workspace, which the page reports to analytics (`decision_answer`'s
+ * `first_answer`). Counted from the workspace's own `task.input_answered` events, so it never reads
+ * another workspace; a person's first answer in a second workspace counts as a first there too.
+ */
+export const answerInputFromPage = service(AnswerInput, async (ctx, input): Promise<{ task: Task; firstAnswer: boolean }> => {
+  const task = await answerInput(ctx, input);
+  const answers = await ctx.db
+    .select({ id: events.id })
+    .from(events)
+    .where(and(inTenant(ctx, events), eq(events.action, "task.input_answered"), eq(events.actorType, ctx.actor.type), eq(events.actorId, ctx.actor.id)))
+    .limit(2);
+  return { task, firstAnswer: answers.length === 1 };
 });
 
 /**

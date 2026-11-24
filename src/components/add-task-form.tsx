@@ -23,7 +23,7 @@ interface AddTaskFormProps {
 export function AddTaskForm({ slug, goals, goalId, lockGoal = false }: AddTaskFormProps) {
   const openGoals = goals.filter((goal) => goal.status === "active" || goal.status === "proposed");
   return (
-    <ActionForm action={addTaskAction} workspace={slug} className="space-y-3">
+    <ActionForm action={addTaskAction} workspace={slug} className="space-y-3" analytics={{ event: "task_create_manual", params: { as: "task" } }}>
       <input type="hidden" name="status" value="todo" />
       <Field label="Task" htmlFor="add-task-title">
         <Input id="add-task-title" name="title" required maxLength={LIMITS.title} placeholder="Renew the parking permits" />

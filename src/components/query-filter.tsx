@@ -3,6 +3,8 @@
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { ReactNode } from "react";
 
+import { sendTracked, type Tracked } from "@/lib/tracked";
+
 import { ToolbarSelect } from "./ui/toolbar-select";
 
 interface QueryFilterProps {
@@ -18,10 +20,12 @@ interface QueryFilterProps {
   resets?: readonly string[];
   className?: string;
   children: ReactNode;
+  /** The analytics event to send when a value is picked (not when the filter is cleared), e.g. `filter_apply`. */
+  analytics?: Tracked;
 }
 
 /** A toolbar filter held in the URL: picking an option navigates to the same page with `?name=value`. */
-export function QueryFilter({ name, label, description, empty = "", resets = [], className, children }: QueryFilterProps) {
+export function QueryFilter({ name, label, description, empty = "", resets = [], className, children, analytics }: QueryFilterProps) {
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -35,8 +39,10 @@ export function QueryFilter({ name, label, description, empty = "", resets = [],
       onChange={(event) => {
         const next = new URLSearchParams(params);
         for (const reset of resets) next.delete(reset);
-        if (event.target.value && event.target.value !== empty) next.set(name, event.target.value);
-        else next.delete(name);
+        if (event.target.value && event.target.value !== empty) {
+          next.set(name, event.target.value);
+          sendTracked(analytics);
+        } else next.delete(name);
         const query = next.toString();
         router.push(query ? `${pathname}?${query}` : pathname);
       }}

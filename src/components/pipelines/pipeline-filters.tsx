@@ -8,7 +8,7 @@ import { QueryFilter } from "../query-filter";
 export function PipelineFilters() {
   return (
     <>
-      <QueryFilter name="kind" label="Kind" description="Filter by kind" className="w-36">
+      <QueryFilter name="kind" label="Kind" analytics={{ event: "filter_apply", params: { filter: "kind" } }} description="Filter by kind" className="w-36">
         <option value="">All kinds</option>
         {DEFINABLE_PIPELINE_KINDS.map((kind) => (
           <option key={kind} value={kind}>
@@ -16,7 +16,7 @@ export function PipelineFilters() {
           </option>
         ))}
       </QueryFilter>
-      <QueryFilter name="status" label="Status" description="Filter by status" className="w-40">
+      <QueryFilter name="status" label="Status" analytics={{ event: "filter_apply", params: { filter: "status" } }} description="Filter by status" className="w-40">
         <option value="">Active and paused</option>
         {PIPELINE_STATUSES.map((status) => (
           <option key={status} value={status}>

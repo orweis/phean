@@ -63,7 +63,7 @@ export async function SiteFooter() {
               The decision center for your fleet of AI agents and personal assistants. Agents do the tasks; you make the calls.
             </p>
             <p className="mt-4 flex flex-wrap gap-x-4 gap-y-1 text-sm">
-              <Link href={routes.signUp()} className="font-semibold link">
+              <Link href={routes.signUp()} className="font-semibold link" data-cta="footer_create_workspace" data-cta-location="footer">
                 Create a workspace
               </Link>
               <a href={GITHUB_URL} target="_blank" rel="noopener noreferrer" className="text-ink-2 link hover:text-ink">
