@@ -60,41 +60,41 @@ function recommendedOption(item: QuickItem): string | undefined {
   return recommended === undefined ? undefined : item.request.options[recommended];
 }
 
-/** What a swipe right sends, in words, given the picks on a request that takes several; null when there is nothing to send. */
-function sendLabelOf(item: QuickItem, picks: readonly number[]): string | null {
-  if (item.request.multiple) return picks.length ? `Send ${picksLabel(item.request.options, picks)}` : null;
+/** What a swipe right sends, given the picks on a request that takes several: “Okafor LLP”, Blog + Changelog; null when there is nothing to send. */
+function sendTargetOf(item: QuickItem, picks: readonly number[]): string | null {
+  if (item.request.multiple) return picks.length ? picksLabel(item.request.options, picks) : null;
   const option = recommendedOption(item);
-  return option === undefined ? null : `Send “${truncate(option, 40)}”`;
+  return option === undefined ? null : `“${truncate(option, 40)}”`;
 }
 
-/** The title, where the person is in the queue, a way out, and the progress bar with its words. */
+/** What a swipe right sends, in words: "Send “Okafor LLP”", "Send Blog + Changelog"; null when there is nothing to send. */
+function sendLabelOf(item: QuickItem, picks: readonly number[]): string | null {
+  const target = sendTargetOf(item, picks);
+  return target === null ? null : `Send ${target}`;
+}
+
+/**
+ * Quick Decisions' own slim bar, in place of the workspace's header: the way out, the title, where
+ * the person is in the queue, and the progress bar with its words.
+ */
 function QueueHeader({ slug, answered, remaining, onClose }: { slug: string; answered: number; remaining: number; onClose: () => void }) {
   const total = answered + remaining;
   const { count, spoken } = progressText(answered, remaining);
   return (
-    <header className="mb-4">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <nav aria-label="Breadcrumb">
-            <Link href={routes.decisions(slug)} className="relative text-xs font-semibold text-muted link after:absolute after:-inset-x-2 after:-inset-y-3.5">
-              Decisions
-            </Link>
-          </nav>
-          <h1 className="text-2xl font-bold tracking-display text-ink">Quick Decisions</h1>
-        </div>
-        <div className="flex items-center gap-1">
-          {total > 0 && (
-            <span data-progress-count aria-hidden className="text-sm font-semibold text-ink-2 tabular-nums">
-              {count}
-            </span>
-          )}
-          <Link href={routes.decisions(slug)} onClick={onClose} aria-label="Close Quick Decisions" className={buttonClasses("ghost", "touch")}>
-            <X aria-hidden />
-          </Link>
-        </div>
+    <header data-quick-header className="mb-3 shrink-0">
+      <div className="-ml-2 flex items-center gap-1">
+        <Link href={routes.decisions(slug)} onClick={onClose} aria-label="Close Quick Decisions" className={cx(buttonClasses("ghost", "touch"), "shrink-0")}>
+          <X aria-hidden />
+        </Link>
+        <h1 className="min-w-0 flex-1 truncate text-md font-semibold text-ink">Quick Decisions</h1>
+        {total > 0 && (
+          <span data-progress-count aria-hidden className="shrink-0 text-sm font-semibold text-ink-2 tabular-nums">
+            {count}
+          </span>
+        )}
       </div>
       {total > 0 && (
-        <div role="img" aria-label={spoken} data-progress className="mt-3 flex items-center gap-1">
+        <div role="img" aria-label={spoken} data-progress className="mt-2 flex items-center gap-1">
           {progressSegments(answered, remaining).map((state, index) => (
             <span
               key={index}
@@ -449,29 +449,29 @@ export function QuickDecisions({ slug, userId, items, view, requestId, tab, file
   if (current && shown === "context") return <ContextView slug={slug} item={current} tab={tab} count={count} ctl={ctl} />;
   if (current && shown === "file" && file) return <FileView item={current} file={file} ctl={ctl} />;
 
-  const sendLabel = current ? sendLabelOf(current, picksOf(current)) : null;
+  const sendTarget = current ? sendTargetOf(current, picksOf(current)) : null;
+  const sendLabel = sendTarget === null ? null : `Send ${sendTarget}`;
   return (
-    // The card flies off the side of the screen, never into a sideways scroll.
-    <div className="mx-auto max-w-xl overflow-x-clip">
+    // The whole screen, the card taking what the bar and the buttons leave.
+    <div data-quick-queue className="mx-auto flex w-full max-w-xl flex-1 flex-col">
       <QueueHeader slug={slug} answered={answered.length} remaining={queue.length} onClose={close} />
       {current ? (
         <>
-          <div className="relative pb-2" inert={arriving} data-arriving={arriving || undefined}>
+          <div className="relative flex min-h-[24rem] flex-1 flex-col pb-2" inert={arriving} data-arriving={arriving || undefined}>
             {behind && <div aria-hidden data-behind className="surface absolute inset-x-3 top-3 bottom-0 rounded-lg border border-rule" />}
             <SwipeCard
               key={current.request.id}
               requestId={current.request.id}
               labelledBy={questionIdOf(current)}
-              canSend={Boolean(sendLabel)}
-              sendLabel={sendLabel ?? ""}
+              sendTarget={sendTarget}
               onSend={() => ctl.send(current, "swipe")}
               onSnooze={() => ctl.snooze(current, "swipe")}
-              className="min-h-[max(24rem,calc(100dvh-22rem))]"
+              className="flex-1"
             >
               <QuickCard item={current} ctl={ctl} />
             </SwipeCard>
           </div>
-          <div role="group" aria-label="Quick actions" data-quick-bar inert={arriving} className="mt-4 grid grid-cols-[auto_auto_minmax(0,1fr)] gap-2">
+          <div role="group" aria-label="Quick actions" data-quick-bar inert={arriving} className="mt-3 grid shrink-0 grid-cols-[auto_auto_minmax(0,1fr)] gap-2">
             <Button variant="secondary" size="touch" aria-keyshortcuts="ArrowLeft S" onClick={() => ctl.snooze(current, "button")}>
               <AlarmClock aria-hidden />
               Snooze
@@ -493,7 +493,7 @@ export function QuickDecisions({ slug, userId, items, view, requestId, tab, file
               <span className="truncate">{current.request.multiple ? picksLabel(current.request.options, picksOf(current)) || "No picks" : (recommendedOption(current) ?? "No recommendation")}</span>
             </Button>
           </div>
-          <p className="mt-3 text-center text-xs text-muted">
+          <p className="mt-2 shrink-0 text-center text-xs text-muted">
             {sendLabel ? "Swipe right to send, left to snooze." : "Swipe left to snooze."}
             <span className="hidden pointer-fine:inline"> Or use the arrow keys.</span>
           </p>

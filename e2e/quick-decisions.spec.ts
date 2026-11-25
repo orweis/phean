@@ -44,6 +44,9 @@ async function swipe(page: Page, card: Locator, dx: number, { hold = false } = {
   if (!hold) await page.mouse.up();
 }
 
+/** How far the card is drawn from its place, sideways, in CSS pixels. */
+const translateX = (card: Locator) => card.evaluate((element) => Math.round(new DOMMatrix(getComputedStyle(element).transform).e));
+
 test.describe("Quick Decisions on a phone", () => {
   test.use({ viewport: { width: 375, height: 812 }, hasTouch: true });
 
@@ -90,6 +93,10 @@ test.describe("Quick Decisions on a phone", () => {
       await expect(page.getByRole("heading", { level: 1, name: "Quick Decisions" })).toBeVisible();
       await expect(page.locator("[data-progress-count]")).toHaveText("1 of 4");
       await expect(page.getByRole("img", { name: "Decision 1 of 4: 0 answered, 3 after this one" })).toBeVisible();
+      // A focused flow: no workspace header or tab rail, only its own bar with the way out.
+      await expect(page.getByRole("banner")).toHaveCount(0);
+      await expect(page.getByRole("navigation", { name: "Workspace" })).toHaveCount(0);
+      await expect(page.getByRole("link", { name: "Close Quick Decisions" })).toHaveAttribute("href", `/w/${slug}/decisions`);
     });
 
     const first = cardOf(page, LAUNCH);
@@ -133,9 +140,25 @@ test.describe("Quick Decisions on a phone", () => {
       await expect(first).toBeVisible();
     });
 
+    await test.step("the card follows the finger one to one either way, and the answer behind it shows from half way", async () => {
+      for (const dx of [70, -70]) {
+        const start = (await first.getByRole("heading", { level: 2 }).boundingBox())!;
+        await swipe(page, first, dx, { hold: true });
+        await expect.poll(() => translateX(first)).toBe(dx);
+        const label = page.locator(`[data-swipe-hint=${dx > 0 ? "send" : "snooze"}] [data-swipe-label]`);
+        await expect(label).toContainText(dx > 0 ? "Send“Send”" : "SnoozeTo the back");
+        await expect.poll(() => label.evaluate((element) => Number(getComputedStyle(element).opacity))).toBeGreaterThan(0.5);
+        // Back to where it started: short of the threshold, nothing happens.
+        await page.mouse.move(start.x + start.width / 2, start.y + start.height / 2 + 4, { steps: 6 });
+        await page.mouse.up();
+        await expect.poll(() => translateX(first)).toBe(0);
+      }
+    });
+
     await test.step("swiping right sends the recommended answer, and Undo takes it back", async () => {
       await swipe(page, first, 160, { hold: true });
-      await expect(page.locator("[data-swipe=send]")).toContainText("Send “Send”");
+      await expect(page.locator("[data-swipe=send]")).toContainText("Send“Send”");
+      await expect(page.locator("[data-swipe-hint=send]")).toHaveAttribute("data-armed");
       await page.mouse.up();
       await expect(status).toContainText("Sent “Send” to Launch bot");
       await expect(cardOf(page, COURIER)).toBeVisible();

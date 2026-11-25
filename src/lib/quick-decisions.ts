@@ -92,23 +92,36 @@ export function swipeIntent(dx: number, canSend: boolean, threshold = SWIPE_THRE
   return null;
 }
 
-/**
- * Where a dragged card is drawn: it follows the finger, except rightward with nothing to send,
- * where it gives a little and stops, so it says "no" without a message.
- */
-export function dragOffset(dx: number, canSend: boolean): number {
-  if (dx > 0 && !canSend) return Math.min(dx * 0.25, 28);
-  return dx;
-}
-
-/** The card's tilt while dragged, in degrees: a little, growing with the distance. */
+/** The card's tilt while dragged, in degrees: a little, growing with the distance, the same either way. */
 export function tiltOf(dx: number): number {
   return Math.max(-MAX_TILT, Math.min(MAX_TILT, dx / 24));
 }
 
-/** How far the drag is toward acting, from 0 to 1, for the colour behind the card. */
+/** How far the drag is toward acting, from 0 to 1. */
 export function swipeProgress(dx: number, threshold = SWIPE_THRESHOLD): number {
   return Math.min(1, Math.abs(dx) / threshold);
+}
+
+/** Whether letting go now would act (or, rightward with nothing to send, would have): the drag is past the threshold. */
+export function isArmed(dx: number, threshold = SWIPE_THRESHOLD): boolean {
+  return Math.abs(dx) >= threshold;
+}
+
+/**
+ * How strongly the words behind the card show, from 0 to 1: legible from the first few pixels,
+ * stronger as the card nears the threshold, and full once letting go would act.
+ */
+export function hintOpacity(dx: number, threshold = SWIPE_THRESHOLD): number {
+  if (dx === 0) return 0;
+  return isArmed(dx, threshold) ? 1 : 0.4 + 0.5 * swipeProgress(dx, threshold);
+}
+
+/**
+ * Whether a page is a focused flow, which takes the whole screen without the workspace's header and
+ * tab rail: Quick Decisions. `segments` are the route's segments below the workspace's layout.
+ */
+export function isFocusedFlow(segments: readonly string[]): boolean {
+  return segments[0] === "decisions" && segments[1] === "quick";
 }
 
 /** Each segment of the progress bar: answered this session, the card on screen, and those still to come. */

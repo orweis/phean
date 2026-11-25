@@ -11,7 +11,6 @@ import {
   requestOwningFile,
   DONE_TITLES,
   doneTitle,
-  dragOffset,
   isSidewaysDrag,
   isVerticalDrag,
   picksLabel,
@@ -22,6 +21,9 @@ import {
   SWIPE_THRESHOLD,
   swipeIntent,
   swipeProgress,
+  hintOpacity,
+  isArmed,
+  isFocusedFlow,
   tiltOf,
   MAX_TILT,
 } from "@/lib/quick-decisions";
@@ -75,17 +77,36 @@ describe("swipes", () => {
     expect(swipeIntent(-110, false)).toBe("snooze");
   });
 
-  it("follows the finger, gives only a little rightward with nothing to send, and tilts a little", () => {
-    expect(dragOffset(80, true)).toBe(80);
-    expect(dragOffset(-80, false)).toBe(-80);
-    expect(dragOffset(40, false)).toBe(10);
-    expect(dragOffset(400, false)).toBe(28);
+  it("tilts a little, the same either way", () => {
     expect(tiltOf(0)).toBe(0);
     expect(tiltOf(48)).toBe(2);
+    expect(tiltOf(-48)).toBe(-2);
     expect(tiltOf(1000)).toBe(MAX_TILT);
     expect(tiltOf(-1000)).toBe(-MAX_TILT);
     expect(swipeProgress(55)).toBe(0.5);
     expect(swipeProgress(-500)).toBe(1);
+  });
+
+  it("shows the words behind the card clearly from half the threshold, and fully once letting go would act", () => {
+    expect(hintOpacity(0)).toBe(0);
+    expect(hintOpacity(SWIPE_THRESHOLD / 2)).toBeGreaterThan(0.5);
+    expect(hintOpacity(-SWIPE_THRESHOLD / 2)).toBe(hintOpacity(SWIPE_THRESHOLD / 2));
+    expect(hintOpacity(SWIPE_THRESHOLD * 0.9)).toBeLessThan(1);
+    expect(hintOpacity(SWIPE_THRESHOLD * 0.4)).toBeLessThan(hintOpacity(SWIPE_THRESHOLD * 0.9));
+    expect(isArmed(SWIPE_THRESHOLD - 1)).toBe(false);
+    expect(isArmed(SWIPE_THRESHOLD)).toBe(true);
+    expect(isArmed(-SWIPE_THRESHOLD)).toBe(true);
+    expect(hintOpacity(SWIPE_THRESHOLD)).toBe(1);
+    expect(hintOpacity(-400)).toBe(1);
+  });
+});
+
+describe("the focused flow", () => {
+  it("is Quick Decisions alone, which leaves out the workspace's header and tab rail", () => {
+    expect(isFocusedFlow(["decisions", "quick"])).toBe(true);
+    expect(isFocusedFlow(["decisions"])).toBe(false);
+    expect(isFocusedFlow([])).toBe(false);
+    expect(isFocusedFlow(["tasks", "quick"])).toBe(false);
   });
 });
 
