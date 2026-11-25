@@ -180,6 +180,8 @@ export const ClaimTaskInput = z.object({
 });
 /** The most options a request offers. */
 export const MAX_OPTIONS = 8;
+/** An option's 0-based position on a request. */
+const optionIndex = z.number().int().min(0).max(MAX_OPTIONS - 1);
 export const AskInput = z.object({
   taskId,
   question: z
@@ -202,6 +204,12 @@ export const AskInput = z.object({
     .boolean()
     .default(false)
     .describe("true when the human may pick several options (which channels to announce on, which candidates to interview); needs 2+ options"),
+  recommended: z
+    .union([optionIndex, z.array(optionIndex).max(MAX_OPTIONS)])
+    .optional()
+    .describe(
+      "The option you recommend, by its 0-based position in options (one number), or, when multiple is true, the positions of every option you suggest ticking (an array). The human sees it marked Recommended and can send it in one move, so set it whenever you have a recommendation",
+    ),
   links: links.default([]).describe("References for this question: the conversation (kind conversation), the sources it is about (kind source), docs"),
   session: SessionInput.optional().describe("Where the human can answer you; include a url whenever you have one"),
 });

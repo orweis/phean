@@ -841,11 +841,12 @@ export const linkSession = service(LinkSessionInput, async (ctx, { taskId, sessi
 });
 
 /** An agent's question for a person; the task shows as waiting on them until it is answered. */
-export const requestInput = service(AskInput, async (ctx, { taskId, question, kind, context, options, multiple, links, session }): Promise<Task> => {
+export const requestInput = service(AskInput, async (ctx, { taskId, question, kind, context, options, multiple, recommended, links, session }): Promise<Task> => {
   assertCan(ctx, "task:write");
   const me = agentOnly(ctx, "Only agents ask for input. People can add a note to the task instead.");
   const choices = [...new Set(options)];
   if (multiple && choices.length < 2) throw invalid("A request that takes several answers needs at least two distinct options.");
+  const suggested = recommendedPositions(options, choices, recommended, multiple);
   const next = session && sessionOf(ctx, session);
 
   return inTransaction(ctx, async (tx) => {
@@ -874,6 +875,7 @@ export const requestInput = service(AskInput, async (ctx, { taskId, question, ki
       context,
       options: choices,
       ...(multiple && { multiple: true }),
+      ...(suggested.length > 0 && { recommended: suggested }),
       links: normalizeLinks(links),
       agentId: me,
       agentName: ctx.actor.name,
@@ -898,6 +900,23 @@ export const requestInput = service(AskInput, async (ctx, { taskId, question, ki
     return task!;
   });
 });
+
+/**
+ * The options an agent recommends, as positions in the deduplicated `choices`, in order. `recommended`
+ * counts positions in the options as the agent gave them; one at most unless several may be picked.
+ */
+function recommendedPositions(given: readonly string[], choices: readonly string[], recommended: number | number[] | undefined, multiple: boolean): number[] {
+  if (recommended === undefined) return [];
+  const positions = [recommended].flat();
+  if (!positions.length) return [];
+  if (!given.length) throw invalid("recommended names an option, so give options too.");
+  const outside = positions.find((position) => position >= given.length);
+  if (outside !== undefined) throw invalid(`recommended names option ${outside}, but there are only ${given.length} options (counted from 0).`);
+  const labels = new Set(positions.map((position) => given[position]!));
+  const picked = choices.flatMap((option, index) => (labels.has(option) ? [index] : []));
+  if (!multiple && picked.length > 1) throw invalid("Recommend one option, or set multiple when several may be picked together.");
+  return picked;
+}
 
 /** The asking agent closes its question once it has what it needed. */
 export const resolveInput = service(TaskRefInput, async (ctx, { taskId }): Promise<Task> => {
@@ -1061,6 +1080,7 @@ export const retractAnswer = service(RetractAnswerInput, async (ctx, { taskId, r
       context: record.context,
       options: record.options,
       ...(record.multiple && { multiple: true }),
+      ...(record.recommended && record.recommended.length > 0 && { recommended: record.recommended }),
       ...(record.viaAgentName && { viaAgentName: record.viaAgentName }),
       links: record.links,
       agentId: record.agentId,

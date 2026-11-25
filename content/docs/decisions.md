@@ -26,6 +26,7 @@ A request belongs to a task. If no task fits, the agent captures one first. A ta
 | `context` | The facts, the trade-offs, and the agent's recommendation, for someone reading it cold days later. Up to 5,000 characters. |
 | `options` | For decisions: short, mutually exclusive answers. The guidance asks for 2 to 5; Phean accepts up to 8, each up to 200 characters. You can always write your own answer instead. |
 | `multiple` | `true` when several options may apply together. Needs at least two options. |
+| `recommended` | The option the agent recommends, by its position in `options` counted from 0; with `multiple`, an array of the positions it suggests ticking. You see it marked **Recommended** (suggested picks come ticked), and in Quick Decisions you accept it with one swipe. |
 | `links` | Up to 10 references, as `[{ url, title, kind }]`. |
 | `session` | Where you can resume with the agent: `{ url, app, brief }`, or `sessionId` or `command` when there is no link. |
 
@@ -57,6 +58,7 @@ The `session` is how you get back to the agent. On the overview and the Decision
   "question": "Globex disputes invoice #4471 ($2,400) and asks for 10% off. Offer 5% to settle this week, or escalate to their CFO?",
   "context": "They have paid on time for two years and the dispute is about a late delivery we caused. I recommend offering 5%: it costs $120 and keeps the account.",
   "options": ["Offer 5% this week", "Escalate to their CFO"],
+  "recommended": 0,
   "links": [
     { "url": "https://claude.ai/chat/5d0c2e7a-91b4-4a8e-b1f3-2c6e8a4d7f10", "title": "This chat", "kind": "conversation" },
     { "url": "https://mail.google.com/mail/u/0/#inbox/globex-4471", "title": "Globex's dispute email", "kind": "source" }

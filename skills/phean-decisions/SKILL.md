@@ -30,6 +30,7 @@ Call `request_input` with these fields:
 | `context` | The facts, the trade-offs, and **your recommendation**, in a few lines. Write for someone reading it cold, days later, without the chat open. |
 | `options` | For decisions: 2-5 short, mutually exclusive answers, each a few words. The person clicks one. Leave it out for open questions. |
 | `multiple` | `true` when several options may apply together ("Which channels should announce the launch?"). The person ticks any number and sends them together; the options need not be exclusive then, and you need at least two. Phrase the question to match: "Pick any that apply". |
+| `recommended` | The option you recommend, as its position in `options`, counted from 0 (`1` for the second). With `multiple`, an array of the positions you suggest ticking (`[0, 2]`). Set it whenever you have a recommendation: the person sees it marked Recommended (suggested picks come pre-ticked), and in Quick Decisions on their phone they accept it with one swipe. Still say why in `context`. |
 | `links` | References, as `[{ url, title, kind }]`. See below. Always include them. |
 | `session` | Where the person can resume with you: `{ url, app, brief }`, or `sessionId` / `command` when you have no link. `app` is where the person reaches the conversation (Slack, Claude), never your own name. |
 
@@ -59,6 +60,7 @@ Rules:
   "question": "Globex disputes invoice #4471 ($2,400) and asks for 10% off. Offer 5% to settle this week, or escalate to their CFO?",
   "context": "They have paid on time for two years and the dispute is about a late delivery we caused. I recommend offering 5%: it costs $120 and keeps the account.",
   "options": ["Offer 5% this week", "Escalate to their CFO"],
+  "recommended": 0,
   "links": [
     { "url": "https://claude.ai/chat/5d0c2e7a-91b4-4a8e-b1f3-2c6e8a4d7f10", "title": "This chat", "kind": "conversation" },
     { "url": "https://mail.google.com/mail/u/0/#inbox/globex-4471", "title": "Globex's dispute email", "kind": "source" }
@@ -92,7 +94,7 @@ Each answer is delivered to you once, through either tool. An answer has:
 ## Don'ts
 
 - Don't bury the question in a task description or a long chat message.
-- Don't ask a decision without your recommendation.
+- Don't ask a decision without your recommendation: say why in `context` and mark the option in `recommended`.
 - Don't stall silently: a blocked task without a request looks like work in progress.
 - Don't guess an answer to unblock yourself.
 - Don't answer, resolve or collect a request that a pipeline asked (it shows as the pipeline's, on a person stop): only its named people may answer it, and Phean acts on the answer itself. Asking your own question on a stop you are working is fine; the run waits with you. The phean-pipelines skill has more.

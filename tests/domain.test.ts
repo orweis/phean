@@ -546,6 +546,34 @@ describe("agent sessions and questions", () => {
     expect(await collectAnswers(scout, {})).toEqual([expect.objectContaining({ chosenOption: "Thursday", chosenOptions: ["Thursday"] })]);
   });
 
+  it("keeps the options an agent recommends, checked against the options, through an Undo", async () => {
+    const task = await todo("Choose the venue");
+    const ask = (input: Partial<Parameters<typeof requestInput>[1]>) =>
+      requestInput(scout, { taskId: task.id, kind: "decision", question: "Lisbon or Porto?", options: ["Lisbon", "Porto", "Lisbon"], ...input });
+
+    // One recommendation on a single choice, counted in the options as given and kept after duplicates go.
+    expect((await ask({ recommended: 1 })).inputRequest).toMatchObject({ options: ["Lisbon", "Porto"], recommended: [1] });
+    expect((await ask({ recommended: [2] })).inputRequest).toMatchObject({ recommended: [0] });
+    // None given, none stored.
+    expect((await ask({})).inputRequest).not.toHaveProperty("recommended");
+    expect((await ask({ recommended: [] })).inputRequest).not.toHaveProperty("recommended");
+    // Refused: past the options, several on a single choice, or no options at all.
+    await expect(ask({ recommended: 3 })).rejects.toMatchObject({ code: "invalid" });
+    await expect(ask({ recommended: [0, 1] })).rejects.toMatchObject({ code: "invalid" });
+    await expect(ask({ options: [], kind: "question", recommended: 0 })).rejects.toMatchObject({ code: "invalid" });
+    await expect(ask({ recommended: -1 })).rejects.toMatchObject({ code: "invalid" });
+
+    // Several suggested picks on a request that takes several, in option order.
+    const asked = await ask({ options: ["Blog", "Newsletter", "Changelog"], multiple: true, recommended: [2, 0] });
+    expect(asked.inputRequest).toMatchObject({ multiple: true, recommended: [0, 2] });
+
+    // It stays on the record, and an Undo reopens the request with it.
+    const answered = await answerInput(human, { taskId: task.id, choices: [0, 2], requestId: asked.inputRequest!.id });
+    expect(answered.inputAnswers[0]).toMatchObject({ recommended: [0, 2] });
+    const reopened = await retractAnswer(human, { taskId: task.id, requestId: asked.inputRequest!.id });
+    expect(reopened.inputRequest).toMatchObject({ recommended: [0, 2] });
+  });
+
   it("keeps every closed question on the task, and only delivers what a person decided", async () => {
     const task = await todo("Book the offsite venue");
     const ask = (question: string) => requestInput(scout, { taskId: task.id, question });

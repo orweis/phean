@@ -75,6 +75,11 @@ export interface InputRequest {
   options: string[];
   /** Whether a person may pick several of the options; absent on single-choice requests. */
   multiple?: boolean;
+  /**
+   * The positions of the options the agent recommends, in option order: one at most on a
+   * single-choice request, any number on one that takes several. Absent when it recommends none.
+   */
+  recommended?: number[];
   links: TaskLink[];
   agentId: string;
   agentName: string;
@@ -86,6 +91,12 @@ export interface InputRequest {
   snoozedAt?: string;
   /** Set when a pipeline asked it; only the pipeline engine sets it. */
   pipeline?: PipelineRequestRef;
+}
+
+/** The options the agent recommends, by label, in option order; empty when it recommends none. */
+export function recommendedOptions(request: Pick<InputRequest, "options" | "recommended">): string[] {
+  const wanted = new Set(request.recommended ?? []);
+  return request.options.filter((_, index) => wanted.has(index));
 }
 
 /** Where an open request stands in the queue: when it was asked, or when it was last snoozed. */

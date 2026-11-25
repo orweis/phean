@@ -16,6 +16,7 @@ import { DecisionKeys } from "./decision-keys";
 import { DocumentChips } from "./documents/document-chips";
 import { GoalLink } from "./goal-link";
 import { MultipleChoice } from "./multiple-choice";
+import { RecommendedTag } from "./recommended-tag";
 import { ActionButton } from "./ui/action-button";
 import { ActionForm } from "./ui/action-form";
 import { Badge, MetaBadge } from "./ui/badge";
@@ -185,6 +186,7 @@ function MoreAnswers({ taskId, slug, request, title }: { taskId: string; slug: s
  * `MultipleChoice` instead.
  */
 function OptionButtons({ taskId, slug, request, via }: { taskId: string; slug: string; request: InputRequest; via: AnswerVia }) {
+  const recommended = new Set(request.recommended ?? []);
   return request.options.map((option, index) => (
     <ActionButton
       key={option}
@@ -206,6 +208,7 @@ function OptionButtons({ taskId, slug, request, via }: { taskId: string; slug: s
         </kbd>
       )}
       {option}
+      {recommended.has(index) && <RecommendedTag />}
     </ActionButton>
   ));
 }
