@@ -37,6 +37,9 @@ import {
   listRuns,
   pipelineHistory,
   rerunFrom,
+  resendHandoff,
+  updateRun,
+  listStuckStops,
   startRun,
   taskLine,
   updatePipeline,
@@ -327,6 +330,9 @@ describe("tenant isolation", () => {
       await expect(startRun(ctx, { pipelineId: pipeline.id })).rejects.toMatchObject({ code: "not_found" });
       await expect(cancelRun(ctx, { runId: run.run.id })).rejects.toMatchObject({ code: "not_found" });
       await expect(rerunFrom(ctx, { runId: run.run.id, stopId: "draft" })).rejects.toMatchObject({ code: "not_found" });
+      await expect(updateRun(ctx, { runId: run.run.id, name: "Mine" })).rejects.toMatchObject({ code: "not_found" });
+      await expect(resendHandoff(ctx, { runId: run.run.id, stopId: "draft" })).rejects.toMatchObject({ code: "not_found" });
+      expect(await listStuckStops(ctx, {})).toEqual([]);
       await expect(updatePipeline(ctx, { pipelineId: pipeline.id, name: "Mine" })).rejects.toMatchObject({ code: "not_found" });
       // The app's pages read through the same walls.
       expect(await listPipelineBoard(ctx, {})).toEqual([]);

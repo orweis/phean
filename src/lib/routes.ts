@@ -62,9 +62,9 @@ export const routes = {
   /** One memory, brought into view on the Memory page. */
   memoryItem: (slug: string, memoryId: string) => withQuery(`/w/${slug}/memory`, { focus: memoryId }),
   /** Every pipeline in the workspace (the page comes with the Pipelines tab). */
-  pipelines: (slug: string) => `/w/${slug}/pipelines`,
+  pipelines: (slug: string, query?: { kind?: string; status?: string; runs?: string }) => withQuery(`/w/${slug}/pipelines`, query),
   /** One pipeline: its map, runs and definition. */
-  pipeline: (slug: string, pipelineId: string, query?: { tab?: string; version?: string }) => withQuery(`/w/${slug}/pipelines/${pipelineId}`, query),
+  pipeline: (slug: string, pipelineId: string, query?: { tab?: string; version?: string; runs?: string }) => withQuery(`/w/${slug}/pipelines/${pipelineId}`, query),
   /** One run of a pipeline (a trip down the line), in one of its views. */
   pipelineRun: (slug: string, runId: string, query?: { view?: string; stop?: string }) => withQuery(`/w/${slug}/pipelines/runs/${runId}`, query),
   /** A pipeline's inbound webhook: POST here with its secret to start a run. */
@@ -80,7 +80,8 @@ export const routes = {
   search: (slug: string, query?: string) => withQuery(`/w/${slug}/search`, { q: query }),
   /** A person's morning digest for the workspace, and where they choose when it is emailed. */
   digest: (slug: string) => `/w/${slug}/digest`,
-  agents: (slug: string) => `/w/${slug}/agents`,
+  /** The Agents page, or one agent's row on it, brought into view (`focus`). */
+  agents: (slug: string, query?: { focus?: string }) => withQuery(`/w/${slug}/agents`, query),
   members: (slug: string) => `/w/${slug}/members`,
   /** Workspace settings: the board's stages. Reached from the workspace menu, not the tab rail. */
   settings: (slug: string) => `/w/${slug}/settings`,

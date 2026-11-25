@@ -12,7 +12,7 @@ import { createGoal, setGoalStatus } from "@/server/domain/goals";
 import { answerFromNotification, muteWorkspace, openDecisions, unmuteWorkspace } from "@/server/domain/notifications";
 import { ACTIONS, can, type Action } from "@/server/domain/policy";
 import { captureTasks, transferClaims } from "@/server/domain/tasks";
-import { approvePipelineVersion, archivePipeline, definePipeline, startRun, updatePipeline } from "@/server/domain/pipelines";
+import { approvePipelineVersion, archivePipeline, definePipeline, listStuckStops, resendHandoff, startRun, updatePipeline, updateRun } from "@/server/domain/pipelines";
 import { listPendingInvitations } from "@/server/domain/tenants";
 
 import * as backoffice from "@/server/backoffice";
@@ -181,7 +181,17 @@ describe("policy enforcement in services", () => {
     const { pipeline } = await definePipeline(member, { name: "Member's line", definition });
     expect(pipeline.ownerUserId).toBe(member.actor.id);
     await expect(startRun(platformAdmin, { pipelineId: pipeline.id })).rejects.toMatchObject({ code: "forbidden" });
-    await expect(startRun(owner, { pipelineId: pipeline.id })).resolves.toMatchObject({ run: { number: 1 } });
+    const started = await startRun(owner, { pipelineId: pipeline.id });
+    expect(started.run.number).toBe(1);
+    // Renaming a run and resending a stop's handoff are run changes, as cancelling and rerunning are.
+    await expect(updateRun(platformAdmin, { runId: started.run.id, name: "Nope" })).rejects.toMatchObject({ code: "forbidden" });
+    await expect(resendHandoff(platformAdmin, { runId: started.run.id, stopId: "one" })).rejects.toMatchObject({ code: "forbidden" });
+    // A Read agent changes no run, as it starts, cancels and reruns none.
+    const reader: typeof owner = { ...owner, actor: { type: "agent", id: "ag_reader", name: "Reader", role: "agent_read" } };
+    await expect(updateRun(reader, { runId: started.run.id, name: "Nope" })).rejects.toMatchObject({ code: "forbidden" });
+    await expect(resendHandoff(reader, { runId: started.run.id, stopId: "one" })).rejects.toMatchObject({ code: "forbidden" });
+    await expect(updateRun(member, { runId: started.run.id, name: "Q3 memo" })).resolves.toMatchObject({ run: { name: "Q3 memo" } });
+    expect(await listStuckStops(platformAdmin, {})).toEqual([]);
     // The owner of the workspace may change any regular pipeline; the member owns theirs.
     await expect(updatePipeline(owner, { pipelineId: pipeline.id, description: "Ours" })).resolves.toMatchObject({ pipeline: { description: "Ours" } });
     const { pipeline: owners } = await definePipeline(owner, { name: "Owner's line", definition });

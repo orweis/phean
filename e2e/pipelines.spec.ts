@@ -4,6 +4,7 @@ import { newWorkspace } from "./support/accounts";
 import { asAgent, issueToken } from "./support/agents";
 import { expectAccessible } from "./support/checks";
 import { card } from "./support/locators";
+import { DEMO_SESSION } from "./support/env";
 import { openTab } from "./support/navigation";
 
 interface Task {
@@ -57,14 +58,33 @@ test("an agent defines a pipeline, a person runs it and decides at its person st
     const row = page.locator("[data-pipeline]").filter({ hasText: "Release notes" });
     await expect(row).toContainText("No runs yet");
     await expectAccessible(page);
-    await row.getByRole("button", { name: "Start run of Release notes" }).click();
+    await row.locator('summary[aria-label="Start run of Release notes"]').click();
+    await row.getByLabel("Name").fill("Release 3.2 notes");
+    await row.getByRole("button", { name: "Start run", exact: true }).click();
     await expect(page).toHaveURL(/\/pipelines\/runs\/r_/);
     runUrl = new URL(page.url()).pathname;
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Release notes #1");
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Release 3.2 notes");
+    await expect(page.getByText("Release notes #1", { exact: true })).toBeVisible();
     await expect(page.locator("[data-run-headline]")).toHaveText("At Draft");
     // Draft was handed to Writer, who has not picked it up yet.
     await expect(page.locator('[data-stop-row="draft"]')).toContainText("Handing off");
     await expect(page.locator('[data-line-map] [data-stop="draft"]')).toContainText("Handing off");
+  });
+
+  await test.step("a person resends the handoff, and the agent's name leads to it on the Agents page", async () => {
+    const panel = page.locator("[data-selected-stop]");
+    await panel.getByRole("button", { name: "Resend handoff of Draft to Writer" }).click();
+    await expect(page.locator("[data-status-region]")).toContainText("Resent the handoff to Writer");
+    await asAgent(token, async (agent) => {
+      const { events: activity } = await agent.call<{ events: { action: string; data: Record<string, unknown> }[] }>("get_activity", { limit: 5 });
+      expect(activity.find((event) => event.action === "task.handoff_retried")?.data).toMatchObject({ retry: true, retryCount: 1, trigger: "manual", reason: `resent by ${owner.name}` });
+    });
+    await panel.getByRole("link", { name: "Writer" }).click();
+    await expect(page).toHaveURL(/\/agents\?focus=ag_/);
+    const focused = page.locator("tr[data-focused]");
+    await expect(focused).toContainText("Writer");
+    await expect(focused).toBeFocused();
+    await page.goto(runUrl);
   });
 
   await test.step("the agent works its stop; the run then waits on the person", async () => {
@@ -89,7 +109,7 @@ test("an agent defines a pipeline, a person runs it and decides at its person st
     await page.goto(runUrl);
     await page.locator("[data-selected-stop]").getByRole("link", { name: "Open the decision" }).click();
     const strip = page.locator("[data-task-line]").first();
-    await expect(strip).toContainText("A stop of Release notes #1");
+    await expect(strip).toContainText("A stop of Release 3.2 notes");
     await expect(strip.locator('[aria-current="step"]')).toContainText("Review");
   });
 
@@ -97,12 +117,12 @@ test("an agent defines a pipeline, a person runs it and decides at its person st
     await page.goto(`/w/${slug}/decisions`);
     const pinned = card(page, "Pipelines: 1 run waiting on you");
     await expect(pinned).toContainText("Pipeline");
-    await expect(pinned).toContainText("Stop 2 of 2 · Release notes #1");
+    await expect(pinned).toContainText("Stop 2 of 2 · Release 3.2 notes");
     await expect(pinned.getByRole("list", { name: "What each answer leads to" })).toContainText("Publish → leads to Ends: Published");
     await expect(pinned).toContainText("Time limit in 10 hours; then the run goes with “Hold”");
     await expectAccessible(page);
     await pinned.getByRole("button", { name: "Publish" }).click();
-    await expect(page.locator("[data-status-region]")).toContainText("Sent “Publish” to Release notes #1; the run has it now");
+    await expect(page.locator("[data-status-region]")).toContainText("Sent “Publish” to Release 3.2 notes; the run has it now");
     await expect(page.locator("[data-status-region]").getByRole("button", { name: "Undo" })).toHaveCount(0);
     await page.goto(runUrl);
     await expect(page.locator("[data-run-headline]")).toHaveText("Ended: Published");
@@ -120,12 +140,40 @@ test("an agent defines a pipeline, a person runs it and decides at its person st
   await test.step("a person adds a stop in the editor, which saves a new version", async () => {
     await page.getByRole("navigation", { name: "Pipeline views" }).getByRole("link", { name: "Definition" }).click();
     await page.locator("[data-pipeline-editor]").getByRole("button", { name: "Add stop after" }).first().click();
-    await expect(page.getByLabel("Name").nth(1)).toHaveValue("New stop");
+    await expect(page.locator("[data-pipeline-editor]").getByLabel("Name").nth(1)).toHaveValue("New stop");
     await expect(page.getByRole("region", { name: "Preview of Release notes's line" })).toContainText("New stop");
     await page.getByRole("button", { name: "Save version" }).click();
     await expect(page.locator("[data-status-region]")).toContainText("Saved “Release notes”");
     await expect(page.locator('[data-version="2"]')).toContainText("Current");
     await page.locator('[data-version="2"]').getByRole("link", { name: "Show changes" }).click();
     await expect(page.locator('[data-version="2"] [data-diff]')).toContainText('Added the stop "New stop"');
+  });
+});
+
+/** The seeded Globex pipeline has a run whose draft its agent never picked up: the stuck filters find it. */
+test.describe("stuck runs", () => {
+  test.use({ storageState: DEMO_SESSION });
+
+  test("the stuck filter shows which stop is stuck, since when, and how often it was resent", async ({ page }) => {
+    await page.goto("/w/globex/pipelines");
+    await page.getByRole("combobox", { name: "Filter runs" }).selectOption("stuck");
+    await expect(page).toHaveURL(/runs=stuck/);
+    const stuck = card(page, "Stuck handoffs");
+    const row = stuck.locator("[data-stuck-stop]").filter({ hasText: "Holiday payout schedule" });
+    await expect(row).toContainText("at Draft the newsletter");
+    await expect(row).toContainText("Stuck");
+    await expect(row).toContainText("resent 5 times");
+    await expect(row.getByRole("link", { name: "Inbox sweeper" })).toHaveAttribute("href", /\/agents\?focus=ag_/);
+    await expectAccessible(page);
+
+    await row.getByRole("link", { name: "Holiday payout schedule" }).click();
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Holiday payout schedule");
+    await expect(page.locator('[data-stop-row="draft"] [data-stuck]')).toContainText("Stuck");
+    await expect(page.locator('[data-line-map] [data-stop="draft"] [data-stuck]')).toHaveText("Stuck");
+
+    await page.goto("/w/globex/pipelines");
+    await page.locator("[data-pipeline]").first().getByRole("link", { name: "1 run stuck" }).click();
+    await expect(page.locator("[data-run-row]")).toHaveCount(1);
+    await expect(page.locator("[data-run-row]")).toContainText("Holiday payout schedule");
   });
 });

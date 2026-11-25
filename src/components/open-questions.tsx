@@ -6,6 +6,7 @@ import { askedInApp, askerName, sessionOfAsker, type AgentSession, type InputReq
 import { LIMITS, REQUEST_KIND_META } from "@/lib/domain";
 import { cx } from "@/lib/cx";
 import { timeAgo, truncate } from "@/lib/format";
+import { runLabel } from "@/lib/pipelines";
 import { routes } from "@/lib/routes";
 import type { Tracked } from "@/lib/tracked";
 import type { PipelineRequestContext } from "@/server/domain/pipelines";
@@ -59,10 +60,13 @@ const takeBack = (taskId: string, request: InputRequest): UndoSpec | undefined =
         analytics: { event: "decision_undo" },
       };
 
+/** A pipeline request's run as people know it: its name, or "Weekly newsletter #42". */
+const pipelineRunLabel = (ref: NonNullable<InputRequest["pipeline"]>) => runLabel({ name: ref.runName, number: ref.runNumber }, ref.pipelineName);
+
 /** What the status region says once an answer is sent: the receipt a person checks. */
 const sent = (answer: string, request: InputRequest) =>
   request.pipeline
-    ? `Sent “${truncate(answer, 60)}” to ${request.pipeline.pipelineName} #${request.pipeline.runNumber}; the run has it now, so it cannot be taken back`
+    ? `Sent “${truncate(answer, 60)}” to ${pipelineRunLabel(request.pipeline)}; the run has it now, so it cannot be taken back`
     : `Sent “${truncate(answer, 60)}” to ${request.agentName}`;
 
 /** Where the request's run stands and what each option leads to, for a decision a pipeline asked. */
@@ -88,11 +92,12 @@ function PipelineContext({ slug, request, context }: { slug: string; request: In
         </p>
       )}
       <p className="sr-only">
-        Asked by the pipeline {ref.pipelineName}, run {ref.runNumber}, at {ref.stopName}.
+        Asked by the pipeline {ref.pipelineName}, run {ref.runNumber}
+        {(context?.runName ?? ref.runName) ? ` (${context?.runName ?? ref.runName})` : ""}, at {ref.stopName}.
       </p>
       <p>
         <Link href={routes.pipelineRun(slug, ref.runId)} className="link">
-          Open run #{ref.runNumber}
+          Open {context?.runName ?? ref.runName ? `“${context?.runName ?? ref.runName}”` : `run #${ref.runNumber}`}
         </Link>
       </p>
     </div>
@@ -111,7 +116,7 @@ function OtherAnswer({ taskId, slug, request, via }: { taskId: string; slug: str
       phone="inline"
       title={decision ? "Your decision" : "Your answer"}
     >
-      <ActionForm action={answerInputAction} workspace={slug} className="space-y-3" notice={request.pipeline ? `Sent your answer to ${request.pipeline.pipelineName} #${request.pipeline.runNumber}; the run has it now` : `Sent your answer to ${request.agentName}`} undo={takeBack(taskId, request)} analytics={answerEvent(request, via, true)} closeOnSuccess>
+      <ActionForm action={answerInputAction} workspace={slug} className="space-y-3" notice={request.pipeline ? `Sent your answer to ${pipelineRunLabel(request.pipeline)}; the run has it now` : `Sent your answer to ${request.agentName}`} undo={takeBack(taskId, request)} analytics={answerEvent(request, via, true)} closeOnSuccess>
         <input type="hidden" name="taskId" value={taskId} />
         {/* Pinned to this request: a newer question on the task refuses the answer instead of taking it. */}
         <input type="hidden" name="requestId" value={request.id} />
@@ -294,7 +299,7 @@ export function OpenQuestions({
                   <span aria-hidden> · </span>
                   <span data-pipeline-position>
                     {pipelineContext(pipelines, request)?.position ? `Stop ${pipelineContext(pipelines, request)!.position!.index} of ${pipelineContext(pipelines, request)!.position!.total} · ` : ""}
-                    {request.pipeline.pipelineName} #{request.pipeline.runNumber}
+                    {runLabel({ name: pipelineContext(pipelines, request)?.runName ?? request.pipeline.runName, number: request.pipeline.runNumber }, request.pipeline.pipelineName)}
                   </span>
                 </>
               )}

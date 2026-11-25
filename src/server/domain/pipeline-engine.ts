@@ -2,8 +2,10 @@ import { and, asc, desc, eq, inArray, isNull, lte, max, or, sql, type SQL } from
 
 import type { InputAnswer, PipelineRequestRef } from "@/lib/agent-sessions";
 import { isOpenTaskStatus, LIVE_RUN_STATUSES, LIVE_STOP_STATES, type ApproverRole, type RunTrigger, type StopState } from "@/lib/domain";
+import { handoffGivesUpAt, handoffStillWaiting, HANDOFF_RETRY_WINDOW_MINUTES, isStuckHandoff, nextHandoffRetry, retryReason, waitInWords } from "@/lib/pipeline-handoffs";
 import {
   branchNamed,
+  clipRunName,
   descendantsOf,
   endReachedBy,
   latestFiring,
@@ -12,6 +14,8 @@ import {
   predecessorsOf,
   renderTemplate,
   rollUp,
+  runTitle,
+  scheduledRunName,
   stopOrder,
   type ChoiceBranch,
   type PipelineDefinition,
@@ -43,6 +47,7 @@ import {
   type StopVote,
 } from "../db/schema";
 import { durationBucket } from "../analytics";
+import { liveAgent } from "./agent-liveness";
 import { trackAfterCommit } from "./analytics";
 import { inTenant, inTransaction, tenantRow, type Ctx, type Tenant } from "./context";
 import { conflict, forbidden, invalid, isDomainError, notFound } from "./errors";
@@ -184,8 +189,9 @@ async function settleRow(ctx: Ctx, rowId: string, set: Partial<typeof pipelineRu
   return row ?? null;
 }
 
-const runRef = (trip: Trip) => ({ pipelineId: trip.pipeline.id, runId: trip.run.id, taskId: trip.run.taskId, number: trip.run.number });
-const tripName = (trip: Trip) => `${trip.pipeline.name} #${trip.run.number}`;
+const runRef = (trip: Trip) => ({ pipelineId: trip.pipeline.id, runId: trip.run.id, taskId: trip.run.taskId, number: trip.run.number, ...(trip.run.name && { runName: trip.run.name }) });
+/** The run in words, for notes and the activity: "Issue 42: AI agents roundup (Weekly newsletter #42)". */
+const tripName = (trip: Trip) => runTitle(trip.run, trip.pipeline.name);
 
 // Who serves a stop
 
@@ -362,8 +368,15 @@ async function openStop(trip: Trip, stop: PipelineStop, row: RunStop, extra?: st
     .where(tenantRow(sys, pipelineRunStops, row.id));
   const opened = { ...row, taskId: task!.id };
   try {
-    if (stop.kind === "agent") await handOffTask(sys, { taskId: task!.id, toAgent: stop.agent!, note: brief.note });
-    else if (stop.kind === "any_agent") await handOffTask(sys, { taskId: task!.id, note: brief.note });
+    if (stop.kind === "agent") {
+      const handed = await handOffTask(sys, { taskId: task!.id, toAgent: stop.agent!, note: brief.note });
+      // The handoff the tick resends until the agent picks it up (`lib/pipeline-handoffs.ts`).
+      const at = handed.delegatedAt ?? now;
+      await sys.db
+        .update(pipelineRunStops)
+        .set({ handedOffAt: at, handoffAgentId: handed.delegateToAgentId, handoffResends: 0, handoffRetryAt: nextHandoffRetry(at, at), handoffGaveUpAt: null })
+        .where(tenantRow(sys, pipelineRunStops, row.id));
+    } else if (stop.kind === "any_agent") await handOffTask(sys, { taskId: task!.id, note: brief.note });
     else if (stop.kind === "person") {
       if (stop.person) await handOffTask(sys, { taskId: task!.id, toPerson: stop.person, note: brief.note });
       if (stop.blocking) await ask(trip, stop, opened, { question: brief.question, context: brief.context, options: stop.options });
@@ -390,7 +403,15 @@ async function openStop(trip: Trip, stop: PipelineStop, row: RunStop, extra?: st
 async function ask(trip: Trip, stop: PipelineStop, row: RunStop, request: { question: string; context: string; options: readonly string[] }): Promise<void> {
   const task = await requestInput(trip.sys, { taskId: row.taskId!, kind: "decision", question: request.question, context: request.context, options: [...request.options] });
   const requestId = task.inputRequest!.id;
-  const ref: PipelineRequestRef = { pipelineId: trip.pipeline.id, pipelineName: trip.pipeline.name, runId: trip.run.id, runNumber: trip.run.number, stopId: stop.id, stopName: stop.name };
+  const ref: PipelineRequestRef = {
+    pipelineId: trip.pipeline.id,
+    pipelineName: trip.pipeline.name,
+    runId: trip.run.id,
+    runNumber: trip.run.number,
+    ...(trip.run.name && { runName: trip.run.name }),
+    stopId: stop.id,
+    stopName: stop.name,
+  };
   await tagPipelineRequest(trip.sys, row.taskId!, requestId, ref);
   await trip.sys.db.update(pipelineRunStops).set({ requestId }).where(tenantRow(trip.sys, pipelineRunStops, row.id));
 }
@@ -403,7 +424,10 @@ async function askAgain(trip: Trip, stop: PipelineStop, row: RunStop, context: s
   await ask(trip, stop, row, { question: last.question, context: clip(`${context}\n\n${last.context}`, 5000), options: last.options });
 }
 
-async function stopEvent(trip: Trip, action: "pipeline.stop_completed" | "pipeline.stop_failed" | "pipeline.stop_retried" | "pipeline.stop_reminded" | "pipeline.stop_timed_out", stop: PipelineStop, summary: string, data: Record<string, unknown> = {}) {
+async function stopEvent(
+  trip: Trip,
+  action: "pipeline.stop_completed" | "pipeline.stop_failed" | "pipeline.stop_retried" | "pipeline.stop_reminded" | "pipeline.stop_timed_out" | "pipeline.stop_stuck",
+  stop: PipelineStop, summary: string, data: Record<string, unknown> = {}) {
   await recordEvent(trip.sys, { action, entityType: "pipeline_run", entityId: trip.run.id, summary: `${summary} (${tripName(trip)})`, data: { ...runRef(trip), stopId: stop.id, ...data } });
 }
 
@@ -642,6 +666,18 @@ export interface RunStart {
   goalId?: string;
   /** Refuse inputs the pipeline does not declare (a person or agent typed them); triggers pass only what it declares. */
   strict?: boolean;
+  /** What the run makes; a schedule names it after its day (in `timeZone`) when this is left out. */
+  name?: string | null;
+  /** The schedule's time zone, for that default name. */
+  timeZone?: string;
+}
+
+/** A run's name: the one given, or for a scheduled run its pipeline and day; null shows as "<pipeline> #<number>". */
+function runNameFor(pipeline: Pipeline, start: RunStart): string | null {
+  const given = start.name ? clipRunName(start.name) : "";
+  if (given) return given;
+  if (start.trigger === "schedule" && start.scheduledFor && start.timeZone) return scheduledRunName(pipeline.name, start.scheduledFor, start.timeZone);
+  return null;
 }
 
 function runInputs(definition: PipelineDefinition, given: Record<string, string | number | boolean>, strict: boolean): Record<string, string> {
@@ -670,6 +706,7 @@ export async function beginRun(ctx: Ctx, pipelineId: string, start: RunStart): P
     const inputs = runInputs(definition, start.inputs ?? {}, start.strict ?? false);
     const [last] = await tx.db.select({ number: max(pipelineRuns.number) }).from(pipelineRuns).where(and(inTenant(tx, pipelineRuns), eq(pipelineRuns.pipelineId, pipeline.id)));
     const number = (last?.number ?? 0) + 1;
+    const name = runNameFor(pipeline, start);
     const sys = await pipelineContext(tx, pipeline.name);
 
     let taskId: string;
@@ -683,7 +720,8 @@ export async function beginRun(ctx: Ctx, pipelineId: string, start: RunStart): P
     } else {
       const lines = Object.entries(inputs).map(([name, value]) => `- ${name}: ${clip(value, 300)}`);
       const description = clip([pipeline.description, lines.length ? `Inputs:\n${lines.join("\n")}` : ""].filter(Boolean).join("\n\n"), 5000);
-      const { created } = await captureTasks(sys, { tasks: [{ title: `${pipeline.name} #${number}`, description, status: "todo", source: "other", ...(start.goalId && { goalId: start.goalId }) }] });
+      // The run's task is called what the run makes, so the board reads "Issue 42: AI agents roundup".
+      const { created } = await captureTasks(sys, { tasks: [{ title: name ?? `${pipeline.name} #${number}`, description, status: "todo", source: "other", ...(start.goalId && { goalId: start.goalId }) }] });
       taskId = created[0]!.id;
     }
     if ((await findTask(tx, taskId)).status !== "in_progress") await updateTask(sys, { taskId, status: "in_progress" });
@@ -696,6 +734,7 @@ export async function beginRun(ctx: Ctx, pipelineId: string, start: RunStart): P
         pipelineId: pipeline.id,
         version: pipeline.currentVersion,
         number,
+        name,
         trigger: start.trigger,
         triggeredByType: start.by.type,
         triggeredById: start.by.id,
@@ -716,8 +755,8 @@ export async function beginRun(ctx: Ctx, pipelineId: string, start: RunStart): P
       action: "pipeline.run_started",
       entityType: "pipeline_run",
       entityId: run.id,
-      summary: `started ${pipeline.name} #${number}${start.trigger === "schedule" || start.trigger === "event" || start.trigger === "webhook" ? ` (${start.trigger})` : ""}`,
-      data: { pipelineId: pipeline.id, runId: run.id, taskId, number, trigger: start.trigger },
+      summary: `started ${runTitle({ name, number }, pipeline.name)}${start.trigger === "schedule" || start.trigger === "event" || start.trigger === "webhook" ? ` (${start.trigger})` : ""}`,
+      data: { pipelineId: pipeline.id, runId: run.id, taskId, number, ...(name && { runName: name }), trigger: start.trigger },
     });
     // A manual start is a person's click, which the page reports; the server reports the rest.
     if (start.trigger !== "manual") await trackAfterCommit(tx, { name: "run_start", params: { trigger: start.trigger } });
@@ -859,6 +898,8 @@ export async function onTasksCaptured(ctx: Ctx, created: readonly Task[]): Promi
           trigger: "event",
           by: { type: ctx.actor.type, id: ctx.actor.id, name: ctx.actor.name },
           detail: `Task ${task.id} captured: ${clip(task.title, 150)}`,
+          // The run is about the task that started it, so it takes the task's title as its name.
+          name: task.title,
           inputs: { task_id: task.id, task_title: task.title, task_description: task.description },
         });
       } catch (error) {
@@ -937,6 +978,9 @@ export interface SweepReport {
   reminded: number;
   timedOut: number;
   started: number;
+  /** Handoffs resent because no one picked them up, and those given up on after the window. */
+  resent: number;
+  gaveUp: number;
 }
 
 /** Live stops whose reminder or time limit is due at `now`. */
@@ -989,7 +1033,7 @@ async function applyDeadline(ctx: Ctx, rowId: string, now: Date): Promise<"remin
 }
 
 /** Applies due time limits in one workspace (or one run), as a read does before it reports. */
-export async function sweepDeadlines(ctx: Ctx, { runId, now = new Date() }: { runId?: string; now?: Date } = {}): Promise<Omit<SweepReport, "started">> {
+export async function sweepDeadlines(ctx: Ctx, { runId, now = new Date() }: { runId?: string; now?: Date } = {}): Promise<Pick<SweepReport, "reminded" | "timedOut">> {
   const report = { reminded: 0, timedOut: 0 };
   const due = await ctx.db
     .select({ id: pipelineRunStops.id })
@@ -1011,7 +1055,7 @@ export async function sweepDeadlines(ctx: Ctx, { runId, now = new Date() }: { ru
  * run), and looks back only to where it last looked, so overlapping sweeps never start a time twice.
  */
 export async function sweepPipelines(db: Db, now = new Date()): Promise<SweepReport> {
-  const report: SweepReport = { reminded: 0, timedOut: 0, started: 0 };
+  const report: SweepReport = { reminded: 0, timedOut: 0, started: 0, resent: 0, gaveUp: 0 };
   const tenantOf = { id: organization.id, slug: organization.slug, name: organization.name };
   const due = await db
     .select({ tenant: tenantOf })
@@ -1029,6 +1073,10 @@ export async function sweepPipelines(db: Db, now = new Date()): Promise<SweepRep
       console.error(`Pipeline deadlines failed in workspace ${tenant.slug}`, error);
     }
   }
+
+  const retries = await sweepHandoffRetries(db, now);
+  report.resent += retries.resent;
+  report.gaveUp += retries.gaveUp;
 
   const schedules = await db
     .select({ id: pipelineTriggers.id, pipelineId: pipelineTriggers.pipelineId, tenant: tenantOf })
@@ -1056,7 +1104,7 @@ export async function fireSchedule(ctx: Ctx, triggerId: string, now: Date): Prom
     await tx.db.update(pipelineTriggers).set({ checkedAt: now, ...(at && { lastFiredAt: at }) }).where(tenantRow(tx, pipelineTriggers, triggerId));
     if (!at || (trigger.lastFiredAt && at <= trigger.lastFiredAt)) return false;
     try {
-      await beginRun(tx, trigger.pipelineId, { trigger: "schedule", by: { type: "system", id: null, name: "Schedule" }, detail: `${trigger.cron} (${trigger.timeZone})`, scheduledFor: at });
+      await beginRun(tx, trigger.pipelineId, { trigger: "schedule", by: { type: "system", id: null, name: "Schedule" }, detail: `${trigger.cron} (${trigger.timeZone})`, scheduledFor: at, timeZone: trigger.timeZone });
       return true;
     } catch (error) {
       // The run for this time exists already, or the pipeline cannot start one now.
@@ -1073,6 +1121,181 @@ function isUniqueViolation(error: unknown): boolean {
   return false;
 }
 
+// Resending handoffs no one picked up
+
+/** Why a handoff went out again: the tick's backoff (`automatic`), or a person's or agent's click (`manual`). */
+export type ResendTrigger = "automatic" | "manual";
+
+/** What a resend sent, for the notice and the tests. */
+export interface HandoffResend {
+  taskId: string;
+  stopName: string;
+  agentId: string;
+  agentName: string;
+  retryCount: number;
+}
+
+/**
+ * The agent a stop's subtask was handed to, while it may act (`liveAgent`: not revoked or expired, and
+ * a sub-agent's parent standing too). Never another agent of the same name: a resend goes only to the
+ * agent the task is handed to.
+ */
+async function liveHandoffAgent(ctx: Ctx, row: RunStop): Promise<{ id: string; name: string } | null> {
+  if (!row.handoffAgentId) return null;
+  const [agent] = await ctx.db
+    .select({ id: agents.id, name: agents.name })
+    .from(agents)
+    .where(and(tenantRow(ctx, agents, row.handoffAgentId), liveAgent()));
+  return agent ?? null;
+}
+
+/**
+ * Sends a stop's handoff again, as `task.handoff_retried` on its task: the agent hears it as
+ * `handed_to_you` (its parent too, for a sub-agent), with `retry`, the count, why, and the handoff note
+ * to act on. The task itself is left as it is. `by` records the event: the pipeline for the tick's
+ * resends, the person (or agent) who asked for a manual one. The caller has checked that the handoff
+ * still waits on `agent`.
+ */
+async function sendHandoffAgain(trip: Trip, by: Ctx, stop: PipelineStop, row: RunStop, task: Task, agent: { id: string; name: string }, how: { trigger: ResendTrigger; reason: string }): Promise<HandoffResend> {
+  const retryCount = row.handoffResends + 1;
+  await trip.sys.db.update(pipelineRunStops).set({ handoffResends: retryCount }).where(tenantRow(trip.sys, pipelineRunStops, row.id));
+  await recordEvent(by, {
+    action: "task.handoff_retried",
+    entityType: "task",
+    entityId: task.id,
+    summary: `resent the handoff of “${task.title}” to ${agent.name} (retry ${retryCount}: ${how.reason}) in ${tripName(trip)}`,
+    data: {
+      ...runRef(trip),
+      goalId: task.goalId,
+      // The stop's own task; the run's is runTaskId.
+      taskId: task.id,
+      runTaskId: trip.run.taskId,
+      stopId: stop.id,
+      stopName: stop.name,
+      stopState: row.state,
+      toAgentId: agent.id,
+      toName: agent.name,
+      retry: true,
+      retryCount,
+      reason: how.reason,
+      trigger: how.trigger,
+      ...(how.trigger === "manual" && { resentBy: { type: by.actor.type, id: by.actor.id, name: by.actor.name } }),
+      note: task.delegationNote,
+    },
+  });
+  return { taskId: task.id, stopName: stop.name, agentId: agent.id, agentName: agent.name, retryCount };
+}
+
+/** The tick stops resending a stop's handoff and leaves it stuck for a person, saying why. */
+async function giveUpHandoff(trip: Trip, stop: PipelineStop, row: RunStop, now: Date, why: string): Promise<void> {
+  await trip.sys.db.update(pipelineRunStops).set({ handoffRetryAt: null, handoffGaveUpAt: now }).where(tenantRow(trip.sys, pipelineRunStops, row.id));
+  await stopEvent(trip, "pipeline.stop_stuck", stop, `gave up resending "${stop.name}": ${why}`, {
+    stopTaskId: row.taskId,
+    toAgentId: row.handoffAgentId,
+    retryCount: row.handoffResends,
+    reason: why,
+  });
+}
+
+/**
+ * One due automatic resend: the handoff still waits on its agent (anything else, a pick-up, a release,
+ * another handoff, ends the resends), so it goes out again and the next time is set; or 3 days have
+ * passed, or the agent can no longer act, and the tick gives up, leaving the stop stuck for a person.
+ * The run's row and then the stop's are locked, and the due time is read again under the lock, so two
+ * ticks never send one resend twice.
+ */
+async function retryHandoff(ctx: Ctx, rowId: string, now: Date): Promise<"resent" | "gaveUp" | null> {
+  const [found] = await ctx.db.select({ runId: pipelineRunStops.runId }).from(pipelineRunStops).where(tenantRow(ctx, pipelineRunStops, rowId));
+  if (!found) return null;
+  const trip = await tripOf(ctx, found.runId);
+  const row = await lockStop(ctx, rowId);
+  if (!row || !isLiveState(row.state) || !row.handoffRetryAt || row.handoffRetryAt > now || !row.taskId || !row.handedOffAt) return null;
+  const stop = stopOf(trip.definition, row.stopId);
+  const task = await findTask(ctx, row.taskId);
+  if (!handoffStillWaiting({ live: true, handedOffAt: row.handedOffAt, handoffAgentId: row.handoffAgentId, task })) {
+    await ctx.db.update(pipelineRunStops).set({ handoffRetryAt: null }).where(tenantRow(ctx, pipelineRunStops, row.id));
+    return null;
+  }
+  if (now >= handoffGivesUpAt(row.handedOffAt)) {
+    await giveUpHandoff(trip, stop, row, now, `not picked up in ${waitInWords(HANDOFF_RETRY_WINDOW_MINUTES)}`);
+    return "gaveUp";
+  }
+  const agent = await liveHandoffAgent(trip.sys, row);
+  if (!agent) {
+    await giveUpHandoff(trip, stop, row, now, "the agent it was handed to can no longer act (revoked, expired, or its parent agent is gone)");
+    return "gaveUp";
+  }
+  await sendHandoffAgain(trip, trip.sys, stop, row, task, agent, { trigger: "automatic", reason: retryReason(row.handedOffAt, now) });
+  await ctx.db
+    .update(pipelineRunStops)
+    .set({ handoffRetryAt: nextHandoffRetry(row.handedOffAt, now) ?? handoffGivesUpAt(row.handedOffAt) })
+    .where(tenantRow(ctx, pipelineRunStops, row.id));
+  return "resent";
+}
+
+/** How far a resend that failed unexpectedly is put off, so one bad row never holds the others up. */
+const RETRY_AFTER_ERROR_MS = 10 * 60_000;
+
+/** The tick's resends: every workspace's handoffs whose next resend is due at `now`. */
+export async function sweepHandoffRetries(db: Db, now = new Date()): Promise<{ resent: number; gaveUp: number }> {
+  const report = { resent: 0, gaveUp: 0 };
+  const due = await db
+    .select({ id: pipelineRunStops.id, tenant: { id: organization.id, slug: organization.slug, name: organization.name } })
+    .from(pipelineRunStops)
+    .innerJoin(organization, eq(organization.id, pipelineRunStops.tenantId))
+    .where(and(isNull(pipelineRunStops.supersededAt), inArray(pipelineRunStops.state, LIVE), lte(pipelineRunStops.handoffRetryAt, now)))
+    .orderBy(asc(pipelineRunStops.handoffRetryAt))
+    .limit(200);
+  for (const { id, tenant } of due) {
+    try {
+      const outcome = await inTransaction(systemContext(db, tenant), (tx) => retryHandoff(tx, id, now));
+      if (outcome === "resent") report.resent++;
+      if (outcome === "gaveUp") report.gaveUp++;
+    } catch (error) {
+      console.error(`Resending a handoff failed in workspace ${tenant.slug}`, error);
+      // Put this row off, outside the failed transaction, so it does not come first in every tick.
+      await db
+        .update(pipelineRunStops)
+        .set({ handoffRetryAt: new Date(now.getTime() + RETRY_AFTER_ERROR_MS) })
+        .where(and(eq(pipelineRunStops.tenantId, tenant.id), eq(pipelineRunStops.id, id)))
+        .catch((cause: unknown) => console.error(`Could not put off resending ${id}`, cause));
+    }
+  }
+  return report;
+}
+
+/**
+ * Resends a stop's handoff now, as `trigger: manual`, whatever the state of the automatic resends
+ * (stuck, given up, or not yet due), and without changing their schedule. It goes only while the
+ * handoff still waits: the stop is an agent stop the run reached, and its task is still being handed
+ * to the agent the run handed it to, who can still act. A stop that is done, picked up, or now with
+ * someone else is refused with what to do instead. Permission is the caller's to check (`resendHandoff`).
+ */
+export async function resendStopHandoff(ctx: Ctx, runId: string, stopId: string): Promise<HandoffResend> {
+  return inTransaction(ctx, async (tx) => {
+    const trip = await tripOf(tx, runId);
+    const stop = stopOf(trip.definition, stopId);
+    if (stop.kind !== "agent") throw invalid(`"${stop.name}" is not served by a named agent, so there is no handoff to resend.`);
+    const current = (await currentStops(tx, runId)).find((row) => row.stopId === stopId);
+    const row = current ? await lockStop(tx, current.id) : null;
+    if (!row?.taskId) throw invalid(`${tripName(trip)} has not reached "${stop.name}"${row ? ` (it was ${row.state.replace("_", " ")})` : ""}, so there is no handoff to resend.`);
+    if (!isLiveState(row.state)) throw conflict(`"${stop.name}" is ${row.state.replace("_", " ")}, so there is no handoff waiting to resend. Rerun from it to hand it out again.`);
+    const task = await findTask(tx, row.taskId);
+    if (!row.handoffAgentId) throw conflict(`"${stop.name}" was handed off before Phean kept track of handoffs, so it cannot be resent. Hand its task off again instead.`);
+    if (task.delegation !== "handing_off" || task.delegateToAgentId !== row.handoffAgentId) {
+      const [holder] = task.delegateToAgentId
+        ? await tx.db.select({ name: agents.name }).from(agents).where(tenantRow(tx, agents, task.delegateToAgentId))
+        : [];
+      if (holder) throw conflict(`This stop's task is now being handed to ${holder.name}, not to the agent the run handed it to; hand it off again instead.`);
+      if (task.delegation === "handing_off") throw conflict(`This stop's task is now being handed to someone else; hand it off again instead.`);
+      throw conflict(`"${stop.name}" was already picked up${task.claimedByAgentId || task.operatorUserId ? " and is being worked on" : ""}, so there is no handoff waiting to resend.`);
+    }
+    const agent = await liveHandoffAgent(tx, row);
+    if (!agent) throw conflict(`The agent "${stop.name}" was handed to can no longer act (revoked, expired, or its parent agent is gone). Hand its task to someone else.`);
+    return sendHandoffAgain(trip, tx, stop, row, task, agent, { trigger: "manual", reason: `resent by ${tx.actor.name}` });
+  });
+}
+
 // Reading a run
 
 /** A stop as a run shows it: its state (`upcoming` before the run reaches it), task, result and timings. */
@@ -1081,8 +1304,12 @@ export interface RunStopView {
   name: string;
   kind: PipelineStop["kind"];
   state: StopState | "upcoming";
-  /** Who serves it, in words: an agent's name, a person's, a role, or "any agent". */
+  /** Who serves it, in words: an agent's current name, a person's, a role, or "any agent". */
   servedBy: string;
+  /** An agent stop's agent as it is now, to link to on the Agents page; null when none of that name or id is connected. */
+  agent: { id: string; name: string } | null;
+  /** An agent stop's handoff: when it went to the agent, how often it was resent, and whether it is stuck (not picked up). */
+  handoff: StopHandoff | null;
   attempt: number;
   task: { id: string; title: string; status: Task["status"] } | null;
   result: StopResult | null;
@@ -1093,6 +1320,22 @@ export interface RunStopView {
   startedAt: Date | null;
   endedAt: Date | null;
   dueAt: Date | null;
+}
+
+export interface StopHandoff {
+  agentId: string | null;
+  /** The agent it was handed to, while it may still act; null once it was revoked or expired. */
+  agent: { id: string; name: string } | null;
+  /** The handoff still waits on that agent: no one picked it up, let it go or handed it on. A person may resend it. */
+  waiting: boolean;
+  handedOffAt: Date;
+  resends: number;
+  /** The tick's next resend; null once it was picked up or the tick gave up. */
+  nextRetryAt: Date | null;
+  /** When the tick gave up resending, 3 days on: the stop needs a person. */
+  gaveUpAt: Date | null;
+  /** Not picked up since the handoff, past the first resend's time. */
+  stuck: boolean;
 }
 
 export interface RunView {
@@ -1107,9 +1350,37 @@ export interface RunView {
   definition: PipelineDefinition;
 }
 
-/** Who serves a stop, in words: the agent's name, the person's (or "an owner or admin"), or "any agent". */
+/**
+ * The connected agents a definition's agent stops name, by stop id: a stop may name its agent by id
+ * or by name, and is shown by the agent's name now. A stop whose agent is gone is left out.
+ */
+export async function stopAgents(ctx: Ctx, definition: Pick<PipelineDefinition, "stops">): Promise<Record<string, { id: string; name: string }>> {
+  const refs = [...new Set(definition.stops.flatMap((stop) => (stop.kind === "agent" && stop.agent ? [stop.agent] : [])))];
+  if (refs.length === 0) return {};
+  const found = await ctx.db
+    .select({ id: agents.id, name: agents.name })
+    .from(agents)
+    .where(
+      and(
+        inTenant(ctx, agents),
+        sql`${agents.authKind} <> 'system'`,
+        isNull(agents.revokedAt),
+        or(inArray(agents.id, refs), inArray(sql`lower(${agents.name})`, refs.map((ref) => ref.toLowerCase()))),
+      ),
+    );
+  const out: Record<string, { id: string; name: string }> = {};
+  for (const stop of definition.stops) {
+    if (stop.kind !== "agent" || !stop.agent) continue;
+    const byName = found.filter((agent) => agent.name.toLowerCase() === stop.agent!.toLowerCase());
+    const agent = found.find((candidate) => candidate.id === stop.agent) ?? (byName.length === 1 ? byName[0] : undefined);
+    if (agent) out[stop.id] = agent;
+  }
+  return out;
+}
+
+/** Who serves a stop, in words: the agent's name now, the person's (or "an owner or admin"), or "any agent". */
 export async function servedByOf(ctx: Ctx, stop: PipelineStop): Promise<string> {
-  if (stop.kind === "agent") return stop.agent!;
+  if (stop.kind === "agent") return (await stopAgents(ctx, { stops: [stop] }))[stop.id]?.name ?? stop.agent!;
   if (stop.kind === "any_agent") return "any agent";
   if (stop.kind === "person") return describeApprovers(ctx, { person: stop.person, role: stop.role });
   return "another pipeline";
@@ -1122,17 +1393,46 @@ export async function runView(ctx: Ctx, runId: string): Promise<RunView> {
   const rows = await ctx.db.select(stopColumns).from(pipelineRunStops).where(and(inTenant(ctx, pipelineRunStops), eq(pipelineRunStops.runId, runId))).orderBy(desc(pipelineRunStops.startedAt));
   const taskIds = [...new Set([run.taskId, ...rows.map((row) => row.taskId)].filter((id): id is string => Boolean(id)))];
   const taskRows = taskIds.length
-    ? await ctx.db.select({ id: tasks.id, title: tasks.title, status: tasks.status }).from(tasks).where(and(inTenant(ctx, tasks), inArray(tasks.id, taskIds)))
+    ? await ctx.db
+        .select({ id: tasks.id, title: tasks.title, status: tasks.status, delegation: tasks.delegation, delegateToAgentId: tasks.delegateToAgentId, delegatedAt: tasks.delegatedAt })
+        .from(tasks)
+        .where(and(inTenant(ctx, tasks), inArray(tasks.id, taskIds)))
     : [];
-  const taskOf = (id: string | null) => taskRows.find((task) => task.id === id) ?? null;
+  const fullTaskOf = (id: string | null) => taskRows.find((task) => task.id === id) ?? null;
+  const taskOf = (id: string | null) => {
+    const task = fullTaskOf(id);
+    return task ? { id: task.id, title: task.title, status: task.status } : null;
+  };
   const trip: Trip = { run, pipeline, definition, sys: ctx, notes: new Map() };
-  const servedBy = (stop: PipelineStop) => servedByOf(ctx, stop);
+  const agentsByStop = await stopAgents(ctx, definition);
+  const now = new Date();
+  const servedBy = (stop: PipelineStop) => (stop.kind === "agent" ? Promise.resolve(agentsByStop[stop.id]?.name ?? stop.agent!) : servedByOf(ctx, stop));
+  const handoffIds = [...new Set(rows.flatMap((row) => (row.handoffAgentId ? [row.handoffAgentId] : [])))];
+  const handoffAgents = handoffIds.length
+    ? await ctx.db.select({ id: agents.id, name: agents.name }).from(agents).where(and(inTenant(ctx, agents), inArray(agents.id, handoffIds), liveAgent()))
+    : [];
+  const handoffOf = (row: RunStop | undefined): StopHandoff | null => {
+    if (!row?.handedOffAt) return null;
+    const state = { live: isLiveState(row.state) && !row.supersededAt, handedOffAt: row.handedOffAt, handoffAgentId: row.handoffAgentId, task: fullTaskOf(row.taskId) };
+    return {
+      agentId: row.handoffAgentId,
+      agent: handoffAgents.find((agent) => agent.id === row.handoffAgentId) ?? null,
+      waiting: handoffStillWaiting(state),
+      handedOffAt: row.handedOffAt,
+      resends: row.handoffResends,
+      nextRetryAt: row.handoffRetryAt,
+      gaveUpAt: row.handoffGaveUpAt,
+      stuck: isStuckHandoff(state, now),
+    };
+  };
   const view = async (stop: PipelineStop, row: RunStop | undefined): Promise<RunStopView> => ({
     stopId: stop.id,
     name: stop.name,
     kind: stop.kind,
     state: row?.state ?? "upcoming",
     servedBy: await servedBy(stop),
+    agent: agentsByStop[stop.id] ?? null,
+    handoff: handoffOf(row),
     attempt: row?.attempt ?? 0,
     task: taskOf(row?.taskId ?? null),
     result: row?.result ?? null,

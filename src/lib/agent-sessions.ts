@@ -59,6 +59,8 @@ export interface PipelineRequestRef {
   pipelineName: string;
   runId: string;
   runNumber: number;
+  /** The run's name when it was asked ("Issue 42: AI agents roundup"), if it had one. */
+  runName?: string;
   /** The stop's id in the run's definition, and its name. */
   stopId: string;
   stopName: string;

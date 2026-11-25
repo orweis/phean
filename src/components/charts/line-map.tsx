@@ -1,10 +1,11 @@
-import { Flag } from "lucide-react";
+import { Flag, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 
 import { cx } from "@/lib/cx";
 import { FAILURE_ACTION_META, STOP_VIEW_META, type StopState, type StopViewState } from "@/lib/domain";
 import { formatDuration } from "@/lib/format";
 import { edgeRunState, lineMap, type MapEdge, type MapNode } from "@/lib/pipeline-map";
+import { routes } from "@/lib/routes";
 import type { PipelineDefinition, PipelineStop } from "@/lib/pipelines";
 
 import { KIND_ICON, StopDot } from "../pipelines/stop-mark";
@@ -21,6 +22,8 @@ export interface MapStopState {
   /** The stop's own state, to tell which branch it took. */
   raw: StopState | "upcoming";
   branch: string | null;
+  /** Its handoff waits on an agent that has not picked it up. */
+  stuck?: boolean;
 }
 
 interface LineMapProps {
@@ -36,6 +39,10 @@ interface LineMapProps {
   /** Where a pointer on each stop goes (its task), by stop id. */
   hrefOf?: Record<string, string>;
   selected?: string | null;
+  /** The connected agent serving each agent stop, by stop id: its name links to it on the Agents page. */
+  agents?: Record<string, { id: string; name: string }>;
+  /** The workspace, for those links. */
+  slug?: string;
 }
 
 const centre = (node: Pick<MapNode, "col" | "row">) => ({ x: node.col * W + W / 2, y: node.row * H + DOT_Y });
@@ -90,7 +97,7 @@ function edgeStyle(edge: MapEdge, states: LineMapProps["states"]): { stroke: str
  * are termini. With a run's states, each station shows that run's state by icon, word and line form.
  * The drawing is decorative; the list beside it says the same in words.
  */
-export function LineMap({ definition, label, servedBy = {}, states, reachedEnd, hrefOf, selected }: LineMapProps) {
+export function LineMap({ definition, label, servedBy = {}, states, reachedEnd, hrefOf, selected, agents = {}, slug }: LineMapProps) {
   const map = lineMap(definition);
   const nodes = new Map(map.nodes.map((node) => [`${node.kind}:${node.id}`, node]));
   const width = Math.max(1, map.cols) * W;
@@ -106,6 +113,7 @@ export function LineMap({ definition, label, servedBy = {}, states, reachedEnd, 
             return (
               <li key={node.id}>
                 {index + 1}. {stop.name}, {servedBy[stop.id] ?? stop.kind.replace("_", " ")}.{states?.[stop.id] && ` ${STOP_VIEW_META[states[stop.id]!.state].label}.`}
+                {states?.[stop.id]?.stuck && " Stuck: its agent has not picked it up."}
                 {node.kind === "stop" && node.join && ` ${node.join === "first" ? "Goes on with the first branch to arrive." : "Waits for every branch."}`} {thenInWords(stop, definition)} {stopRules(stop)}
               </li>
             );
@@ -176,7 +184,9 @@ export function LineMap({ definition, label, servedBy = {}, states, reachedEnd, 
           const KindIcon = KIND_ICON[stop.kind];
           const href = hrefOf?.[stop.id];
           const isSelected = selected === stop.id;
-          const body = (
+          const agent = agents[stop.id];
+          const who = servedBy[stop.id] ?? stop.agent ?? stop.kind.replace("_", " ");
+          const station = (
             <>
               <span className="mt-5 flex items-center justify-center">
                 {run ? (
@@ -194,11 +204,27 @@ export function LineMap({ definition, label, servedBy = {}, states, reachedEnd, 
                 )}
               </span>
               <span className={cx("mt-1.5 line-clamp-2 rounded-xs px-1 text-center text-xs font-semibold text-ink", isSelected && "bg-accent-tint text-accent-ink")}>{stop.name}</span>
-              <span className="flex max-w-full items-center gap-1 truncate text-2xs text-muted">
+            </>
+          );
+          const details = (
+            <>
+              <span className="relative flex max-w-full items-center gap-1 truncate text-2xs text-muted">
                 <KindIcon className="size-3 shrink-0" />
-                <span className="truncate">{servedBy[stop.id] ?? stop.agent ?? stop.kind.replace("_", " ")}</span>
+                {agent && slug ? (
+                  <Link href={routes.agents(slug, { focus: agent.id })} tabIndex={-1} data-agent-link={agent.id} title={`${agent.name} on the Agents page`} className="truncate link">
+                    {agent.name}
+                  </Link>
+                ) : (
+                  <span className="truncate">{who}</span>
+                )}
               </span>
               {run && <span className="text-2xs font-semibold text-ink-2">{STOP_VIEW_META[run.state].label}</span>}
+              {run?.stuck && (
+                <span data-stuck className="inline-flex items-center gap-0.5 text-2xs font-semibold text-late-ink">
+                  <TriangleAlert className="size-3" />
+                  Stuck
+                </span>
+              )}
               {!run && node.join && <span className="text-2xs text-muted">{node.join === "first" ? "First to arrive" : "Waits for all"}</span>}
             </>
           );
@@ -207,13 +233,16 @@ export function LineMap({ definition, label, servedBy = {}, states, reachedEnd, 
             "absolute flex flex-col items-center px-3",
             isSelected && "before:absolute before:inset-x-2 before:top-2 before:bottom-1 before:rounded-md before:border-2 before:border-accent",
           );
-          return href ? (
-            <Link key={stop.id} href={href} scroll={false} tabIndex={-1} data-stop={stop.id} data-selected={isSelected || undefined} title={title} className={className} style={style}>
-              {body}
-            </Link>
-          ) : (
+          return (
             <div key={stop.id} data-stop={stop.id} data-selected={isSelected || undefined} title={title} className={className} style={style}>
-              {body}
+              {href ? (
+                <Link href={href} scroll={false} tabIndex={-1} className="relative flex flex-col items-center">
+                  {station}
+                </Link>
+              ) : (
+                station
+              )}
+              {details}
             </div>
           );
         })}

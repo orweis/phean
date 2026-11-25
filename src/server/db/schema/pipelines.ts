@@ -121,6 +121,8 @@ export const pipelineRuns = pgTable(
     version: integer("version").notNull(),
     /** 1, 2, 3… per pipeline. */
     number: integer("number").notNull(),
+    /** What this trip makes ("Issue 42: AI agents roundup"); null shows as "<pipeline> #<number>". */
+    name: text("name"),
     trigger: runTriggerEnum("trigger").notNull(),
     /** Who or what started it: a person, an agent, or Phean itself (a schedule, an event, a webhook). */
     triggeredByType: text("triggered_by_type", { enum: ["user", "agent", "system"] }).notNull(),
@@ -222,6 +224,17 @@ export const pipelineRunStops = pgTable(
     /** Set when a rerun or a hand-back replaced it with a fresh row. */
     supersededAt: timestampTz("superseded_at"),
     supersededBy: text("superseded_by", { enum: ["rerun", "hand_back"] }),
+    /**
+     * An agent stop's handoff (`lib/pipeline-handoffs.ts`): when its subtask was handed to the agent
+     * (the task's `delegatedAt` then), and to which; how often it was resent since, by the tick or a
+     * person; when the tick resends next (null once it was picked up or the window passed); and when
+     * the tick gave up, after 3 days, leaving the stop stuck for a person.
+     */
+    handedOffAt: timestampTz("handed_off_at"),
+    handoffAgentId: text("handoff_agent_id"),
+    handoffResends: integer("handoff_resends").notNull().default(0),
+    handoffRetryAt: timestampTz("handoff_retry_at"),
+    handoffGaveUpAt: timestampTz("handoff_gave_up_at"),
     ...timestamps,
   },
   (t) => [
@@ -231,6 +244,8 @@ export const pipelineRunStops = pgTable(
     // Task changes find their stop; the sweep finds stops whose time is up.
     index("pipeline_run_stops_task_idx").on(t.tenantId, t.taskId),
     index("pipeline_run_stops_due_idx").on(t.dueAt).where(sql`due_at is not null and superseded_at is null`),
+    // The tick finds handoffs to resend.
+    index("pipeline_run_stops_retry_idx").on(t.handoffRetryAt).where(sql`handoff_retry_at is not null and superseded_at is null`),
   ],
 );
 

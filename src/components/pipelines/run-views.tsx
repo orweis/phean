@@ -12,6 +12,10 @@ import type { RunStopView, RunView } from "@/server/domain/pipelines";
 
 import { DocumentChips } from "../documents/document-chips";
 import { StopDot, StopStateBadge } from "./stop-mark";
+import { AgentName, ResendHandoffButton, StuckBadge } from "./stuck";
+
+/** Whether a stop's handoff can be resent: it still waits on the agent it was handed to, who can still act. */
+export const resendable = (stop: RunStopView) => stop.kind === "agent" && Boolean(stop.handoff?.waiting && stop.handoff.agent);
 
 const viewState = (stop: RunStopView): StopViewState => stopViewState(stop.state, stop.task?.status);
 
@@ -31,7 +35,7 @@ export function outcomeOf(stop: RunStopView): string | null {
  * state, who serves it, how long it took and what it handed on. Earlier attempts (reruns,
  * hand-backs) fold under the stop they repeat.
  */
-export function CompactRun({ view, slug, selected, now }: { view: RunView; slug: string; selected: string | null; now: Date }) {
+export function CompactRun({ view, slug, selected, now, canAct = false }: { view: RunView; slug: string; selected: string | null; now: Date; canAct?: boolean }) {
   return (
     <ol data-run-compact className="divide-y divide-rule">
       {view.stops.map((stop) => {
@@ -57,10 +61,14 @@ export function CompactRun({ view, slug, selected, now }: { view: RunView; slug:
                 {stop.name}
               </Link>
               <span className="text-xs text-ink-2">{state === "waiting" && stop.waitingOn ? `Waiting on ${stop.waitingOn}` : STOP_VIEW_META[state].label}</span>
-              <span className="text-xs text-muted">{stop.servedBy}</span>
+              <AgentName slug={slug} agent={stop.agent} fallback={stop.servedBy} className="text-xs text-muted" />
               {took && <span className="figure text-xs text-muted">{took}</span>}
               {stop.attempt > 1 && <span className="text-xs text-muted">attempt {stop.attempt}</span>}
               {stop.branch && <span className="text-xs text-ink-2">took “{stop.branch}”</span>}
+              {stop.handoff?.stuck && <StuckBadge handoff={stop.handoff} now={now} />}
+              {canAct && resendable(stop) && stop.handoff?.stuck && (
+                <ResendHandoffButton slug={slug} runId={view.run.id} stopId={stop.stopId} stopName={stop.name} agentName={stop.handoff!.agent!.name} stuck />
+              )}
             </div>
             {outcome && <p className="mt-1 line-clamp-2 pl-7 text-xs wrap-anywhere text-ink-2">{truncate(outcome, 240)}</p>}
             {earlier.length > 0 && (
@@ -152,7 +160,7 @@ export function RunTimeline({ view, now }: { view: RunView; now: Date }) {
 }
 
 /** The selected stop: where it stands, who serves it, what it handed on, and the way to its task. */
-export function SelectedStop({ view, stopId, slug, now, actions }: { view: RunView; stopId: string; slug: string; now: Date; actions?: React.ReactNode }) {
+export function SelectedStop({ view, stopId, slug, now, actions, canAct = false }: { view: RunView; stopId: string; slug: string; now: Date; actions?: React.ReactNode; canAct?: boolean }) {
   const stop = view.stops.find((candidate) => candidate.stopId === stopId);
   if (!stop) return null;
   const state = viewState(stop);
@@ -165,9 +173,22 @@ export function SelectedStop({ view, stopId, slug, now, actions }: { view: RunVi
         <h2 className="text-md font-semibold text-ink">{stop.name}</h2>
         <StopStateBadge state={state} waitingOn={stop.waitingOn} />
       </div>
+      {stop.handoff?.stuck && <StuckBadge handoff={stop.handoff} now={now} />}
       <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1 text-xs">
         <dt className="text-muted">Served by</dt>
-        <dd className="text-ink-2">{stop.servedBy}</dd>
+        <dd className="text-ink-2">
+          <AgentName slug={slug} agent={stop.agent} fallback={stop.servedBy} />
+        </dd>
+        {stop.handoff && (
+          <>
+            <dt className="text-muted">Handed off</dt>
+            <dd className="text-ink-2">
+              {timeAgo(stop.handoff.handedOffAt)}
+              {stop.handoff.resends > 0 && ` · resent ${stop.handoff.resends === 1 ? "once" : `${stop.handoff.resends} times`}`}
+              {stop.handoff.nextRetryAt && state === "handing_off" && ` · next resend ${timeAgo(stop.handoff.nextRetryAt)}`}
+            </dd>
+          </>
+        )}
         {stop.startedAt && state !== "skipped" && state !== "not_reached" && (
           <>
             <dt className="text-muted">Reached</dt>
@@ -203,6 +224,9 @@ export function SelectedStop({ view, stopId, slug, now, actions }: { view: RunVi
           <Link href={routes.task(slug, stop.task.id)} scroll={false} className="text-xs font-semibold text-accent-ink link">
             {state === "waiting" ? "Open the decision" : "Open its task"}
           </Link>
+        )}
+        {canAct && resendable(stop) && (
+          <ResendHandoffButton slug={slug} runId={view.run.id} stopId={stop.stopId} stopName={stop.name} agentName={stop.handoff!.agent!.name} stuck={Boolean(stop.handoff?.stuck)} />
         )}
         {actions}
       </div>

@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { handoffGivesUpAt, handoffRetryOffsets, isStuckHandoff, nextHandoffRetry, retryReason, waitInWords } from "@/lib/pipeline-handoffs";
+import { clipRunName, runLabel, runTitle, scheduledRunName } from "@/lib/pipelines";
 
 import {
   cronProblem,
@@ -152,5 +154,50 @@ describe("schedules", () => {
     expect(latestFiring("0 9 * * mon", "Europe/Berlin", new Date("2026-11-23T07:00:00Z"), monday)?.toISOString()).toBe("2026-11-23T08:00:00.000Z");
     expect(latestFiring("0 9 * * mon", "Europe/Berlin", new Date("2026-11-23T08:00:00Z"), monday)).toBeNull();
     expect(latestFiring("0 9 * * mon", "Europe/Berlin", new Date("2026-11-23T07:00:00Z"), new Date("2026-11-23T07:59:00Z"))).toBeNull();
+  });
+});
+
+describe("resending a handoff no one picked up", () => {
+  const at = new Date("2026-11-25T10:00:00Z");
+  const plus = (minutes: number) => new Date(at.getTime() + minutes * 60_000);
+
+  it("doubles from 3 minutes after the handoff, within 3 days", () => {
+    expect(handoffRetryOffsets()).toEqual([3, 6, 12, 24, 48, 96, 192, 384, 768, 1536, 3072]);
+    expect(handoffGivesUpAt(at)).toEqual(plus(3 * 24 * 60));
+    expect(nextHandoffRetry(at, at)).toEqual(plus(3));
+    expect(nextHandoffRetry(at, plus(3))).toEqual(plus(6));
+    // A late tick goes on to the next time still ahead, not the ones it missed.
+    expect(nextHandoffRetry(at, plus(50))).toEqual(plus(96));
+    expect(nextHandoffRetry(at, plus(3072))).toBeNull();
+  });
+
+  it("says how long it waited, in words", () => {
+    expect(retryReason(at, plus(12))).toBe("not picked up 12 minutes after the handoff");
+    expect(waitInWords(1)).toBe("1 minute");
+    expect(waitInWords(96)).toBe("1 hour 36 minutes");
+    expect(waitInWords(120)).toBe("2 hours");
+    expect(waitInWords(3 * 24 * 60)).toBe("3 days");
+    expect(waitInWords(25 * 60 + 5)).toBe("1 day 1 hour");
+  });
+
+  it("is stuck only while that same handoff waits, past the first resend's time", () => {
+    const task = { delegation: "handing_off", delegateToAgentId: "ag_1", delegatedAt: at };
+    const state = { live: true, handedOffAt: at, handoffAgentId: "ag_1", task };
+    expect(isStuckHandoff(state, plus(2))).toBe(false);
+    expect(isStuckHandoff(state, plus(3))).toBe(true);
+    expect(isStuckHandoff({ ...state, task: { ...task, delegation: "picking_up" } }, plus(10))).toBe(false);
+    expect(isStuckHandoff({ ...state, task: { ...task, delegateToAgentId: "ag_2" } }, plus(10))).toBe(false);
+    expect(isStuckHandoff({ ...state, task: { ...task, delegatedAt: plus(5) } }, plus(10))).toBe(false);
+    expect(isStuckHandoff({ ...state, live: false }, plus(10))).toBe(false);
+  });
+});
+
+describe("naming runs", () => {
+  it("falls back to the pipeline and number, and names a scheduled run after its day where the schedule keeps time", () => {
+    expect(runLabel({ name: null, number: 3 }, "Weekly newsletter")).toBe("Weekly newsletter #3");
+    expect(runLabel({ name: "Issue 42", number: 3 }, "Weekly newsletter")).toBe("Issue 42");
+    expect(runTitle({ name: "Issue 42", number: 3 }, "Weekly newsletter")).toBe("Issue 42 (Weekly newsletter #3)");
+    expect(scheduledRunName("Weekly newsletter", new Date("2026-11-29T23:30:00Z"), "Europe/Berlin")).toBe("Weekly newsletter, 2026-11-30");
+    expect(clipRunName(`  ${"x".repeat(200)}\n`)).toHaveLength(120);
   });
 });

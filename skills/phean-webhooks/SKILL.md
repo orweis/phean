@@ -9,7 +9,7 @@ Phean calls your HTTPS endpoint the moment something you care about changes. Any
 
 ## 1. Register and keep the secret
 
-Call `register_webhook` with your `url` (HTTPS, on a public host), and optionally `topics` (`decisions`, `tasks`, `goals`, `memory`, `pipelines`) and `scope`. The `pipelines` topic carries runs starting and ending, stops reached, finished, failed and timed out, and changes proposed to a pipeline and their approval; the phean-pipelines skill says what to do with them. It returns:
+Call `register_webhook` with your `url` (HTTPS, on a public host), and optionally `topics` (`decisions`, `tasks`, `goals`, `memory`, `pipelines`) and `scope`. The `pipelines` topic carries runs starting, renamed and ending, stops reached, finished, failed, timed out and stuck (a handoff no one picked up in 3 days), and changes proposed to a pipeline and their approval; the phean-pipelines skill says what to do with them. It returns:
 
 - `webhook`: its id (`wh_…`), status, topics and scope.
 - `secret`: `whsec_…`. **Shown once.** Store it in your secret store, never in code or logs.
@@ -31,7 +31,7 @@ Many endpoints (automation platforms, API gateways, serverless functions behind 
 
 ### A Claude Code routine as your webhook
 
-If you run as a Claude Code routine (a cloud scheduled task) rather than a service, your person can give the routine an API trigger and you register its **Fire URL** as your `url`, with the routine's token in `headers` as `Authorization: Bearer …`. Phean then sends `{ "text": "…" }`: a line per change with its link, then the payload as JSON. It adds the routine's `anthropic-beta` and `anthropic-version` headers itself. Each delivery starts a run, and the text arrives in a `routine-fire-payload` block. You can't check the signature from there, so treat the text as a pointer: call `collect_answers` and `get_task` and act on what Phean says now.
+If you run as a Claude Code routine (a cloud scheduled task) rather than a service, your person can give the routine an API trigger and you register its **Fire URL** as your `url`, with the routine's token in `headers` as `Authorization: Bearer …`. Phean then sends `{ "text": "…" }`: a line per change with its link, then the payload as JSON. It adds the routine's `anthropic-beta` and `anthropic-version` headers itself. Each delivery starts a run, and the text arrives in a `routine-fire-payload` block. A resent handoff's line starts with `RETRY <count> (<reason>):`, under a line that says to `claim_task` it to stop the resends. You can't check the signature from there, so treat the text as a pointer: call `collect_answers` and `get_task` and act on what Phean says now.
 
 ## 2. What a request looks like
 
@@ -118,7 +118,7 @@ With Flask use `request.get_data()`, and with FastAPI `await request.body()`, fo
 - **De-duplicate by `eventId`.** Delivery is at least once: a batch can arrive again, for example if your 2xx was lost. Remember the event ids you have handled and skip repeats. Within one webhook, events arrive in order.
 - **Read `reasons`** to see why you got each event:
   - `asked_by_you`: a person answered your question or decision, or took the answer back (`task.input_retracted`, which reopens the question);
-  - `handed_to_you`: someone is handing a task off to you by name (`task.handed_off`), or handing back one you handed off (`data.handBack` is true); read its `note`, then `claim_task` to pick it up;
+  - `handed_to_you`: someone is handing a task off to you by name (`task.handed_off`), or handing back one you handed off (`data.handBack` is true); read its `note`, then `claim_task` to pick it up. A pipeline's handoff you have not picked up is sent again as `task.handoff_retried` (see "Resent handoffs" below);
   - `handed_off_by_you`: a change to a task you handed off (picked up, updated, a question asked, handed back, completed, released, handed on), so you hear how it ends;
   - `watching:task` / `watching:goal` / `watching:memory`: something you follow changed;
   - `in_watched_goal`: a change filed under a goal you follow;
@@ -126,6 +126,12 @@ With Flask use `request.get_data()`, and with FastAPI `await request.body()`, fo
   - `workspace`: you registered with `scope: "all"`.
 - **Read `forAgents`** when it is there. The handoff reasons also reach a parent agent for its sub-agents (a sub-agent sharing your token rarely listens itself): a task handed to one of them by name comes as `handed_to_you`, and changes to a task one of them handed off as `handed_off_by_you`, with `forAgents: [{ "id": "ag_…", "name": "Deck writer" }]` naming the sub-agent it was for. Act on it as that sub-agent (with `actingAs`). The field is left out when the reasons are all your own.
 - **Fetch the current state.** An event says what changed, not the whole object. Call `get_task`, `get_goal` or `recall` for the latest, and on `task.input_answered` call `collect_answers` to take the answer (that marks it delivered). On `task.handed_off` with the reason `handed_to_you`, read the handoff note in `data.note` and pick the task up with `claim_task`; when you finish a task handed to you, hand it back with `hand_off_task` and `handBack: true` rather than completing it, and when one you handed off comes back, review it and complete it (the phean-handoffs skill covers the rest). Then act on it. A person can take an answer back for a few seconds after giving it, until you collect it: on `task.input_retracted` the question is open again, and `collect_answers` returns nothing for it, so wait for the next answer.
+- **Resent handoffs.** When a pipeline hands you a stop and you do not claim it, Phean sends it again with backoff, 3, 6, 12, 24 … minutes after the handoff, for up to 3 days; a person can also press Resend on the run's page. Each resend is a `task.handoff_retried` event with the reason `handed_to_you` (its parent hears it too, for a sub-agent, with `forAgents`), and its `data` says it is one: `retry` (true), `retryCount` (1 for the first resend), `reason` ("not picked up 12 minutes after the handoff", or "resent by Dana"), `trigger` (`automatic`, or `manual` with `resentBy`), the stop's `taskId`, `runId`, `stopId`, `stopName`, `stopState`, the run's `runName` when it has one, and the handoff `note`. **Acknowledge by claiming the task** (`claim_task`): that, or releasing, completing or handing it on, ends the resends. A resend repeats the handoff, so do the work once: check `get_task` and skip a stop you already picked up. After 3 days Phean stops and sends `pipeline.stop_stuck`; the stop waits for a person.
+
+```json
+{ "eventId": 812, "action": "task.handoff_retried", "entityType": "task", "entityId": "t_…", "reasons": ["handed_to_you"], "data": { "retry": true, "retryCount": 3, "reason": "not picked up 12 minutes after the handoff", "trigger": "automatic", "taskId": "t_…", "runId": "r_…", "stopId": "draft", "stopName": "Draft the newsletter", "runName": "Issue 42: AI agents roundup", "note": "Write issue 42 from these links: …" } }
+```
+
 - **You never get your own changes,** so acting on an event does not echo back to you; nor, for a sub-agent, the changes that sub-agent made itself.
 
 ## 5. When things go wrong

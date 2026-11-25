@@ -27,7 +27,12 @@ export function RunGrid({ grid, slug }: { grid: Grid; slug: string }) {
             </th>
             {grid.runs.map((run) => (
               <th key={run.id} scope="col" className={cx(TH, "px-1 text-center")}>
-                <Link href={routes.pipelineRun(slug, run.id)} className="link" aria-label={`Run ${run.number}, ${RUN_STATUS_META[run.status].label}`}>
+                <Link
+                  href={routes.pipelineRun(slug, run.id)}
+                  className="link"
+                  title={run.name ? `#${run.number}: ${run.name}` : undefined}
+                  aria-label={`Run ${run.number}${run.name ? `, ${run.name}` : ""}, ${RUN_STATUS_META[run.status].label}`}
+                >
                   #{run.number}
                 </Link>
               </th>

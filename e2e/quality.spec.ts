@@ -31,6 +31,7 @@ const PAGES = [
   "/w/globex/documents/d_missing",
   "/w/globex/pipelines",
   "/w/globex/pipelines?kind=adhoc",
+  "/w/globex/pipelines?runs=stuck",
   "/w/globex/pipelines/p_missing",
   "/w/globex/pipelines/runs/r_missing",
   "/docs",
@@ -77,6 +78,7 @@ const PANELS = [
   ["/w/globex/memory", "Add"],
   ["/w/globex/documents", "New document"],
   ["/w/globex/pipelines", "New pipeline"],
+  ["/w/globex/pipelines", "Start run of"],
   ["/w/globex/agents", "Key for a bot"],
   ["/account", "Change password"],
 ] as const;
@@ -103,7 +105,7 @@ async function pipelinePages(page: Page): Promise<string[]> {
   const run = await row.locator("[data-run-strip] a").last().getAttribute("href");
   expect(pipeline).toMatch(/^\/w\/globex\/pipelines\/p_/);
   expect(run).toMatch(/^\/w\/globex\/pipelines\/runs\/r_/);
-  return [pipeline!, `${pipeline}?tab=runs`, `${pipeline}?tab=insights`, `${pipeline}?tab=definition`, run!, `${run}?view=timeline`, `${run}?view=activity`];
+  return [pipeline!, `${pipeline}?tab=runs`, `${pipeline}?tab=runs&runs=stuck`, `${pipeline}?tab=insights`, `${pipeline}?tab=definition`, run!, `${run}?view=timeline`, `${run}?view=activity`];
 }
 
 /** The first goal on the overview's goal map, whose id is only known at run time. */
@@ -162,7 +164,7 @@ test.describe("signed in", () => {
 
   test("a run's Re-run panel has no detectable accessibility violations", async ({ page }) => {
     const pages = await pipelinePages(page);
-    const panel = await openPanel(page, pages[4]!, "Re-run from a stop");
+    const panel = await openPanel(page, pages[5]!, "Re-run from a stop");
     await expect(panel.getByLabel("From", { exact: true })).toBeFocused();
     await expectAccessible(page);
   });

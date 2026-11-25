@@ -11,6 +11,7 @@ import { ActorAvatar } from "@/components/ui/avatar";
 import { Badge, MetaBadge } from "@/components/ui/badge";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Popover } from "@/components/ui/popover";
+import { FocusOnLoad } from "@/components/ui/focus-on-load";
 import { ScrollX } from "@/components/ui/scroll-x";
 import { EmptyState } from "@/components/ui/stat";
 import { PINNED_CELL, TH } from "@/components/ui/table";
@@ -26,7 +27,7 @@ import {
   type AgentStatus,
 } from "@/lib/domain";
 import { formatDay, pluralize, timeAgo } from "@/lib/format";
-import { routes } from "@/lib/routes";
+import { queryParam, routes } from "@/lib/routes";
 import { requireWorkspace } from "@/server/auth/session";
 import { mcpResourceUrl } from "@/server/config";
 import { canRevoke, listAgents, type ListedAgent } from "@/server/domain/agents";
@@ -59,7 +60,8 @@ function WhatAgentsGet() {
 }
 
 export default async function AgentsPage({ params, searchParams }: PageProps<"/w/[slug]/agents">) {
-  const showArchived = (await searchParams).archived === "1";
+  const query = await searchParams;
+  const focus = queryParam(query.focus);
   const { slug } = await params;
   const { ctx } = await requireWorkspace(slug);
   const [agents, workload, keyUrl, hooks] = await Promise.all([
@@ -80,6 +82,9 @@ export default async function AgentsPage({ params, searchParams }: PageProps<"/w
   // Archiving is housekeeping for revoked agents, held to the same permission as revoking others' agents.
   const canManage = can(ctx.actor, "agent:manage");
   const byId = new Map(agents.map((agent) => [agent.id, agent]));
+  // A link to one agent (from a pipeline's line) lands on its row, in whichever view lists it.
+  const focused = focus ? byId.get(focus) : undefined;
+  const showArchived = query.archived === "1" || Boolean(focused?.archivedAt);
   // Archived (revoked, filed away) agents have their own view; the list shows the rest.
   const listed = agents.filter((agent) => Boolean(agent.archivedAt) === showArchived);
   const listedIds = new Set(listed.map((agent) => agent.id));
@@ -231,7 +236,19 @@ export default async function AgentsPage({ params, searchParams }: PageProps<"/w
                   const running = (children.get(agent.id) ?? []).filter((child) => !child.revokedAt).length;
                   const removableHook = canRemoveWebhooks && hookByAgent.has(agent.id);
                   return (
-                    <tr key={agent.id} data-agent={agent.id} data-parent={agent.parentAgentId ?? undefined} className={cx(status === "revoked" && "text-muted", nested && "bg-fill/40")}>
+                    <tr
+                      key={agent.id}
+                      data-agent={agent.id}
+                      data-parent={agent.parentAgentId ?? undefined}
+                      data-focused={agent.id === focused?.id ? agent.id : undefined}
+                      tabIndex={agent.id === focused?.id ? -1 : undefined}
+                      aria-current={agent.id === focused?.id ? "true" : undefined}
+                      className={cx(
+                        "scroll-mt-32 outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus data-focused:bg-accent-tint/30",
+                        status === "revoked" && "text-muted",
+                        nested && "bg-fill/40",
+                      )}
+                    >
                       <td className={cx("min-w-44 py-3 pr-3", nested ? "pl-10" : "pl-5", PINNED_CELL)}>
                         <div className="flex items-center gap-2.5">
                           {nested && <CornerDownRight className="size-3.5 shrink-0 text-faint" aria-hidden />}
@@ -351,6 +368,7 @@ export default async function AgentsPage({ params, searchParams }: PageProps<"/w
             </table>
           </ScrollX>
         )}
+        {focused && <FocusOnLoad id={focused.id} />}
       </Card>
     </>
   );

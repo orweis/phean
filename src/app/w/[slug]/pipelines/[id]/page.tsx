@@ -10,6 +10,7 @@ import { PipelineEditor } from "@/components/pipelines/pipeline-editor";
 import { PipelineTabs, type PipelineTab } from "@/components/pipelines/pipeline-tabs";
 import { RunGrid } from "@/components/pipelines/run-grid";
 import { RunList } from "@/components/pipelines/run-list";
+import { RunsFilter } from "@/components/pipelines/runs-filter";
 import { StartRun } from "@/components/pipelines/start-run";
 import { StopLegend } from "@/components/pipelines/stop-legend";
 import { TriggersForm } from "@/components/pipelines/triggers-form";
@@ -30,7 +31,7 @@ import type { PipelineDefinition } from "@/lib/pipelines";
 import { queryParam, routes } from "@/lib/routes";
 import { requireWorkspace } from "@/server/auth/session";
 import { listAgents } from "@/server/domain/agents";
-import { canChangeRegular, getPipeline, getPipelineVersion, getRun, pipelineHistory, stopsServedBy, type PipelineVersion } from "@/server/domain/pipelines";
+import { canChangeRegular, getPipeline, getPipelineVersion, getRun, listStuckStops, pipelineHistory, stopAgents, stopsServedBy, type PipelineVersion } from "@/server/domain/pipelines";
 import { can } from "@/server/domain/policy";
 import { listMembers } from "@/server/domain/tenants";
 import { absoluteUrl, orNotFound } from "@/server/web";
@@ -127,11 +128,16 @@ export default async function PipelinePage({ params, searchParams }: PageProps<"
   const canStart = can(ctx.actor, "pipeline:write");
   const canChange = pipeline.status !== "archived" && (pipeline.kind === "adhoc" ? canStart : canChangeRegular(ctx, pipeline));
   const servedBy = await stopsServedBy(ctx, definition);
+  const agentsByStop = await stopAgents(ctx, definition);
+  const runsParam = queryParam(query.runs);
+  const stuck = tab === "runs" || tab === "map" ? await listStuckStops(ctx, { pipelineId: pipeline.id }) : [];
+  const onlyStuck = tab === "runs" && runsParam === "stuck";
   const now = new Date();
 
   const latest = tab === "map" && recentRuns[0] ? await getRun(ctx, { runId: recentRuns[0].id }) : null;
   const latestOnCurrent = latest && latest.run.version === pipeline.currentVersion;
-  const history = tab === "runs" || tab === "insights" ? await pipelineHistory(ctx, { pipelineId: pipeline.id, limit: 50 }) : [];
+  const allHistory = tab === "runs" || tab === "insights" ? await pipelineHistory(ctx, { pipelineId: pipeline.id, limit: 50 }) : [];
+  const history = onlyStuck ? allHistory.filter((run) => stuck.some((stop) => stop.runId === run.id)) : allHistory;
   const baseOf = async (number: number | null) => (number ? (await getPipelineVersion(ctx, { pipelineId: pipeline.id, version: number })).definition : null);
   const proposalBases = tab === "insights" || tab === "definition" ? await Promise.all(proposals.map((proposal) => baseOf(proposal.baseVersion))) : [];
   const versionParam = Number(queryParam(query.version));
@@ -245,7 +251,7 @@ export default async function PipelinePage({ params, searchParams }: PageProps<"
             action={
               latest && (
                 <Link href={routes.pipelineRun(slug, latest.run.id)} className="text-xs font-semibold text-ink-2 link">
-                  Run #{latest.run.number}: {latest.headline}
+                  {latest.run.name ?? `Run #${latest.run.number}`}: {latest.headline}
                 </Link>
               )
             }
@@ -255,7 +261,13 @@ export default async function PipelinePage({ params, searchParams }: PageProps<"
               definition={latestOnCurrent ? latest.definition : definition}
               label={`${pipeline.name}'s line${latestOnCurrent ? `, with run ${latest.run.number}` : ""}`}
               servedBy={servedBy}
-              states={latestOnCurrent ? Object.fromEntries(latest.stops.map((stop) => [stop.stopId, { state: stopViewState(stop.state, stop.task?.status), raw: stop.state, branch: stop.branch }])) : undefined}
+              agents={agentsByStop}
+              slug={slug}
+              states={
+                latestOnCurrent
+                  ? Object.fromEntries(latest.stops.map((stop) => [stop.stopId, { state: stopViewState(stop.state, stop.task?.status), raw: stop.state, branch: stop.branch, stuck: Boolean(stop.handoff?.stuck) }]))
+                  : undefined
+              }
               reachedEnd={latestOnCurrent ? latest.run.endId : null}
               hrefOf={latestOnCurrent ? Object.fromEntries(latest.stops.flatMap((stop) => (stop.task ? [[stop.stopId, routes.task(slug, stop.task.id)]] : []))) : undefined}
             />
@@ -264,12 +276,23 @@ export default async function PipelinePage({ params, searchParams }: PageProps<"
         </Card>
       )}
 
+      {tab === "runs" && allHistory.length > 0 && (
+        <div className="mb-4 flex flex-wrap items-center justify-end gap-2">
+          <RunsFilter stuck={new Set(stuck.map((stop) => stop.runId)).size} />
+        </div>
+      )}
       {tab === "runs" &&
         (history.length === 0 ? (
           <Card>
-            <EmptyState icon={<Workflow />} title="No runs yet">
-              Start one here, or let an agent start one with start_run{triggers.schedule ? "; the schedule starts the next one on time" : ""}.
-            </EmptyState>
+            {onlyStuck ? (
+              <EmptyState icon={<Workflow />} title="No stuck runs">
+                Every handoff in this pipeline&apos;s runs was picked up. A stop is stuck when its agent has not claimed it a few minutes after the handoff.
+              </EmptyState>
+            ) : (
+              <EmptyState icon={<Workflow />} title="No runs yet">
+                Start one here, or let an agent start one with start_run{triggers.schedule ? "; the schedule starts the next one on time" : ""}.
+              </EmptyState>
+            )}
           </Card>
         ) : (
           <div className="space-y-6">
@@ -281,8 +304,8 @@ export default async function PipelinePage({ params, searchParams }: PageProps<"
               </CardBody>
             </Card>
             <Card>
-              <CardHeader title="All runs" description="Newest first." />
-              <RunList runs={history} definition={definition} slug={slug} />
+              <CardHeader title={onlyStuck ? "Stuck runs" : "All runs"} description={onlyStuck ? "Runs with a stop whose agent has not picked up its handoff. Phean resends it with backoff for 3 days; open the run to resend it now." : "Newest first."} />
+              <RunList runs={history} definition={definition} slug={slug} stuck={stuck} />
             </Card>
           </div>
         ))}
@@ -320,7 +343,7 @@ export default async function PipelinePage({ params, searchParams }: PageProps<"
             <Card>
               <CardHeader title="Definition" description={pipeline.status === "archived" ? "Archived pipelines are kept as they were." : "Only its owner and the workspace's owners and admins change a regular pipeline; agents propose changes."} />
               <CardBody>
-                <LineMap definition={definition} label={`${pipeline.name}'s line`} servedBy={servedBy} />
+                <LineMap definition={definition} label={`${pipeline.name}'s line`} servedBy={servedBy} agents={agentsByStop} slug={slug} />
               </CardBody>
             </Card>
           )}

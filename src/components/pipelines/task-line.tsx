@@ -3,6 +3,7 @@ import Link from "next/link";
 
 import { cx } from "@/lib/cx";
 import { STOP_VIEW_META } from "@/lib/domain";
+import { runLabel } from "@/lib/pipelines";
 import { routes } from "@/lib/routes";
 import type { TaskLine } from "@/server/domain/pipelines";
 
@@ -19,7 +20,7 @@ export function TaskLineStrip({ line, slug }: { line: TaskLine; slug: string }) 
         <Workflow className="size-3.5" aria-hidden />
         {line.role === "run" ? "Carries" : "A stop of"}{" "}
         <Link href={routes.pipelineRun(slug, line.run.id)} className="font-semibold text-ink-2 link">
-          {line.pipeline.name} #{line.run.number}
+          {runLabel(line.run, line.pipeline.name)}
         </Link>
         <span aria-hidden>·</span>
         <span className="text-ink-2">{line.run.headline}</span>

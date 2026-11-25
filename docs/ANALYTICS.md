@@ -177,7 +177,7 @@ server sends it (**only**); server copies carry `source_side=server`, and key-ev
 | `task_peek_open` | A task opens in the peek | `from` (`board`, `table`, `calendar`, `map`, `search`, `decisions`, `goals`, `other`) | | |
 | `task_open_page` | A task opens as a full page | | | |
 | `tasks_layout` | The Tasks page's layout changes | `layout` (`board`, `table`, `calendar`, `map`) | | |
-| `filter_apply` | A toolbar filter is applied | `filter` (`goal`, `status`, `kind`, `operator`) | | |
+| `filter_apply` | A toolbar filter is applied | `filter` (`goal`, `status`, `kind`, `operator`, `stuck`) | | |
 | `search_submit` | A workspace search is run (never the term) | `has_results`, `used_suggestion`, `from` (`shortcut`, `click`) | | |
 | `goal_create` | A goal is created | | | |
 | `goal_decide` | A goal is approved, rejected, achieved or abandoned | `decision` (`approve`, `reject`, `achieved`, `abandon`) | | |
@@ -193,6 +193,8 @@ server sends it (**only**); server copies carry `source_side=server`, and key-ev
 | `run_start` | A run starts | `trigger` (`manual`, `agent`, `schedule`, `event`, `webhook`) | | also (non-manual ones come from the server) |
 | `run_cancel` | A run is cancelled | | | |
 | `run_rerun_from` | A run is rerun from a stop | | | |
+| `run_rename` | A run is renamed, or its name cleared (never the name) | | | |
+| `handoff_resend` | A person resends a stop's handoff to the agent it waits on | `stuck` | | |
 | `run_view` | A run's view changes | `view` (`compact`, `timeline`, `activity`) | | |
 | `proposal_decide` | An agent's proposed change is decided | `result` (`approve`, `reject`) | | |
 | `pipeline_pause` | A pipeline is paused | | | |

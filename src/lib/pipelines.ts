@@ -626,3 +626,35 @@ export function latestFiring(expression: string, timeZone: string, after: Date, 
   }
   return null;
 }
+
+// Naming runs
+
+/** Characters of a run's name (`LIMITS.runName`), repeated here so the naming rules stay pure. */
+const RUN_NAME_MAX = 120;
+
+/** Keeps a run name to one line and the limit. */
+export function clipRunName(text: string): string {
+  const line = text.replace(/\s+/g, " ").trim();
+  return line.length > RUN_NAME_MAX ? `${line.slice(0, RUN_NAME_MAX - 1).trimEnd()}…` : line;
+}
+
+/** What a run is called where its pipeline is already in view: its own name, or "Weekly newsletter #42". */
+export function runLabel(run: { name?: string | null; number: number }, pipelineName: string): string {
+  return run.name?.trim() || `${pipelineName} #${run.number}`;
+}
+
+/** What a run is called on its own (a task, a handoff note): its name with its pipeline and number, or just those. */
+export function runTitle(run: { name?: string | null; number: number }, pipelineName: string): string {
+  const name = run.name?.trim();
+  return name ? `${name} (${pipelineName} #${run.number})` : `${pipelineName} #${run.number}`;
+}
+
+/** The calendar day of an instant in a time zone, as YYYY-MM-DD. */
+export function zonedDay(at: Date, timeZone: string): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(at);
+}
+
+/** A scheduled run's default name: the pipeline and the day it was scheduled for, where the schedule keeps time ("Weekly newsletter, 2026-11-30"). */
+export function scheduledRunName(pipelineName: string, scheduledFor: Date, timeZone: string): string {
+  return clipRunName(`${pipelineName}, ${zonedDay(scheduledFor, timeZone)}`);
+}

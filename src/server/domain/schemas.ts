@@ -734,7 +734,14 @@ export const PipelineTriggersInput = z
   .describe("What starts runs besides start_run (regular pipelines only). Given, it replaces the pipeline's triggers");
 
 const inputValue = z.union([z.string().max(LIMITS.text), z.number(), z.boolean()]);
+const runName = z
+  .string()
+  .trim()
+  .min(1)
+  .max(LIMITS.runName)
+  .describe("What this run makes, named after the specific thing: \"Issue 42: AI agents roundup\", \"Acme Q3 renewal email\". Shown wherever the run is, and as its task's title");
 export const RunOptionsInput = z.object({
+  name: runName.optional(),
   inputs: z.record(z.string(), inputValue).default({}).describe("The run's inputs, by name"),
   taskId: taskId.optional().describe("Run on this existing task: its stops become its subtasks. It must not be a subtask itself"),
   goalId: goalId.optional().describe("File the run's own task under this goal"),
@@ -778,6 +785,15 @@ export const ListRunsInput = z.object({
   status: z.enum(RUN_STATUSES).optional(),
   limit: limit(200, 30),
 });
+export const UpdateRunInput = z.object({
+  runId,
+  name: runName.nullable().optional().describe("The run's new name; null clears it, so it shows as \"<pipeline> #<number>\""),
+});
+export const ResendHandoffInput = z.object({
+  runId,
+  stopId: pipelineIdent.describe("The agent stop whose handoff to send again"),
+});
+export const ListStuckStopsInput = z.object({ pipelineId: pipelineId.optional(), limit: limit(200, 100) });
 export const CancelRunInput = z.object({ runId, reason: z.string().trim().max(LIMITS.note).default("").describe("Why, for the run's history") });
 export const RerunFromInput = z.object({
   runId,

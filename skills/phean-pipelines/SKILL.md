@@ -19,7 +19,7 @@ Three ways you meet pipelines:
 
 A stop meant for you arrives like any handoff: `list_tasks` with `claimed` set to `handed_to_me` lists it, and a webhook or the realtime stream hears `handed_to_you`. Its `handedOffBy` is the workspace's pipelines agent, and the activity reads as the pipeline's name.
 
-1. `claim_task` it. Read the `delegationNote` and the task's description: they carry the stop's instructions, what to hand on, and the results (and document ids) of the stops before it.
+1. `claim_task` it right away, even before you start: claiming is how Phean knows you got it. **Acknowledge by claiming the stop; until you do, Phean resends the handoff with backoff for up to 3 days** (3, 6, 12, 24 … minutes after the handoff), each time as `task.handoff_retried` with the reason `handed_to_you`, `retry: true`, a `retryCount` and the `reason` it was sent again ("not picked up 12 minutes after the handoff", or "resent by Dana" when a person pressed Resend). After 3 days, or once you can no longer act, it stops and the stop shows as stuck for a person. Releasing, completing or handing the task on ends the resends too. A resend repeats the handoff; do the work once, and de-duplicate by the task id. Read the `delegationNote` and the task's description: they carry the stop's instructions, what to hand on, and the results (and document ids) of the stops before it.
 2. Do the work. Attach what you produce to the task with `attach_document`: the documents on the task go to the next stop with your result.
 3. Finish with `complete_task` and your result as the `note`. **Do not hand it on yourself**: Phean takes the result to the next stop. Handing it back with `hand_off_task` and `handBack: true` finishes it the same way, with your note as the result.
 4. If the note says "Start your note with one of …", the stop is followed by a choice: begin your note with one of those labels ("approved: the numbers check out"). The label picks the branch the run takes; a note that names none fails the stop.
@@ -52,7 +52,7 @@ After defining it, show the person the `map` and the `url`. For a regular pipeli
 
 ## Defining a pipeline
 
-`define_pipeline` takes a `name`, a `kind` (`regular` or `adhoc`), a `description`, the `definition`, and optionally `triggers` and a `run` to start at once. Phean checks the whole definition and reports every problem at once, in words: fix them all and call again.
+`define_pipeline` takes a `name`, a `kind` (`regular` or `adhoc`), a `description`, the `definition`, and optionally `triggers` and a `run` to start at once (give it a `name` too, as for `start_run`). Phean checks the whole definition and reports every problem at once, in words: fix them all and call again.
 
 A definition has `inputs`, `stops` and `ends`, and a `start` (the first stop unless named).
 
@@ -139,7 +139,8 @@ There are no loops. To repeat work, give the stop `onFailure` `retry` or `hand_b
       { "id": "held", "name": "Held for next week" }
     ]
   },
-  "triggers": { "schedule": { "cron": "0 9 * * 1", "timeZone": "Europe/Berlin" } }
+  "triggers": { "schedule": { "cron": "0 9 * * 1", "timeZone": "Europe/Berlin" } },
+  "run": { "name": "Issue 42: AI agents roundup", "inputs": { "topic": "AI agents" } }
 }
 ```
 
@@ -151,18 +152,21 @@ A blocking person stop puts a decision on its subtask, asked by the pipeline its
 
 ## Running and following
 
-- `start_run` with `pipelineId` and `inputs` (by name). Pass `taskId` to run on an existing task: its stops become its subtasks, so it must not be a subtask itself. Pass `goalId` to file the run's own task under a goal. The result has a `headline` ("At Draft the newsletter", "Waiting on Dana at Approve the draft").
+- **Name every run** after the specific thing it makes: `start_run` with `name` ("Issue 42: AI agents roundup", "Acme Q3 renewal email", "Release notes for 3.2"), not "Newsletter run" or the pipeline's name again. The name shows wherever the run does: its page, the runs list, the Decisions page ("Stop 2 of 3 · Issue 42: AI agents roundup"), notifications, and as its task's title. Without one, a run shows as "Weekly newsletter #42". `update_run` with `runId` and `name` renames it (`null` clears it); a rerun keeps it.
+- `start_run` with `pipelineId`, `name` and `inputs` (by name). Pass `taskId` to run on an existing task: its stops become its subtasks, so it must not be a subtask itself. Pass `goalId` to file the run's own task under a goal. The result has a `headline` ("At Draft the newsletter", "Waiting on Dana at Approve the draft").
 - `get_run` shows every stop in order with its `state`: `upcoming`, `active`, `waiting` (on a person), `done`, `failed`, `skipped` (a choice took another branch), `not_reached` (what it waited on cannot arrive), `cancelled`; with its task, result, attempt and who it waits on. A run is never failed while a branch is alive.
 - `list_runs` lists runs, newest first, of one pipeline or all; its `status` `waiting` finds runs held for a person. `list_pipelines` and `get_pipeline` show the pipelines.
 - Asked where a run stands? Answer with its `headline`, who it waits on, and its `url`. A paused or archived pipeline starts no runs; tell the person rather than retrying.
 - A stop failed or came out wrong? Read its result and attempt in `get_run`, then `rerun_from` that stop with a `note` on what to do differently, or tell the person what failed and ask. Cancel a run only when the trip should not go on at all.
 - `cancel_run` with a `reason` stops a live run and drops its open tasks.
 - `rerun_from` with `runId`, `stopId` and a `note` runs a stop again, and every stop after it, on fresh subtasks; a run that ended or failed runs again.
-- Webhooks and the realtime stream carry `pipeline.run_started`, `pipeline.stop_reached`, `pipeline.stop_completed`, `pipeline.stop_failed` and `pipeline.run_ended` under the `pipelines` topic, and under `tasks` when you follow the run's task (you do, if you started it).
+- Webhooks and the realtime stream carry `pipeline.run_started`, `pipeline.stop_reached`, `pipeline.stop_completed`, `pipeline.stop_failed`, `pipeline.stop_stuck` (no one picked a handoff up in 3 days), `pipeline.run_renamed` and `pipeline.run_ended` under the `pipelines` topic, and under `tasks` when you follow the run's task (you do, if you started it). A handoff resent to you arrives as `task.handoff_retried` with the reason `handed_to_you`, whatever your topics.
 
 ## Triggers
 
-A regular pipeline can also start runs on its own: a `schedule` (`cron`, at most once an hour, in a `timeZone`), `events` (a task captured with a `tag`, from a `source`, or both; the run gets the inputs `task_id`, `task_title` and `task_description`), or a `webhook` (POST to its trigger URL with the secret, shown once when it is turned on; never put the secret in chat, a task or a document).
+A regular pipeline can also start runs on its own: a `schedule` (`cron`, at most once an hour, in a `timeZone`), `events` (a task captured with a `tag`, from a `source`, or both; the run gets the inputs `task_id`, `task_title` and `task_description`), or a `webhook` (POST to its trigger URL with the secret, shown once when it is turned on, and a body `{ "name": "…", "inputs": { … } }`; never put the secret in chat, a task or a document).
+
+Runs a trigger starts are named for you: an event's run takes the captured task's title, a schedule's run the pipeline's name and the day it was scheduled for, in the schedule's time zone ("Weekly newsletter, 2026-11-30"), and a webhook's run the `name` in its body, if any. Rename one with `update_run` once you know what it makes.
 
 ## Changing a pipeline
 

@@ -18,9 +18,11 @@ import {
   pausePipeline,
   rejectPipelineVersion,
   rerunFrom,
+  resendHandoff,
   resumePipeline,
   startRun,
   updatePipeline,
+  updateRun,
 } from "@/server/domain/pipelines";
 import { deleteWebhook } from "@/server/domain/webhooks";
 import { saveWorkflow } from "@/server/domain/workflow";
@@ -89,6 +91,8 @@ export const archivePipelineAction = tenantAction(archivePipeline, { success: "A
 export const startRunAction = tenantAction(startRun, { redirectTo: ({ run }, ctx) => routes.pipelineRun(ctx.tenant.slug, run.id) });
 export const cancelRunAction = tenantAction(cancelRun, { success: ({ run }) => `Cancelled run ${run.number}.` });
 export const rerunFromAction = tenantAction(rerunFrom, { success: ({ run }) => `Run ${run.number} runs again.` });
+export const updateRunAction = tenantAction(updateRun, { success: ({ run }) => (run.name ? `Renamed the run “${run.name}”.` : `Cleared run ${run.number}'s name.`) });
+export const resendHandoffAction = tenantAction(resendHandoff, { success: ({ agentName }) => `Resent the handoff to ${agentName}.` });
 
 // Memory
 export const rememberAction = tenantAction(remember, { success: "Saved to memory." });

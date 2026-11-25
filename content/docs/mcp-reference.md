@@ -146,11 +146,12 @@ See [Webhooks](/docs/webhooks).
 | `update_pipeline` | Change a pipeline's name, description, definition (a new version) or triggers. An agent's change to a regular pipeline becomes a proposal a person approves. |
 | `list_pipelines` | Read-only. The workspace's pipelines with their runs at a glance. |
 | `get_pipeline` | Read-only. One pipeline: definition, map, versions, open proposals, triggers and recent runs. |
-| `start_run` | Start a run with its inputs, on a new task or an existing one that is not a subtask. |
+| `start_run` | Start a run with its name (what it makes) and inputs, on a new task or an existing one that is not a subtask. |
 | `get_run` | Read-only. One run: its headline, status and ending, and every stop's state, task, result and attempt. |
 | `list_runs` | Read-only. Runs, newest first, of one pipeline or all, optionally by status. |
 | `cancel_run` | Destructive. Cancel a live run: its open stops' tasks and its own task are dropped. |
 | `rerun_from` | Run a stop again, and every stop after it, on fresh subtasks. |
+| `update_run` | Name a run after the specific thing it makes, or clear its name. |
 
 See [Pipelines](/docs/pipelines).
 

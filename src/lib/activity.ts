@@ -16,6 +16,7 @@ const ACTION_BATCH_PHRASES = {
   "task.released": ["released", "task"],
   "task.handed_off": ["handed off", "task"],
   "task.handoff_cancelled": ["called off handoffs of", "task"],
+  "task.handoff_retried": ["resent handoffs of", "task"],
   "task.picked_up": ["picked up", "task"],
   "task.claim_transferred": ["handed over", "task"],
   "task.completed": ["completed", "task"],
@@ -60,6 +61,8 @@ const ACTION_BATCH_PHRASES = {
   "pipeline.run_ended": ["ended", "run"],
   "pipeline.run_cancelled": ["cancelled", "run"],
   "pipeline.run_rerun": ["reran", "run"],
+  "pipeline.run_renamed": ["renamed", "run"],
+  "pipeline.stop_stuck": ["gave up resending", "stop"],
 } as const satisfies Record<string, readonly [verb: string, noun: string]>;
 
 export type EventAction = keyof typeof ACTION_BATCH_PHRASES;
