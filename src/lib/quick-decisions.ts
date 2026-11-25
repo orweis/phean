@@ -161,3 +161,62 @@ export const DONE_TITLES = [
 export function doneTitle(random: number): (typeof DONE_TITLES)[number] {
   return DONE_TITLES[Math.min(DONE_TITLES.length - 1, Math.max(0, Math.floor(random * DONE_TITLES.length)))]!;
 }
+
+/**
+ * How long a card that has just arrived ignores taps, keys and swipes, in milliseconds: a double tap
+ * or a held key meant for the card that left must never answer the one that replaced it.
+ */
+export const ARRIVAL_GUARD_MS = 300;
+
+/** Whether a failed answer or snooze means the request is no longer there to act on (answered elsewhere, or gone). */
+export const isStaleRefusal = (code: string | undefined): boolean => code === "conflict" || code === "not_found";
+
+/**
+ * Whether a request may be answered or snoozed now: never twice at once, never once it is settled
+ * here, so a tap during the fly-off or a second key press posts nothing.
+ */
+export function mayAct(requestId: string, busy: { inFlight: ReadonlySet<string>; settled: ReadonlySet<string> }): boolean {
+  return !busy.inFlight.has(requestId) && !busy.settled.has(requestId);
+}
+
+/**
+ * The request a file view may show a file for: one still waiting whose task carries that file.
+ * Anything else (another task's document, a request that is gone) shows nothing.
+ */
+export function requestOwningFile<T extends { request: { id: string }; documents: readonly { id: string }[] }>(
+  items: readonly T[],
+  requestId: string | undefined,
+  fileId: string | undefined,
+): T | undefined {
+  if (!requestId || !fileId) return undefined;
+  return items.find((item) => item.request.id === requestId && item.documents.some((document) => document.id === fileId));
+}
+
+/** What this tab remembers of an answer it gave, for the progress count and the done screen: ids and a short label, never the full words. */
+export interface AnsweredEntry {
+  requestId: string;
+  taskId: string;
+  /** “Hold” · Send the launch email…: the answer and the question, cut short. */
+  label: string;
+  /** A pipeline acts on its answer at once, so it cannot be taken back. */
+  undoable: boolean;
+}
+
+/** How long this tab keeps what it answered: past it, the count starts again. */
+export const ANSWERED_TTL_MS = 12 * 60 * 60 * 1000;
+
+/** The entry kept for an answer: the request's ids and a label cut to a few words. */
+export function answeredEntry(item: { taskId: string; request: Pick<InputRequest, "id" | "question" | "pipeline"> }, answer: string): AnsweredEntry {
+  return { requestId: item.request.id, taskId: item.taskId, label: `“${truncate(answer, 30)}” · ${truncate(item.request.question, 50)}`, undoable: !item.request.pipeline };
+}
+
+/** What was stored, if it is still fresh and well formed; anything else reads as nothing answered. */
+export function freshAnswered(stored: unknown, now: number): AnsweredEntry[] {
+  const record = stored as { savedAt?: unknown; entries?: unknown } | null;
+  if (typeof record !== "object" || record === null || typeof record.savedAt !== "number" || !Array.isArray(record.entries)) return [];
+  if (now - record.savedAt > ANSWERED_TTL_MS || record.savedAt > now + 60_000) return [];
+  return record.entries.filter((entry): entry is AnsweredEntry => {
+    const value = entry as Partial<AnsweredEntry> | null;
+    return typeof value === "object" && value !== null && [value.requestId, value.taskId, value.label].every((field) => typeof field === "string") && typeof value.undoable === "boolean";
+  });
+}

@@ -99,7 +99,8 @@ Keys never fire while you are typing in a field.
 
 **Quick Decisions** (`/w/<slug>/decisions/quick`) shows what waits one card at a time, made for a phone. On a phone the Decisions page leads with it (**Start**); on a wider screen it is the **Quick Decisions** button at the top of the page. A link to one request, such as a notification's, still opens that request on the Decisions page.
 
-- Pipeline decisions come first, then the rest longest waiting first; snoozed ones wait at the back.
+- Pipeline decisions come first, then the rest longest waiting first; snoozed ones wait at the back. A pipeline decision that names someone else (another person, or owners and admins) is left out of your queue; it stays on the Decisions page, which says who it waits on.
+- A card that has just arrived ignores taps and keys for a moment, so a double tap or a held key never answers the next one.
 - Tap an option to answer it. The option the agent recommends is filled and marked **Recommended**; on a request that takes several, its suggestions start ticked and **Send** names your picks.
 - **Swipe right** sends the recommended answer (or your picks); **swipe left** snoozes. The colour behind the card says what letting go will do. The **Snooze**, **Context** and named answer buttons under the card do the same without a swipe.
 - **Read full context** opens the agent's context, the task's files and the request's links, with the answers pinned at the bottom so you can answer while reading. A file opens in place, with a way back to the decision.

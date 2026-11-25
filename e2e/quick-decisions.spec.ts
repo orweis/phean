@@ -33,6 +33,8 @@ const cardOf = (page: Page, question: string) => page.getByRole("article", { nam
 
 /** Drags a card sideways by its question, as a finger would, and lets go unless asked to hold. */
 async function swipe(page: Page, card: Locator, dx: number, { hold = false } = {}) {
+  // A card that has just arrived takes no input for a moment; a person's finger would be slower anyway.
+  await expect(page.locator("[data-arriving]")).toHaveCount(0);
   const box = (await card.getByRole("heading", { level: 2 }).boundingBox())!;
   const x = box.x + box.width / 2;
   const y = box.y + box.height / 2;
@@ -213,8 +215,15 @@ test.describe("Quick Decisions on a phone", () => {
       await expect(list.getByRole("listitem")).toHaveCount(4);
       await expectAccessible(page);
       await expectNothingCutOff(page);
-      await list.getByRole("button", { name: `Undo the answer to ${COURIER}` }).click();
-      await expect(status).toContainText("Launch bot's question is open again.");
+      // The tab keeps only ids and a short label, never the question or the answer in full.
+      const stored = await page.evaluate(() => Object.entries(sessionStorage).filter(([key]) => key.startsWith("phean-quick-answered:")));
+      expect(stored).toHaveLength(1);
+      expect(stored[0]![1]).not.toContain(CONTEXT.slice(0, 40));
+      expect(stored[0]![1]).not.toContain("Pick any that apply");
+      // After a reload, Undo still brings the card back.
+      await page.reload();
+      await list.getByRole("button", { name: /^Undo “DHL”/ }).click();
+      await expect(status).toContainText("The question is open again.");
       await cardOf(page, COURIER).getByRole("button", { name: "UPS" }).click();
       await expect(done).toContainText("4 answered.");
       await expect(done.getByRole("link", { name: "Back to Decisions" })).toHaveAttribute("href", `/w/${slug}/decisions`);
@@ -227,6 +236,123 @@ test.describe("Quick Decisions on a phone", () => {
       expect(byTask[courier.id]).toMatchObject({ answer: "UPS" });
       expect(byTask[channels.id]).toMatchObject({ chosenOptions: ["Blog", "Newsletter"] });
       expect(byTask[budget.id]).toMatchObject({ answer: "Marketing: MKT-204" });
+    });
+  });
+});
+
+test.describe("Quick Decisions guards", () => {
+  test.use({ viewport: { width: 375, height: 812 }, hasTouch: true });
+
+  test("pipeline decisions come first without Undo; keys, double taps, stale requests and stray files are handled", async ({ page }) => {
+    test.slow();
+    const { slug, owner } = await newWorkspace(page, "Guarded");
+    await openTab(page, slug, "Agents");
+    const token = await issueToken(page, "Guard bot");
+    const status = page.locator("[data-status-region]");
+
+    const asked = await asAgent(token, async (agent) => {
+      await agent.call("define_pipeline", {
+        name: "Release notes",
+        kind: "adhoc",
+        definition: {
+          stops: [
+            {
+              id: "review",
+              name: "Review",
+              kind: "person",
+              person: owner.email,
+              instructions: "Publish these release notes?",
+              timeLimitMinutes: 600,
+              onTimeout: "Hold",
+              then: { choice: [{ label: "Publish", end: "published" }, { label: "Hold", end: "held" }] },
+            },
+          ],
+          ends: [
+            { id: "published", name: "Published" },
+            { id: "held", name: "Held" },
+          ],
+        },
+      });
+      const { created } = await agent.call<{ created: Task[] }>("capture_tasks", {
+        tasks: ["Pick the venue", "Pick the caterer", "Pick the band", "Pick the date", "Pick the theme"].map((title) => ({ title, status: "todo" })),
+      });
+      const [venue, caterer, band, date, theme] = created as [Task, Task, Task, Task, Task];
+      const { document } = await agent.call<{ document: { id: string } }>("attach_document", { taskId: theme.id, title: "Theme moodboard", format: "markdown", content: "# Secret theme" });
+      const ask = (task: Task, question: string, options: string[], recommended?: number) =>
+        agent.call<{ task: { inputRequest: { id: string } } }>("request_input", { taskId: task.id, kind: "decision", question, options, ...(recommended !== undefined && { recommended }) });
+      await ask(venue, "Which venue?", ["Hall", "Barn"], 1);
+      await ask(caterer, "Which caterer?", ["Ada's", "Bo's"], 0);
+      const bandAsk = await ask(band, "Which band?", ["Jazz", "Rock"]);
+      await ask(date, "Which date?", ["May", "June"]);
+      const themeAsk = await ask(theme, "Which theme?", ["Retro", "Space"]);
+      return { venue, bandRequest: bandAsk.task.inputRequest.id, themeRequest: themeAsk.task.inputRequest.id, moodboard: document.id };
+    });
+
+    const settled = () => expect(page.locator("[data-arriving]")).toHaveCount(0);
+
+    await test.step("the pipeline's decision comes first and cannot be taken back", async () => {
+      await page.goto(`/w/${slug}/decisions/quick`);
+      const card = page.getByRole("article", { name: "Publish these release notes?" });
+      await expect(card).toContainText("Release notes #1 · Review");
+      await expect(card).toContainText("Stop 1 of 1");
+      await expect(card).toContainText("Defaults to “Hold” in 10 hours");
+      await card.getByRole("button", { name: "Publish" }).click();
+      await expect(status).toContainText("Sent “Publish” to Release notes #1; the run has it now, so it cannot be taken back");
+      await expect(status.getByRole("button", { name: "Undo" })).toHaveCount(0);
+    });
+
+    await test.step("a double tap answers one card, not the one that replaces it", async () => {
+      const venue = page.getByRole("article", { name: "Which venue?" });
+      await settled();
+      await venue.getByRole("button", { name: /^Barn/ }).dblclick();
+      await expect(status).toContainText("Sent “Barn” to Guard bot");
+      await expect(page.getByRole("article", { name: "Which caterer?" })).toBeVisible();
+      await page.waitForTimeout(600);
+      await expect(page.getByRole("article", { name: "Which caterer?" })).toBeVisible();
+      await expect(page.locator("[data-progress-count]")).toHaveText("3 of 6");
+      // Take it back, so the agent can close the venue question itself below.
+      await status.getByRole("button", { name: "Undo" }).click();
+      await expect(status).toContainText("Guard bot's question is open again.");
+      await expect(page.getByRole("article", { name: "Which venue?" })).toBeVisible();
+    });
+
+    await test.step("a request answered elsewhere leaves with a word instead of an error", async () => {
+      await asAgent(token, (agent) => agent.call("resolve_input", { taskId: asked.venue.id }));
+      await settled();
+      await page.getByRole("article", { name: "Which venue?" }).getByRole("button", { name: "Hall" }).click();
+      await expect(status).toContainText("Already answered elsewhere: “Which venue?”");
+      await expect(page.getByRole("article", { name: "Which caterer?" })).toBeVisible();
+      await expect(page.getByRole("article", { name: "Which venue?" })).toHaveCount(0);
+    });
+
+    await test.step("→ sends the recommended answer, ← snoozes, and a number picks an option", async () => {
+      await settled();
+      await page.keyboard.press("ArrowRight");
+      await expect(status).toContainText("Sent “Ada's” to Guard bot");
+      const band = page.getByRole("article", { name: "Which band?" });
+      await expect(band).toBeVisible();
+      await settled();
+      // Nothing is recommended on this one, so → does nothing; ← snoozes it.
+      await page.keyboard.press("ArrowRight");
+      await expect(band).toBeVisible();
+      await page.keyboard.press("ArrowLeft");
+      await expect(status).toContainText("Snoozed “Pick the band”");
+      await expect(page.getByRole("article", { name: "Which date?" })).toBeVisible();
+      await settled();
+      await page.keyboard.press("2");
+      await expect(status).toContainText("Sent “June” to Guard bot");
+      await expect(page.getByRole("article", { name: "Which theme?" })).toBeVisible();
+    });
+
+    await test.step("a file link pointing at another task's document shows nothing of it", async () => {
+      // The band's request is still waiting (snoozed); the moodboard is on the theme's task.
+      await page.goto(`/w/${slug}/decisions/quick?request=${asked.bandRequest}&view=file&file=${asked.moodboard}`);
+      await expect(page.getByRole("heading", { level: 1, name: "Quick Decisions" })).toBeVisible();
+      await expect(page.getByText("Secret theme")).toHaveCount(0);
+      await expect(page.locator("[data-quick-file]")).toHaveCount(0);
+      // The same file through its own request opens.
+      await page.goto(`/w/${slug}/decisions/quick?request=${asked.themeRequest}&view=file&file=${asked.moodboard}`);
+      await expect(page.locator("[data-quick-file]")).toContainText("Secret theme");
     });
   });
 });

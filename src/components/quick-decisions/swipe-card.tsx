@@ -43,6 +43,8 @@ export function SwipeCard({ canSend, sendLabel, onSend, onSnooze, labelledBy, re
   const dragged = useRef(false);
   const [dx, setDx] = useState(0);
   const [leaving, setLeaving] = useState<"send" | "snooze" | null>(null);
+  /** Reduced motion, read when a drag starts: the card then follows the finger without tilting. */
+  const [still, setStill] = useState(false);
 
   const move = (value: number) => {
     offset.current = value;
@@ -69,6 +71,7 @@ export function SwipeCard({ canSend, sendLabel, onSend, onSnooze, labelledBy, re
     if (leaving || (event.pointerType === "mouse" && event.button !== 0)) return;
     if ((event.target as Element).closest(NO_DRAG)) return;
     drag.current = { pointer: event.pointerId, x: event.clientX, y: event.clientY, mode: "pending" };
+    setStill(stillPreferred());
     dragged.current = false;
   };
 
@@ -107,7 +110,7 @@ export function SwipeCard({ canSend, sendLabel, onSend, onSnooze, labelledBy, re
   const transform = leaving
     ? `translateX(${leaving === "send" ? 120 : -120}%) rotate(${leaving === "send" ? 10 : -10}deg)`
     : dx
-      ? `translateX(${shown}px) rotate(${tiltOf(shown)}deg)`
+      ? `translateX(${shown}px) rotate(${still ? 0 : tiltOf(shown)}deg)`
       : undefined;
 
   return (

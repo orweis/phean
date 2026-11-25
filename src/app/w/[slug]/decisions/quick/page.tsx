@@ -6,7 +6,7 @@ import { QuickDecisions, type QuickFile } from "@/components/quick-decisions/qui
 import { askedInApp, askerName, sessionOfAsker } from "@/lib/agent-sessions";
 import { DOCUMENT_FORMAT_META } from "@/lib/documents";
 import { timeAgo } from "@/lib/format";
-import { CONTEXT_TABS, doneTitle, QUICK_ENTRIES, type ContextTab, type QuickEntry, type QuickItem } from "@/lib/quick-decisions";
+import { CONTEXT_TABS, doneTitle, QUICK_ENTRIES, requestOwningFile, type ContextTab, type QuickEntry, type QuickItem } from "@/lib/quick-decisions";
 import { isOneOf } from "@/lib/domain";
 import { queryParam, routes } from "@/lib/routes";
 import { requireWorkspace } from "@/server/auth/session";
@@ -45,7 +45,7 @@ function pipelineLine(task: TaskView, context: PipelineRequestContext | undefine
 export default async function QuickDecisionsPage({ params, searchParams }: PageProps<"/w/[slug]/decisions/quick">) {
   const { slug } = await params;
   const query = await searchParams;
-  const { ctx } = await requireWorkspace(slug);
+  const { ctx, viewer } = await requireWorkspace(slug);
   const canAnswer = can(ctx.actor, "task:write");
 
   if (!canAnswer) {
@@ -65,7 +65,10 @@ export default async function QuickDecisionsPage({ params, searchParams }: PageP
   const contexts = pinned.length
     ? await describePipelineRequests(ctx, { requests: pinned.map((task) => ({ runId: task.inputRequest!.pipeline!.runId, stopId: task.inputRequest!.pipeline!.stopId })) })
     : {};
-  const items: QuickItem[] = open.map((task) => {
+  // A pipeline's decision is only for its approvers; anyone else would only be refused, so it is left out of their queue.
+  const contextOf = (task: TaskView) => (task.inputRequest?.pipeline ? contexts[`${task.inputRequest.pipeline.runId}:${task.inputRequest.pipeline.stopId}`] : undefined);
+  const answerable = open.filter((task) => !task.inputRequest?.pipeline || contextOf(task)?.mayDecide);
+  const items: QuickItem[] = answerable.map((task) => {
     const request = task.inputRequest!;
     const app = askedInApp(request, sessionOfAsker(task.agentSessions, request)?.app);
     return {
@@ -76,7 +79,7 @@ export default async function QuickDecisionsPage({ params, searchParams }: PageP
       where: task.goalTitle ?? app,
       age: timeAgo(request.askedAt),
       documents: task.documents,
-      pipeline: pipelineLine(task, request.pipeline ? contexts[`${request.pipeline.runId}:${request.pipeline.stopId}`] : undefined),
+      pipeline: pipelineLine(task, contextOf(task)),
     };
   });
 
@@ -88,7 +91,7 @@ export default async function QuickDecisionsPage({ params, searchParams }: PageP
 
   // A file of the request on screen, read here (with the workspace's access check) and drawn as the document page draws it.
   const fileId = view === "file" ? queryParam(query.file) : undefined;
-  const owner = fileId ? items.find((item) => item.request.id === requestId && item.documents.some((document) => document.id === fileId)) : undefined;
+  const owner = requestOwningFile(items, requestId, fileId);
   let file: QuickFile | null = null;
   if (owner && fileId) {
     const loaded = await getDocument(ctx, { documentId: fileId }).catch(() => null);
@@ -107,6 +110,7 @@ export default async function QuickDecisionsPage({ params, searchParams }: PageP
   return (
     <QuickDecisions
       slug={slug}
+      userId={viewer.user.id}
       items={items}
       view={file ? "file" : view === "context" ? "context" : "card"}
       requestId={requestId ?? null}

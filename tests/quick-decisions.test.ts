@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  ANSWERED_TTL_MS,
+  answeredEntry,
   answerReceipt,
+  ARRIVAL_GUARD_MS,
+  freshAnswered,
+  isStaleRefusal,
+  mayAct,
+  requestOwningFile,
   DONE_TITLES,
   doneTitle,
   dragOffset,
@@ -119,5 +126,69 @@ describe("the words on the buttons", () => {
     expect(doneTitle(0.999)).toBe(DONE_TITLES[DONE_TITLES.length - 1]);
     expect(doneTitle(1)).toBe(DONE_TITLES[DONE_TITLES.length - 1]);
     expect(new Set(DONE_TITLES).size).toBe(5);
+  });
+});
+
+describe("guarding against a second post", () => {
+  it("acts once per request: never while one is on its way, never once it is settled here", () => {
+    const none = new Set<string>();
+    expect(mayAct("q_1", { inFlight: none, settled: none })).toBe(true);
+    expect(mayAct("q_1", { inFlight: new Set(["q_1"]), settled: none })).toBe(false);
+    expect(mayAct("q_1", { inFlight: none, settled: new Set(["q_1"]) })).toBe(false);
+    expect(mayAct("q_2", { inFlight: new Set(["q_1"]), settled: new Set(["q_1"]) })).toBe(true);
+  });
+
+  it("holds a new card still for long enough to swallow a double tap", () => {
+    expect(ARRIVAL_GUARD_MS).toBeGreaterThanOrEqual(250);
+    expect(ARRIVAL_GUARD_MS).toBeLessThanOrEqual(500);
+  });
+
+  it("treats a conflict or a missing request as stale, and anything else as a mistake to show", () => {
+    expect(isStaleRefusal("conflict")).toBe(true);
+    expect(isStaleRefusal("not_found")).toBe(true);
+    expect(isStaleRefusal("invalid")).toBe(false);
+    expect(isStaleRefusal("forbidden")).toBe(false);
+    expect(isStaleRefusal(undefined)).toBe(false);
+  });
+});
+
+describe("the file a request may show", () => {
+  const items = [
+    { request: { id: "q_1" }, documents: [{ id: "d_1" }, { id: "d_2" }] },
+    { request: { id: "q_2" }, documents: [{ id: "d_3" }] },
+  ];
+
+  it("is one on the request's own task", () => {
+    expect(requestOwningFile(items, "q_1", "d_2")?.request.id).toBe("q_1");
+  });
+
+  it("is nothing for another task's document, a request that is gone, or a missing id", () => {
+    expect(requestOwningFile(items, "q_1", "d_3")).toBeUndefined();
+    expect(requestOwningFile(items, "q_9", "d_1")).toBeUndefined();
+    expect(requestOwningFile(items, undefined, "d_1")).toBeUndefined();
+    expect(requestOwningFile(items, "q_1", undefined)).toBeUndefined();
+  });
+});
+
+describe("what the tab remembers", () => {
+  const item = { taskId: "t_1", request: { id: "q_1", question: "Send the launch email to the beta list now, or hold it until the pricing page is live?" } };
+
+  it("keeps ids and a short label, never the whole question or answer", () => {
+    const entry = answeredEntry(item, "Hold it until Thursday, when the pricing page goes live and we can link it");
+    expect(entry).toMatchObject({ requestId: "q_1", taskId: "t_1", undoable: true });
+    expect(Object.keys(entry).sort()).toEqual(["label", "requestId", "taskId", "undoable"]);
+    expect(entry.label.length).toBeLessThanOrEqual(90);
+    expect(entry.label).not.toContain("pricing page is live?");
+    expect(answeredEntry({ ...item, request: { ...item.request, pipeline: PIPELINE } }, "Hold").undoable).toBe(false);
+  });
+
+  it("forgets it after the time-to-live, and reads anything malformed as nothing", () => {
+    const entries = [answeredEntry(item, "Hold")];
+    const now = Date.parse("2026-11-25T12:00:00Z");
+    expect(freshAnswered({ savedAt: now - 1000, entries }, now)).toEqual(entries);
+    expect(freshAnswered({ savedAt: now - ANSWERED_TTL_MS - 1, entries }, now)).toEqual([]);
+    expect(freshAnswered({ savedAt: now, entries: [{ requestId: "q_1", question: "old shape" }] }, now)).toEqual([]);
+    expect(freshAnswered([{ requestId: "q_1" }], now)).toEqual([]);
+    expect(freshAnswered(null, now)).toEqual([]);
   });
 });

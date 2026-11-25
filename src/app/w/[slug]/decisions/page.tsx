@@ -69,7 +69,9 @@ export default async function DecisionsPage({ params, searchParams }: PageProps<
   const linkedElsewhere = linked?.record && !closed.some(({ request }) => request.id === focus) ? linked.record : null;
   const canAnswer = can(ctx.actor, "task:write");
   // Quick Decisions answers one card at a time; offered whenever something waits on this person.
-  const quick = canAnswer && open.length > 0;
+  // A pipeline's decision counts only for its approvers, as Quick Decisions leaves it out for anyone else.
+  const quickCount = rest.length + pinned.filter((task) => contexts[`${task.inputRequest!.pipeline!.runId}:${task.inputRequest!.pipeline!.stopId}`]?.mayDecide).length;
+  const quick = canAnswer && quickCount > 0;
   const proposed = goals.filter((goal) => goal.status === "proposed");
   const decisions = open.filter((task) => task.inputRequest?.kind === "decision" && !task.inputRequest.pipeline).length;
 
@@ -102,7 +104,7 @@ export default async function DecisionsPage({ params, searchParams }: PageProps<
               <h2 id="quick-start-title" className="text-sm font-semibold text-ink">
                 Quick Decisions
               </h2>
-              <p className="mt-0.5 text-xs text-ink-2">{pluralize(open.length, "request")} waiting. One card at a time: tap or swipe to answer.</p>
+              <p className="mt-0.5 text-xs text-ink-2">{pluralize(quickCount, "request")} waiting. One card at a time: tap or swipe to answer.</p>
             </div>
             <ButtonLink href={routes.quickDecisions(slug, { from: "phone" })} variant="primary" size="touch">
               Start

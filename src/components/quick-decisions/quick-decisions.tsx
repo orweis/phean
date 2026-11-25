@@ -10,7 +10,21 @@ import { IDLE } from "@/lib/action-state";
 import { countBucket, track } from "@/lib/analytics";
 import { cx } from "@/lib/cx";
 import { truncate } from "@/lib/format";
-import { answerReceipt, picksLabel, progressSegments, progressText, quickOrder, type ContextTab, type QuickEntry, type QuickItem } from "@/lib/quick-decisions";
+import {
+  answeredEntry,
+  answerReceipt,
+  ARRIVAL_GUARD_MS,
+  isStaleRefusal,
+  mayAct,
+  picksLabel,
+  progressSegments,
+  progressText,
+  quickOrder,
+  type AnsweredEntry,
+  type ContextTab,
+  type QuickEntry,
+  type QuickItem,
+} from "@/lib/quick-decisions";
 import { routes } from "@/lib/routes";
 import { sendTracked } from "@/lib/tracked";
 
@@ -19,7 +33,7 @@ import { Button, ButtonLink, buttonClasses } from "../ui/button";
 import { useStatus, type UndoSpec } from "../ui/status-region";
 import { ContextView } from "./context-view";
 import type { AnswerGesture, QuickController, SnoozeGesture } from "./controller";
-import { DoneView, type Answered } from "./done-view";
+import { DoneView } from "./done-view";
 import { FileView, type QuickFile } from "./file-view";
 import { QuickCard } from "./quick-card";
 import { SwipeCard } from "./swipe-card";
@@ -62,7 +76,7 @@ function QueueHeader({ slug, answered, remaining, onClose }: { slug: string; ans
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <nav aria-label="Breadcrumb">
-            <Link href={routes.decisions(slug)} className="text-xs font-semibold text-muted link">
+            <Link href={routes.decisions(slug)} className="relative text-xs font-semibold text-muted link after:absolute after:-inset-x-2 after:-inset-y-3.5">
               Decisions
             </Link>
           </nav>
@@ -96,6 +110,8 @@ function QueueHeader({ slug, answered, remaining, onClose }: { slug: string; ans
 
 interface QuickDecisionsProps {
   slug: string;
+  /** The person viewing, so what this tab remembers is theirs alone. */
+  userId: string;
   /** The open requests, in the Decisions page's order. */
   items: QuickItem[];
   view: "card" | "context" | "file";
@@ -113,7 +129,7 @@ interface QuickDecisionsProps {
  * Decisions page's actions; the card leaves at once and comes back if the server refuses. The
  * request on screen and its view live in the URL, so Back steps through them.
  */
-export function QuickDecisions({ slug, items, view, requestId, tab, file, entry, doneTitle }: QuickDecisionsProps) {
+export function QuickDecisions({ slug, userId, items, view, requestId, tab, file, entry, doneTitle }: QuickDecisionsProps) {
   const router = useRouter();
   const status = useStatus();
   const [, startTransition] = useTransition();
@@ -124,9 +140,15 @@ export function QuickDecisions({ slug, items, view, requestId, tab, file, entry,
   const [settled, setSettled] = useState<ReadonlySet<string>>(() => new Set());
   /** Ticks on requests that take several, by request; untouched ones start from the agent's suggestions. */
   const [picks, setPicks] = useState<Record<string, number[]>>({});
-  const [answered, remember] = useAnswered(slug);
+  const [answered, remember] = useAnswered(userId, slug);
   /** An answer or snooze just moved the queue on, so focus goes to the card that replaced it. */
   const acted = useRef(false);
+  /** Requests with an answer or snooze on its way to the server: a second tap or key for one posts nothing. */
+  const inFlight = useRef(new Set<string>());
+  /** Requests the server took an answer for here, so a later refusal (a second post) never brings the card back. */
+  const answeredHere = useRef(new Set<string>());
+  /** A card the server would not take, whose question gets focus back once it is on screen again. */
+  const [refocus, setRefocus] = useState<string | null>(null);
 
   const queue = useMemo(() => quickOrder(items.filter((item) => !settled.has(item.request.id)), snoozed), [items, settled, snoozed]);
   const chosen = requestId ? queue.find((item) => item.request.id === requestId) : undefined;
@@ -136,6 +158,19 @@ export function QuickDecisions({ slug, items, view, requestId, tab, file, entry,
   const viewable = requestId ? Boolean(chosen) : Boolean(current);
   const shown: "card" | "context" | "file" = viewable ? (view === "file" && file ? "file" : view === "context" ? "context" : "card") : "card";
   const { count } = progressText(answered.length, queue.length);
+
+  // A card that has just arrived takes no input for a moment (`inert`, and the keys wait): a double
+  // tap or a held key meant for the one that left must not answer it, a pipeline's above all.
+  const currentId = current?.request.id ?? null;
+  const [restingId, setRestingId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!currentId) return;
+    const timer = setTimeout(() => setRestingId(currentId), ARRIVAL_GUARD_MS);
+    return () => clearTimeout(timer);
+  }, [currentId]);
+  const arriving = currentId !== null && restingId !== currentId;
+  /** Whether input for `item` counts now: it is not mid-post or settled, and it is not a card that just arrived. */
+  const ready = (item: QuickItem) => mayAct(item.request.id, { inFlight: inFlight.current, settled }) && !(arriving && item.request.id === currentId);
 
   const href = useCallback((query?: Parameters<typeof routes.quickDecisions>[1]) => routes.quickDecisions(slug, query), [slug]);
 
@@ -155,8 +190,19 @@ export function QuickDecisions({ slug, items, view, requestId, tab, file, entry,
 
   const restore = (requestIdToRestore: string) => {
     acted.current = true;
+    answeredHere.current.delete(requestIdToRestore);
     setSettled((previous) => without(previous, requestIdToRestore));
     remember((list) => list.filter((entry) => entry.requestId !== requestIdToRestore));
+    // The server has the request open again; read it, so a reload's list and this one agree.
+    router.refresh();
+  };
+
+  /** A request the server says is no longer there to act on: it leaves the queue with a word, and the page reads the server again. */
+  const dropStale = (item: QuickItem, message: string) => {
+    acted.current = true;
+    setSettled((previous) => new Set(previous).add(item.request.id));
+    status?.announce({ message });
+    router.refresh();
   };
 
   /** Taking an answer back (Undo), which reopens the request: only before its agent collects it, and never a pipeline's. */
@@ -176,18 +222,27 @@ export function QuickDecisions({ slug, items, view, requestId, tab, file, entry,
 
   const submit = (item: QuickItem, fields: { answer?: string; choices?: number[] }, receipt: string, gesture: AnswerGesture, custom: boolean) => {
     const { request } = item;
+    if (!ready(item)) return;
+    inFlight.current.add(request.id);
     acted.current = true;
     setSettled((previous) => new Set(previous).add(request.id));
     toQueue();
     startTransition(async () => {
       const form = formOf(item, fields.answer ? { answer: fields.answer } : {});
       for (const choice of fields.choices ?? []) form.append("choices", String(choice));
-      const result = await answerInputAction(IDLE, form);
+      const result = await answerInputAction(IDLE, form).finally(() => inFlight.current.delete(request.id));
       if (result.status === "error") {
+        if (answeredHere.current.has(request.id)) return;
+        if (isStaleRefusal(result.code)) {
+          dropStale(item, `Already answered elsewhere: “${truncate(request.question, 60)}”`);
+          return;
+        }
         setSettled((previous) => without(previous, request.id));
+        setRefocus(request.id);
         status?.announce({ message: result.message ?? "Could not send that answer.", tone: "error" });
         return;
       }
+      answeredHere.current.add(request.id);
       const server = result.data?.analytics as { first_answer?: boolean } | undefined;
       sendTracked({
         event: "decision_answer",
@@ -202,10 +257,7 @@ export function QuickDecisions({ slug, items, view, requestId, tab, file, entry,
           first_answer: server?.first_answer === true,
         },
       });
-      remember((list) => [
-        ...list.filter((entry) => entry.requestId !== request.id),
-        { requestId: request.id, taskId: item.taskId, question: request.question, answer: receipt, agentName: request.agentName, undoable: !request.pipeline },
-      ]);
+      remember((list) => [...list.filter((entry) => entry.requestId !== request.id), answeredEntry(item, receipt)]);
       status?.announce({ message: answerReceipt(receipt, request), undo: undoFor(item), workspace: slug });
     });
   };
@@ -240,13 +292,20 @@ export function QuickDecisions({ slug, items, view, requestId, tab, file, entry,
     answerText: (item, answer, gesture) => submit(item, { answer }, answer, gesture, true),
     snooze: (item: QuickItem, gesture: SnoozeGesture) => {
       const id = item.request.id;
+      if (!ready(item)) return;
+      inFlight.current.add(id);
       acted.current = true;
       setSnoozed((previous) => ({ ...previous, [id]: new Date().toISOString() }));
       toQueue();
       startTransition(async () => {
-        const result = await snoozeRequestAction(IDLE, formOf(item));
+        const result = await snoozeRequestAction(IDLE, formOf(item)).finally(() => inFlight.current.delete(id));
         if (result.status === "error") {
           setSnoozed((previous) => omit(previous, id));
+          if (isStaleRefusal(result.code)) {
+            dropStale(item, `No longer waiting: “${truncate(item.request.question, 60)}”`);
+            return;
+          }
+          setRefocus(id);
           status?.announce({ message: result.message ?? "Could not snooze that.", tone: "error" });
           return;
         }
@@ -258,7 +317,10 @@ export function QuickDecisions({ slug, items, view, requestId, tab, file, entry,
           undo: {
             action: async (state, form) => {
               const undone = await snoozeRequestAction(state, form);
-              if (undone.status !== "error") setSnoozed((previous) => omit(previous, id));
+              if (undone.status !== "error") {
+                setSnoozed((previous) => omit(previous, id));
+                router.refresh();
+              }
               return undone;
             },
             fields: { taskId: item.taskId, requestId: id, undo: "true" },
@@ -269,7 +331,7 @@ export function QuickDecisions({ slug, items, view, requestId, tab, file, entry,
     },
   };
 
-  const undoFromList = async (entry: Answered): Promise<boolean> => {
+  const undoFromList = async (entry: AnsweredEntry): Promise<boolean> => {
     const form = new FormData();
     form.set("workspace", slug);
     form.set("taskId", entry.taskId);
@@ -281,7 +343,7 @@ export function QuickDecisions({ slug, items, view, requestId, tab, file, entry,
     }
     sendTracked({ event: "decision_undo" });
     restore(entry.requestId);
-    status?.announce({ message: `${entry.agentName}'s question is open again.` });
+    status?.announce({ message: "The question is open again." });
     return true;
   };
 
@@ -305,21 +367,33 @@ export function QuickDecisions({ slug, items, view, requestId, tab, file, entry,
   useEffect(() => {
     if (!done || doneSent.current) return;
     doneSent.current = true;
-    track("quick_decisions_done", { answered_bucket: countBucket(answeredNow(slug).length) });
-  }, [done, slug]);
+    track("quick_decisions_done", { answered_bucket: countBucket(answeredNow(userId, slug).length) });
+  }, [done, userId, slug]);
 
   // After an answer or a snooze, focus moves to the question of the card that took its place (or the done screen's title).
   const focusKey = shown === "card" ? (current ? questionIdOf(current) : "quick-done-title") : null;
+  // It waits for the card to come to rest: nothing inside an inert card can take focus.
   useEffect(() => {
-    if (!acted.current || !focusKey) return;
+    if (!acted.current || !focusKey || arriving) return;
     acted.current = false;
     document.getElementById(focusKey)?.focus();
-  }, [focusKey]);
+  }, [focusKey, arriving]);
+  // When the server refuses, focus goes back to the question of the card that came back.
+  useEffect(() => {
+    if (!refocus || arriving) return;
+    const question = document.getElementById(`quick-q-${refocus}`);
+    if (!question) return;
+    question.focus();
+    acted.current = false;
+    const timer = setTimeout(() => setRefocus(null), 0);
+    return () => clearTimeout(timer);
+  });
 
   // The keyboard: the Decisions page's keys where they mean the same, plus arrows for the swipes. Never in a field or an open panel.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.altKey || event.ctrlKey || event.metaKey || event.defaultPrevented || !current) return;
+      // A held key repeats: only the first press counts, so holding → never sends card after card.
+      if (event.repeat || event.altKey || event.ctrlKey || event.metaKey || event.defaultPrevented || !current) return;
       const target = event.target as Element | null;
       if (target?.closest?.(TYPING) || document.querySelector("details[open], dialog[open]")) return;
       const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
@@ -330,6 +404,7 @@ export function QuickDecisions({ slug, items, view, requestId, tab, file, entry,
         router.push(href({ request: current.request.id }), { scroll: false });
         return;
       }
+      if (arriving) return;
       if (/^[1-9]$/.test(key)) {
         const index = Number(key) - 1;
         if (index >= current.request.options.length) return;
@@ -381,8 +456,8 @@ export function QuickDecisions({ slug, items, view, requestId, tab, file, entry,
       <QueueHeader slug={slug} answered={answered.length} remaining={queue.length} onClose={close} />
       {current ? (
         <>
-          <div className="relative pb-2">
-            {behind && <div aria-hidden data-behind className="absolute inset-x-3 top-3 bottom-0 rounded-lg border border-rule bg-panel" />}
+          <div className="relative pb-2" inert={arriving} data-arriving={arriving || undefined}>
+            {behind && <div aria-hidden data-behind className="surface absolute inset-x-3 top-3 bottom-0 rounded-lg border border-rule" />}
             <SwipeCard
               key={current.request.id}
               requestId={current.request.id}
@@ -396,7 +471,7 @@ export function QuickDecisions({ slug, items, view, requestId, tab, file, entry,
               <QuickCard item={current} ctl={ctl} />
             </SwipeCard>
           </div>
-          <div role="group" aria-label="Quick actions" data-quick-bar className="mt-4 grid grid-cols-[auto_auto_minmax(0,1fr)] gap-2">
+          <div role="group" aria-label="Quick actions" data-quick-bar inert={arriving} className="mt-4 grid grid-cols-[auto_auto_minmax(0,1fr)] gap-2">
             <Button variant="secondary" size="touch" aria-keyshortcuts="ArrowLeft S" onClick={() => ctl.snooze(current, "button")}>
               <AlarmClock aria-hidden />
               Snooze

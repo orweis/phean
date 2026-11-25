@@ -2,18 +2,20 @@
 
 import { useCallback, useSyncExternalStore } from "react";
 
-import type { Answered } from "./done-view";
+import { freshAnswered, type AnsweredEntry } from "@/lib/quick-decisions";
 
 /**
- * What a person answered in Quick Decisions in this tab, per workspace: the progress bar counts it
- * and the done screen lists it. Kept in `sessionStorage`, so a reload mid-queue keeps the count; when
- * storage is refused (a private window), in memory for the life of the page. A per-viewer
- * convenience only: the answers themselves are on the server.
+ * What a person answered in Quick Decisions in this tab, per person and workspace: the progress bar
+ * counts it and the done screen lists it. Only request ids and a short label are kept, in
+ * `sessionStorage` (in memory when storage is refused), for at most `ANSWERED_TTL_MS`, and it is
+ * forgotten on sign-out and when Quick Decisions is closed. A per-viewer convenience only: the
+ * answers themselves are on the server.
  */
+const PREFIX = "phean-quick-answered:";
 const memory = new Map<string, string>();
 const listeners = new Set<() => void>();
-const EMPTY: Answered[] = [];
-let cache: { key: string; raw: string | null; value: Answered[] } | null = null;
+const EMPTY: AnsweredEntry[] = [];
+let cache: { key: string; raw: string | null; value: AnsweredEntry[] } | null = null;
 
 function load(key: string): string | null {
   try {
@@ -31,23 +33,13 @@ function save(key: string, raw: string): void {
   }
 }
 
-const isAnswered = (value: unknown): value is Answered => {
-  const entry = value as Partial<Answered> | null;
-  return (
-    typeof entry === "object" &&
-    entry !== null &&
-    [entry.requestId, entry.taskId, entry.question, entry.answer, entry.agentName].every((field) => typeof field === "string") &&
-    typeof entry.undoable === "boolean"
-  );
-};
-
-function read(key: string): Answered[] {
+function read(key: string): AnsweredEntry[] {
   const raw = load(key);
   if (cache?.key === key && cache.raw === raw) return cache.value;
   let value = EMPTY;
   try {
-    const parsed: unknown = raw ? JSON.parse(raw) : [];
-    if (Array.isArray(parsed)) value = parsed.filter(isAnswered);
+    const entries = raw ? freshAnswered(JSON.parse(raw), Date.now()) : [];
+    if (entries.length) value = entries;
   } catch {
     value = EMPTY;
   }
@@ -55,28 +47,45 @@ function read(key: string): Answered[] {
   return value;
 }
 
+function notify(): void {
+  for (const listener of listeners) listener();
+}
+
 function subscribe(listener: () => void): () => void {
   listeners.add(listener);
   return () => listeners.delete(listener);
 }
 
-const keyOf = (slug: string) => `phean-quick-answered:${slug}`;
+const keyOf = (userId: string, slug: string) => `${PREFIX}${userId}:${slug}`;
 
-/** This tab's answers in the workspace as stored right now, for an effect that must not wait for a render. */
-export const answeredNow = (slug: string): readonly Answered[] => read(keyOf(slug));
+/** Forgets what every person answered in this tab: on sign-out, so the next person here sees none of it. */
+export function forgetQuickAnswers(): void {
+  memory.clear();
+  try {
+    const keys = Array.from({ length: window.sessionStorage.length }, (_, index) => window.sessionStorage.key(index)).filter((key): key is string => Boolean(key?.startsWith(PREFIX)));
+    for (const key of keys) window.sessionStorage.removeItem(key);
+  } catch {
+    // Storage refused: the memory copy above was all there was.
+  }
+  cache = null;
+  notify();
+}
 
-/** This tab's answers in the workspace, and a way to change them. The server render sees none. */
-export function useAnswered(slug: string): [Answered[], (change: (list: Answered[]) => Answered[]) => void] {
-  const key = keyOf(slug);
+/** This person's answers in the workspace as stored right now, for an effect that must not wait for a render. */
+export const answeredNow = (userId: string, slug: string): readonly AnsweredEntry[] => read(keyOf(userId, slug));
+
+/** This person's answers in the workspace in this tab, and a way to change them. The server render sees none. */
+export function useAnswered(userId: string, slug: string): [AnsweredEntry[], (change: (list: AnsweredEntry[]) => AnsweredEntry[]) => void] {
+  const key = keyOf(userId, slug);
   const list = useSyncExternalStore(
     subscribe,
     () => read(key),
     () => EMPTY,
   );
   const update = useCallback(
-    (change: (list: Answered[]) => Answered[]) => {
-      save(key, JSON.stringify(change(read(key))));
-      for (const listener of listeners) listener();
+    (change: (list: AnsweredEntry[]) => AnsweredEntry[]) => {
+      save(key, JSON.stringify({ savedAt: Date.now(), entries: change(read(key)) }));
+      notify();
     },
     [key],
   );

@@ -9,6 +9,7 @@ import { authClient } from "@/lib/auth-client";
 import { routes } from "@/lib/routes";
 
 import { browserPushSubscription } from "./push-subscription";
+import { forgetQuickAnswers } from "./quick-decisions/use-answered";
 import { Button, type ButtonVariant } from "./ui/button";
 
 /**
@@ -35,6 +36,8 @@ export function SignOutButton({ redirectTo = routes.home(), label = "Sign out", 
         startTransition(async () => {
           await stopNotificationsHere();
           await authClient.signOut();
+          // What this person answered in Quick Decisions stays with them, not with the tab.
+          forgetQuickAnswers();
           router.push(redirectTo);
           router.refresh();
         })

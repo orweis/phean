@@ -108,7 +108,7 @@ function Picks({ item, ctl }: { item: QuickItem; ctl: QuickController }) {
           <label
             key={option}
             className={cx(
-              "flex min-h-12 cursor-pointer items-center gap-3 rounded-xl border border-edge px-4 py-2 text-sm font-semibold text-ink select-none",
+              "flex min-h-12 cursor-pointer items-center gap-3 rounded-lg border border-edge px-4 py-2 text-sm font-semibold text-ink select-none",
               "has-checked:border-accent has-checked:bg-accent-tint has-checked:text-accent-ink has-checked:ring-1 has-checked:ring-accent has-checked:ring-inset",
               "has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-focus",
             )}
