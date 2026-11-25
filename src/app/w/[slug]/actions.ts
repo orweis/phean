@@ -1,8 +1,21 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
+
+import type { ActionState } from "@/lib/action-state";
 import { GOAL_STATUS_META } from "@/lib/domain";
+import { LAST_WORKSPACE_COOKIE } from "@/lib/last-workspace";
 import { routes } from "@/lib/routes";
-import { tenantAction } from "@/server/actions";
+import { DELETED_NOTICE_COOKIE, DELETED_NOTICE_MAX_AGE } from "@/lib/workspace-deletion";
+import { attempt, tenantAction } from "@/server/actions";
+import { queueAnalyticsSignal } from "@/server/auth/analytics";
+import { getSession, requireWorkspace } from "@/server/auth/session";
+import { appUrl } from "@/server/config";
+import { workspaceDeletionProof } from "@/server/entry";
+import { deleteWorkspace } from "@/server/domain/workspace-deletion";
+import { formToInput } from "@/server/forms";
 import { cancelInvitation, inviteMember, removeMember } from "@/server/auth/workspaces";
 import { archiveAgent, archiveRevokedAgents, createAgent, revokeAgent, unarchiveAgent } from "@/server/domain/agents";
 import { saveDigestSubscription, stopDigestSubscription } from "@/server/domain/digest";
@@ -138,3 +151,33 @@ export const saveDigestAction = tenantAction(saveDigestSubscription);
 export const muteWorkspaceAction = tenantAction(muteWorkspace);
 export const unmuteWorkspaceAction = tenantAction(unmuteWorkspace);
 export const stopDigestAction = tenantAction(stopDigestSubscription);
+
+// The workspace itself
+/**
+ * Deletes the workspace, for good. Not a `tenantAction`: the service also needs what only the
+ * request knows (when this session signed in, and Better Auth's records to check the password and
+ * code against). Afterwards the person lands on their workspaces with a notice, and the browser
+ * forgets this workspace as the one to reopen.
+ */
+export async function deleteWorkspaceAction(_previous: ActionState, formData: FormData): Promise<ActionState> {
+  const slug = String(formData.get("workspace") ?? "");
+  const { ctx } = await requireWorkspace(slug);
+  const signedIn = await getSession();
+  if (!signedIn) redirect(routes.signIn());
+  const proof = workspaceDeletionProof(new Date(signedIn.session.createdAt));
+  const result = await attempt(() => deleteWorkspace(ctx, formToInput(formData, deleteWorkspace.schema) as Parameters<typeof deleteWorkspace>[1], proof));
+  if (!result.ok) return result.state;
+
+  const jar = await cookies();
+  if (jar.get(LAST_WORKSPACE_COOKIE)?.value === slug) jar.delete(LAST_WORKSPACE_COOKIE);
+  jar.set(DELETED_NOTICE_COOKIE, result.value.name, {
+    path: routes.workspaces(),
+    maxAge: DELETED_NOTICE_MAX_AGE,
+    sameSite: "lax",
+    httpOnly: false,
+    secure: appUrl().startsWith("https:"),
+  });
+  await queueAnalyticsSignal({ event: "workspace_delete" });
+  revalidatePath("/", "layout");
+  redirect(routes.workspaces());
+}

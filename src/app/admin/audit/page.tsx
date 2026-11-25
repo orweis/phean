@@ -4,10 +4,11 @@ import Link from "next/link";
 
 import { Pager, TableScroll, TwoFactorGate } from "@/components/backoffice/parts";
 import { PageHeader } from "@/components/page-header";
-import { Card } from "@/components/ui/card";
+import { Card, CardHeader } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/stat";
 import { PINNED_CELL, TH } from "@/components/ui/table";
 import { cx } from "@/lib/cx";
+import { countLabel, DELETION_COUNTS } from "@/lib/workspace-deletion";
 import { queryParam } from "@/lib/routes";
 import { adminPaths } from "@/server/backoffice/paths";
 import { listAuditLog } from "@/server/backoffice";
@@ -96,6 +97,41 @@ export default async function AdminAuditPage({ searchParams }: PageProps<"/admin
             </TableScroll>
             <Pager page={log.page} pageSize={log.pageSize} total={log.total} noun="entries" href={(next) => adminPaths.audit(next)} />
           </>
+        )}
+      </Card>
+      <Card className="mt-6">
+        <CardHeader title="Deleted workspaces" description="Workspaces their owners deleted, with everything in them, newest first: recorded before the deletion, and kept when nothing else of the workspace is." />
+        {log.deletions.length === 0 ? (
+          <EmptyState icon={<ScrollText />} title="No workspace deleted yet" />
+        ) : (
+          <TableScroll label="Deleted workspaces">
+            <table className="w-full text-sm">
+              <caption className="sr-only">Deleted workspaces, newest first</caption>
+              <thead>
+                <tr className="border-b border-rule">
+                  {["When", "Workspace", "Deleted by", "What went with it", "Files"].map((label, index) => (
+                    <th key={label} scope="col" className={cx(TH, "text-left", index === 0 && cx("pl-5", PINNED_CELL), index === 4 && "pr-5")}>
+                      {label}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-rule">
+                {log.deletions.map((row) => (
+                  <tr key={row.id} className="align-top">
+                    <td className={cx("py-2.5 pr-3 pl-5 text-xs whitespace-nowrap text-ink-2", PINNED_CELL)}>{when.format(row.at)}</td>
+                    <td className="px-3 py-2.5 text-xs">
+                      <p className="font-semibold wrap-anywhere text-ink">{row.name}</p>
+                      <p className="text-muted">/w/{row.slug}</p>
+                    </td>
+                    <td className="px-3 py-2.5 text-xs text-ink-2">{row.deletedByEmail}</td>
+                    <td className="max-w-md px-3 py-2.5 text-xs text-ink-2">{DELETION_COUNTS.map((kind) => countLabel(kind, row.counts[kind] ?? 0)).join(" · ")}</td>
+                    <td className="py-2.5 pr-5 pl-3 text-xs whitespace-nowrap text-ink-2">{row.blobsClearedAt ? "Deleted" : "Pending"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </TableScroll>
         )}
       </Card>
     </>
