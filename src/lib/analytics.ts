@@ -120,6 +120,8 @@ export const EVENTS = {
   quick_context_open: { params: { tab: ["context", "files", "links"] } },
   quick_file_open: { params: {} },
   quick_decisions_done: { params: { answered_bucket: BUCKET } },
+  quick_snoozed_rest: { params: { snoozed_bucket: BUCKET } },
+  quick_snoozed_show: { params: {} },
 
   // App: tasks
   task_create_manual: { params: { as: ["task", "goal"] } },

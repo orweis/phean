@@ -129,14 +129,39 @@ export function progressSegments(answered: number, remaining: number): ("done" |
   return [...Array<"done">(answered).fill("done"), ...(remaining > 0 ? (["current"] as const) : []), ...Array<"rest">(Math.max(0, remaining - 1)).fill("rest")];
 }
 
-/** "3 of 7" and its words for a screen reader: where the person is in this session's queue. */
+/**
+ * "3 of 7 requests" and its words for a screen reader: where the person is in today's queue. The
+ * queue counts requests alone; goals waiting for approval are on the Decisions page.
+ */
 export function progressText(answered: number, remaining: number): { count: string; spoken: string } {
   const total = answered + remaining;
-  if (remaining === 0) return { count: `${answered} of ${total}`, spoken: `All ${total} done` };
+  const noun = total === 1 ? "request" : "requests";
+  if (remaining === 0) return { count: `${answered} of ${total} ${noun}`, spoken: `All ${total} ${noun} done` };
   return {
-    count: `${answered + 1} of ${total}`,
-    spoken: `Decision ${answered + 1} of ${total}: ${answered} answered, ${remaining - 1} after this one`,
+    count: `${answered + 1} of ${total} ${noun}`,
+    spoken: `Request ${answered + 1} of ${total}: ${answered} answered, ${remaining - 1} after this one`,
   };
+}
+
+/** Whether every request left is one snoozed in this visit: the queue has come round to them, so it rests. */
+export function onlySnoozedLeft(queue: readonly { request: { id: string } }[], snoozedHere: Readonly<Record<string, string>>): boolean {
+  return queue.length > 0 && queue.every((item) => item.request.id in snoozedHere);
+}
+
+/** "1 snoozed, nothing else waiting": the end of the queue when only snoozed requests are left. */
+export function snoozedTitle(count: number): string {
+  return `${count} snoozed, nothing else waiting`;
+}
+
+/** What the end of the queue says about goals waiting for approval, which the queue does not hold; null when there are none. */
+export function approvalsLine(count: number): string | null {
+  if (count <= 0) return null;
+  return count === 1 ? "1 goal still needs your approval" : `${count} goals still need your approval`;
+}
+
+/** The send button for a request that takes several, by how many are ticked: "Send 3 picks". */
+export function sendPicksLabel(count: number): string {
+  return count === 0 ? "Pick at least one" : `Send ${count} ${count === 1 ? "pick" : "picks"}`;
 }
 
 /** The picks named on a send button: "Blog + Changelog", or how many when they would not fit. */

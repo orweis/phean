@@ -2,7 +2,6 @@
 
 import { ChevronLeft, ChevronRight, FileText, PenLine, Send } from "lucide-react";
 import Link from "next/link";
-import { useRef } from "react";
 
 import { cx } from "@/lib/cx";
 import { DOCUMENT_FORMAT_META } from "@/lib/documents";
@@ -12,7 +11,6 @@ import { routes } from "@/lib/routes";
 import { TaskLinks } from "../agent-sessions";
 import { RecommendedTag } from "../recommended-tag";
 import { Button, buttonClasses } from "../ui/button";
-import { useChipRail } from "../ui/chip-rail";
 import { SEGMENTED, segment } from "../ui/segmented";
 import { Composer } from "./composer";
 import type { QuickController } from "./controller";
@@ -28,13 +26,12 @@ export function BackLink({ href, children }: { href: string; children: string })
 }
 
 /**
- * The answers, pinned to the bottom of the full context so the person can answer while reading:
- * the options as a sideways rail of capsules (the recommended one filled), or for a request that
- * takes several one Send naming the picks carried over from the card, and Other… for a written answer.
+ * The answers, held at the bottom of the full context so the person can answer while reading: every
+ * option as a capsule, wrapping onto as many rows as they need so none hides behind a scroll (the
+ * recommended one filled), or for a request that takes several one Send naming the picks carried
+ * over from the card, and Other… for a written answer.
  */
 function AnswerDock({ item, ctl }: { item: QuickItem; ctl: QuickController }) {
-  const rail = useRef<HTMLDivElement>(null);
-  useChipRail(rail, item.request.id);
   const recommended = new Set(item.request.recommended ?? []);
   const { request } = item;
   const other = (
@@ -52,29 +49,28 @@ function AnswerDock({ item, ctl }: { item: QuickItem; ctl: QuickController }) {
       role="group"
       aria-label="Answer"
       data-answer-dock
-      className="fixed inset-x-4 bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-30 mx-auto flex max-w-xl items-center gap-2 rounded-full p-1.5"
+      className="sticky bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-30 mt-6 flex flex-wrap items-center gap-1.5 rounded-3xl p-1.5"
     >
       {/* The glass is a layer of its own, not the dock: a backdrop filter would trap the composer's sheet inside it. */}
-      <div aria-hidden className="glass-float absolute inset-0 -z-10 rounded-full" />
+      <div aria-hidden className="glass-float absolute inset-0 -z-10 rounded-3xl" />
       {request.options.length === 0 ? (
         <div className="flex-1 [&_summary]:w-full">{other}</div>
       ) : request.multiple ? (
         <>
           <Button variant="primary" size="touch" className="min-w-0 flex-1" disabled={!ctl.picksOf(item).length} onClick={() => ctl.send(item, "dock")}>
             <Send aria-hidden />
-            <span className="truncate">{ctl.sendLabel(item) ?? "Pick on the card first"}</span>
+            <span className="truncate">{ctl.picksOf(item).length ? (ctl.sendLabel(item) ?? "") : "Pick on the card first"}</span>
           </Button>
           {other}
         </>
       ) : (
         <>
-          <div ref={rail} className="chip-rail flex min-w-0 flex-1 gap-1.5">
-            {request.options.map((option, index) => (
+          {request.options.map((option, index) => (
               <Button
                 key={option}
                 variant={recommended.has(index) ? "primary" : "secondary"}
                 size="touch"
-                className="max-w-64"
+                className="max-w-full"
                 data-option={index + 1}
                 onClick={() => ctl.answerOption(item, index, "dock")}
               >
@@ -82,7 +78,6 @@ function AnswerDock({ item, ctl }: { item: QuickItem; ctl: QuickController }) {
                 {recommended.has(index) && <RecommendedTag tone="filled" compact />}
               </Button>
             ))}
-          </div>
           {other}
         </>
       )}
@@ -102,7 +97,7 @@ export function ContextView({ slug, item, tab, count, ctl }: { slug: string; ite
     { id: "links", label: `Links (${request.links.length})` },
   ];
   return (
-    <section aria-labelledby="quick-context-question" data-quick-context={request.id} className="mx-auto w-full max-w-xl pb-24">
+    <section aria-labelledby="quick-context-question" data-quick-context={request.id} className="mx-auto flex w-full max-w-xl flex-1 flex-col">
       <div className="flex items-center justify-between gap-3">
         <BackLink href={ctl.href({ request: request.id })}>Decision</BackLink>
         <span className="text-sm font-semibold text-muted tabular-nums">{count}</span>
@@ -127,7 +122,7 @@ export function ContextView({ slug, item, tab, count, ctl }: { slug: string; ite
           </Link>
         ))}
       </nav>
-      <div className="mt-4 min-h-48">
+      <div className="mt-4 min-h-48 flex-1">
         {tab === "context" && (
           <div className="space-y-4">
             {request.context ? (
@@ -147,7 +142,7 @@ export function ContextView({ slug, item, tab, count, ctl }: { slug: string; ite
             )}
             <p className="text-xs text-muted">
               On the task{" "}
-              <Link href={routes.task(slug, item.taskId)} className="font-semibold text-ink-2 link">
+              <Link href={routes.task(slug, item.taskId)} className="inline-flex min-h-11 items-center font-semibold text-ink-2 link">
                 {item.title}
               </Link>
             </p>
@@ -175,7 +170,7 @@ export function ContextView({ slug, item, tab, count, ctl }: { slug: string; ite
           ) : (
             <p className="text-sm text-muted">No files on this request&apos;s task.</p>
           ))}
-        {tab === "links" && (request.links.length ? <TaskLinks links={request.links} /> : <p className="text-sm text-muted">No links on this request.</p>)}
+        {tab === "links" && (request.links.length ? <TaskLinks links={request.links} size="touch" /> : <p className="text-sm text-muted">No links on this request.</p>)}
       </div>
       <AnswerDock item={item} ctl={ctl} />
     </section>

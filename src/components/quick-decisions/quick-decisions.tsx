@@ -16,10 +16,12 @@ import {
   ARRIVAL_GUARD_MS,
   isStaleRefusal,
   mayAct,
+  onlySnoozedLeft,
   picksLabel,
   progressSegments,
   progressText,
   quickOrder,
+  sendPicksLabel,
   type AnsweredEntry,
   type ContextTab,
   type QuickEntry,
@@ -33,7 +35,7 @@ import { Button, ButtonLink, buttonClasses } from "../ui/button";
 import { useStatus, type UndoSpec } from "../ui/status-region";
 import { ContextView } from "./context-view";
 import type { AnswerGesture, QuickController, SnoozeGesture } from "./controller";
-import { DoneView } from "./done-view";
+import { DoneView, SnoozedView } from "./done-view";
 import { FileView, type QuickFile } from "./file-view";
 import { QuickCard } from "./quick-card";
 import { SwipeCard } from "./swipe-card";
@@ -51,6 +53,9 @@ const without = <T,>(set: ReadonlySet<T>, value: T) => {
 };
 
 const omit = (record: Readonly<Record<string, string>>, key: string) => Object.fromEntries(Object.entries(record).filter(([name]) => name !== key));
+
+/** The screen less the focused frame's safe-area padding (`WorkspaceFrame`), which the queue fills exactly. */
+const SCREEN_HEIGHT = "calc(100dvh - max(0.5rem, env(safe-area-inset-top)) - max(1rem, env(safe-area-inset-bottom)))";
 
 const questionIdOf = (item: QuickItem) => `quick-q-${item.request.id}`;
 
@@ -77,13 +82,13 @@ function sendLabelOf(item: QuickItem, picks: readonly number[]): string | null {
  * Quick Decisions' own slim bar, in place of the workspace's header: the way out, the title, where
  * the person is in the queue, and the progress bar with its words.
  */
-function QueueHeader({ slug, answered, remaining, onClose }: { slug: string; answered: number; remaining: number; onClose: () => void }) {
+function QueueHeader({ slug, answered, remaining }: { slug: string; answered: number; remaining: number }) {
   const total = answered + remaining;
   const { count, spoken } = progressText(answered, remaining);
   return (
     <header data-quick-header className="mb-3 shrink-0">
       <div className="-ml-2 flex items-center gap-1">
-        <Link href={routes.decisions(slug)} onClick={onClose} aria-label="Close Quick Decisions" className={cx(buttonClasses("ghost", "touch"), "shrink-0")}>
+        <Link href={routes.decisions(slug)} aria-label="Close Quick Decisions" className={cx(buttonClasses("ghost", "touch"), "shrink-0")}>
           <X aria-hidden />
         </Link>
         <h1 className="min-w-0 flex-1 truncate text-md font-semibold text-ink">Quick Decisions</h1>
@@ -122,6 +127,8 @@ interface QuickDecisionsProps {
   entry: QuickEntry;
   /** Picked at random on the server; kept for the visit, so it does not change under the person. */
   doneTitle: string;
+  /** Goals waiting for this workspace's approval, which the queue does not hold: the end says so. */
+  approvals: number;
 }
 
 /**
@@ -129,7 +136,7 @@ interface QuickDecisionsProps {
  * Decisions page's actions; the card leaves at once and comes back if the server refuses. The
  * request on screen and its view live in the URL, so Back steps through them.
  */
-export function QuickDecisions({ slug, userId, items, view, requestId, tab, file, entry, doneTitle }: QuickDecisionsProps) {
+export function QuickDecisions({ slug, userId, items, view, requestId, tab, file, entry, doneTitle, approvals }: QuickDecisionsProps) {
   const router = useRouter();
   const status = useStatus();
   const [, startTransition] = useTransition();
@@ -149,10 +156,16 @@ export function QuickDecisions({ slug, userId, items, view, requestId, tab, file
   const answeredHere = useRef(new Set<string>());
   /** A card the server would not take, whose question gets focus back once it is on screen again. */
   const [refocus, setRefocus] = useState<string | null>(null);
+  /** The person asked to see what they snoozed again, once only snoozed requests were left. */
+  const [showSnoozed, setShowSnoozed] = useState(false);
+  /** The bar along the bottom, whose top the status region's notices sit above. */
+  const bar = useRef<HTMLDivElement>(null);
 
   const queue = useMemo(() => quickOrder(items.filter((item) => !settled.has(item.request.id)), snoozed), [items, settled, snoozed]);
   const chosen = requestId ? queue.find((item) => item.request.id === requestId) : undefined;
-  const current = chosen ?? queue[0];
+  // Once the queue has come round to what was snoozed here, it rests rather than showing the same card again.
+  const resting = !showSnoozed && !chosen && onlySnoozedLeft(queue, snoozed);
+  const current = resting ? undefined : (chosen ?? queue[0]);
   const behind = queue.find((item) => item !== current);
   // A view of one request needs that request still waiting (without a named one, the first in the queue); otherwise the card.
   const viewable = requestId ? Boolean(chosen) : Boolean(current);
@@ -258,7 +271,7 @@ export function QuickDecisions({ slug, userId, items, view, requestId, tab, file
         },
       });
       remember((list) => [...list.filter((entry) => entry.requestId !== request.id), answeredEntry(item, receipt)]);
-      status?.announce({ message: answerReceipt(receipt, request), undo: undoFor(item), workspace: slug });
+      status?.announce({ message: answerReceipt(receipt, request), undo: undoFor(item), workspace: slug, compact: true });
     });
   };
 
@@ -296,6 +309,7 @@ export function QuickDecisions({ slug, userId, items, view, requestId, tab, file
       inFlight.current.add(id);
       acted.current = true;
       setSnoozed((previous) => ({ ...previous, [id]: new Date().toISOString() }));
+      setShowSnoozed(false);
       toQueue();
       startTransition(async () => {
         const result = await snoozeRequestAction(IDLE, formOf(item)).finally(() => inFlight.current.delete(id));
@@ -310,9 +324,11 @@ export function QuickDecisions({ slug, userId, items, view, requestId, tab, file
           return;
         }
         sendTracked({ event: "decision_snooze", params: { gesture } });
-        const name = truncate(item.title, 60);
+        // The card's own words, as the person saw them on it.
+        const name = truncate(item.request.question, 60);
         status?.announce({
-          message: `Snoozed “${name}” to the back of the queue`,
+          message: `Snoozed “${name}”`,
+          compact: true,
           workspace: slug,
           undo: {
             action: async (state, form) => {
@@ -362,7 +378,11 @@ export function QuickDecisions({ slug, userId, items, view, requestId, tab, file
   useEffect(() => {
     if (fileShown) track("quick_file_open");
   }, [fileShown]);
-  const done = !current;
+  const done = !current && !resting;
+  const restingCount = resting ? queue.length : 0;
+  useEffect(() => {
+    if (restingCount) track("quick_snoozed_rest", { snoozed_bucket: countBucket(restingCount) });
+  }, [restingCount]);
   const doneSent = useRef(false);
   useEffect(() => {
     if (!done || doneSent.current) return;
@@ -444,42 +464,98 @@ export function QuickDecisions({ slug, userId, items, view, requestId, tab, file
     return () => document.removeEventListener("keydown", onKeyDown);
   });
 
-  const close = () => remember(() => []);
+  // Notices sit above the bar along the bottom, never over its buttons.
+  const barShown = Boolean(current) && shown === "card";
+  useEffect(() => {
+    const element = bar.current;
+    if (!barShown || !element) return;
+    const root = document.documentElement;
+    const dock = () => root.style.setProperty("--status-dock", `${Math.max(0, window.innerHeight - element.getBoundingClientRect().top) + 8}px`);
+    dock();
+    const observer = new ResizeObserver(dock);
+    observer.observe(element);
+    window.addEventListener("resize", dock);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", dock);
+      root.style.removeProperty("--status-dock");
+    };
+  }, [barShown]);
 
   if (current && shown === "context") return <ContextView slug={slug} item={current} tab={tab} count={count} ctl={ctl} />;
   if (current && shown === "file" && file) return <FileView item={current} file={file} ctl={ctl} />;
 
   const sendTarget = current ? sendTargetOf(current, picksOf(current)) : null;
   const sendLabel = sendTarget === null ? null : `Send ${sendTarget}`;
+  const header = <QueueHeader slug={slug} answered={answered.length} remaining={resting ? 0 : queue.length} />;
+  if (!current) {
+    return (
+      <div data-quick-queue className="mx-auto flex w-full max-w-xl flex-1 flex-col">
+        {header}
+        {resting ? (
+          <SnoozedView slug={slug} snoozed={queue.length} approvals={approvals} onShow={() => {
+              track("quick_snoozed_show");
+              acted.current = true;
+              setShowSnoozed(true);
+            }} />
+        ) : (
+          <DoneView slug={slug} title={title} answered={answered} approvals={approvals} onUndo={undoFromList} />
+        )}
+      </div>
+    );
+  }
+  const question = current.request.options.length === 0;
+  const picked = picksOf(current);
   return (
-    // The whole screen, the card taking what the bar and the buttons leave.
-    <div data-quick-queue className="mx-auto flex w-full max-w-xl flex-1 flex-col">
-      <QueueHeader slug={slug} answered={answered.length} remaining={queue.length} onClose={close} />
-      {current ? (
-        <>
-          <div className="relative flex min-h-[24rem] flex-1 flex-col pb-2" inert={arriving} data-arriving={arriving || undefined}>
-            {behind && <div aria-hidden data-behind className="surface absolute inset-x-3 top-3 bottom-0 rounded-lg border border-rule" />}
-            <SwipeCard
-              key={current.request.id}
-              requestId={current.request.id}
-              labelledBy={questionIdOf(current)}
-              sendTarget={sendTarget}
-              onSend={() => ctl.send(current, "swipe")}
-              onSnooze={() => ctl.snooze(current, "swipe")}
-              className="flex-1"
+    // Exactly the screen: the bar along the top, the card taking what is left (and scrolling inside
+    // when it is long), the buttons pinned along the bottom.
+    <div data-quick-queue className="mx-auto flex w-full max-w-xl flex-col" style={{ height: SCREEN_HEIGHT }}>
+      {header}
+      <div className="relative flex min-h-0 flex-1 flex-col pb-2" inert={arriving} data-arriving={arriving || undefined}>
+        {behind && <div aria-hidden data-behind className="surface absolute inset-x-3 top-3 bottom-0 rounded-lg border border-rule" />}
+        <SwipeCard
+          key={current.request.id}
+          requestId={current.request.id}
+          labelledBy={questionIdOf(current)}
+          sendTarget={sendTarget}
+          onSend={() => ctl.send(current, "swipe")}
+          onSnooze={() => ctl.snooze(current, "swipe")}
+          className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
+        >
+          <QuickCard item={current} ctl={ctl} />
+        </SwipeCard>
+      </div>
+      <div
+        ref={bar}
+        role="group"
+        aria-label="Quick actions"
+        data-quick-bar
+        inert={arriving}
+        className={cx("mt-3 grid shrink-0 gap-2", question ? "grid-cols-2" : "grid-cols-[auto_auto_minmax(0,1fr)]")}
+      >
+        <Button variant="secondary" size="touch" aria-keyshortcuts="ArrowLeft S" onClick={() => ctl.snooze(current, "button")}>
+          <AlarmClock aria-hidden />
+          Snooze
+        </Button>
+        <ButtonLink href={href({ request: current.request.id, view: "context" })} scroll={false} variant="secondary" size="touch" aria-keyshortcuts="C">
+          <BookOpen aria-hidden />
+          Context
+        </ButtonLink>
+        {/* A question is answered in the field on the card, so the bar has nothing to send for it. */}
+        {!question &&
+          (current.request.multiple ? (
+            <Button
+              variant="primary"
+              size="touch"
+              className="min-w-0"
+              disabled={!picked.length}
+              aria-label={picked.length ? `${sendPicksLabel(picked.length)}: ${picksLabel(current.request.options, picked, Infinity)}` : undefined}
+              aria-keyshortcuts="ArrowRight"
+              onClick={() => ctl.send(current, "tap")}
             >
-              <QuickCard item={current} ctl={ctl} />
-            </SwipeCard>
-          </div>
-          <div role="group" aria-label="Quick actions" data-quick-bar inert={arriving} className="mt-3 grid shrink-0 grid-cols-[auto_auto_minmax(0,1fr)] gap-2">
-            <Button variant="secondary" size="touch" aria-keyshortcuts="ArrowLeft S" onClick={() => ctl.snooze(current, "button")}>
-              <AlarmClock aria-hidden />
-              Snooze
+              <span className="truncate">{sendPicksLabel(picked.length)}</span>
             </Button>
-            <ButtonLink href={href({ request: current.request.id, view: "context" })} scroll={false} variant="secondary" size="touch" aria-keyshortcuts="C">
-              <BookOpen aria-hidden />
-              Context
-            </ButtonLink>
+          ) : (
             <Button
               variant="primary"
               size="touch"
@@ -490,17 +566,14 @@ export function QuickDecisions({ slug, userId, items, view, requestId, tab, file
               onClick={() => ctl.send(current, "tap")}
             >
               <Check aria-hidden />
-              <span className="truncate">{current.request.multiple ? picksLabel(current.request.options, picksOf(current)) || "No picks" : (recommendedOption(current) ?? "No recommendation")}</span>
+              <span className="truncate">{recommendedOption(current) ?? "No recommendation"}</span>
             </Button>
-          </div>
-          <p className="mt-2 shrink-0 text-center text-xs text-muted">
-            {sendLabel ? "Swipe right to send, left to snooze." : "Swipe left to snooze."}
-            <span className="hidden pointer-fine:inline"> Or use the arrow keys.</span>
-          </p>
-        </>
-      ) : (
-        <DoneView slug={slug} title={title} answered={answered} onUndo={undoFromList} />
-      )}
+          ))}
+      </div>
+      <p className="mt-2 shrink-0 text-center text-xs text-muted">
+        {sendLabel ? "Swipe right to send, left to snooze." : "Swipe left to snooze."}
+        <span className="hidden sm:pointer-fine:inline"> Or use the arrow keys.</span>
+      </p>
     </div>
   );
 }

@@ -16,6 +16,10 @@ import {
   picksLabel,
   progressSegments,
   progressText,
+  onlySnoozedLeft,
+  snoozedTitle,
+  approvalsLine,
+  sendPicksLabel,
   quickOrder,
   starterChips,
   SWIPE_THRESHOLD,
@@ -119,8 +123,26 @@ describe("progress", () => {
   });
 
   it("says where the person is in words as well", () => {
-    expect(progressText(2, 3)).toEqual({ count: "3 of 5", spoken: "Decision 3 of 5: 2 answered, 2 after this one" });
-    expect(progressText(4, 0)).toEqual({ count: "4 of 4", spoken: "All 4 done" });
+    expect(progressText(2, 3)).toEqual({ count: "3 of 5 requests", spoken: "Request 3 of 5: 2 answered, 2 after this one" });
+    expect(progressText(4, 0)).toEqual({ count: "4 of 4 requests", spoken: "All 4 requests done" });
+    expect(progressText(0, 1).count).toBe("1 of 1 request");
+  });
+
+  it("rests when only requests snoozed in this visit are left, and says so", () => {
+    const queue = [{ request: { id: "a" } }, { request: { id: "b" } }];
+    expect(onlySnoozedLeft(queue, { a: "t", b: "t" })).toBe(true);
+    expect(onlySnoozedLeft(queue, { a: "t" })).toBe(false);
+    expect(onlySnoozedLeft([], {})).toBe(false);
+    expect(snoozedTitle(1)).toBe("1 snoozed, nothing else waiting");
+  });
+
+  it("names the goals still waiting for approval, and the picks to send", () => {
+    expect(approvalsLine(0)).toBeNull();
+    expect(approvalsLine(1)).toBe("1 goal still needs your approval");
+    expect(approvalsLine(3)).toBe("3 goals still need your approval");
+    expect(sendPicksLabel(0)).toBe("Pick at least one");
+    expect(sendPicksLabel(1)).toBe("Send 1 pick");
+    expect(sendPicksLabel(3)).toBe("Send 3 picks");
   });
 });
 

@@ -170,7 +170,7 @@ export function SwipeCard({ sendTarget, onSend, onSnooze, labelledBy, requestId,
       : undefined;
 
   return (
-    <div className="relative flex flex-1 flex-col" data-swipe={intent ?? undefined}>
+    <div className="relative flex min-h-0 flex-1 flex-col" data-swipe={intent ?? undefined}>
       {direction !== 0 && (
         <Underlay side={direction > 0 ? "send" : "snooze"} sendTarget={sendTarget} reveal={Math.abs(at)} armed={leaving !== null || isArmed(dx)} opacity={leaving ? 1 : hintOpacity(dx)} />
       )}
