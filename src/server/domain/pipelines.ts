@@ -18,6 +18,7 @@ import { recordEvent, runActivity, type Activity } from "./events";
 import {
   actorProblems,
   beginRun,
+  deciderOf,
   endRun,
   EVENT_INPUTS,
   findPipeline,
@@ -660,6 +661,9 @@ export interface PipelineRequestContext {
   /** When the time limit runs out, and the option taken then. */
   dueAt: Date | null;
   onTimeout: string | null;
+  /** Who decides, in words ("Dana", "an owner or admin"), and whether the person reading may. */
+  waitingOn: string;
+  mayDecide: boolean;
 }
 
 /**
@@ -678,7 +682,7 @@ export const describePipelineRequests = service(PipelineRequestsInput, async (ct
     const definition = definitions.get(key)!;
     const stop = definition.stops.find((candidate) => candidate.id === stopId);
     if (!stop) continue;
-    const [pipeline] = await ctx.db.select({ name: pipelines.name }).from(pipelines).where(tenantRow(ctx, pipelines, run.pipelineId));
+    const [pipeline] = await ctx.db.select({ name: pipelines.name, ownerUserId: pipelines.ownerUserId }).from(pipelines).where(tenantRow(ctx, pipelines, run.pipelineId));
     const [row] = await ctx.db
       .select({ dueAt: pipelineRunStops.dueAt, recovering: pipelineRunStops.recovering })
       .from(pipelineRunStops)
@@ -707,6 +711,7 @@ export const describePipelineRequests = service(PipelineRequestsInput, async (ct
       steps,
       dueAt: row?.dueAt ?? null,
       onTimeout: row?.recovering ? null : (stop.onTimeout ?? null),
+      ...(await deciderOf(ctx, stop, Boolean(row?.recovering), pipeline?.ownerUserId ?? null)),
     };
   }
   return out;

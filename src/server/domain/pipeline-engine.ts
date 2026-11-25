@@ -207,10 +207,15 @@ interface Approvers {
 }
 
 function approversOf(trip: Trip, stop: PipelineStop, row: RunStop): Approvers {
-  if (!row.recovering) return { person: stop.person, role: stop.role };
+  return approversFor(stop, row.recovering, trip.pipeline.ownerUserId);
+}
+
+/** Who decides at a stop: its person or role, or, while it is recovering from a failure, whoever its failure rule (or the owner) names. */
+function approversFor(stop: PipelineStop, recovering: boolean, ownerUserId: string | null): Approvers {
+  if (!recovering) return { person: stop.person, role: stop.role };
   const rule = stop.onFailure;
   if (rule.person || rule.role) return { person: rule.person, role: rule.role };
-  return trip.pipeline.ownerUserId ? { person: trip.pipeline.ownerUserId } : { role: "admin" };
+  return ownerUserId ? { person: ownerUserId } : { role: "admin" };
 }
 
 async function describeApprovers(ctx: Ctx, approvers: Approvers): Promise<string> {
@@ -228,6 +233,22 @@ async function assertMayDecide(ctx: Ctx, approvers: Approvers, stopName: string)
   if (approvers.role === "admin" && ctx.actor.role !== "owner" && ctx.actor.role !== "admin") {
     throw forbidden(`Only an owner or admin decides at "${stopName}".`);
   }
+}
+
+/**
+ * Who decides at a stop now, in words, and whether the acting person may: by the same rules
+ * `assertMayDecide` enforces when they answer, so a list can leave out what they could not answer.
+ */
+export async function deciderOf(ctx: Ctx, stop: PipelineStop, recovering: boolean, ownerUserId: string | null): Promise<{ waitingOn: string; mayDecide: boolean }> {
+  const approvers = approversFor(stop, recovering, ownerUserId);
+  const mayDecide = await assertMayDecide(ctx, approvers, stop.name).then(
+    () => true,
+    (error: unknown) => {
+      if (isDomainError(error) && error.code === "forbidden") return false;
+      throw error;
+    },
+  );
+  return { waitingOn: await describeApprovers(ctx, approvers), mayDecide };
 }
 
 /**

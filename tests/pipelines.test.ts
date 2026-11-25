@@ -608,8 +608,13 @@ describe("the app's reads", () => {
         { option: "Drop", next: "Ends: Dropped" },
       ],
       onTimeout: "Drop",
+      waitingOn: "Dana",
+      mayDecide: true,
     });
     expect(described[`${started.run.id}:review`]!.dueAt).toBeInstanceOf(Date);
+    // Another member reads the same decision, but it is not theirs to make: Quick Decisions leaves it out for them.
+    const forLee = await describePipelineRequests(leeCtx, { requests: [{ runId: started.run.id, stopId: "review" }] });
+    expect(forLee[`${started.run.id}:review`]).toMatchObject({ waitingOn: "Dana", mayDecide: false });
   });
 
   it("finds the line a task is on: the run it carries, or the stop it serves", async () => {
