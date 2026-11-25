@@ -181,7 +181,8 @@ describe("the realtime event stream", () => {
   });
 
   it("asks the agent to reconnect by the time its OAuth access token runs out", async () => {
-    tokenExpiresAt = new Date(Date.now() + 300);
+    // Long enough that a busy machine still opens the stream before the token lapses, short enough to wait for.
+    tokenExpiresAt = new Date(Date.now() + 1500);
     const client = connect(ws.scout.token);
     const ready = (await client.next("ready")) as Extract<StreamMessage, { type: "ready" }>;
     // reconnectAt is reckoned a moment after the lifetime was, so allow a few milliseconds.
