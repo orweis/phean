@@ -95,6 +95,19 @@ On the Decisions page and the overview, one request is always selected.
 
 Keys never fire while you are typing in a field.
 
+## Quick Decisions
+
+**Quick Decisions** (`/w/<slug>/decisions/quick`) shows what waits one card at a time, made for a phone. On a phone the Decisions page leads with it (**Start**); on a wider screen it is the **Quick Decisions** button at the top of the page. A link to one request, such as a notification's, still opens that request on the Decisions page.
+
+- Pipeline decisions come first, then the rest longest waiting first; snoozed ones wait at the back.
+- Tap an option to answer it. The option the agent recommends is filled and marked **Recommended**; on a request that takes several, its suggestions start ticked and **Send** names your picks.
+- **Swipe right** sends the recommended answer (or your picks); **swipe left** snoozes. The colour behind the card says what letting go will do. The **Snooze**, **Context** and named answer buttons under the card do the same without a swipe.
+- **Read full context** opens the agent's context, the task's files and the request's links, with the answers pinned at the bottom so you can answer while reading. A file opens in place, with a way back to the decision.
+- **Write another answer** (or **Answer**, for a question) opens a short reply with a few phrases to start from.
+- After each answer the status region offers **Undo**, as on the Decisions page; a pipeline's answer cannot be taken back. When nothing is left, the last card lists what you answered, each with Undo.
+
+With a keyboard: `→` sends the recommended answer, `←` or `S` snoozes, `1` to `9` pick an option, `C` opens the context, and `Esc` goes back from the context or a file to the card.
+
 ## How the agent gets the answer
 
 Each answer is delivered to the asking agent once, through either of two tools:
