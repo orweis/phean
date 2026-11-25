@@ -44,6 +44,9 @@ async function swipe(page: Page, card: Locator, dx: number, { hold = false } = {
   if (!hold) await page.mouse.up();
 }
 
+/** How far the card is drawn from its place, sideways, in CSS pixels. */
+const translateX = (card: Locator) => card.evaluate((element) => Math.round(new DOMMatrix(getComputedStyle(element).transform).e));
+
 test.describe("Quick Decisions on a phone", () => {
   test.use({ viewport: { width: 375, height: 812 }, hasTouch: true });
 
@@ -88,8 +91,12 @@ test.describe("Quick Decisions on a phone", () => {
       await start.getByRole("link", { name: "Start" }).click();
       await expect(page).toHaveURL(new RegExp(`/w/${slug}/decisions/quick\\?from=phone$`));
       await expect(page.getByRole("heading", { level: 1, name: "Quick Decisions" })).toBeVisible();
-      await expect(page.locator("[data-progress-count]")).toHaveText("1 of 4");
-      await expect(page.getByRole("img", { name: "Decision 1 of 4: 0 answered, 3 after this one" })).toBeVisible();
+      await expect(page.locator("[data-progress-count]")).toHaveText("1 of 4 requests");
+      await expect(page.getByRole("img", { name: "Request 1 of 4: 0 answered, 3 after this one" })).toBeVisible();
+      // A focused flow: no workspace header or tab rail, only its own bar with the way out.
+      await expect(page.getByRole("banner")).toHaveCount(0);
+      await expect(page.getByRole("navigation", { name: "Workspace" })).toHaveCount(0);
+      await expect(page.getByRole("link", { name: "Close Quick Decisions" })).toHaveAttribute("href", `/w/${slug}/decisions`);
     });
 
     const first = cardOf(page, LAUNCH);
@@ -99,6 +106,10 @@ test.describe("Quick Decisions on a phone", () => {
       await expect(first.getByRole("button", { name: /^Send.*Recommended/ })).toBeVisible();
       await expect(first.getByRole("list", { name: "Files" }).getByRole("link")).toHaveCount(2);
       await expect(page.getByRole("group", { name: "Quick actions" }).getByRole("button", { name: "Send “Send”" })).toBeEnabled();
+      // The links the agent left are on the card's face, each a thumb's size.
+      const link = first.getByRole("list", { name: "Links" }).getByRole("link", { name: /^This chat/ });
+      await expect(link).toHaveAttribute("target", "_blank");
+      expect((await link.boundingBox())!.height).toBeGreaterThanOrEqual(44);
     });
 
     await test.step("the full context, a file and back, one tap each", async () => {
@@ -107,6 +118,10 @@ test.describe("Quick Decisions on a phone", () => {
       await expect(page.getByRole("heading", { level: 1, name: LAUNCH })).toBeVisible();
       await expect(page.getByText("Launch bot asks")).toBeVisible();
       await expect(page.getByText("Open rate on the last beta email was 61%.")).toBeVisible();
+      // Every option is in view in the dock, none behind a sideways scroll.
+      const dock = page.locator("[data-answer-dock]");
+      await expect(dock.getByRole("button", { name: "Hold" })).toBeInViewport({ ratio: 1 });
+      await expect(dock.getByRole("button", { name: /^Send/ })).toBeInViewport({ ratio: 1 });
       await expectAccessible(page);
       await expectNothingCutOff(page);
       const tabs = page.getByRole("navigation", { name: "Context, files and links" });
@@ -133,17 +148,37 @@ test.describe("Quick Decisions on a phone", () => {
       await expect(first).toBeVisible();
     });
 
+    await test.step("the card follows the finger one to one either way, and the answer behind it shows from half way", async () => {
+      for (const dx of [70, -70]) {
+        const start = (await first.getByRole("heading", { level: 2 }).boundingBox())!;
+        await swipe(page, first, dx, { hold: true });
+        await expect.poll(() => translateX(first)).toBe(dx);
+        const label = page.locator(`[data-swipe-hint=${dx > 0 ? "send" : "snooze"}] [data-swipe-label]`);
+        await expect(label).toContainText(dx > 0 ? "Send“Send”" : "SnoozeTo the back");
+        await expect.poll(() => label.evaluate((element) => Number(getComputedStyle(element).opacity))).toBeGreaterThan(0.5);
+        // Back to where it started: short of the threshold, nothing happens.
+        await page.mouse.move(start.x + start.width / 2, start.y + start.height / 2 + 4, { steps: 6 });
+        await page.mouse.up();
+        await expect.poll(() => translateX(first)).toBe(0);
+      }
+    });
+
     await test.step("swiping right sends the recommended answer, and Undo takes it back", async () => {
       await swipe(page, first, 160, { hold: true });
-      await expect(page.locator("[data-swipe=send]")).toContainText("Send “Send”");
+      await expect(page.locator("[data-swipe=send]")).toContainText("Send“Send”");
+      await expect(page.locator("[data-swipe-hint=send]")).toHaveAttribute("data-armed");
       await page.mouse.up();
       await expect(status).toContainText("Sent “Send” to Launch bot");
       await expect(cardOf(page, COURIER)).toBeVisible();
-      await expect(page.locator("[data-progress-count]")).toHaveText("2 of 4");
+      await expect(page.locator("[data-progress-count]")).toHaveText("2 of 4 requests");
+      // The notice sits above the bar, never over its buttons.
+      const notice = (await status.locator("[data-notice]").boundingBox())!;
+      const bar = (await page.getByRole("group", { name: "Quick actions" }).boundingBox())!;
+      expect(notice.y + notice.height).toBeLessThanOrEqual(bar.y);
       await status.getByRole("button", { name: "Undo" }).click();
       await expect(status).toContainText("Launch bot's question is open again.");
       await expect(first).toBeVisible();
-      await expect(page.locator("[data-progress-count]")).toHaveText("1 of 4");
+      await expect(page.locator("[data-progress-count]")).toHaveText("1 of 4 requests");
     });
 
     await test.step("a short drag springs back; tapping an option answers at once", async () => {
@@ -161,47 +196,55 @@ test.describe("Quick Decisions on a phone", () => {
       await swipe(page, card, 200);
       await expect(card).toBeVisible();
       await page.getByRole("group", { name: "Quick actions" }).getByRole("button", { name: "Snooze" }).click();
-      await expect(status).toContainText("Snoozed “Ship the signed contracts” to the back of the queue");
+      await expect(status).toContainText(`Snoozed “${COURIER}”`);
       await expect(cardOf(page, CHANNELS)).toBeVisible();
     });
 
-    await test.step("several picks: the suggestions start ticked, and Send names the picks", async () => {
+    await test.step("several picks: the recommendations start ticked, and the bar's one Send counts and names the picks", async () => {
       const card = cardOf(page, CHANNELS);
-      await expect(card.getByRole("checkbox", { name: /Blog/ })).toBeChecked();
+      const bar = page.getByRole("group", { name: "Quick actions" });
+      await expect(card.getByRole("checkbox", { name: /Blog.*Recommended/ })).toBeChecked();
       await expect(card.getByRole("checkbox", { name: /Changelog/ })).toBeChecked();
       await expect(card.getByRole("checkbox", { name: /Newsletter/ })).not.toBeChecked();
-      await expect(card.getByRole("button", { name: "Send Blog + Changelog" })).toBeEnabled();
+      await expect(card.getByRole("button", { name: /^Send/ })).toHaveCount(0);
+      await expect(bar.getByRole("button", { name: "Send 2 picks: Blog + Changelog" })).toBeEnabled();
       await card.getByRole("checkbox", { name: /Changelog/ }).uncheck();
       await card.getByRole("checkbox", { name: /Blog/ }).uncheck();
-      await expect(card.getByRole("button", { name: "Pick at least one" })).toBeDisabled();
+      await expect(bar.getByRole("button", { name: "Pick at least one" })).toBeDisabled();
       await card.getByRole("checkbox", { name: /Blog/ }).check();
       await card.getByRole("checkbox", { name: /Newsletter/ }).check();
-      await card.getByRole("button", { name: "Send Blog + Newsletter" }).click();
+      await bar.getByRole("button", { name: "Send 2 picks: Blog + Newsletter" }).click();
       await expect(status).toContainText("Sent “Blog + Newsletter” to Launch bot");
     });
 
-    await test.step("a question with no options is answered in the composer", async () => {
+    await test.step("a question with no options is answered in the field on the card, and the bar has nothing to send", async () => {
       const card = cardOf(page, BUDGET);
-      await card.locator("summary", { hasText: "Answer" }).click();
-      const sheet = page.getByRole("group", { name: "Answer Launch bot" });
-      const field = sheet.getByLabel("Your answer");
-      await expect(field).toBeFocused();
-      await expect(sheet.getByRole("button", { name: "Send answer" })).toBeDisabled();
+      const field = card.getByLabel("Your answer");
+      await expect(field).toBeVisible();
+      await expect(page.getByRole("group", { name: "Quick actions" }).getByRole("button")).toHaveText(["Snooze"]);
+      await expect(card.getByRole("button", { name: "Send answer" })).toBeDisabled();
       await expectAccessible(page);
-      await sheet.getByRole("button", { name: "Check with" }).click();
+      await card.getByRole("button", { name: "Check with" }).click();
       await expect(field).toHaveValue("Check with ");
+      await expect(field).toBeFocused();
       await field.fill("Marketing: MKT-204");
-      await sheet.getByRole("button", { name: "Send answer" }).click();
+      await card.getByRole("button", { name: "Send answer" }).click();
       await expect(status).toContainText("Sent “Marketing: MKT-204” to Launch bot");
     });
 
-    await test.step("the snoozed one comes round again: a swipe left snoozes it, a tap answers it", async () => {
+    await test.step("with only the snoozed one left the queue rests; shown again, a swipe left rests it again, a tap answers it", async () => {
       const card = cardOf(page, COURIER);
+      const rest = page.locator("[data-quick-snoozed]");
+      await expect(rest.getByRole("heading", { level: 2 })).toHaveText("1 snoozed, nothing else waiting");
+      await expect(rest.getByRole("heading", { level: 2 })).toBeFocused();
+      await expect(rest.getByRole("link", { name: "Back to Decisions" })).toHaveAttribute("href", `/w/${slug}/decisions`);
+      await rest.getByRole("button", { name: "Show snoozed again" }).click();
       await expect(card).toBeVisible();
-      await expect(page.locator("[data-progress-count]")).toHaveText("4 of 4");
+      await expect(page.locator("[data-progress-count]")).toHaveText("4 of 4 requests");
       await swipe(page, card, -180);
-      await expect(status).toContainText("Snoozed “Ship the signed contracts”");
-      await expect(card).toBeVisible();
+      await expect(status).toContainText(`Snoozed “${COURIER}”`);
+      await expect(rest).toBeVisible();
+      await rest.getByRole("button", { name: "Show snoozed again" }).click();
       await card.getByRole("button", { name: "DHL" }).click();
       await expect(status).toContainText("Sent “DHL” to Launch bot");
     });
@@ -227,6 +270,12 @@ test.describe("Quick Decisions on a phone", () => {
       await cardOf(page, COURIER).getByRole("button", { name: "UPS" }).click();
       await expect(done).toContainText("4 answered.");
       await expect(done.getByRole("link", { name: "Back to Decisions" })).toHaveAttribute("href", `/w/${slug}/decisions`);
+      // Closing and coming back carries on from today's progress rather than starting over.
+      await page.getByRole("link", { name: "Close Quick Decisions" }).click();
+      await expect(page).toHaveURL(new RegExp(`/w/${slug}/decisions$`));
+      await page.goto(`/w/${slug}/decisions/quick`);
+      await expect(done).toContainText("4 answered.");
+      await expect(page.locator("[data-progress-count]")).toHaveText("4 of 4 requests");
     });
 
     await test.step("each agent has exactly what was picked", async () => {
@@ -309,7 +358,7 @@ test.describe("Quick Decisions guards", () => {
       await expect(page.getByRole("article", { name: "Which caterer?" })).toBeVisible();
       await page.waitForTimeout(600);
       await expect(page.getByRole("article", { name: "Which caterer?" })).toBeVisible();
-      await expect(page.locator("[data-progress-count]")).toHaveText("3 of 6");
+      await expect(page.locator("[data-progress-count]")).toHaveText("3 of 6 requests");
       // Take it back, so the agent can close the venue question itself below.
       await status.getByRole("button", { name: "Undo" }).click();
       await expect(status).toContainText("Guard bot's question is open again.");
@@ -336,7 +385,7 @@ test.describe("Quick Decisions guards", () => {
       await page.keyboard.press("ArrowRight");
       await expect(band).toBeVisible();
       await page.keyboard.press("ArrowLeft");
-      await expect(status).toContainText("Snoozed “Pick the band”");
+      await expect(status).toContainText("Snoozed “Which band?”");
       await expect(page.getByRole("article", { name: "Which date?" })).toBeVisible();
       await settled();
       await page.keyboard.press("2");

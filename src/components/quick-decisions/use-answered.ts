@@ -7,8 +7,8 @@ import { freshAnswered, type AnsweredEntry } from "@/lib/quick-decisions";
 /**
  * What a person answered in Quick Decisions in this tab, per person and workspace: the progress bar
  * counts it and the done screen lists it. Only request ids and a short label are kept, in
- * `sessionStorage` (in memory when storage is refused), for at most `ANSWERED_TTL_MS`, and it is
- * forgotten on sign-out and when Quick Decisions is closed. A per-viewer convenience only: the
+ * `sessionStorage` (in memory when storage is refused), for at most `ANSWERED_TTL_MS`, so closing and
+ * reopening Quick Decisions carries on from today's progress; it is forgotten on sign-out. A per-viewer convenience only: the
  * answers themselves are on the server.
  */
 const PREFIX = "phean-quick-answered:";

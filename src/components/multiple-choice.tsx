@@ -64,7 +64,7 @@ export function MultipleChoice({ taskId, slug, request, title, analytics }: { ta
               </kbd>
             )}
             {option}
-            {suggested.has(index) && <RecommendedTag label="Suggested" />}
+            {suggested.has(index) && <RecommendedTag />}
           </label>
         ))}
       </fieldset>

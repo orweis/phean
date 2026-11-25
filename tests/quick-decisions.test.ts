@@ -11,17 +11,23 @@ import {
   requestOwningFile,
   DONE_TITLES,
   doneTitle,
-  dragOffset,
   isSidewaysDrag,
   isVerticalDrag,
   picksLabel,
   progressSegments,
   progressText,
+  onlySnoozedLeft,
+  snoozedTitle,
+  approvalsLine,
+  sendPicksLabel,
   quickOrder,
   starterChips,
   SWIPE_THRESHOLD,
   swipeIntent,
   swipeProgress,
+  hintOpacity,
+  isArmed,
+  isFocusedFlow,
   tiltOf,
   MAX_TILT,
 } from "@/lib/quick-decisions";
@@ -75,17 +81,36 @@ describe("swipes", () => {
     expect(swipeIntent(-110, false)).toBe("snooze");
   });
 
-  it("follows the finger, gives only a little rightward with nothing to send, and tilts a little", () => {
-    expect(dragOffset(80, true)).toBe(80);
-    expect(dragOffset(-80, false)).toBe(-80);
-    expect(dragOffset(40, false)).toBe(10);
-    expect(dragOffset(400, false)).toBe(28);
+  it("tilts a little, the same either way", () => {
     expect(tiltOf(0)).toBe(0);
     expect(tiltOf(48)).toBe(2);
+    expect(tiltOf(-48)).toBe(-2);
     expect(tiltOf(1000)).toBe(MAX_TILT);
     expect(tiltOf(-1000)).toBe(-MAX_TILT);
     expect(swipeProgress(55)).toBe(0.5);
     expect(swipeProgress(-500)).toBe(1);
+  });
+
+  it("shows the words behind the card clearly from half the threshold, and fully once letting go would act", () => {
+    expect(hintOpacity(0)).toBe(0);
+    expect(hintOpacity(SWIPE_THRESHOLD / 2)).toBeGreaterThan(0.5);
+    expect(hintOpacity(-SWIPE_THRESHOLD / 2)).toBe(hintOpacity(SWIPE_THRESHOLD / 2));
+    expect(hintOpacity(SWIPE_THRESHOLD * 0.9)).toBeLessThan(1);
+    expect(hintOpacity(SWIPE_THRESHOLD * 0.4)).toBeLessThan(hintOpacity(SWIPE_THRESHOLD * 0.9));
+    expect(isArmed(SWIPE_THRESHOLD - 1)).toBe(false);
+    expect(isArmed(SWIPE_THRESHOLD)).toBe(true);
+    expect(isArmed(-SWIPE_THRESHOLD)).toBe(true);
+    expect(hintOpacity(SWIPE_THRESHOLD)).toBe(1);
+    expect(hintOpacity(-400)).toBe(1);
+  });
+});
+
+describe("the focused flow", () => {
+  it("is Quick Decisions alone, which leaves out the workspace's header and tab rail", () => {
+    expect(isFocusedFlow(["decisions", "quick"])).toBe(true);
+    expect(isFocusedFlow(["decisions"])).toBe(false);
+    expect(isFocusedFlow([])).toBe(false);
+    expect(isFocusedFlow(["tasks", "quick"])).toBe(false);
   });
 });
 
@@ -98,8 +123,26 @@ describe("progress", () => {
   });
 
   it("says where the person is in words as well", () => {
-    expect(progressText(2, 3)).toEqual({ count: "3 of 5", spoken: "Decision 3 of 5: 2 answered, 2 after this one" });
-    expect(progressText(4, 0)).toEqual({ count: "4 of 4", spoken: "All 4 done" });
+    expect(progressText(2, 3)).toEqual({ count: "3 of 5 requests", spoken: "Request 3 of 5: 2 answered, 2 after this one" });
+    expect(progressText(4, 0)).toEqual({ count: "4 of 4 requests", spoken: "All 4 requests done" });
+    expect(progressText(0, 1).count).toBe("1 of 1 request");
+  });
+
+  it("rests when only requests snoozed in this visit are left, and says so", () => {
+    const queue = [{ request: { id: "a" } }, { request: { id: "b" } }];
+    expect(onlySnoozedLeft(queue, { a: "t", b: "t" })).toBe(true);
+    expect(onlySnoozedLeft(queue, { a: "t" })).toBe(false);
+    expect(onlySnoozedLeft([], {})).toBe(false);
+    expect(snoozedTitle(1)).toBe("1 snoozed, nothing else waiting");
+  });
+
+  it("names the goals still waiting for approval, and the picks to send", () => {
+    expect(approvalsLine(0)).toBeNull();
+    expect(approvalsLine(1)).toBe("1 goal still needs your approval");
+    expect(approvalsLine(3)).toBe("3 goals still need your approval");
+    expect(sendPicksLabel(0)).toBe("Pick at least one");
+    expect(sendPicksLabel(1)).toBe("Send 1 pick");
+    expect(sendPicksLabel(3)).toBe("Send 3 picks");
   });
 });
 

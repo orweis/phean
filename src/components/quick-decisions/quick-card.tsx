@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronRight, FileText, PenLine, Send, Timer, Workflow } from "lucide-react";
+import { ChevronRight, FileText, PenLine, Timer, Workflow } from "lucide-react";
 import Link from "next/link";
 
 import { REQUEST_KIND_META } from "@/lib/domain";
@@ -10,7 +10,8 @@ import { type QuickItem } from "@/lib/quick-decisions";
 import { RecommendedTag } from "../recommended-tag";
 import { MetaBadge } from "../ui/badge";
 import { Button, buttonClasses } from "../ui/button";
-import { Composer } from "./composer";
+import { TaskLinks } from "../agent-sessions";
+import { Composer, InlineComposer } from "./composer";
 import type { QuickController } from "./controller";
 
 /** The agent's initial on a squared tile: agents are tiles, people discs, both neutral. */
@@ -29,7 +30,7 @@ export function AskerRow({ item }: { item: QuickItem }) {
       <AgentTile name={item.request.agentName} />
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-semibold text-ink">{item.asker}</p>
-        <p className="truncate text-xs text-muted">
+        <p className="text-xs text-pretty wrap-anywhere text-muted">
           {item.where && (
             <>
               {item.where}
@@ -89,19 +90,15 @@ function SingleChoice({ item, ctl }: { item: QuickItem; ctl: QuickController }) 
   );
 }
 
-/** A request that takes several answers: tick rows (the agent's suggestions start ticked), then one Send naming the picks. */
+/**
+ * A request that takes several answers: tick rows, the agent's recommendations ticked to start. The
+ * one Send is the bar's below the card ("Send 3 picks"), so it stays in reach however long the list.
+ */
 function Picks({ item, ctl }: { item: QuickItem; ctl: QuickController }) {
   const picks = ctl.picksOf(item);
   const suggested = new Set(item.request.recommended ?? []);
-  const label = ctl.sendLabel(item);
   return (
-    <form
-      onSubmit={(event) => {
-        event.preventDefault();
-        if (picks.length) ctl.send(item, "tap");
-      }}
-      className="space-y-2"
-    >
+    <div className="space-y-2">
       <fieldset className="space-y-2">
         <legend className="mb-2 text-xs text-muted">Pick any that apply</legend>
         {item.request.options.map((option, index) => (
@@ -122,15 +119,11 @@ function Picks({ item, ctl }: { item: QuickItem; ctl: QuickController }) {
               className="size-5 shrink-0 accent-accent"
             />
             <span className="min-w-0 flex-1 text-pretty wrap-anywhere">{option}</span>
-            {suggested.has(index) && <RecommendedTag label="Suggested" tone="quiet" />}
+            {suggested.has(index) && <RecommendedTag tone="quiet" />}
           </label>
         ))}
       </fieldset>
-      <Button type="submit" variant="primary" size="answer" disabled={!picks.length}>
-        <Send aria-hidden />
-        {label ?? "Pick at least one"}
-      </Button>
-    </form>
+    </div>
   );
 }
 
@@ -172,6 +165,7 @@ export function QuickCard({ item, ctl }: { item: QuickItem; ctl: QuickController
           </Link>
         )}
         <Attachments item={item} ctl={ctl} />
+        {request.links.length > 0 && <TaskLinks links={request.links} size="touch" className="mt-3" />}
         {item.pipeline?.timeLimit && (
           <p className="mt-3 flex items-center gap-1.5 text-xs font-semibold text-wait-ink">
             <Timer className="size-3.5 shrink-0" aria-hidden />
@@ -179,9 +173,10 @@ export function QuickCard({ item, ctl }: { item: QuickItem; ctl: QuickController
           </p>
         )}
       </div>
-      <div className="mt-auto space-y-2 p-5 pt-6">
+      {/* A question's field follows its words, one tap away; options sit at the bottom, where a thumb reaches. */}
+      <div className={cx("space-y-2 p-5", request.options.length === 0 ? "pt-5" : "mt-auto pt-6")}>
         {request.options.length === 0 ? (
-          <Composer item={item} onSend={(answer) => ctl.answerText(item, answer, "composer")} label="Answer" icon={<PenLine aria-hidden />} variant="primary" size="answer" />
+          <InlineComposer item={item} onSend={(answer) => ctl.answerText(item, answer, "composer")} />
         ) : (
           <>
             {request.multiple ? <Picks item={item} ctl={ctl} /> : <SingleChoice item={item} ctl={ctl} />}
