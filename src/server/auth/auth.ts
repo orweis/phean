@@ -28,6 +28,7 @@ import { reportSignUp, signalProviderSignIn } from "./analytics";
 import { pruneUnusedClients } from "./clients";
 import { nativeSignIn } from "./native";
 import { pushDeviceSessions } from "./push-devices";
+import { signedInAtField, stampSignIn } from "./signed-in-at";
 import { providerSignInChallenge, TRUST_DEVICE_SECONDS, TWO_FACTOR_CHALLENGE_SECONDS } from "./two-factor";
 
 const SEVEN_DAYS_IN_SECONDS = 60 * 60 * 24 * 7;
@@ -106,7 +107,10 @@ export function createAuth(database: Db, baseUrl: string) {
     databaseHooks: {
       // Runs once the account is committed; only a person's first account is a sign-up.
       account: { create: { after: (created) => reportSignUp(database, created) } },
+      // When the person last proved who they are; a session made from another keeps its parent's (signed-in-at.ts).
+      session: { create: { before: stampSignIn } },
     },
+    session: { additionalFields: signedInAtField },
     account: {
       // People connect GitHub or Google from their account page while signed in, so the provider's
       // address may differ from their Phean one; the provider must still have verified it.
@@ -142,6 +146,9 @@ export function createAuth(database: Db, baseUrl: string) {
       // so no email delivery is configured.
       organization({
         creatorRole: "owner",
+        // Deleting a workspace is Phean's own service (`deleteWorkspace`): the owner re-authenticates,
+        // and it clears what the plugin does not know about (agents' tokens, files, the deletion record).
+        disableOrganizationDeletion: true,
         invitationExpiresIn: SEVEN_DAYS_IN_SECONDS,
         // The plugin writes the workspace and its owner without a transaction, so both are durable here.
         organizationHooks: {

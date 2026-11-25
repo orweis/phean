@@ -52,7 +52,7 @@ with the unredacted address, before the page's redacted one. Check both after an
   sets gtag's `ga-disable-<id>` switch (nothing more is sent, not even cookieless pings) and deletes the
   `_ga` cookies.
 - `/privacy` describes what is sent and how to opt out.
-- What only the server sees happen (a sign-up or sign-in through GitHub or Google, a workspace created or an
+- What only the server sees happen (a sign-up or sign-in through GitHub or Google, a workspace created or deleted, or an
   invitation accepted by an action that redirects) reaches the next page through the `phean-ga-signal`
   cookie (`lib/analytics-signals.ts`): catalog enums only, ten minutes, set only for a visitor who accepted,
   and read and deleted by `AnalyticsSignals` on `/workspaces` and a workspace's overview.
@@ -137,6 +137,7 @@ server sends it (**only**); server copies carry `source_side=server`, and key-ev
 | `login` | Someone signs in | `method`, `two_factor` | | |
 | `two_factor_challenge` | The two-factor step is shown, passed or failed | `result` (`shown`, `passed`, `failed`) | | |
 | `workspace_create` | A workspace is created | | **key** | also |
+| `workspace_delete` | An owner deletes a workspace (Settings, Danger zone); no name, slug or id, and no counts | | | |
 | `invite_send` | An invitation is sent | `role` | | |
 | `invite_accept` | An invitation is accepted | `role` | | |
 | `onboarding_step` | A step of the empty workspace's flow is done | `step` (`connect_agent_viewed`, `mcp_url_copied`, `first_task_seen`) | | |

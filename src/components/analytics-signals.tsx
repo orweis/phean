@@ -11,6 +11,7 @@ export function sendSignals(signals: readonly AnalyticsSignal[]): void {
     if (signal.event === "sign_up") track("sign_up", { method: signal.method });
     else if (signal.event === "login") track("login", { method: signal.method, two_factor: false });
     else if (signal.event === "invite_accept") track("invite_accept", { role: signal.role });
+    else if (signal.event === "workspace_delete") track("workspace_delete");
     else track("workspace_create");
   }
 }

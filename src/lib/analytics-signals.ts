@@ -1,6 +1,6 @@
 /**
  * One-shot analytics signals (docs/ANALYTICS.md): what only the server sees happen (a sign-up or
- * sign-in through GitHub or Google, a workspace created or an invitation accepted by an action that
+ * sign-in through GitHub or Google, a workspace created or deleted or an invitation accepted by an action that
  * redirects) handed to the next page, whose `AnalyticsSignals` sends it with `track` and deletes it.
  * The cookie carries catalog enums only, never a name, email, slug or id, lives ten minutes, and the
  * server sets it only for a visitor who accepted analytics. Client-safe.
@@ -20,6 +20,7 @@ export type AnalyticsSignal =
   | { event: "sign_up"; method: SignInMethod }
   | { event: "login"; method: SignInMethod }
   | { event: "workspace_create" }
+  | { event: "workspace_delete" }
   | { event: "invite_accept"; role: MemberRole };
 
 /** At most this many wait in the cookie; the oldest go first. */
@@ -33,13 +34,13 @@ export function methodOfProvider(providerId: string | null | undefined): SignInM
 }
 
 function encode(signal: AnalyticsSignal): string {
-  if (signal.event === "workspace_create") return signal.event;
+  if (signal.event === "workspace_create" || signal.event === "workspace_delete") return signal.event;
   return `${signal.event}.${signal.event === "invite_accept" ? signal.role : signal.method}`;
 }
 
 function decode(part: string): AnalyticsSignal | null {
   const [event, value = ""] = part.split(".");
-  if (event === "workspace_create" && !value) return { event };
+  if ((event === "workspace_create" || event === "workspace_delete") && !value) return { event };
   if ((event === "sign_up" || event === "login") && (SIGN_IN_METHODS as readonly string[]).includes(value)) return { event, method: value as SignInMethod };
   if (event === "invite_accept" && (MEMBER_ROLES as readonly string[]).includes(value)) return { event, role: value as MemberRole };
   return null;

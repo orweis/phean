@@ -14,6 +14,9 @@ import { ACTIONS, can, type Action } from "@/server/domain/policy";
 import { captureTasks, transferClaims } from "@/server/domain/tasks";
 import { approvePipelineVersion, archivePipeline, definePipeline, listStuckStops, resendHandoff, startRun, updatePipeline, updateRun } from "@/server/domain/pipelines";
 import { listPendingInvitations } from "@/server/domain/tenants";
+import { deleteWorkspace, workspaceInventory } from "@/server/domain/workspace-deletion";
+import { organization } from "@/server/db/schema";
+import { eq } from "drizzle-orm";
 
 import * as backoffice from "@/server/backoffice";
 import { platformContext, type PlatformCtx } from "@/server/backoffice/context";
@@ -23,13 +26,15 @@ import { TOOLS } from "@/server/mcp/tools";
 
 import { ADMIN_EMAIL, everyBackofficeCall, seedPlatformAdmin } from "./support/backoffice";
 import { addMember, asUser, createTestDb, seedUser, seedWorkspace, type TestDb } from "./support/db";
+import { freshProof } from "./support/deletion";
 
 const CONTRIBUTE: readonly Action[] = ["workspace:read", "goal:write", "task:write", "memory:write", "document:write"];
 const AGENT_WRITE: readonly Action[] = [...CONTRIBUTE, "agent:delegate", "webhook:manage", "pipeline:write"];
 
 const EXPECTED: Record<Role, readonly Action[]> = {
   owner: ACTIONS,
-  admin: ACTIONS,
+  // Everything but deleting the workspace, which is its owner's alone.
+  admin: ACTIONS.filter((action) => action !== "workspace:delete"),
   member: ["workspace:read", "goal:write", "goal:decide", "task:write", "memory:write", "document:write", "agent:connect", "digest:subscribe", "notify:subscribe", "pipeline:write"],
   agent_read: ["workspace:read"],
   agent_write: AGENT_WRITE,
@@ -204,6 +209,24 @@ describe("policy enforcement in services", () => {
     await expect(approvePipelineVersion(other.closer.ctx, { pipelineId: theirs.id, version: 2 })).rejects.toMatchObject({ code: "forbidden" });
     await expect(archivePipeline(scout.ctx, { pipelineId: pipeline.id })).rejects.toMatchObject({ code: "not_found" });
     await expect(archivePipeline(other.scout.ctx, { pipelineId: theirs.id })).rejects.toMatchObject({ code: "forbidden" });
+  });
+
+  it("lets only the owner delete the workspace: never an admin, a member, an agent of any level, or a platform admin", async () => {
+    const { db } = testDb;
+    const { tenant, human, scout } = await seedWorkspace(db);
+    const admin = asUser(db, tenant, await seedUser(db, "Admin"), "admin");
+    await addMember(db, tenant, { id: admin.actor.id, name: "Admin", email: `admin.${admin.actor.id}@example.com` }, "admin");
+    const agents = (["agent_read", "agent_write", "agent_admin"] as const).map((role): Ctx => ({ ...scout.ctx, actor: { ...scout.ctx.actor, role } as Ctx["actor"] }));
+    for (const role of ["agent_read", "agent_write", "agent_admin", "platform_admin", "member", "admin"] as const) {
+      expect(can(actorWith(role), "workspace:delete"), role).toBe(false);
+    }
+    expect(can(actorWith("owner"), "workspace:delete")).toBe(true);
+    for (const ctx of [admin, member, platformAdmin, ...agents].map((one) => ({ ...one, tenant }))) {
+      await expect(workspaceInventory(ctx, {})).rejects.toMatchObject({ code: "forbidden" });
+      await expect(deleteWorkspace(ctx, { confirm: tenant.name }, freshProof())).rejects.toMatchObject({ code: "forbidden" });
+    }
+    expect(await db.select({ id: organization.id }).from(organization).where(eq(organization.id, tenant.id))).toHaveLength(1);
+    await expect(deleteWorkspace(human, { confirm: tenant.name }, freshProof())).resolves.toMatchObject({ id: tenant.id });
   });
 
   it("keeps platform admins read-only", async () => {

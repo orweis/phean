@@ -83,6 +83,7 @@ export const EVENTS = {
   login: { params: { method: METHODS, two_factor: BOOL } },
   two_factor_challenge: { params: { result: ["shown", "passed", "failed"] } },
   workspace_create: { params: {}, key: true, server: "also" },
+  workspace_delete: { params: {} },
   invite_send: { params: { role: ROLES } },
   invite_accept: { params: { role: ROLES } },
   onboarding_step: { params: { step: ["connect_agent_viewed", "mcp_url_copied", "first_task_seen"] } },

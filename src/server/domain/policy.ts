@@ -13,6 +13,7 @@ const DENIAL_MESSAGES: Partial<Record<Action, string>> = {
   "member:manage": "Only workspace owners and admins can manage members.",
   "workflow:manage": "Only workspace owners and admins can change the board's stages.",
   "notify:subscribe": "Only the workspace's members get its Decision notifications.",
+  "workspace:delete": "Only the workspace's owner can delete it, in the Phean web app.",
   "pipeline:manage": "Only the pipeline's owner and workspace owners and admins can change a regular pipeline. Agents propose changes with update_pipeline instead.",
 };
 

@@ -17,9 +17,17 @@ vi.mock("@vercel/blob", () => ({
   del: vi.fn(async (keys: unknown, options: Record<string, unknown>) => {
     calls.push({ op: "del", key: keys, options });
   }),
+  // Two pages under any prefix, so deleting by prefix has to follow the cursor.
+  list: vi.fn(async (options: Record<string, unknown>) => {
+    calls.push({ op: "list", key: options.prefix, options });
+    const page = options.cursor === "page-2" ? 2 : 1;
+    return { blobs: [{ pathname: `${String(options.prefix)}documents/d_${page}/v1` }], hasMore: page === 1, cursor: page === 1 ? "page-2" : undefined };
+  }),
 }));
 
-const { blobStore, documentKey } = await import("@/server/storage/blobs");
+const { blobStore, documentKey, tenantKeyPrefix } = await import("@/server/storage/blobs");
+const { documentBlobs } = await import("@/server/db/schema");
+const { eq } = await import("drizzle-orm");
 
 const ctx = { db: {} as never, tenant: { id: "org_1", slug: "acme", name: "Acme" }, actor: { type: "user" as const, id: "u", name: "U", role: "owner" as const } };
 
@@ -67,6 +75,41 @@ describe("the document blob store", () => {
     expect(calls.map((call) => call.op)).toEqual(["get", "del"]);
     vi.unstubAllEnvs();
     expect(await blobStore(human).get(key)).toBeNull();
+  });
+
+  it("deletes a tenant's files by prefix in Vercel Blob, page after page, and in the database alongside", async () => {
+    vi.stubEnv("BLOB_READ_WRITE_TOKEN", "vercel_blob_rw_test");
+    const { human } = await seedWorkspace(testDb.db);
+    const prefix = tenantKeyPrefix(human.tenant.id);
+    await blobStore(human).deletePrefix(prefix);
+    expect(calls.map((call) => [call.op, call.key, call.options.token])).toEqual([
+      ["list", prefix, "vercel_blob_rw_test"],
+      ["del", [`${prefix}documents/d_1/v1`], "vercel_blob_rw_test"],
+      ["list", prefix, "vercel_blob_rw_test"],
+      ["del", [`${prefix}documents/d_2/v1`], "vercel_blob_rw_test"],
+    ]);
+    expect(calls[2]!.options.cursor).toBe("page-2");
+  });
+
+  it("deletes by prefix in the database store, and only that prefix, wildcards in it taken literally", async () => {
+    const { human } = await seedWorkspace(testDb.db);
+    const other = await seedWorkspace(testDb.db);
+    const store = blobStore(human);
+    const keys = [`${tenantKeyPrefix(human.tenant.id)}documents/d_1/v1`, `${tenantKeyPrefix(human.tenant.id)}documents/d_1/v2`];
+    for (const key of keys) await store.put(key, new Uint8Array([1]), "text/markdown");
+    const theirs = `${tenantKeyPrefix(other.tenant.id)}documents/d_9/v1`;
+    await blobStore(other.human).put(theirs, new Uint8Array([2]), "text/markdown");
+    // "_" and "%" are LIKE wildcards: a prefix holding them must not reach keys that only look alike.
+    const lookalike = { db: testDb.db, tenant: { id: human.tenant.id } };
+    await blobStore(lookalike).put("tenants/aXb/documents/d/v1", new Uint8Array([3]), "text/markdown");
+    await blobStore(lookalike).deletePrefix("tenants/a_b/");
+    await blobStore(lookalike).deletePrefix("tenants/%/");
+    expect(await blobStore(lookalike).get("tenants/aXb/documents/d/v1")).toEqual(new Uint8Array([3]));
+
+    await store.deletePrefix(tenantKeyPrefix(human.tenant.id));
+    for (const key of keys) expect(await store.get(key)).toBeNull();
+    expect(await blobStore(other.human).get(theirs)).toEqual(new Uint8Array([2]));
+    expect(await testDb.db.select({ key: documentBlobs.key }).from(documentBlobs).where(eq(documentBlobs.tenantId, human.tenant.id))).toEqual([{ key: "tenants/aXb/documents/d/v1" }]);
   });
 
   it("falls back to the database without a token, or when told to", () => {

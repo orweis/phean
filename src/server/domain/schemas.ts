@@ -488,6 +488,21 @@ export const InviteMemberInput = z.object({
 export const InvitationRefInput = z.object({ invitationId: z.string().trim().min(1) });
 export const MemberRefInput = z.object({ memberId: z.string().trim().min(1) });
 
+/**
+ * Deleting a workspace: its exact name or slug, typed by the owner, and the proofs their account
+ * asks for (`deleteWorkspace` checks each). Blank fields read as missing, never as a match.
+ */
+export const DeleteWorkspaceInput = z.object({
+  confirm: z.string().trim().max(LIMITS.name),
+  password: z.string().max(LIMITS.passwordMax).optional().transform((value) => value || undefined),
+  code: z
+    .string()
+    .trim()
+    .max(16)
+    .optional()
+    .transform((value) => value?.replace(/\s+/g, "") || undefined),
+});
+
 // Webhooks and watches
 /** Custom headers a webhook endpoint may require. */
 export const MAX_WEBHOOK_HEADERS = 10;

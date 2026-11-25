@@ -83,4 +83,37 @@ export const usageRollupState = pgTable("usage_rollup_state", {
   ranAt: timestampTz("ran_at").notNull().defaultNow(),
 });
 
+/**
+ * Every workspace deleted, written in the deletion's own transaction before any of its rows go: who
+ * deleted which workspace, and how much went with it. Phean's own record, like `backoffice_audit`:
+ * `tenant_id` names the workspace and outlives it (no foreign key), and it holds metadata only (the
+ * name, slug and counts, never a task, decision or document). Append-only: nothing in the app
+ * updates a row except `blobs_cleared_at`, set once the workspace's files are gone from the blob store.
+ */
+export const workspaceDeletions = pgTable(
+  "workspace_deletions",
+  {
+    id: bigint("id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+    at: timestampTz("at").notNull().defaultNow(),
+    tenantId: text("tenant_id").notNull(),
+    name: text("name").notNull(),
+    slug: text("slug").notNull(),
+    /** Kept as they were, so the record survives the person's account. */
+    deletedByUserId: text("deleted_by_user_id").notNull(),
+    deletedByEmail: text("deleted_by_email").notNull(),
+    deletedByName: text("deleted_by_name").notNull(),
+    /** What went with it: tasks, goals, decisions, documents, memories, agents, pipelines, webhooks, members. */
+    counts: jsonb("counts").$type<Record<string, number>>().notNull(),
+    /**
+     * When its document files were deleted from the blob store, which is outside the database: at once
+     * where the bytes live in Postgres, otherwise after commit, retried by the pipelines tick.
+     */
+    blobsClearedAt: timestampTz("blobs_cleared_at"),
+    /** When clearing its files was last tried, so the tick retries the longest-waiting first and a failing one cannot starve the rest. */
+    blobsAttemptedAt: timestampTz("blobs_attempted_at"),
+  },
+  (t) => [index("workspace_deletions_at_idx").on(t.at.desc())],
+);
+
 export type BackofficeAuditRow = typeof backofficeAudit.$inferSelect;
+export type WorkspaceDeletionRow = typeof workspaceDeletions.$inferSelect;
