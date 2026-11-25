@@ -28,8 +28,8 @@ export interface RequestPayload {
   question: string;
   options: string[];
   answerable: boolean;
-  /** Set when a pipeline asked: the line, the run's number and the stop that holds it. */
-  pipeline?: { name: string; run: number; stop: string };
+  /** Set when a pipeline asked: the line, the run's number (and its name, when it has one) and the stop that holds it. */
+  pipeline?: { name: string; run: number; runName?: string; stop: string };
 }
 
 export interface PrivateRequestPayload {
@@ -105,6 +105,7 @@ export function requestPayload(workspace: PayloadWorkspace, taskId: string, requ
           pipeline: {
             name: truncate(request.pipeline.pipelineName, Math.ceil(NAME_CHARS * scale)),
             run: request.pipeline.runNumber,
+            ...(request.pipeline.runName && { runName: truncate(request.pipeline.runName, Math.ceil(NAME_CHARS * scale)) }),
             stop: truncate(request.pipeline.stopName, Math.ceil(NAME_CHARS * scale)),
           },
         }),

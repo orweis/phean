@@ -27,8 +27,12 @@ const DECISION_ACTIONS = new Set(["task.input_answered", "task.input_retracted",
 /** Events about an agent's own question, delivered to it whatever it watches. */
 const ANSWER_ACTIONS = new Set(["task.input_answered", "task.input_retracted"]);
 
-/** A task being handed to an agent by name, delivered to it whatever it watches. */
-const HANDOFF_ACTION = "task.handed_off";
+/**
+ * A task being handed to an agent by name, delivered to it whatever it watches: the handoff, and a
+ * pipeline's resend of one no one picked up (`task.handoff_retried`, with `retry`, `retryCount` and
+ * `reason` in its data).
+ */
+const HANDOFF_ACTIONS = new Set(["task.handed_off", "task.handoff_retried"]);
 
 /** Which topics an event belongs to; an agent gets it if its webhook subscribes to any of them. */
 export function topicsOf(action: string): WebhookTopic[] {
@@ -135,7 +139,7 @@ export function routeEvent(event: RoutedEvent, listener: Listener, watching: Wat
     forAgents.add(agentId);
   };
   if (inTopics && ANSWER_ACTIONS.has(event.action) && event.data.agentId === listener.agentId) reasons.add("asked_by_you");
-  if (event.action === HANDOFF_ACTION) {
+  if (HANDOFF_ACTIONS.has(event.action)) {
     if (event.data.toAgentId === listener.agentId) reasons.add("handed_to_you");
     else if (typeof event.data.toAgentId === "string") forSubagent(event.data.toAgentId, "handed_to_you");
   }

@@ -762,6 +762,20 @@ describe("a Claude Code routine as the webhook", () => {
     expect(payload.events[0]).toMatchObject({ entityId: task.id, data: expect.objectContaining({ answer: "Okafor" }) });
   });
 
+  it("marks a resent handoff in a run's text, and tells only the agent it waits on to claim it", () => {
+    const resent = { summary: "Weekly newsletter resent the handoff of “Draft”", reasons: ["handed_to_you"], url: "https://phean.test/x", data: { retry: true, retryCount: 3, reason: "not picked up 12 minutes after the handoff" } };
+    const text = routineText(JSON.stringify({ type: "phean.events", agent: { name: "Scout" }, workspace: { name: "Acme" }, events: [resent] }));
+    expect(text).toContain("- RETRY 3 (not picked up 12 minutes after the handoff): Weekly newsletter resent the handoff of “Draft” [handed_to_you] https://phean.test/x");
+    expect(text).toContain("claim_task it to pick it up");
+    // An agent that only follows the task hears the resend marked, but is not told to claim it.
+    const watcher = routineText(JSON.stringify({ type: "phean.events", agent: { name: "Closer" }, workspace: { name: "Acme" }, events: [{ ...resent, reasons: ["watching:task"] }] }));
+    expect(watcher).toContain("- RETRY 3 (not picked up 12 minutes after the handoff):");
+    expect(watcher).not.toContain("claim_task");
+    // Other events carry no mark.
+    const plain = routineText(JSON.stringify({ type: "phean.events", agent: { name: "Scout" }, workspace: { name: "Acme" }, events: [{ summary: "Dana answered", reasons: ["asked_by_you"] }] }));
+    expect(plain).not.toContain("RETRY");
+  });
+
   it("keeps the summary and drops the payload when the batch is too long for a run's text", () => {
     const events = Array.from({ length: 25 }, (_, index) => ({ summary: `Dana answered request ${index}`, reasons: ["answered_you"], url: "https://phean.test/x", data: { blob: "x".repeat(2_000) } }));
     const text = routineText(JSON.stringify({ type: "phean.events", agent: { name: "Scout" }, workspace: { name: "Acme" }, events }));

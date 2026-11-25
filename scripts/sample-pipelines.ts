@@ -3,10 +3,12 @@
  * insights, and a run page have something to show: a weekly partner newsletter that an agent drafts,
  * the owner reviews and another agent sends. Its runs are driven through the real services (so every
  * stop, task and event is what the engine makes), then backdated over the last three weeks with
- * believable stop times. Every run has finished and its tasks are archived, so the board, the
- * overview and Decisions read as before. Runs only on a workspace with no pipelines.
+ * believable stop times. Every run has finished but the last, whose draft was handed to its agent
+ * 90 minutes ago and never picked up (stuck, resent five times), so the stuck filter and Resend have
+ * something to show. Every run's tasks are archived, so the board, the overview and Decisions read
+ * as before. Runs only on a workspace with no pipelines.
  */
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 
 import type { Db } from "../src/server/db/client";
 import { agents, events, pipelineRuns, pipelineRunStops, pipelines, tasks } from "../src/server/db/schema";
@@ -104,7 +106,29 @@ export async function seedSamplePipelines(db: Db, owner: Ctx): Promise<number> {
     }
     await backdate(db, owner.tenant, view.run.id, now - plan.daysAgo * 24 * HOUR, plan);
   }
-  return RUNS.length;
+  await seedStuckRun(db, owner, pipeline.id, now);
+  return RUNS.length + 1;
+}
+
+/** A run whose draft the sweeper never picked up: handed off 90 minutes ago, resent at 3, 6, 12, 24 and 48 minutes. */
+async function seedStuckRun(db: Db, owner: Ctx, pipelineId: string, now: number) {
+  const view = await startRun(owner, { pipelineId, name: "Holiday payout schedule" });
+  const draft = stopTask(view, "draft")!;
+  const shift = sql`interval '90 minutes'`;
+  const handedOffAt = new Date(now - 90 * MINUTE);
+  await db
+    .update(pipelineRunStops)
+    .set({ startedAt: sql`${pipelineRunStops.startedAt} - ${shift}`, dueAt: sql`${pipelineRunStops.dueAt} - ${shift}`, handedOffAt: sql`${pipelineRunStops.handedOffAt} - ${shift}`, handoffResends: 5 })
+    .where(eq(pipelineRunStops.runId, view.run.id));
+  await db
+    .update(pipelineRunStops)
+    .set({ handoffRetryAt: sql`${pipelineRunStops.handedOffAt} + interval '96 minutes'` })
+    .where(eq(pipelineRunStops.runId, view.run.id));
+  await db.update(pipelineRuns).set({ startedAt: handedOffAt, createdAt: handedOffAt }).where(eq(pipelineRuns.id, view.run.id));
+  await db
+    .update(tasks)
+    .set({ delegatedAt: sql`${tasks.delegatedAt} - ${shift}`, createdAt: sql`${tasks.createdAt} - ${shift}`, archivedAt: new Date(now) })
+    .where(and(eq(tasks.tenantId, owner.tenant.id), inArray(tasks.id, [draft, view.run.taskId!])));
 }
 
 const startRunView = (ctx: Ctx, runId: string): Promise<RunView> => getRun(ctx, { runId });

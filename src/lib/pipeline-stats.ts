@@ -24,6 +24,8 @@ export interface RunStopRecord {
 export interface RunRecord {
   id: string;
   number: number;
+  /** What the run makes, when it was named. */
+  name?: string | null;
   version: number;
   status: RunStatus;
   startedAt: Date;
@@ -60,7 +62,7 @@ export interface RunGrid {
   /** Stops in the order a run meets them; stops only older versions had come last. */
   stops: { id: string; name: string }[];
   /** Newest first. */
-  runs: { id: string; number: number; status: RunStatus }[];
+  runs: { id: string; number: number; name: string | null; status: RunStatus }[];
   /** By stop id, one cell per run, in the order of `runs`. */
   cells: Record<string, GridCell[]>;
 }
@@ -87,7 +89,7 @@ export function runGrid(definition: PipelineDefinition, runs: readonly RunRecord
   }
   return {
     stops: ids.map((id) => ({ id, name: names.get(id) ?? id })),
-    runs: newest.map(({ id, number, status }) => ({ id, number, status })),
+    runs: newest.map(({ id, number, name, status }) => ({ id, number, name: name ?? null, status })),
     cells,
   };
 }

@@ -274,6 +274,8 @@ export const LIMITS = {
   option: 200,
   headerValue: 2000,
   linkTitle: 120,
+  /** A pipeline run's name: the thing it makes ("Issue 42: AI agents roundup"). */
+  runName: 120,
   stageLabel: 40,
   documentTitle: 200,
   documentSummary: 500,

@@ -125,7 +125,7 @@ export const EVENTS = {
   task_peek_open: { params: { from: ["board", "table", "calendar", "map", "search", "decisions", "goals", "other"] } },
   task_open_page: { params: {} },
   tasks_layout: { params: { layout: LAYOUTS } },
-  filter_apply: { params: { filter: ["goal", "status", "kind", "operator"] } },
+  filter_apply: { params: { filter: ["goal", "status", "kind", "operator", "stuck"] } },
 
   // App: search, goals
   search_submit: { params: { has_results: BOOL, used_suggestion: BOOL, from: ["shortcut", "click"] } },
@@ -144,6 +144,8 @@ export const EVENTS = {
   run_start: { params: { trigger: TRIGGERS }, server: "also" },
   run_cancel: { params: {} },
   run_rerun_from: { params: {} },
+  run_rename: { params: {} },
+  handoff_resend: { params: { stuck: BOOL } },
   run_view: { params: { view: ["compact", "timeline", "activity"] } },
   proposal_decide: { params: { result: ["approve", "reject"] } },
   pipeline_pause: { params: {} },

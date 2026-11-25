@@ -1,9 +1,9 @@
-import { Activity as ActivityIcon, ChevronRight, CircleStop, Clock3, ListOrdered, RotateCcw } from "lucide-react";
+import { Activity as ActivityIcon, ChevronRight, CircleStop, Clock3, ListOrdered, PenLine, RotateCcw } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { cache } from "react";
 
-import { cancelRunAction, rerunFromAction } from "@/app/w/[slug]/actions";
+import { cancelRunAction, rerunFromAction, updateRunAction } from "@/app/w/[slug]/actions";
 import { ActivityFeed } from "@/components/activity-feed";
 import { LineMap } from "@/components/charts/line-map";
 import { CompactRun, RunTimeline, SelectedStop } from "@/components/pipelines/run-views";
@@ -24,6 +24,7 @@ import { isOneOf, LIMITS, LIVE_RUN_STATUSES, RUN_STATUS_META, RUN_TRIGGER_META }
 import { formatDuration, timeAgo } from "@/lib/format";
 import { stopViewState } from "@/lib/pipeline-map";
 import { focusStopOf } from "@/lib/pipeline-stats";
+import { runLabel, runTitle } from "@/lib/pipelines";
 import { queryParam, routes } from "@/lib/routes";
 import { requireWorkspace } from "@/server/auth/session";
 import { getRun, getRunActivity, type RunView } from "@/server/domain/pipelines";
@@ -45,7 +46,7 @@ const loadRun = cache(async (slug: string, runId: string) => {
 export async function generateMetadata({ params }: PageProps<"/w/[slug]/pipelines/runs/[runId]">): Promise<Metadata> {
   const { slug, runId } = await params;
   const view = await loadRun(slug, runId);
-  return { title: `${view.pipeline.name} #${view.run.number}` };
+  return { title: runTitle(view.run, view.pipeline.name) };
 }
 
 /** The stops a run can go again from: those it reached. */
@@ -61,7 +62,7 @@ function RerunFrom({ view, slug }: { view: RunView; slug: string }) {
         action={rerunFromAction}
         workspace={slug}
         confirm="Run this stop and every stop after it again? Their tasks under way are dropped and handed out afresh."
-        notice={`Run #${view.run.number} runs again`}
+        notice={`${runLabel(view.run, view.pipeline.name)} runs again`}
         analytics={{ event: "run_rerun_from" }}
         closeOnSuccess
         className="space-y-3"
@@ -90,6 +91,33 @@ function RerunFrom({ view, slug }: { view: RunView; slug: string }) {
   );
 }
 
+/** Names the run after what it makes, or clears its name. */
+function RenameRun({ view, slug }: { view: RunView; slug: string }) {
+  return (
+    <Popover variant="ghost" icon={<PenLine aria-hidden />} label="Rename" triggerLabel="Rename this run" title="Rename the run" className="sm:w-80">
+      <ActionForm
+        action={updateRunAction}
+        workspace={slug}
+        notice="Renamed the run"
+        analytics={{ event: "run_rename" }}
+        closeOnSuccess
+        className="space-y-3"
+      >
+        <input type="hidden" name="runId" value={view.run.id} />
+        <Field label="Name" htmlFor="run-name" hint={`What this run makes. Leave it empty to show it as ${view.pipeline.name} #${view.run.number}.`}>
+          <Input id="run-name" name="name" defaultValue={view.run.name ?? ""} maxLength={LIMITS.runName} placeholder="Issue 42: AI agents roundup" />
+        </Field>
+        <div className="flex items-center gap-2">
+          <SubmitButton size="sm" variant="primary">
+            Save
+          </SubmitButton>
+          <PopoverCancel />
+        </div>
+      </ActionForm>
+    </Popover>
+  );
+}
+
 export default async function RunPage({ params, searchParams }: PageProps<"/w/[slug]/pipelines/runs/[runId]">) {
   const { slug, runId } = await params;
   const query = await searchParams;
@@ -104,7 +132,8 @@ export default async function RunPage({ params, searchParams }: PageProps<"/w/[s
   const canAct = can(ctx.actor, "pipeline:write");
   const stopParam = queryParam(query.stop);
   const selected = view.stops.some((stop) => stop.stopId === stopParam) ? stopParam! : focusStopOf(view.stops);
-  const states = Object.fromEntries(view.stops.map((stop) => [stop.stopId, { state: stopViewState(stop.state, stop.task?.status), raw: stop.state, branch: stop.branch }]));
+  const states = Object.fromEntries(view.stops.map((stop) => [stop.stopId, { state: stopViewState(stop.state, stop.task?.status), raw: stop.state, branch: stop.branch, stuck: Boolean(stop.handoff?.stuck) }]));
+  const label = runLabel(run, pipeline.name);
   const selectedStop = view.stops.find((stop) => stop.stopId === selected);
   const canRerunSelected = canAct && run.status !== "cancelled" && selectedStop && rerunnable(view).includes(selectedStop);
 
@@ -125,8 +154,8 @@ export default async function RunPage({ params, searchParams }: PageProps<"/w/[s
           </li>
           <li className="flex items-center gap-1">
             <ChevronRight className="size-3 text-faint" aria-hidden />
-            <span aria-current="page" className="text-ink-2">
-              Run #{run.number}
+            <span aria-current="page" className="max-w-64 truncate text-ink-2">
+              {label}
             </span>
           </li>
         </ol>
@@ -134,15 +163,18 @@ export default async function RunPage({ params, searchParams }: PageProps<"/w/[s
       <div className="mb-6 flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
         <div className="min-w-0 flex-1 basis-80">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <h1 className="text-2xl font-bold text-ink">
-              {pipeline.name} #{run.number}
-            </h1>
+            <h1 className="text-2xl font-bold wrap-anywhere text-ink">{label}</h1>
             <MetaBadge meta={RUN_STATUS_META} value={run.status} />
           </div>
           <p data-run-headline className="mt-1.5 text-md font-semibold text-ink-2">
             {view.headline}
           </p>
           <p className="mt-1.5 flex flex-wrap gap-x-3 text-xs text-muted">
+            {run.name && (
+              <span>
+                {pipeline.name} #{run.number}
+              </span>
+            )}
             <span>Version {run.version}</span>
             <span>
               {RUN_TRIGGER_META[run.trigger].label}
@@ -160,14 +192,15 @@ export default async function RunPage({ params, searchParams }: PageProps<"/w/[s
           {run.summary && run.status !== "done" && <p className="mt-1.5 max-w-3xl text-sm text-ink-2">{run.summary}</p>}
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {canAct && <RenameRun view={view} slug={slug} />}
           {canAct && run.status !== "cancelled" && <RerunFrom view={view} slug={slug} />}
           {canAct && live && (
             <ActionButton
               action={cancelRunAction}
               workspace={slug}
               fields={{ runId: run.id }}
-              confirm={`Cancel ${pipeline.name} #${run.number}? Its stops under way stop, their tasks are dropped, and it cannot go on.`}
-              notice={`Cancelled ${pipeline.name} #${run.number}`}
+              confirm={`Cancel ${label}? Its stops under way stop, their tasks are dropped, and it cannot go on.`}
+              notice={`Cancelled ${label}`}
               analytics={{ event: "run_cancel" }}
               size="sm"
               variant="danger"
@@ -186,8 +219,10 @@ export default async function RunPage({ params, searchParams }: PageProps<"/w/[s
           <CardBody className="space-y-4">
             <LineMap
               definition={view.definition}
-              label={`${pipeline.name}'s line, with run ${run.number}`}
+              label={`${pipeline.name}'s line, with ${label}`}
               servedBy={Object.fromEntries(view.stops.map((stop) => [stop.stopId, stop.servedBy]))}
+              agents={Object.fromEntries(view.stops.flatMap((stop) => (stop.agent ? [[stop.stopId, stop.agent]] : [])))}
+              slug={slug}
               states={states}
               reachedEnd={run.endId}
               hrefOf={Object.fromEntries(view.stops.map((stop) => [stop.stopId, routes.pipelineRun(slug, run.id, { stop: stop.stopId })]))}
@@ -205,6 +240,7 @@ export default async function RunPage({ params, searchParams }: PageProps<"/w/[s
                 stopId={selected}
                 slug={slug}
                 now={now}
+                canAct={canAct}
                 actions={
                   canRerunSelected && (
                     <ActionButton
@@ -249,7 +285,7 @@ export default async function RunPage({ params, searchParams }: PageProps<"/w/[s
             </ChipRail>
           }
         />
-        {current === "compact" && <CompactRun view={view} slug={slug} selected={selected} now={now} />}
+        {current === "compact" && <CompactRun view={view} slug={slug} selected={selected} now={now} canAct={canAct} />}
         {current === "timeline" && <RunTimeline view={view} now={now} />}
         {current === "activity" && (
           <CardBody>

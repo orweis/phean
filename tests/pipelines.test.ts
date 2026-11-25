@@ -1,10 +1,11 @@
-import { and, eq } from "drizzle-orm";
-import { beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { and, eq, sql } from "drizzle-orm";
+import { beforeAll, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 
-import { pipelineTriggers } from "@/server/db/schema";
+import { events, pipelineRunStops, pipelineTriggers, tasks, webhookDeliveries, webhooks } from "@/server/db/schema";
+import { agentContext, authenticateAgentToken, createAgent, createSubagent, revokeAgent } from "@/server/domain/agents";
 import type { Ctx } from "@/server/domain/context";
 import { listActivity } from "@/server/domain/events";
-import { fireSchedule, sweepDeadlines, systemContext } from "@/server/domain/pipeline-engine";
+import { fireSchedule, sweepDeadlines, sweepHandoffRetries, systemContext } from "@/server/domain/pipeline-engine";
 import {
   approvePipelineVersion,
   cancelRun,
@@ -18,15 +19,19 @@ import {
   pipelineHistory,
   taskLine,
   listRuns,
+  listStuckStops,
   pausePipeline,
   rejectPipelineVersion,
   rerunFrom,
+  resendHandoff,
   startRun,
   updatePipeline,
+  updateRun,
   type RunView,
 } from "@/server/domain/pipelines";
 import { answerInput, captureTasks, claimTask, completeTask, getTask, handOffTask, listTasks, releaseTask, updateTask } from "@/server/domain/tasks";
 import { handlePipelineTrigger, PIPELINE_TRIGGER_LIMIT } from "@/server/pipelines/trigger";
+import { registerWebhook } from "@/server/domain/webhooks";
 
 import { addMember, asUser, createTestDb, seedUser, seedWorkspace, type TestDb, type TestUser, type Workspace } from "./support/db";
 
@@ -629,5 +634,264 @@ describe("the app's reads", () => {
     expect(await taskLine(human, { taskId: started.run.taskId! })).toMatchObject({ role: "run", stops: [{ current: false }, { current: false }, { current: false }] });
     const [plain] = (await captureTasks(human, { tasks: [{ title: "Not on a line" }] })).created;
     expect(await taskLine(human, { taskId: plain!.id })).toBeNull();
+  });
+});
+
+describe("run names", () => {
+  it("names a run, its task and its notes, keeps the name on a rerun, and renames or clears it", async () => {
+    const { pipeline } = await define(human, [agentStop("draft", "Scout", { end: "done" }, { instructions: "Write {{run.number}}." })]);
+    const named = await startRun(human, { pipelineId: pipeline.id, name: "  Issue 42: AI agents roundup " });
+    expect(named.run.name).toBe("Issue 42: AI agents roundup");
+    expect(named.run.task?.title).toBe("Issue 42: AI agents roundup");
+    const draft = (await getTask(scout, { taskId: stopIn(named, "draft").task!.id })).task;
+    expect(draft.description).toContain("Issue 42: AI agents roundup (Newsletter #1)");
+
+    const plain = await startRun(human, { pipelineId: pipeline.id });
+    expect(plain.run).toMatchObject({ name: null, task: { title: "Newsletter #2" } });
+
+    await completeTask(scout, { taskId: draft.id, note: "Done" });
+    const rerun = await rerunFrom(human, { runId: named.run.id, stopId: "draft", note: "Again" });
+    expect(rerun.run.name).toBe("Issue 42: AI agents roundup");
+
+    const renamed = await updateRun(scout, { runId: plain.run.id, name: "Acme Q3 renewal email" });
+    expect(renamed.run).toMatchObject({ name: "Acme Q3 renewal email", task: { title: "Acme Q3 renewal email" } });
+    await expect(updateRun(human, { runId: plain.run.id, name: "Acme Q3 renewal email" })).rejects.toMatchObject({ code: "invalid" });
+    await expect(updateRun(human, { runId: plain.run.id })).rejects.toMatchObject({ code: "invalid" });
+    // The run's task is renamed through the task service, so its watchers hear it.
+    const taskEvents = (await listActivity(human, { limit: 100 })).filter((event) => event.action === "task.updated" && event.entityId === plain.run.task!.id);
+    expect(taskEvents[0]).toMatchObject({ summary: expect.stringContaining("Acme Q3 renewal email"), data: expect.objectContaining({ changed: ["title"] }) });
+    // Kept to one line, as at start (the schema already holds it to the limit).
+    const clipped = await updateRun(human, { runId: plain.run.id, name: "Acme\n  Q3 renewal" });
+    expect(clipped.run.name).toBe("Acme Q3 renewal");
+    await updateRun(human, { runId: plain.run.id, name: "Acme Q3 renewal email" });
+    const cleared = await updateRun(human, { runId: plain.run.id, name: null });
+    expect(cleared.run).toMatchObject({ name: null, task: { title: "Newsletter #2" } });
+    expect((await listActivity(human, { limit: 50 })).map((event) => event.action)).toContain("pipeline.run_renamed");
+    expect((await listPipelineBoard(human, {}))[0]!.strip.map((run) => run.name)).toEqual([null, "Issue 42: AI agents roundup"]);
+  });
+
+  it("names a run an event starts after the captured task, and a scheduled one after its day", async () => {
+    const { pipeline } = await define(human, [agentStop("one", "Scout", { end: "done" })], { triggers: { events: [{ tag: "launch" }], schedule: { cron: "0 9 * * 1", timeZone: "Europe/Berlin" } } });
+    await captureTasks(scout, { tasks: [{ title: "Launch the partner portal", tags: ["launch"] }] });
+    const [fromEvent] = await listRuns(human, { pipelineId: pipeline.id });
+    expect(fromEvent!.name).toBe("Launch the partner portal");
+
+    const [trigger] = await testDb.db.select().from(pipelineTriggers).where(and(eq(pipelineTriggers.pipelineId, pipeline.id), eq(pipelineTriggers.kind, "schedule")));
+    await testDb.db.update(pipelineTriggers).set({ checkedAt: new Date("2026-11-30T07:30:00Z") }).where(eq(pipelineTriggers.id, trigger!.id));
+    expect(await fireSchedule(systemContext(testDb.db, ws.tenant), trigger!.id, new Date("2026-11-30T08:05:00Z"))).toBe(true);
+    const runs = await listRuns(human, { pipelineId: pipeline.id });
+    expect(runs.find((entry) => entry.trigger === "schedule")!.name).toBe("Newsletter, 2026-11-30");
+  });
+
+  it("shows the run's name beside a person stop's decision and on the task's line", async () => {
+    const { pipeline } = await define(human, [{ id: "review", name: "Review", kind: "person", person: ws.human.actor.id, options: ["Yes", "No"], then: { end: "done" } }]);
+    const started = await startRun(human, { pipelineId: pipeline.id, name: "Acme Q3 renewal email" });
+    const taskId = stopIn(started, "review").task!.id;
+    const { task } = await getTask(human, { taskId });
+    expect(task.inputRequest?.pipeline).toMatchObject({ runName: "Acme Q3 renewal email", runNumber: 1 });
+    const contexts = await describePipelineRequests(human, { requests: [{ runId: started.run.id, stopId: "review" }] });
+    expect(contexts[`${started.run.id}:review`]).toMatchObject({ runName: "Acme Q3 renewal email", position: { index: 1, total: 1 } });
+    expect((await taskLine(human, { taskId }))?.run.name).toBe("Acme Q3 renewal email");
+  });
+});
+
+describe("resending handoffs no one picked up", () => {
+  const MINUTE = 60_000;
+  const retriesOf = async (taskId: string) =>
+    (await listActivity(human, { limit: 100 })).filter((event) => event.action === "task.handoff_retried" && event.entityId === taskId);
+
+  /** Moves a stop's handoff back in time, as the clock would: the row's handoff and its task's delegation alike. */
+  async function backdateHandoff(taskId: string, minutes: number) {
+    const shift = sql`interval '1 minute' * ${minutes}`;
+    await testDb.db.update(pipelineRunStops).set({ handedOffAt: sql`${pipelineRunStops.handedOffAt} - ${shift}` }).where(eq(pipelineRunStops.taskId, taskId));
+    await testDb.db.update(tasks).set({ delegatedAt: sql`${tasks.delegatedAt} - ${shift}` }).where(eq(tasks.id, taskId));
+  }
+
+  async function handedToScout() {
+    const { pipeline } = await define(human, [agentStop("draft", "Scout", { end: "done" }, { instructions: "Draft it." })]);
+    const started = await startRun(human, { pipelineId: pipeline.id, name: "Issue 7" });
+    const stop = stopIn(started, "draft");
+    return { started, taskId: stop.task!.id, at: stop.handoff!.handedOffAt };
+  }
+
+  it("resends at 3, 6, 12 … minutes, once each however many sweeps overlap, with why and how often", async () => {
+    const { started, taskId, at } = await handedToScout();
+    expect(stopIn(started, "draft").handoff).toMatchObject({ resends: 0, stuck: false, nextRetryAt: new Date(at.getTime() + 3 * MINUTE) });
+
+    // The sweep covers every workspace, so these count this run's resends in its own activity.
+    await sweepHandoffRetries(testDb.db, new Date(at.getTime() + 2 * MINUTE));
+    expect(await retriesOf(taskId)).toHaveLength(0);
+    const due = new Date(at.getTime() + 3 * MINUTE);
+    // Two ticks at once. PGlite runs one connection, so this shows the due time is re-read and moved on
+    // under the lock (the second finds nothing due), not that Postgres's row locks serialize real ticks.
+    await Promise.all([sweepHandoffRetries(testDb.db, due), sweepHandoffRetries(testDb.db, due)]);
+    expect(await retriesOf(taskId)).toHaveLength(1);
+    await sweepHandoffRetries(testDb.db, new Date(at.getTime() + 5 * MINUTE));
+    expect(await retriesOf(taskId)).toHaveLength(1);
+    await sweepHandoffRetries(testDb.db, new Date(at.getTime() + 12 * MINUTE + 5_000));
+
+    const sent = await retriesOf(taskId);
+    expect(sent).toHaveLength(2);
+    expect(sent[0]!.data).toMatchObject({
+      retry: true,
+      retryCount: 2,
+      reason: "not picked up 12 minutes after the handoff",
+      trigger: "automatic",
+      taskId,
+      runId: started.run.id,
+      stopId: "draft",
+      runName: "Issue 7",
+      toAgentId: ws.scout.ctx.actor.id,
+      note: expect.stringContaining("Draft it."),
+    });
+    expect(sent[1]!.data).toMatchObject({ retryCount: 1, reason: "not picked up 3 minutes after the handoff" });
+    // A late tick sends once and moves on to the next time still ahead: 24 minutes.
+    const view = await run(started.run.id);
+    expect(stopIn(view, "draft").handoff).toMatchObject({ resends: 2, nextRetryAt: new Date(at.getTime() + 24 * MINUTE) });
+  });
+
+  it("stops when the agent picks the stop up, and reads it as stuck only until then", async () => {
+    const { started, taskId, at } = await handedToScout();
+    await sweepHandoffRetries(testDb.db, new Date(at.getTime() + 3 * MINUTE));
+    expect(await listStuckStops(human, {})).toEqual([]);
+    await backdateHandoff(taskId, 10);
+    const stuck = await listStuckStops(human, {});
+    expect(stuck).toEqual([expect.objectContaining({ runId: started.run.id, stopId: "draft", runName: "Issue 7", resends: 1, agent: { id: ws.scout.ctx.actor.id, name: "Scout" } })]);
+    expect(stopIn(await run(started.run.id), "draft").handoff?.stuck).toBe(true);
+
+    await claimTask(scout, { taskId });
+    await sweepHandoffRetries(testDb.db, new Date(at.getTime() + 6 * MINUTE));
+    await sweepHandoffRetries(testDb.db, new Date(at.getTime() + 60 * MINUTE));
+    expect(await retriesOf(taskId)).toHaveLength(1);
+    expect(await listStuckStops(human, {})).toEqual([]);
+    expect(stopIn(await run(started.run.id), "draft").handoff).toMatchObject({ stuck: false, nextRetryAt: null, resends: 1 });
+  });
+
+  it("gives up after 3 days, leaving the stop stuck for a person", async () => {
+    const { started, taskId, at } = await handedToScout();
+    for (let minutes = 3; minutes < 3 * 24 * 60; minutes *= 2) await sweepHandoffRetries(testDb.db, new Date(at.getTime() + minutes * MINUTE));
+    expect(await retriesOf(taskId)).toHaveLength(11);
+    await sweepHandoffRetries(testDb.db, new Date(at.getTime() + 3 * 24 * 60 * MINUTE));
+    await sweepHandoffRetries(testDb.db, new Date(at.getTime() + 4 * 24 * 60 * MINUTE));
+    expect(await retriesOf(taskId)).toHaveLength(11);
+    await backdateHandoff(taskId, 3 * 24 * 60);
+    const view = await run(started.run.id);
+    expect(stopIn(view, "draft")).toMatchObject({ state: "active", handoff: { stuck: true, resends: 11, nextRetryAt: null, gaveUpAt: expect.any(Date) } });
+    expect((await listActivity(human, { limit: 100 })).filter((event) => event.action === "pipeline.stop_stuck")).toHaveLength(1);
+    expect((await listStuckStops(human, {}))[0]).toMatchObject({ gaveUpAt: expect.any(Date) });
+  });
+
+  it("resends by hand while the handoff waits, without moving the schedule, and refuses once it does not", async () => {
+    const { started, taskId, at } = await handedToScout();
+    const resent = await resendHandoff(human, { runId: started.run.id, stopId: "draft" });
+    expect(resent).toMatchObject({ taskId, agentName: "Scout", stopName: "draft", retryCount: 1 });
+    expect((await retriesOf(taskId))[0]!.data).toMatchObject({ trigger: "manual", reason: "resent by Dana", resentBy: { type: "user", name: "Dana" }, retryCount: 1, note: expect.stringContaining("Draft it.") });
+    expect(stopIn(await run(started.run.id), "draft").handoff).toMatchObject({ nextRetryAt: new Date(at.getTime() + 3 * MINUTE), waiting: true, agent: { name: "Scout" } });
+
+    // Picked up, then done: nothing waits, so there is nothing to resend.
+    await claimTask(scout, { taskId });
+    await expect(resendHandoff(human, { runId: started.run.id, stopId: "draft" })).rejects.toMatchObject({ code: "conflict", message: expect.stringContaining("already picked up") });
+    await completeTask(scout, { taskId, note: "Done" });
+    await expect(resendHandoff(human, { runId: started.run.id, stopId: "draft" })).rejects.toMatchObject({ code: "conflict", message: expect.stringContaining("is done") });
+    expect(await retriesOf(taskId)).toHaveLength(1);
+
+    const { pipeline } = await define(human, [{ id: "ok", name: "OK", kind: "person", person: ws.human.actor.id, then: { end: "done" } }]);
+    const personRun = await startRun(human, { pipelineId: pipeline.id });
+    await expect(resendHandoff(human, { runId: personRun.run.id, stopId: "ok" })).rejects.toMatchObject({ code: "invalid" });
+    await expect(resendHandoff(leeCtx, { runId: started.run.id, stopId: "nope" })).rejects.toMatchObject({ code: "invalid" });
+  });
+
+  it("refuses a manual resend once the stop's task is handed to someone else", async () => {
+    const { started, taskId } = await handedToScout();
+    await handOffTask(human, { taskId, toAgent: "Closer", note: "Closer takes this one" });
+    await expect(resendHandoff(human, { runId: started.run.id, stopId: "draft" })).rejects.toMatchObject({
+      code: "conflict",
+      message: expect.stringContaining("now being handed to Closer"),
+    });
+    expect(await retriesOf(taskId)).toEqual([]);
+  });
+
+  it("resends only to the agent the task was handed to, and leaves the stop stuck for a person once it cannot act", async () => {
+    const { started, taskId, at } = await handedToScout();
+    await revokeAgent(human, { agentId: ws.scout.ctx.actor.id });
+    // Another agent of the same name is not the one the task waits on.
+    await createAgent(human, { name: "Scout" });
+    await expect(resendHandoff(human, { runId: started.run.id, stopId: "draft" })).rejects.toMatchObject({ code: "conflict", message: expect.stringContaining("can no longer act") });
+    await sweepHandoffRetries(testDb.db, new Date(at.getTime() + 3 * MINUTE));
+    expect(await retriesOf(taskId)).toEqual([]);
+    const stuck = (await listActivity(human, { limit: 100 })).filter((event) => event.action === "pipeline.stop_stuck");
+    expect(stuck).toHaveLength(1);
+    expect(stuck[0]!.data).toMatchObject({ reason: expect.stringContaining("can no longer act") });
+    expect(stopIn(await run(started.run.id), "draft").handoff).toMatchObject({ nextRetryAt: null, gaveUpAt: expect.any(Date), agent: null });
+  });
+
+  it("lists stuck stops by the stuck rule before the limit, so handoffs that moved on never crowd them out", async () => {
+    const moved = await handedToScout();
+    const stuck = await handedToScout();
+    // The older one was handed on to Closer by a person: still handing off, but no longer the run's handoff.
+    await handOffTask(human, { taskId: moved.taskId, toAgent: "Closer" });
+    await backdateHandoff(moved.taskId, 60);
+    await backdateHandoff(stuck.taskId, 10);
+    expect((await listStuckStops(human, { limit: 1 })).map((stop) => stop.runId)).toEqual([stuck.started.run.id]);
+  });
+
+  it("puts off a row whose resend fails, and goes on with the rest", async () => {
+    const bad = await handedToScout();
+    const good = await handedToScout();
+    // A stop its run's definition no longer has: resending it throws.
+    await testDb.db.update(pipelineRunStops).set({ stopId: "ghost" }).where(eq(pipelineRunStops.taskId, bad.taskId));
+    const due = new Date(good.at.getTime() + 3 * MINUTE);
+    await sweepHandoffRetries(testDb.db, due);
+    expect(await retriesOf(good.taskId)).toHaveLength(1);
+    const [row] = await testDb.db.select({ retryAt: pipelineRunStops.handoffRetryAt }).from(pipelineRunStops).where(eq(pipelineRunStops.taskId, bad.taskId));
+    expect(row!.retryAt!.getTime()).toBeGreaterThan(due.getTime());
+  });
+
+  it("reaches the agent it was handed to, and the parent of a sub-agent, as handed_to_you", async () => {
+    vi.stubEnv("PHEAN_WEBHOOK_ALLOW_PRIVATE", "1");
+    onTestFinished(() => void vi.unstubAllEnvs());
+    const { agent, token } = await createSubagent(scout, { name: "Scout Writer" });
+    const writer = agentContext(testDb.db, (await authenticateAgentToken(testDb.db, token))!);
+    await registerWebhook(scout, { url: "https://hooks.example.com/scout", topics: ["decisions"] });
+    await registerWebhook(writer, { url: "https://hooks.example.com/writer", topics: ["decisions"] });
+    await registerWebhook(closer, { url: "https://hooks.example.com/closer", topics: ["decisions"] });
+    const { pipeline } = await define(human, [agentStop("draft", "Scout Writer", { end: "done" })]);
+    const started = await startRun(human, { pipelineId: pipeline.id });
+    await resendHandoff(human, { runId: started.run.id, stopId: "draft" });
+
+    const queued = await testDb.db
+      .select({ hook: webhooks.agentId, reasons: webhookDeliveries.reasons, forAgents: webhookDeliveries.forAgents })
+      .from(webhookDeliveries)
+      .innerJoin(webhooks, eq(webhooks.id, webhookDeliveries.webhookId))
+      .innerJoin(events, eq(events.id, webhookDeliveries.eventId))
+      .where(eq(events.action, "task.handoff_retried"));
+    expect(queued).toEqual(
+      expect.arrayContaining([
+        { hook: agent.id, reasons: ["handed_to_you"], forAgents: null },
+        { hook: ws.scout.ctx.actor.id, reasons: ["handed_to_you"], forAgents: [{ id: agent.id, name: "Scout Writer" }] },
+      ]),
+    );
+    expect(queued.some((row) => row.hook === ws.closer.ctx.actor.id)).toBe(false);
+  });
+});
+
+describe("bot names on the line", () => {
+  it("shows an agent stop's agent by its name now, named by id or by name, and plain text once it is gone", async () => {
+    const { pipeline } = await define(human, [agentStop("one", ws.scout.ctx.actor.id, { next: "two" }), agentStop("two", "closer", { end: "done" })]);
+    const started = await startRun(human, { pipelineId: pipeline.id });
+    expect(stopIn(started, "one")).toMatchObject({ servedBy: "Scout", agent: { id: ws.scout.ctx.actor.id, name: "Scout" } });
+    expect(stopIn(started, "two")).toMatchObject({ servedBy: "Closer", agent: { id: ws.closer.ctx.actor.id, name: "Closer" } });
+    await revokeAgent(human, { agentId: ws.closer.ctx.actor.id });
+    expect(stopIn(await run(started.run.id), "two")).toMatchObject({ servedBy: "closer", agent: null });
+  });
+});
+
+describe("migration 0023", () => {
+  it("runs again over its own columns and index, as a preview sharing the database may have run it first", async () => {
+    const { readFileSync } = await import("node:fs");
+    const statements = readFileSync(new URL("../drizzle/0023_run_names_handoff_retries.sql", import.meta.url), "utf8").split("--> statement-breakpoint");
+    for (const statement of statements) await testDb.db.execute(sql.raw(statement));
+    const { pipeline } = await define(human, [agentStop("draft", "Scout", { end: "done" })]);
+    expect((await startRun(human, { pipelineId: pipeline.id, name: "Still works" })).run.name).toBe("Still works");
   });
 });

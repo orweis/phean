@@ -30,7 +30,14 @@ interface PayloadLike {
   type?: string;
   workspace?: { name?: string };
   agent?: { name?: string };
-  events?: { summary?: string; reasons?: string[]; url?: string }[];
+  events?: { summary?: string; reasons?: string[]; url?: string; data?: { retry?: unknown; retryCount?: unknown; reason?: unknown } }[];
+}
+
+/** "RETRY 3 (not picked up 12 minutes after the handoff): ", before a resent handoff's line. */
+function retryMark(event: NonNullable<PayloadLike["events"]>[number]): string {
+  const data = event.data;
+  if (data?.retry !== true) return "";
+  return `RETRY ${typeof data.retryCount === "number" ? data.retryCount : "?"}${typeof data.reason === "string" && data.reason ? ` (${data.reason})` : ""}: `;
 }
 
 /**
@@ -50,8 +57,11 @@ export function routineText(body: string): string {
     payload.type === "phean.ping"
       ? `Phean webhook test (ping) for ${who}. Nothing to do.`
       : `Phean: ${events.length} ${events.length === 1 ? "change" : "changes"} for ${who}. This is a nudge: read the current state from Phean (collect_answers, get_task) before you act.`;
-  const lines = events.map((event) => `- ${event.summary ?? ""}${event.reasons?.length ? ` [${event.reasons.join(", ")}]` : ""}${event.url ? ` ${event.url}` : ""}`);
-  const summary = [head, ...lines].join("\n");
+  // The "claim it" line is for the agent the handoff waits on, not for those who only follow the task.
+  const retries = events.some((event) => event.data?.retry === true && event.reasons?.includes("handed_to_you"));
+  const lines = events.map((event) => `- ${retryMark(event)}${event.summary ?? ""}${event.reasons?.length ? ` [${event.reasons.join(", ")}]` : ""}${event.url ? ` ${event.url}` : ""}`);
+  const resent = retries ? ["This resends a handoff you have not picked up yet: claim_task it to pick it up, and Phean stops resending."] : [];
+  const summary = [head, ...resent, ...lines].join("\n");
   const whole = `${summary}\n\nPayload:\n${body}`;
   if (whole.length <= ROUTINE_TEXT_MAX) return whole;
   return `${summary.slice(0, ROUTINE_TEXT_MAX - 80)}\n\n(Payload left out for length; call get_activity for the rest.)`;

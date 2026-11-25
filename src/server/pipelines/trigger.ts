@@ -17,7 +17,7 @@ export const PIPELINE_TRIGGER_MAX_BYTES = 32 * 1024;
 /** The header that carries the secret, for callers that cannot set Authorization. */
 export const PIPELINE_SECRET_HEADER = "phean-pipeline-secret";
 
-const TriggerBody = z.object({ inputs: RunOptionsInput.shape.inputs });
+const TriggerBody = z.object({ inputs: RunOptionsInput.shape.inputs, name: RunOptionsInput.shape.name });
 
 const json = (status: number, body: Record<string, unknown>, headers: Record<string, string> = {}) =>
   Response.json(body, { status, headers: { "Cache-Control": "no-store", ...headers } });
@@ -61,7 +61,7 @@ function matches(secret: string, storedHash: string): boolean {
 /**
  * `POST /api/pipelines/<id>/trigger`: starts a run of a regular pipeline whose webhook is on, with
  * the secret shown when it was turned on (`Authorization: Bearer <secret>`, or the
- * `Phean-Pipeline-Secret` header) and an optional JSON body `{ "inputs": { ... } }`. The pipeline's
+ * `Phean-Pipeline-Secret` header) and an optional JSON body `{ "name": "...", "inputs": { ... } }`. The pipeline's
  * row, never the request, decides the workspace. A wrong secret and an unknown pipeline answer alike.
  */
 export async function handlePipelineTrigger(request: Request, { db, pipelineId }: { db: Db; pipelineId: string }): Promise<Response> {
@@ -87,11 +87,12 @@ export async function handlePipelineTrigger(request: Request, { db, pipelineId }
     return json(400, { error: "The body must be JSON: { \"inputs\": { ... } }." });
   }
   try {
-    const { inputs } = parseInput(TriggerBody, body);
+    const { inputs, name } = parseInput(TriggerBody, body);
     const run = await beginRun(systemContext(db, trigger.tenant), pipelineId, {
       trigger: "webhook",
       by: { type: "system", id: null, name: "Webhook" },
       detail: `From ${clientAddress(request)}`,
+      name,
       inputs,
       strict: true,
     });

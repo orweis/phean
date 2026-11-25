@@ -13,15 +13,16 @@ export const RUN_MARK: Record<RunStatus, StopViewState> = { running: "active", w
 interface StripRun {
   id: string;
   number: number;
+  name?: string | null;
   status: RunStatus;
   startedAt: Date;
   endedAt: Date | null;
 }
 
-/** "Run 12: Done in 3 h", for a dot's name. */
-export function runLabel(run: StripRun): string {
+/** "Run 12, Issue 42: AI agents roundup: Done in 3 h", for a dot's name. */
+export function stripLabel(run: StripRun): string {
   const took = run.endedAt ? ` in ${formatDuration(run.endedAt.getTime() - run.startedAt.getTime())}` : "";
-  return `Run ${run.number}: ${RUN_STATUS_META[run.status].label}${run.status === "done" || run.status === "failed" ? took : ""}`;
+  return `Run ${run.number}${run.name ? `, ${run.name}` : ""}: ${RUN_STATUS_META[run.status].label}${run.status === "done" || run.status === "failed" ? took : ""}`;
 }
 
 /** The latest runs of a pipeline as a row of dots, oldest first, each a link to its run. */
@@ -34,8 +35,8 @@ export function RunStrip({ runs, slug, className }: { runs: readonly StripRun[];
         <li key={run.id}>
           <Link
             href={routes.pipelineRun(slug, run.id)}
-            aria-label={runLabel(run)}
-            title={runLabel(run)}
+            aria-label={stripLabel(run)}
+            title={stripLabel(run)}
             data-run={run.status}
             className="relative flex rounded-full after:absolute after:-inset-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
           >

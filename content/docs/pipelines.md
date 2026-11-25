@@ -68,9 +68,17 @@ Regular pipelines can start runs on their own:
 
 - a **schedule**: a five-field cron in a time zone, at most once an hour, one run per scheduled time;
 - an **event**: a task captured with a tag, from a source, or both; the run gets `task_id`, `task_title` and `task_description` as inputs;
-- a **webhook**: `POST /api/pipelines/<id>/trigger` with `Authorization: Bearer <secret>` (shown once, when the webhook is turned on) and an optional body `{"inputs": {...}}`. It answers 202 with the run's id; calls are rate limited per client.
+- a **webhook**: `POST /api/pipelines/<id>/trigger` with `Authorization: Bearer <secret>` (shown once, when the webhook is turned on) and an optional body `{"name": "...", "inputs": {...}}`. It answers 202 with the run's id; calls are rate limited per client.
 
 Every run records who or what started it.
+
+## Naming runs
+
+Give every run a name for the specific thing it makes ("Issue 42: AI agents roundup", "Acme Q3 renewal email") with `start_run`'s `name`; `update_run` renames one, and a rerun keeps it. The name shows on the run's page, in the runs list and grid, on the Decisions page and in notifications, and is the title of the run's task. A run with no name shows as "Weekly newsletter #42". Runs a trigger starts are named for you: an event's run takes the captured task's title, a scheduled run the pipeline's name and the day it was scheduled for in the schedule's time zone ("Weekly newsletter, 2026-11-30"), and a webhook's run the `name` in its body.
+
+## Handoffs no one picks up
+
+An agent stop's agent acknowledges its handoff by claiming the stop's task (`claim_task`). Until it does, Phean resends the handoff with backoff, 3, 6, 12, 24 … minutes after the handoff, for up to 3 days, as `task.handoff_retried` with the reason `handed_to_you`; its data carries `retry`, `retryCount`, `reason`, `trigger` (`automatic` or `manual`) and the handoff note. Picking the task up, releasing, completing or handing it on ends the resends. After 3 days, or as soon as the agent can no longer act (revoked or expired), Phean stops (`pipeline.stop_stuck`) and the stop is shown as **Stuck** for a person. Resends go only to the agent the task was handed to, never to another of the same name. The Pipelines tab and a pipeline's Runs tab filter to stuck runs, and **Resend handoff** on a run's page sends a stop's handoff again on demand, stuck or not, while it still waits on that agent, without changing the automatic schedule. Once the stop is picked up, done, or handed to someone else, there is nothing to resend: hand the task off again or rerun the stop instead.
 
 ## Who may do what
 

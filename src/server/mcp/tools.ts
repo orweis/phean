@@ -46,6 +46,7 @@ import {
   listRuns,
   rerunFrom,
   startRun,
+  updateRun,
   updatePipeline,
   type PipelineChange,
 } from "../domain/pipelines";
@@ -578,7 +579,7 @@ export const TOOLS: readonly PheanTool[] = [
     name: "start_run",
     title: "Start run",
     description:
-      "Start a run of a pipeline with its inputs. The run gets a task of its own (or taskId: an existing task that is not a subtask), and each stop becomes a subtask of it as the run reaches it, handed to the stop's agent (who hears handed_to_you) or put to its person as a decision. Returns the run with every stop's state and a headline (\"At Draft\", \"Waiting on Dana at Review\").",
+      "Start a run of a pipeline with its inputs, and always a name for the specific thing this run makes (\"Issue 42: AI agents roundup\", \"Acme Q3 renewal email\"): people find the run, its task and its decisions by it. The run gets a task of its own (or taskId: an existing task that is not a subtask), and each stop becomes a subtask of it as the run reaches it, handed to the stop's agent (who hears handed_to_you) or put to its person as a decision. Returns the run with every stop's state and a headline (\"At Draft\", \"Waiting on Dana at Review\").",
     service: startRun,
   }),
   defineTool({
@@ -614,6 +615,13 @@ export const TOOLS: readonly PheanTool[] = [
     description:
       "Run a stop again, and every stop after it, on fresh subtasks, with note added to its handoff (what to do differently). Works on a live run, or one that ended or failed, which runs again.",
     service: rerunFrom,
+  }),
+  serviceTool({
+    name: "update_run",
+    title: "Rename run",
+    description:
+      "Name a run after the specific thing it makes (\"Issue 42: AI agents roundup\"), or clear its name with null so it shows as \"<pipeline> #<number>\". The run's own task takes the new name while it still carries the old one.",
+    service: updateRun,
   }),
 ];
 

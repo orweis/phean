@@ -1,12 +1,13 @@
 import { createHash, randomBytes } from "node:crypto";
 
-import { and, asc, desc, eq, inArray, max, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, lte, max, ne, sql } from "drizzle-orm";
 import type { z } from "zod";
 
 import { LIVE_RUN_STATUSES, type PipelineKind, type RunStatus, type Source } from "@/lib/domain";
 import { stopViewState } from "@/lib/pipeline-map";
 import { nextFiring, nextStepFor, stopPosition, type RunRecord } from "@/lib/pipeline-stats";
-import { normalizeDefinition, stopOrder, type PipelineDefinition } from "@/lib/pipelines";
+import { HANDOFF_RETRY_FIRST_MINUTES, isStuckHandoff } from "@/lib/pipeline-handoffs";
+import { clipRunName, normalizeDefinition, runTitle, stopOrder, type PipelineDefinition } from "@/lib/pipelines";
 import { routes } from "@/lib/routes";
 
 import { newId } from "../db/ids";
@@ -23,13 +24,17 @@ import {
   findPipeline,
   findRun,
   loadDefinition,
+  pipelineContext,
   pipelineColumns,
   rerunRun,
+  resendStopHandoff,
   runColumns,
   runView,
   servedByOf,
   setPipelineStatus,
+  stopAgents,
   sweepDeadlines,
+  type HandoffResend,
   type Pipeline,
   type PipelineRun,
   type RunStart,
@@ -40,6 +45,7 @@ import {
   CancelRunInput,
   DefinePipelineInput,
   ListPipelinesInput,
+  ListStuckStopsInput,
   ListRunsInput,
   PipelineHistoryInput,
   PipelineRefInput,
@@ -48,13 +54,16 @@ import {
   PipelineVersionInput,
   PipelineVersionRefInput,
   RerunFromInput,
+  ResendHandoffInput,
   RunOptionsInput,
   RunRefInput,
   StartRunInput,
   TaskRefInput,
   UpdatePipelineInput,
+  UpdateRunInput,
 } from "./schemas";
 import { service } from "./service";
+import { updateTask } from "./tasks";
 
 /**
  * Pipelines: defining them, changing them (a new version, or an agent's proposal on a regular
@@ -67,7 +76,7 @@ import { service } from "./service";
  * agent's change to one is a proposal one of them approves.
  */
 
-export type { Pipeline, PipelineRun, RunStopView, RunView } from "./pipeline-engine";
+export type { HandoffResend, Pipeline, PipelineRun, RunStopView, RunView, StopHandoff } from "./pipeline-engine";
 export type PipelineVersion = Omit<PipelineVersionRow, "tenantId">;
 type TriggersInput = z.output<typeof PipelineTriggersInput>;
 
@@ -211,6 +220,7 @@ function startedBy(ctx: Ctx, options: z.output<typeof RunOptionsInput>): RunStar
   return {
     trigger: ctx.actor.type === "user" ? "manual" : "agent",
     by: { type: ctx.actor.type, id: ctx.actor.id, name: ctx.actor.name },
+    name: options.name,
     inputs: options.inputs,
     taskId: options.taskId,
     goalId: options.goalId,
@@ -523,6 +533,132 @@ export const cancelRun = service(CancelRunInput, async (ctx, { runId, reason }):
   return runView(ctx, runId);
 });
 
+/**
+ * Names a run, or clears its name (null): what it makes, shown wherever it appears. The run's own task
+ * takes the new name too, while it still carries the run's old one.
+ */
+export const updateRun = service(UpdateRunInput, async (ctx, { runId, name }): Promise<RunView> => {
+  assertCan(ctx, "pipeline:write");
+  if (name === undefined) throw invalid("Nothing to update: pass name (null clears it).");
+  await inTransaction(ctx, async (tx) => {
+    const run = await findRun(tx, runId, { lock: true });
+    // Kept to one line and the limit, as at start.
+    const next = name ? clipRunName(name) || null : null;
+    if (next === run.name) throw invalid(next ? `Run ${run.number} is already called "${next}".` : `Run ${run.number} has no name to clear.`);
+    const pipeline = await findPipeline(tx, run.pipelineId);
+    await tx.db.update(pipelineRuns).set({ name: next }).where(tenantRow(tx, pipelineRuns, run.id));
+    if (run.taskId) {
+      const [task] = await tx.db.select({ title: tasks.title }).from(tasks).where(tenantRow(tx, tasks, run.taskId));
+      const before = run.name ?? `${pipeline.name} #${run.number}`;
+      // Through the task service, as the pipeline, so the change is logged and the task's watchers hear it.
+      if (task?.title === before) await updateTask(await pipelineContext(tx, pipeline.name), { taskId: run.taskId, title: next ?? `${pipeline.name} #${run.number}` });
+    }
+    await recordEvent(tx, {
+      action: "pipeline.run_renamed",
+      entityType: "pipeline_run",
+      entityId: run.id,
+      summary: next ? `named ${pipeline.name} #${run.number} “${next}”` : `cleared the name of ${runTitle(run, pipeline.name)}`,
+      data: { pipelineId: pipeline.id, runId: run.id, taskId: run.taskId, number: run.number, runName: next },
+    });
+  });
+  return runView(ctx, runId);
+});
+
+/**
+ * Sends an agent stop's handoff again now, while it still waits on its agent, for a bot that missed it: the
+ * agent hears `task.handoff_retried` as `handed_to_you`, with `trigger: manual` and who resent it.
+ * It leaves the automatic resends' schedule as it was.
+ */
+export const resendHandoff = service(ResendHandoffInput, async (ctx, { runId, stopId }): Promise<HandoffResend> => {
+  assertCan(ctx, "pipeline:write");
+  return resendStopHandoff(ctx, runId, stopId);
+});
+
+/** A stop whose handoff no one picked up: where it is, who it waits on, since when, and how often it was resent. */
+export interface StuckStop {
+  pipelineId: string;
+  pipelineName: string;
+  runId: string;
+  runNumber: number;
+  runName: string | null;
+  stopId: string;
+  stopName: string;
+  taskId: string;
+  agent: { id: string; name: string } | null;
+  handedOffAt: Date;
+  resends: number;
+  /** When the tick gave up resending: the stop needs a person. */
+  gaveUpAt: Date | null;
+}
+
+/** Stuck stops, longest waiting first: live agent stops whose handoff still waits on its agent, past the first resend's time. */
+export const listStuckStops = service(ListStuckStopsInput, async (ctx, { pipelineId, limit }): Promise<StuckStop[]> => {
+  assertCan(ctx, "workspace:read");
+  const now = new Date();
+  const rows = await ctx.db
+    .select({
+      runId: pipelineRunStops.runId,
+      stopId: pipelineRunStops.stopId,
+      taskId: pipelineRunStops.taskId,
+      state: pipelineRunStops.state,
+      handedOffAt: pipelineRunStops.handedOffAt,
+      handoffAgentId: pipelineRunStops.handoffAgentId,
+      resends: pipelineRunStops.handoffResends,
+      gaveUpAt: pipelineRunStops.handoffGaveUpAt,
+      delegation: tasks.delegation,
+      delegateToAgentId: tasks.delegateToAgentId,
+      delegatedAt: tasks.delegatedAt,
+      run: { number: pipelineRuns.number, name: pipelineRuns.name, version: pipelineRuns.version, pipelineId: pipelineRuns.pipelineId },
+      pipelineName: pipelines.name,
+      agentName: agents.name,
+    })
+    .from(pipelineRunStops)
+    .innerJoin(tasks, and(eq(tasks.tenantId, pipelineRunStops.tenantId), eq(tasks.id, pipelineRunStops.taskId)))
+    .innerJoin(pipelineRuns, and(eq(pipelineRuns.tenantId, pipelineRunStops.tenantId), eq(pipelineRuns.id, pipelineRunStops.runId)))
+    .innerJoin(pipelines, and(eq(pipelines.tenantId, pipelineRuns.tenantId), eq(pipelines.id, pipelineRuns.pipelineId)))
+    .leftJoin(agents, and(eq(agents.tenantId, pipelineRunStops.tenantId), eq(agents.id, pipelineRunStops.handoffAgentId), isNull(agents.revokedAt)))
+    .where(
+      and(
+        inTenant(ctx, pipelineRunStops),
+        isNull(pipelineRunStops.supersededAt),
+        inArray(pipelineRunStops.state, ["active", "waiting"]),
+        // Stuck, as `isStuckHandoff` reads it, before the limit: the handoff the row records still waits
+        // on its agent (the same agent, the same handoff), and the first resend's time has passed.
+        eq(tasks.delegation, "handing_off"),
+        eq(tasks.delegateToAgentId, pipelineRunStops.handoffAgentId),
+        eq(tasks.delegatedAt, pipelineRunStops.handedOffAt),
+        lte(pipelineRunStops.handedOffAt, new Date(now.getTime() - HANDOFF_RETRY_FIRST_MINUTES * 60_000)),
+        pipelineId ? eq(pipelineRuns.pipelineId, pipelineId) : undefined,
+      ),
+    )
+    .orderBy(asc(pipelineRunStops.handedOffAt))
+    .limit(limit);
+  const definitions = new Map<string, PipelineDefinition>();
+  const out: StuckStop[] = [];
+  for (const row of rows) {
+    const task = { delegation: row.delegation, delegateToAgentId: row.delegateToAgentId, delegatedAt: row.delegatedAt };
+    if (!isStuckHandoff({ live: true, handedOffAt: row.handedOffAt, handoffAgentId: row.handoffAgentId, task }, now)) continue;
+    const key = `${row.run.pipelineId}:${row.run.version}`;
+    if (!definitions.has(key)) definitions.set(key, await loadDefinition(ctx, row.run.pipelineId, row.run.version));
+    const stop = definitions.get(key)!.stops.find((candidate) => candidate.id === row.stopId);
+    out.push({
+      pipelineId: row.run.pipelineId,
+      pipelineName: row.pipelineName,
+      runId: row.runId,
+      runNumber: row.run.number,
+      runName: row.run.name,
+      stopId: row.stopId,
+      stopName: stop?.name ?? row.stopId,
+      taskId: row.taskId!,
+      agent: row.handoffAgentId && row.agentName ? { id: row.handoffAgentId, name: row.agentName } : null,
+      handedOffAt: row.handedOffAt!,
+      resends: row.resends,
+      gaveUpAt: row.gaveUpAt,
+    });
+  }
+  return out;
+});
+
 /** Runs a stop again, and every stop after it, on fresh subtasks; a run that had ended runs again. */
 export const rerunFrom = service(RerunFromInput, async (ctx, { runId, stopId, note }): Promise<RunView> => {
   assertCan(ctx, "pipeline:write");
@@ -536,7 +672,7 @@ export const rerunFrom = service(RerunFromInput, async (ctx, { runId, stopId, no
 export const RUN_STRIP = 20;
 
 /** A run as a dot on a pipeline's strip. */
-export type StripRun = Pick<PipelineRun, "id" | "number" | "status" | "startedAt" | "endedAt">;
+export type StripRun = Pick<PipelineRun, "id" | "number" | "name" | "status" | "startedAt" | "endedAt">;
 
 /** A pipeline on the Pipelines tab: its summary, its latest runs, and when its schedule fires next. */
 export type PipelineBoardRow = PipelineSummary & {
@@ -555,7 +691,7 @@ export const listPipelineBoard = service(ListPipelinesInput, async (ctx, input):
   const ids = summaries.map((pipeline) => pipeline.id);
   const latest = sql`(select max(r2.number) from ${pipelineRuns} r2 where r2.tenant_id = ${ctx.tenant.id} and r2.pipeline_id = ${pipelineRuns.pipelineId})`;
   const strips = await ctx.db
-    .select({ pipelineId: pipelineRuns.pipelineId, id: pipelineRuns.id, number: pipelineRuns.number, status: pipelineRuns.status, startedAt: pipelineRuns.startedAt, endedAt: pipelineRuns.endedAt })
+    .select({ pipelineId: pipelineRuns.pipelineId, id: pipelineRuns.id, number: pipelineRuns.number, name: pipelineRuns.name, status: pipelineRuns.status, startedAt: pipelineRuns.startedAt, endedAt: pipelineRuns.endedAt })
     .from(pipelineRuns)
     .where(and(inTenant(ctx, pipelineRuns), inArray(pipelineRuns.pipelineId, ids), sql`${pipelineRuns.number} > ${latest} - ${RUN_STRIP}`))
     .orderBy(desc(pipelineRuns.number));
@@ -576,7 +712,7 @@ export const listPipelineBoard = service(ListPipelinesInput, async (ctx, input):
     const schedule = found?.cron && found.timeZone ? { cron: found.cron, timeZone: found.timeZone, lastFiredAt: found.lastFiredAt } : null;
     return {
       ...pipeline,
-      strip: strips.filter((run) => run.pipelineId === pipeline.id).map(({ id, number, status, startedAt, endedAt }) => ({ id, number, status, startedAt, endedAt })),
+      strip: strips.filter((run) => run.pipelineId === pipeline.id).map(({ id, number, name, status, startedAt, endedAt }) => ({ id, number, name, status, startedAt, endedAt })),
       line: definition ? stopOrder(definition).map((id) => ({ id, name: byId.get(id)!.name, kind: byId.get(id)!.kind })) : [],
       inputs: definition?.inputs ?? [],
       schedule,
@@ -586,7 +722,7 @@ export const listPipelineBoard = service(ListPipelinesInput, async (ctx, input):
 });
 
 /** A run in a pipeline's history: its stop rows (reruns and hand-backs included) for the grid and insights. */
-export type RunHistory = RunRecord & Pick<PipelineRun, "trigger" | "triggeredByName" | "taskId" | "summary">;
+export type RunHistory = RunRecord & Pick<PipelineRun, "name" | "trigger" | "triggeredByName" | "taskId" | "summary">;
 
 /** A pipeline's latest runs, newest first, each with every stop row it has had. */
 export const pipelineHistory = service(PipelineHistoryInput, async (ctx, { pipelineId, limit }): Promise<RunHistory[]> => {
@@ -619,6 +755,7 @@ export const pipelineHistory = service(PipelineHistoryInput, async (ctx, { pipel
   return runs.map((run) => ({
     id: run.id,
     number: run.number,
+    name: run.name,
     version: run.version,
     status: run.status,
     startedAt: run.startedAt,
@@ -652,6 +789,8 @@ export interface PipelineRequestContext {
   pipelineName: string;
   runId: string;
   runNumber: number;
+  /** The run's name now, if it has one. */
+  runName: string | null;
   stopName: string;
   /** "Stop 3 of 5". */
   position: { index: number; total: number } | null;
@@ -702,6 +841,7 @@ export const describePipelineRequests = service(PipelineRequestsInput, async (ct
       pipelineName: pipeline?.name ?? "",
       runId: run.id,
       runNumber: run.number,
+      runName: run.name,
       stopName: stop.name,
       position: stopPosition(definition, stopId),
       steps,
@@ -717,7 +857,7 @@ export interface TaskLine {
   /** The task carries the whole run, or serves one stop of it. */
   role: "run" | "stop";
   pipeline: { id: string; name: string };
-  run: { id: string; number: number; status: RunStatus; headline: string };
+  run: { id: string; number: number; name: string | null; status: RunStatus; headline: string };
   /** The run's stops in order; `current` marks the one this task serves. */
   stops: { stopId: string; name: string; state: ReturnType<typeof stopViewState>; taskId: string | null; current: boolean }[];
 }
@@ -740,7 +880,7 @@ export const taskLine = service(TaskRefInput, async (ctx, { taskId }): Promise<T
   return {
     role: carried ? "run" : "stop",
     pipeline: { id: view.pipeline.id, name: view.pipeline.name },
-    run: { id: view.run.id, number: view.run.number, status: view.run.status, headline: view.headline },
+    run: { id: view.run.id, number: view.run.number, name: view.run.name, status: view.run.status, headline: view.headline },
     stops: view.stops.map((stop) => ({
       stopId: stop.stopId,
       name: stop.name,
@@ -763,9 +903,12 @@ export const getRunActivity = service(RunRefInput, async (ctx, { runId }): Promi
 /** The stops of a definition in the order a run meets them, with who serves each, in words. */
 export async function stopsServedBy(ctx: Ctx, definition: PipelineDefinition): Promise<Record<string, string>> {
   const out: Record<string, string> = {};
+  const named = await stopAgents(ctx, definition);
   for (const id of stopOrder(definition)) {
     const stop = definition.stops.find((candidate) => candidate.id === id)!;
-    out[id] = await servedByOf(ctx, stop);
+    out[id] = stop.kind === "agent" ? (named[id]?.name ?? stop.agent!) : await servedByOf(ctx, stop);
   }
   return out;
 }
+
+export { stopAgents };

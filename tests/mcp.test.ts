@@ -112,7 +112,7 @@ describe("MCP surface", () => {
   it("advertises every tool with annotations, plus prompts and instructions", async () => {
     const { tools } = await scout.listTools();
     expect(tools.map((tool) => tool.name).sort()).toEqual(TOOLS.filter((tool) => !tool.adminOnly).map((tool) => tool.name).sort());
-    expect(tools).toHaveLength(53);
+    expect(tools).toHaveLength(54);
     const byName = new Map(tools.map((tool) => [tool.name, tool]));
     expect(byName.get("list_tasks")?.annotations?.readOnlyHint).toBe(true);
     expect(byName.get("forget")?.annotations?.destructiveHint).toBe(true);
@@ -529,6 +529,7 @@ describe("tools by access level", () => {
     start_run: { pipelineId: "p_x" },
     cancel_run: { runId: "r_x" },
     rerun_from: { runId: "r_x", stopId: "a" },
+    update_run: { runId: "r_x", name: "Issue 42" },
   };
   const changing = TOOLS.filter((tool) => !tool.annotations.readOnlyHint);
 
