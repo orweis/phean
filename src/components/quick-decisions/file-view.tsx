@@ -46,7 +46,7 @@ export function FileView({ item, file, ctl }: { item: QuickItem; file: QuickFile
     return other ? ctl.href({ request: item.request.id, view: "file", file: other.id }) : null;
   };
   return (
-    <section aria-labelledby="quick-file-title" data-quick-file={file.id} className="mx-auto max-w-3xl pb-24">
+    <section aria-labelledby="quick-file-title" data-quick-file={file.id} className="mx-auto w-full max-w-3xl pb-24">
       <div className="flex items-center justify-between gap-2">
         <BackLink href={ctl.href({ request: item.request.id, view: "context", tab: "files" })}>Files</BackLink>
         <div className="flex items-center gap-1.5">

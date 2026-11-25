@@ -102,7 +102,7 @@ export function ContextView({ slug, item, tab, count, ctl }: { slug: string; ite
     { id: "links", label: `Links (${request.links.length})` },
   ];
   return (
-    <section aria-labelledby="quick-context-question" data-quick-context={request.id} className="mx-auto max-w-xl pb-24">
+    <section aria-labelledby="quick-context-question" data-quick-context={request.id} className="mx-auto w-full max-w-xl pb-24">
       <div className="flex items-center justify-between gap-3">
         <BackLink href={ctl.href({ request: request.id })}>Decision</BackLink>
         <span className="text-sm font-semibold text-muted tabular-nums">{count}</span>

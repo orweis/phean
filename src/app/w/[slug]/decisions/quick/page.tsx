@@ -51,7 +51,7 @@ export default async function QuickDecisionsPage({ params, searchParams }: PageP
 
   if (!canAnswer) {
     return (
-      <div className="mx-auto max-w-md py-10 text-center">
+      <div className="mx-auto w-full max-w-md py-10 text-center">
         <h1 className="text-2xl font-bold tracking-display text-ink">Quick Decisions</h1>
         <p className="mt-2 text-sm text-ink-2">You can read this workspace&apos;s decisions, but not answer them.</p>
         <Link href={routes.decisions(slug)} className="mt-4 inline-block text-sm font-semibold text-accent-ink link">

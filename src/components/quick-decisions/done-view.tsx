@@ -15,7 +15,7 @@ import { Button, ButtonLink } from "../ui/button";
 export function DoneView({ slug, title, answered, onUndo }: { slug: string; title: string; answered: readonly AnsweredEntry[]; onUndo: (entry: AnsweredEntry) => Promise<boolean> }) {
   const [pending, setPending] = useState<string | null>(null);
   return (
-    <section aria-labelledby="quick-done-title" data-quick-done className="surface mx-auto max-w-xl rounded-lg border border-rule px-5 py-8 text-center">
+    <section aria-labelledby="quick-done-title" data-quick-done className="surface mx-auto w-full max-w-xl rounded-lg border border-rule px-5 py-8 text-center">
       <span aria-hidden className="mx-auto flex size-14 items-center justify-center rounded-full bg-arrive-tint text-arrive-ink ring-1 ring-arrive/30 ring-inset">
         <Check className="size-7" strokeWidth={2.5} />
       </span>
