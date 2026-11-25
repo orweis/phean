@@ -45,6 +45,12 @@ export const routes = {
   decision: (slug: string, taskId: string) => `/w/${slug}/decisions#task-${taskId}`,
   /** One request, open or answered, on the Decisions page, which opens it and brings it into view. */
   request: (slug: string, requestId: string) => withQuery(`/w/${slug}/decisions`, { focus: requestId }),
+  /**
+   * Quick Decisions: the open requests one card at a time. `request` picks the card on screen, `view`
+   * shows its full context (and `tab`) or one of its files (`file`); `from` says where it was opened from.
+   */
+  quickDecisions: (slug: string, query?: { request?: string; view?: "context" | "file"; tab?: string; file?: string; from?: string }) =>
+    withQuery(`/w/${slug}/decisions/quick`, query),
   /** The goals waiting on a person's approval, on the Decisions page. */
   approvals: (slug: string) => `/w/${slug}/decisions#approvals`,
   /** The Tasks page: the board by default, or another layout (`view`) with the same filters. */

@@ -164,7 +164,7 @@ describe("form action results", () => {
     await expect(attempt(async () => 42)).resolves.toEqual({ ok: true, value: 42 });
     await expect(attempt(() => Promise.reject(invalid("Title is required.")))).resolves.toEqual({
       ok: false,
-      state: { status: "error", message: "Title is required.", at: expect.any(Number) },
+      state: { status: "error", message: "Title is required.", code: "invalid", at: expect.any(Number) },
     });
     expect(expectedErrorMessage(new APIError("BAD_REQUEST", { message: "User already exists" }))).toBe("User already exists");
 

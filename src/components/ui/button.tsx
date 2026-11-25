@@ -5,7 +5,7 @@ import type { ComponentProps, ReactNode } from "react";
 import { cx } from "@/lib/cx";
 
 export type ButtonVariant = "primary" | "tinted" | "secondary" | "ghost" | "danger" | "dusk" | "signal";
-export type ButtonSize = "sm" | "md" | "lg" | "menu" | "choice";
+export type ButtonSize = "sm" | "md" | "lg" | "menu" | "choice" | "answer" | "touch";
 
 const VARIANTS: Record<ButtonVariant, string> = {
   /** The prominent action of a view; keep it to one or two per screen. */
@@ -25,6 +25,8 @@ const VARIANTS: Record<ButtonVariant, string> = {
 const SIZES: Record<ButtonSize, string> = {
   sm: "relative h-8 justify-center gap-1.5 rounded-full px-3 text-xs after:absolute after:inset-x-0 after:-inset-y-1.5 [&_svg]:size-3.5",
   md: "h-9 justify-center gap-2 rounded-full px-4 text-sm [&_svg]:size-4",
+  /** A capsule made for a thumb, 44px tall: Quick Decisions' bars and docks. */
+  touch: "h-11 justify-center gap-2 rounded-full px-4 text-sm [&_svg]:size-4",
   /** The marketing site's calls to action, 48px tall. */
   lg: "h-12 justify-center gap-2 rounded-full px-6 text-md [&_svg]:size-4",
   /** A row of a menu panel: full width, its label at the start, 36px tall. */
@@ -34,14 +36,19 @@ const SIZES: Record<ButtonSize, string> = {
    * longer than the row it wraps inside its container instead of running out of it.
    */
   choice: "min-h-9 max-w-full justify-start gap-2 rounded-[1.125rem] px-4 py-1.5 text-left text-sm text-pretty wrap-anywhere [&_svg]:size-4",
+  /**
+   * An agent's answer on Quick Decisions' card, made for a thumb: full width, 44px tall at least, and
+   * wrapping like `choice` when the words are long.
+   */
+  answer: "min-h-11 w-full justify-center gap-2 rounded-[1.375rem] px-4 py-2 text-center text-sm text-pretty wrap-anywhere [&_svg]:size-4 [&_svg]:shrink-0",
 };
 
 export function buttonClasses(variant: ButtonVariant = "secondary", size: ButtonSize = "md", className?: string) {
   return cx(
     "inline-flex shrink-0 items-center font-semibold transition-[color,background-color,box-shadow,scale] duration-(--dur-micro) ease-out",
-    size !== "choice" && "whitespace-nowrap",
+    size !== "choice" && size !== "answer" && "whitespace-nowrap",
     // Pressed: a capsule gives a little under the finger. Menu rows and agents' long answers stay still.
-    size !== "menu" && size !== "choice" && "motion-safe:active:not-disabled:not-aria-disabled:scale-[0.97]",
+    size !== "menu" && size !== "choice" && size !== "answer" && "motion-safe:active:not-disabled:not-aria-disabled:scale-[0.97]",
     "disabled:cursor-not-allowed disabled:opacity-55 aria-disabled:cursor-not-allowed aria-disabled:opacity-55",
     VARIANTS[variant],
     SIZES[size],
