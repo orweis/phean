@@ -259,6 +259,7 @@ exports.routes = {
     decisions: (slug) => `/w/${slug}/decisions`,
     decision: (slug, taskId) => `/w/${slug}/decisions#task-${taskId}`,
     request: (slug, requestId) => withQuery(`/w/${slug}/decisions`, { focus: requestId }),
+    quickDecisions: (slug, query) => withQuery(`/w/${slug}/decisions/quick`, query),
     approvals: (slug) => `/w/${slug}/decisions#approvals`,
     board: (slug, filters) => withQuery(`/w/${slug}/board`, typeof filters === "string" ? { goal: filters } : filters),
     tasksByStatus: (slug, status, goal) => exports.routes.board(slug, { view: "table", status, goal }),

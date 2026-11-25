@@ -1,3 +1,4 @@
+import { GalleryVerticalEnd } from "lucide-react";
 import type { Metadata } from "next";
 
 import { AnsweredDecisions } from "@/components/answered-decisions";
@@ -8,13 +9,14 @@ import { OpenQuestions } from "@/components/open-questions";
 import { PageHeader } from "@/components/page-header";
 import { PendingApprovals } from "@/components/pending-approvals";
 import { TrackOnMount } from "@/components/track-on-mount";
+import { ButtonLink } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { FocusOnLoad } from "@/components/ui/focus-on-load";
 import { EmptyState } from "@/components/ui/stat";
 import { DELIVERED_OUTCOMES } from "@/lib/agent-sessions";
 import { countBucket } from "@/lib/analytics";
 import { pluralize } from "@/lib/format";
-import { queryParam } from "@/lib/routes";
+import { queryParam, routes } from "@/lib/routes";
 import { requireWorkspace } from "@/server/auth/session";
 import { vapidConfig } from "@/server/config";
 import { listGoals } from "@/server/domain/goals";
@@ -66,6 +68,10 @@ export default async function DecisionsPage({ params, searchParams }: PageProps<
     : {};
   const linkedElsewhere = linked?.record && !closed.some(({ request }) => request.id === focus) ? linked.record : null;
   const canAnswer = can(ctx.actor, "task:write");
+  // Quick Decisions answers one card at a time; offered whenever something waits on this person.
+  // A pipeline's decision counts only for its approvers, as Quick Decisions leaves it out for anyone else.
+  const quickCount = rest.length + pinned.filter((task) => contexts[`${task.inputRequest!.pipeline!.runId}:${task.inputRequest!.pipeline!.stopId}`]?.mayDecide).length;
+  const quick = canAnswer && quickCount > 0;
   const proposed = goals.filter((goal) => goal.status === "proposed");
   const decisions = open.filter((task) => task.inputRequest?.kind === "decision" && !task.inputRequest.pipeline).length;
 
@@ -74,11 +80,37 @@ export default async function DecisionsPage({ params, searchParams }: PageProps<
       <PageHeader
         title="Decisions"
         description="Everything agents asked you to decide, answer or approve. Pick an option or write your answer; an agent that is waiting picks it up at once, others the next time they check in. With a request focused, number keys pick its options and J and K move between requests. Notifications for new requests are turned on per device, here or from your Account page; muting stops this workspace's on all of them."
-        actions={muted === null ? undefined : <NotificationMute slug={slug} workspaceName={ctx.tenant.name} muted={muted} />}
+        actions={
+          quick || muted !== null ? (
+            <>
+              {quick && (
+                <ButtonLink href={routes.quickDecisions(slug, { from: "button" })} variant="secondary" size="sm" className="max-sm:hidden" data-quick-start="button">
+                  <GalleryVerticalEnd aria-hidden />
+                  Quick Decisions
+                </ButtonLink>
+              )}
+              {muted !== null && <NotificationMute slug={slug} workspaceName={ctx.tenant.name} muted={muted} />}
+            </>
+          ) : undefined
+        }
       />
       <FocusOnLoad id={focus} />
       <TrackOnMount name="decision_view" params={{ pending_count_bucket: countBucket(open.length) }} />
       <div className="space-y-6">
+        {/* On a phone the page leads with Quick Decisions; a link to one request (a notification's) still lands on it below. */}
+        {quick && (
+          <section aria-labelledby="quick-start-title" data-quick-start="phone" className="surface flex items-center gap-3 rounded-lg border border-wait/45 p-4 sm:hidden">
+            <div className="min-w-0 flex-1">
+              <h2 id="quick-start-title" className="text-sm font-semibold text-ink">
+                Quick Decisions
+              </h2>
+              <p className="mt-0.5 text-xs text-ink-2">{pluralize(quickCount, "request")} waiting. One card at a time: tap or swipe to answer.</p>
+            </div>
+            <ButtonLink href={routes.quickDecisions(slug, { from: "phone" })} variant="primary" size="touch">
+              Start
+            </ButtonLink>
+          </section>
+        )}
         {muted !== null && <NotificationsPrompt publicKey={vapidConfig()?.publicKey ?? null} member />}
         {focus && !linked && (
           <p role="status" className="surface rounded-lg border border-rule px-4 py-3 text-sm text-ink-2">

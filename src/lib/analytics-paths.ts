@@ -10,6 +10,7 @@ export type Surface = (typeof SURFACES)[number];
 /** Segments under `/w/[slug]` that are page names; every other segment there is an id. */
 const WORKSPACE_SEGMENTS = new Set([
   "decisions",
+  "quick",
   "board",
   "timeline",
   "goals",

@@ -8,6 +8,7 @@ import type { InputRequest } from "@/lib/agent-sessions";
 import { cx } from "@/lib/cx";
 import type { Tracked } from "@/lib/tracked";
 
+import { RecommendedTag } from "./recommended-tag";
 import { buttonClasses } from "./ui/button";
 import { ActionForm } from "./ui/action-form";
 import { SubmitButton } from "./ui/submit-button";
@@ -18,7 +19,9 @@ import { SubmitButton } from "./ui/submit-button";
  * Enter on a ticked box sends. A capsule shows it is ticked by its box, its tint and a ring.
  */
 export function MultipleChoice({ taskId, slug, request, title, analytics }: { taskId: string; slug: string; request: InputRequest; title: string; analytics?: Tracked }) {
-  const [ticked, setTicked] = useState(0);
+  // The agent's suggested picks start ticked, so its recommendation is one Send away.
+  const suggested = new Set(request.recommended ?? []);
+  const [ticked, setTicked] = useState(suggested.size);
   return (
     <ActionForm
       action={answerInputAction}
@@ -50,6 +53,7 @@ export function MultipleChoice({ taskId, slug, request, title, analytics }: { ta
               type="checkbox"
               name="choices"
               value={index}
+              defaultChecked={suggested.has(index)}
               data-option={index < 9 ? String(index + 1) : undefined}
               aria-keyshortcuts={index < 9 ? String(index + 1) : undefined}
               className="size-4 shrink-0 accent-accent"
@@ -60,6 +64,7 @@ export function MultipleChoice({ taskId, slug, request, title, analytics }: { ta
               </kbd>
             )}
             {option}
+            {suggested.has(index) && <RecommendedTag label="Suggested" />}
           </label>
         ))}
       </fieldset>

@@ -31,7 +31,7 @@ export async function attempt<T>(fn: () => Promise<T>): Promise<Attempt<T>> {
   } catch (error) {
     const message = expectedErrorMessage(error);
     if (message === null) throw error;
-    return { ok: false, state: { status: "error", message, at: Date.now() } };
+    return { ok: false, state: { status: "error", message, ...(isDomainError(error) && { code: error.code }), at: Date.now() } };
   }
 }
 

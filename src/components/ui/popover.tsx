@@ -6,7 +6,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, typ
 import { cx } from "@/lib/cx";
 import { sendTracked, type Tracked } from "@/lib/tracked";
 
-import { buttonClasses, type ButtonVariant } from "./button";
+import { buttonClasses, type ButtonSize, type ButtonVariant } from "./button";
 
 interface PopoverProps {
   label: ReactNode;
@@ -14,6 +14,8 @@ interface PopoverProps {
   icon?: ReactNode;
   children: ReactNode;
   variant?: ButtonVariant;
+  /** The trigger's size: small by default; Quick Decisions' card takes a full-width `answer`. */
+  size?: ButtonSize;
   /** "link" sets the trigger as a compact text link, for panels that lead elsewhere rather than act. */
   look?: "button" | "link";
   align?: "left" | "right";
@@ -81,6 +83,7 @@ export function Popover({
   icon,
   children,
   variant = "secondary",
+  size = "sm",
   look = "button",
   align = "right",
   title,
@@ -154,7 +157,7 @@ export function Popover({
       <summary
         aria-label={triggerLabel}
         className={cx(
-          look === "link" ? LINK_TRIGGER : cx(buttonClasses(variant, "sm"), variant === "ghost" && "group-open/pop:bg-fill group-open/pop:text-ink"),
+          look === "link" ? LINK_TRIGGER : cx(buttonClasses(variant, size), variant === "ghost" && "group-open/pop:bg-fill group-open/pop:text-ink"),
           "list-none [&::-webkit-details-marker]:hidden",
           triggerClassName,
         )}

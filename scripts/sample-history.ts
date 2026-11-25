@@ -155,6 +155,8 @@ interface Handoff {
   options?: string[];
   /** The person may pick several of the options. */
   multiple?: boolean;
+  /** The options the agent recommends, by position. */
+  recommended?: number[];
   context?: string;
   links?: TaskLink[];
 }
@@ -172,6 +174,7 @@ const HANDOFFS: Record<string, Handoff> = {
     hoursAgo: 3,
     question: "Globex disputes invoice #4471 ($2,400) and asks for 10% off. Offer 5% to settle this week, or escalate to their CFO?",
     options: ["Offer 5% this week", "Escalate to their CFO"],
+    recommended: [0],
     context: "They have paid on time for two years and the dispute is about a late delivery we caused. I recommend offering 5%: it costs $120 and keeps the account.",
     links: [
       { url: "https://claude.ai/chat/5d0c2e7a-91b4-4a8e-b1f3-2c6e8a4d7f10", title: "This chat", kind: "conversation" },
@@ -202,6 +205,7 @@ const HANDOFFS: Record<string, Handoff> = {
     question: "Which parts should the onboarding walkthrough cover? Pick any that apply.",
     options: ["Connecting an agent", "Answering decisions", "Goals and the goal map", "The board"],
     multiple: true,
+    recommended: [0, 1, 2],
     context: "The recording slot is 15 minutes, which fits three parts comfortably. I recommend the first three; the board is self-explanatory.",
   },
 };
@@ -351,6 +355,7 @@ export async function seedSampleHistory(db: Db, tenant: Tenant, owner: { id: str
             context: handoff.context ?? "",
             options: handoff.options ?? [],
             ...(handoff.multiple && { multiple: true }),
+            ...(handoff.recommended && { recommended: handoff.recommended }),
             links: [...(handoff.links ?? []), ...draftLinks],
             askedAt: handedOffAt!.toISOString(),
           }
