@@ -92,6 +92,7 @@ const ROUTE_CASES: [string, string][] = [
   [routes.decision(SLUG, ID), "/w/[slug]/decisions"],
   [routes.request(SLUG, "q_123"), "/w/[slug]/decisions"],
   [routes.approvals(SLUG), "/w/[slug]/decisions"],
+  [routes.quickDecisions(SLUG, { request: "q_123", view: "file", file: "d_1", from: "button" }), "/w/[slug]/decisions/quick"],
   [routes.board(SLUG, { goal: "g_1", q: "secret search" } as never), "/w/[slug]/board"],
   [routes.tasksByStatus(SLUG, "todo", "g_1"), "/w/[slug]/board"],
   [routes.timeline(SLUG, { goal: "g_1" }), "/w/[slug]/timeline"],

@@ -6,6 +6,7 @@ import { askedInApp, askerName, sessionOfAsker, type AgentSession, type InputReq
 import { LIMITS, REQUEST_KIND_META } from "@/lib/domain";
 import { cx } from "@/lib/cx";
 import { timeAgo, truncate } from "@/lib/format";
+import { answerReceipt } from "@/lib/quick-decisions";
 import { routes } from "@/lib/routes";
 import type { Tracked } from "@/lib/tracked";
 import type { PipelineRequestContext } from "@/server/domain/pipelines";
@@ -61,10 +62,7 @@ const takeBack = (taskId: string, request: InputRequest): UndoSpec | undefined =
       };
 
 /** What the status region says once an answer is sent: the receipt a person checks. */
-const sent = (answer: string, request: InputRequest) =>
-  request.pipeline
-    ? `Sent “${truncate(answer, 60)}” to ${request.pipeline.pipelineName} #${request.pipeline.runNumber}; the run has it now, so it cannot be taken back`
-    : `Sent “${truncate(answer, 60)}” to ${request.agentName}`;
+const sent = answerReceipt;
 
 /** Where the request's run stands and what each option leads to, for a decision a pipeline asked. */
 function PipelineContext({ slug, request, context }: { slug: string; request: InputRequest; context?: PipelineRequestContext }) {

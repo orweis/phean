@@ -51,6 +51,8 @@ const METHODS = ["password", "github", "google"] as const;
 const TRIGGERS = ["manual", "agent", "schedule", "event", "webhook"] as const;
 const HAND_OFF_TO = ["agent", "person", "anyone"] as const;
 const DECISION_KINDS = ["decision", "question"] as const;
+/** Where a person answered a request: a page, the overview's inbox, a notification, the desktop app, a pipeline's card, or Quick Decisions. */
+const ANSWER_VIA = ["page", "inbox", "notification", "desktop", "pipeline_card", "quick"] as const;
 /** The MCP clients `client_hint` names; anything else is `other`. */
 export const KNOWN_CLIENTS = ["claude_code", "claude_desktop", "claude_ai", "cursor", "vscode", "chatgpt", "windsurf", "codex", "other"] as const;
 export const SKILLS = ["phean-decisions", "phean-handoffs", "phean-pipelines", "phean-webhooks", "phean-documents"] as const;
@@ -96,22 +98,28 @@ export const EVENTS = {
   decision_view: { params: { pending_count_bucket: BUCKET } },
   decision_answer: {
     params: {
-      via: ["page", "inbox", "notification", "desktop", "pipeline_card"],
+      via: ANSWER_VIA,
       kind: DECISION_KINDS,
       with_options: BOOL,
       multiple: BOOL,
       custom_answer: BOOL,
       is_pipeline: BOOL,
       first_answer: BOOL,
+      // Quick Decisions only: how the answer was given.
+      gesture: ["swipe", "tap", "dock", "composer", "keyboard"],
     },
     // Only for answers no page sees: from a notification or the desktop app.
     server: "also",
   },
   // The key event: a workspace's first answer, sent beside its `decision_answer` (`derivedEvents`).
-  first_decision_answer: { params: { via: ["page", "inbox", "notification", "desktop", "pipeline_card"] }, key: true, server: "also" },
-  decision_snooze: { params: {} },
+  first_decision_answer: { params: { via: ANSWER_VIA }, key: true, server: "also" },
+  decision_snooze: { params: { gesture: ["swipe", "button", "keyboard"] } },
   decision_undo: { params: {} },
   decision_mark_answered: { params: {} },
+  quick_decisions_open: { params: { from: ["button", "phone", "link"] } },
+  quick_context_open: { params: { tab: ["context", "files", "links"] } },
+  quick_file_open: { params: {} },
+  quick_decisions_done: { params: { answered_bucket: BUCKET } },
 
   // App: tasks
   task_create_manual: { params: { as: ["task", "goal"] } },
