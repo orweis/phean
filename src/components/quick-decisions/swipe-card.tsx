@@ -23,8 +23,11 @@ function tap() {
 }
 
 interface SwipeCardProps {
-  /** What a swipe right sends, in words (“Okafor LLP”, Blog + Changelog), or null when there is nothing to send. */
-  sendTarget: string | null;
+  /**
+   * What a swipe right sends: a title ("Recommended:", "First option:", or "Send" for picks) over the
+   * answer in words (“Okafor LLP”, Blog + Changelog), or null when there is nothing to send.
+   */
+  sendTarget: { title: string; target: string } | null;
   onSend: () => void;
   onSnooze: () => void;
   /** The id of the question, which names the card. */
@@ -40,7 +43,7 @@ interface SwipeCardProps {
  * the icon fills and grows a little and the words are at full strength, so the person knows that
  * letting go acts.
  */
-function Underlay({ side, sendTarget, reveal, armed, opacity }: { side: "send" | "snooze"; sendTarget: string | null; reveal: number; armed: boolean; opacity: number }) {
+function Underlay({ side, sendTarget, reveal, armed, opacity }: { side: "send" | "snooze"; sendTarget: SwipeCardProps["sendTarget"]; reveal: number; armed: boolean; opacity: number }) {
   const nothing = side === "send" && sendTarget === null;
   const look = nothing
     ? { ground: "bg-fill text-ink-2", disc: "bg-panel text-ink-2" }
@@ -48,7 +51,7 @@ function Underlay({ side, sendTarget, reveal, armed, opacity }: { side: "send" |
       ? { ground: "bg-accent-tint text-accent-ink", disc: armed ? "bg-accent text-on-accent" : "bg-panel text-accent-ink" }
       : { ground: "bg-wait-tint text-wait-ink", disc: armed ? "bg-wait-ink text-wait-tint" : "bg-panel text-wait-ink" };
   const Icon = nothing ? Ban : side === "send" ? Check : AlarmClock;
-  const [title, detail] = nothing ? ["Nothing to send", "Pick an answer"] : side === "send" ? ["Send", sendTarget] : ["Snooze", "To the back"];
+  const [title, detail] = nothing ? ["Nothing to send", "Pick an answer"] : side === "send" ? [sendTarget!.title, sendTarget!.target] : ["Snooze", "To the back"];
   return (
     <div aria-hidden data-swipe-hint={side} data-armed={(armed && !nothing) || undefined} className={cx("absolute inset-0 overflow-hidden rounded-lg", look.ground)}>
       <div
@@ -77,7 +80,7 @@ function Underlay({ side, sendTarget, reveal, armed, opacity }: { side: "send" |
 
 /**
  * The card on screen, which follows a finger (or a mouse) sideways one to one, tilting a little the
- * same way on either side: past `SWIPE_THRESHOLD` to the right it sends the recommended answer or the
+ * same way on either side: past `SWIPE_THRESHOLD` to the right it sends the recommended answer (the first option when there is none) or the
  * picks, to the left it snoozes (each flying off that way), and short of it it springs back. While it
  * moves, what lies behind it names exactly what letting go will do, and crossing the threshold taps
  * the phone's motor. Only a clearly sideways drag moves it (`touch-action: pan-y` leaves up and down

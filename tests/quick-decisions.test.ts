@@ -20,6 +20,8 @@ import {
   snoozedTitle,
   approvalsLine,
   sendPicksLabel,
+  swipeChoice,
+  swipeChoiceLabel,
   quickOrder,
   starterChips,
   SWIPE_THRESHOLD,
@@ -143,6 +145,19 @@ describe("progress", () => {
     expect(sendPicksLabel(0)).toBe("Pick at least one");
     expect(sendPicksLabel(1)).toBe("Send 1 pick");
     expect(sendPicksLabel(3)).toBe("Send 3 picks");
+  });
+});
+
+describe("what a swipe right answers", () => {
+  it("is the recommended option, else the first one, and says which", () => {
+    expect(swipeChoice({ options: ["DHL", "UPS"], recommended: [1] })).toEqual({ index: 1, recommended: true });
+    expect(swipeChoice({ options: ["DHL", "UPS"] })).toEqual({ index: 0, recommended: false });
+    expect(swipeChoice({ options: ["DHL", "UPS"], recommended: [] })).toEqual({ index: 0, recommended: false });
+    // A recommendation past the options (never stored, but never trusted either) falls back to the first.
+    expect(swipeChoice({ options: ["DHL"], recommended: [3] })).toEqual({ index: 0, recommended: false });
+    expect(swipeChoice({ options: [] })).toBeNull();
+    expect(swipeChoiceLabel({ recommended: true })).toBe("Recommended:");
+    expect(swipeChoiceLabel({ recommended: false })).toBe("First option:");
   });
 });
 
