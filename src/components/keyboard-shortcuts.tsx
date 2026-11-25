@@ -33,6 +33,15 @@ const GROUPS = [
     ],
   },
   {
+    title: "Quick Decisions",
+    keys: [
+      { keys: ["→"], what: "Send the recommended answer, or the ticked options (a swipe right)", id: "quick_send" },
+      { keys: ["←"], what: "Snooze to the back of the queue (a swipe left); S does too", id: "quick_snooze" },
+      { keys: ["C"], what: "Read the full context", id: "quick_context" },
+      { keys: ["Esc"], what: "From the context or a file: back to the decision", id: "quick_back" },
+    ],
+  },
+  {
     title: "Tasks board",
     keys: [{ keys: ["Tab"], what: "In a lane's header: skip to the next lane", id: null }],
   },
