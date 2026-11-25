@@ -12,17 +12,17 @@ const TONES = {
 } as const;
 
 /**
- * Marks the option an agent recommends ("Recommended") or a pick it suggests ("Suggested"), in words
- * as well as a mark, so the recommendation never rests on colour. It sits inside the option's button
+ * Marks the option (or, on a request that takes several, each pick) an agent recommends, in words
+ * as well as a mark, so the recommendation never rests on colour. One word everywhere: "Recommended". It sits inside the option's button
  * or label, so it is read as part of the option's name.
  */
-export function RecommendedTag({ label = "Recommended", tone = "tinted", compact = false }: { label?: "Recommended" | "Suggested"; tone?: keyof typeof TONES; compact?: boolean }) {
+export function RecommendedTag({ tone = "tinted", compact = false }: { tone?: keyof typeof TONES; compact?: boolean }) {
   return (
     <span data-recommended className={cx("inline-flex shrink-0 items-center gap-1 rounded-full px-1.5 py-px text-2xs font-semibold [&_svg]:size-3", TONES[tone])}>
       <Sparkles aria-hidden />
       <span className="sr-only">(</span>
       {/* Compact keeps the mark and says the word to screen readers only, where a rail has no room. */}
-      <span className={compact ? "sr-only" : undefined}>{label}</span>
+      <span className={compact ? "sr-only" : undefined}>Recommended</span>
       <span className="sr-only">)</span>
     </span>
   );

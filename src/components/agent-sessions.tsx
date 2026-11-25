@@ -133,17 +133,18 @@ function linkLabel(link: TaskLink): string {
  * References an agent left: back to the conversation, to the source message, to docs. Each opens
  * outside Phean; the kind sets its icon so the way back to the conversation stands out.
  */
-export function TaskLinks({ links, className }: { links: readonly TaskLink[]; className?: string }) {
+export function TaskLinks({ links, className, size = "sm" }: { links: readonly TaskLink[]; className?: string; size?: "sm" | "touch" }) {
   if (links.length === 0) return null;
   return (
-    <ul aria-label="Links" className={cx("flex flex-wrap gap-1.5", className)}>
+    <ul aria-label="Links" className={cx("flex flex-wrap", size === "touch" ? "gap-2" : "gap-1.5", className)}>
       {links.map((link) => (
         <li key={`${link.kind}:${link.url}`} className="min-w-0 max-w-full">
           <OutsideLink
             href={link.url}
             className={cx(
-              "relative inline-flex max-w-full items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold hover:border-ink-2 [&_svg]:size-3 [&_svg]:shrink-0",
-              "after:absolute after:inset-x-0 after:-inset-y-1",
+              "relative inline-flex max-w-full items-center rounded-full border font-semibold hover:border-ink-2 [&_svg]:shrink-0",
+              // A thumb's size where the links are the point of the screen (Quick Decisions); a small chip among a card's lines.
+              size === "touch" ? "min-h-11 gap-1.5 px-3.5 text-sm [&_svg]:size-4" : "gap-1 px-2 py-0.5 text-xs after:absolute after:inset-x-0 after:-inset-y-1 [&_svg]:size-3",
               link.kind === "conversation" ? "border-accent/40 text-accent-ink" : "border-rule text-ink-2",
             )}
           >
