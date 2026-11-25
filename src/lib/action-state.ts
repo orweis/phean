@@ -2,6 +2,8 @@
 export interface ActionState {
   status: "idle" | "success" | "error";
   message?: string;
+  /** On an expected failure, its kind (`conflict`, `not_found`, ...), so a page can tell a stale request from a mistake. */
+  code?: string;
   data?: Record<string, unknown>;
   /** Changes on every completed submission, so forms can reset after success. */
   at?: number;

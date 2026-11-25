@@ -7,6 +7,7 @@ import { LIMITS, REQUEST_KIND_META } from "@/lib/domain";
 import { cx } from "@/lib/cx";
 import { timeAgo, truncate } from "@/lib/format";
 import { runLabel } from "@/lib/pipelines";
+import { answerReceipt } from "@/lib/quick-decisions";
 import { routes } from "@/lib/routes";
 import type { Tracked } from "@/lib/tracked";
 import type { PipelineRequestContext } from "@/server/domain/pipelines";
@@ -17,6 +18,7 @@ import { DecisionKeys } from "./decision-keys";
 import { DocumentChips } from "./documents/document-chips";
 import { GoalLink } from "./goal-link";
 import { MultipleChoice } from "./multiple-choice";
+import { RecommendedTag } from "./recommended-tag";
 import { ActionButton } from "./ui/action-button";
 import { ActionForm } from "./ui/action-form";
 import { Badge, MetaBadge } from "./ui/badge";
@@ -64,10 +66,7 @@ const takeBack = (taskId: string, request: InputRequest): UndoSpec | undefined =
 const pipelineRunLabel = (ref: NonNullable<InputRequest["pipeline"]>) => runLabel({ name: ref.runName, number: ref.runNumber }, ref.pipelineName);
 
 /** What the status region says once an answer is sent: the receipt a person checks. */
-const sent = (answer: string, request: InputRequest) =>
-  request.pipeline
-    ? `Sent “${truncate(answer, 60)}” to ${pipelineRunLabel(request.pipeline)}; the run has it now, so it cannot be taken back`
-    : `Sent “${truncate(answer, 60)}” to ${request.agentName}`;
+const sent = answerReceipt;
 
 /** Where the request's run stands and what each option leads to, for a decision a pipeline asked. */
 function PipelineContext({ slug, request, context }: { slug: string; request: InputRequest; context?: PipelineRequestContext }) {
@@ -190,6 +189,7 @@ function MoreAnswers({ taskId, slug, request, title }: { taskId: string; slug: s
  * `MultipleChoice` instead.
  */
 function OptionButtons({ taskId, slug, request, via }: { taskId: string; slug: string; request: InputRequest; via: AnswerVia }) {
+  const recommended = new Set(request.recommended ?? []);
   return request.options.map((option, index) => (
     <ActionButton
       key={option}
@@ -211,6 +211,7 @@ function OptionButtons({ taskId, slug, request, via }: { taskId: string; slug: s
         </kbd>
       )}
       {option}
+      {recommended.has(index) && <RecommendedTag />}
     </ActionButton>
   ));
 }

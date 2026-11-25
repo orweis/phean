@@ -156,11 +156,15 @@ server sends it (**only**); server copies carry `source_side=server`, and key-ev
 | Event | When | Params | Key | Server |
 | --- | --- | --- | --- | --- |
 | `decision_view` | The Decisions page is viewed | `pending_count_bucket` | | |
-| `decision_answer` | A person answers a request | `via` (`page`, `inbox`, `notification`, `desktop`, `pipeline_card`), `kind` (`decision`, `question`), `with_options`, `multiple`, `custom_answer`, `is_pipeline`, `first_answer` (the person's first answer in this workspace, from the server; a person-wide count would read across workspaces) | | also (answers from a notification or the desktop app, which no page sees) |
+| `decision_answer` | A person answers a request | `via` (`page`, `inbox`, `notification`, `desktop`, `pipeline_card`, `quick`), `kind` (`decision`, `question`), `with_options`, `multiple`, `custom_answer`, `is_pipeline`, `first_answer` (the person's first answer in this workspace, from the server; a person-wide count would read across workspaces), `gesture` (Quick Decisions only: `swipe`, `tap` on an option or Send, `dock` in the full context, `composer` for a written answer, `keyboard`) | | also (answers from a notification or the desktop app, which no page sees) |
 | `first_decision_answer` | Sent beside a `decision_answer` whose `first_answer` is true, from the same side (`derivedEvents`): GA's own derived events cannot test a parameter | `via` | **key** | also (beside the server's `decision_answer`) |
-| `decision_snooze` | A request is snoozed | | | |
+| `decision_snooze` | A request is snoozed | `gesture` (Quick Decisions only: `swipe`, `button`, `keyboard`) | | |
 | `decision_undo` | An answer is taken back | | | |
 | `decision_mark_answered` | A request is marked answered | | | |
+| `quick_decisions_open` | Quick Decisions opens | `from` (`button` on the Decisions page, `phone` from its phone banner, `link` from anywhere else) | | |
+| `quick_context_open` | A request's full context opens in Quick Decisions, or another of its tabs is chosen | `tab` (`context`, `files`, `links`) | | |
+| `quick_file_open` | A request's file opens in Quick Decisions' file viewer | | | |
+| `quick_decisions_done` | Quick Decisions runs out of requests and shows its done screen | `answered_bucket` (answered in this session, as `countBucket`) | | |
 
 ### App: tasks, search, goals
 
@@ -249,7 +253,7 @@ Event-scoped dimensions: every string and boolean param above (`surface`, `app_s
 `doc_section`, `cta_id`, `location`, `section_id`, `demo`, `action`, `target`, `block`, `lang`, `helpful`,
 `skill`, `client`, `method`, `two_factor`, `result`, `step`, `client_hint`, `level`, `reconnect`,
 `took_over_work`, `is_subagent`, `pending_count_bucket`, `via`, `kind`, `with_options`, `multiple`,
-`custom_answer`, `is_pipeline`, `first_answer`, `as`, `from_kind`, `to_kind`, `to`, `hand_back`, `from`,
+`custom_answer`, `is_pipeline`, `first_answer`, `gesture`, `answered_bucket`, `as`, `from_kind`, `to_kind`, `to`, `hand_back`, `from`,
 `layout`, `filter`, `has_results`, `used_suggestion`, `decision`, `template`, `has_person_stop`,
 `has_fork`, `has_choice`, `created_by`, `tab`, `trigger`, `view`, `trigger_type`, `format`, `shortcut`,
 `provider`, `analytics`, `tools_used_bucket`, `count_bucket`, `source`, `outcome`, `duration_bucket`,
