@@ -105,7 +105,7 @@ test.describe("Quick Decisions on a phone", () => {
       await expect(first).toContainText("Decision");
       await expect(first.getByRole("button", { name: /^Send.*Recommended/ })).toBeVisible();
       await expect(first.getByRole("list", { name: "Files" }).getByRole("link")).toHaveCount(2);
-      await expect(page.getByRole("group", { name: "Quick actions" }).getByRole("button", { name: "Send “Send”" })).toBeEnabled();
+      await expect(page.getByRole("group", { name: "Quick actions" }).getByRole("button", { name: "Send recommended: “Send”" })).toBeEnabled();
       // The links the agent left are on the card's face, each a thumb's size.
       const link = first.getByRole("list", { name: "Links" }).getByRole("link", { name: /^This chat/ });
       await expect(link).toHaveAttribute("target", "_blank");
@@ -154,7 +154,7 @@ test.describe("Quick Decisions on a phone", () => {
         await swipe(page, first, dx, { hold: true });
         await expect.poll(() => translateX(first)).toBe(dx);
         const label = page.locator(`[data-swipe-hint=${dx > 0 ? "send" : "snooze"}] [data-swipe-label]`);
-        await expect(label).toContainText(dx > 0 ? "Send“Send”" : "SnoozeTo the back");
+        await expect(label).toContainText(dx > 0 ? "Recommended:“Send”" : "SnoozeTo the back");
         await expect.poll(() => label.evaluate((element) => Number(getComputedStyle(element).opacity))).toBeGreaterThan(0.5);
         // Back to where it started: short of the threshold, nothing happens.
         await page.mouse.move(start.x + start.width / 2, start.y + start.height / 2 + 4, { steps: 6 });
@@ -165,7 +165,7 @@ test.describe("Quick Decisions on a phone", () => {
 
     await test.step("swiping right sends the recommended answer, and Undo takes it back", async () => {
       await swipe(page, first, 160, { hold: true });
-      await expect(page.locator("[data-swipe=send]")).toContainText("Send“Send”");
+      await expect(page.locator("[data-swipe=send]")).toContainText("Recommended:“Send”");
       await expect(page.locator("[data-swipe-hint=send]")).toHaveAttribute("data-armed");
       await page.mouse.up();
       await expect(status).toContainText("Sent “Send” to Launch bot");
@@ -190,10 +190,15 @@ test.describe("Quick Decisions on a phone", () => {
       await expect(cardOf(page, COURIER).getByRole("heading", { level: 2 })).toBeFocused();
     });
 
-    await test.step("with no recommendation there is nothing to swipe right; Snooze sends it to the back", async () => {
+    await test.step("with no recommendation a swipe right offers the first option, named as such; Snooze sends it to the back", async () => {
       const card = cardOf(page, COURIER);
-      await expect(page.getByRole("group", { name: "Quick actions" }).getByRole("button", { name: "No recommendation" })).toBeDisabled();
-      await swipe(page, card, 200);
+      await expect(page.getByRole("group", { name: "Quick actions" }).getByRole("button", { name: "Send first option: “DHL”" })).toBeEnabled();
+      const box = (await card.getByRole("heading", { level: 2 }).boundingBox())!;
+      await swipe(page, card, 160, { hold: true });
+      await expect(page.locator("[data-swipe-hint=send] [data-swipe-label]")).toContainText("First option:“DHL”");
+      // Back where it started, short of the threshold: nothing is sent.
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2 + 4, { steps: 8 });
+      await page.mouse.up();
       await expect(card).toBeVisible();
       await page.getByRole("group", { name: "Quick actions" }).getByRole("button", { name: "Snooze" }).click();
       await expect(status).toContainText(`Snoozed “${COURIER}”`);
@@ -381,9 +386,7 @@ test.describe("Quick Decisions guards", () => {
       const band = page.getByRole("article", { name: "Which band?" });
       await expect(band).toBeVisible();
       await settled();
-      // Nothing is recommended on this one, so → does nothing; ← snoozes it.
-      await page.keyboard.press("ArrowRight");
-      await expect(band).toBeVisible();
+      // Nothing is recommended on this one, so → would send its first option; ← snoozes it instead.
       await page.keyboard.press("ArrowLeft");
       await expect(status).toContainText("Snoozed “Which band?”");
       await expect(page.getByRole("article", { name: "Which date?" })).toBeVisible();

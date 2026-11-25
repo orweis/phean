@@ -25,6 +25,8 @@ import {
   type AnsweredEntry,
   type ContextTab,
   type QuickEntry,
+  swipeChoice,
+  swipeChoiceLabel,
   type QuickItem,
 } from "@/lib/quick-decisions";
 import { routes } from "@/lib/routes";
@@ -59,23 +61,28 @@ const SCREEN_HEIGHT = "calc(100dvh - max(0.5rem, env(safe-area-inset-top)) - max
 
 const questionIdOf = (item: QuickItem) => `quick-q-${item.request.id}`;
 
-/** The option an agent recommends on a single-choice request, by its words. */
-function recommendedOption(item: QuickItem): string | undefined {
-  const recommended = item.request.recommended?.[0];
-  return recommended === undefined ? undefined : item.request.options[recommended];
+/** The option a swipe right answers on a single-choice request: the recommended one, else the first. */
+function choiceOf(item: QuickItem): { index: number; option: string; recommended: boolean } | null {
+  const choice = item.request.multiple ? null : swipeChoice(item.request);
+  return choice && { ...choice, option: item.request.options[choice.index]! };
 }
 
-/** What a swipe right sends, given the picks on a request that takes several: “Okafor LLP”, Blog + Changelog; null when there is nothing to send. */
-function sendTargetOf(item: QuickItem, picks: readonly number[]): string | null {
-  if (item.request.multiple) return picks.length ? picksLabel(item.request.options, picks) : null;
-  const option = recommendedOption(item);
-  return option === undefined ? null : `“${truncate(option, 40)}”`;
+/**
+ * What a swipe right sends, and what to call it: "Recommended:" or "First option:" over “Okafor LLP”,
+ * or "Send" over Blog + Changelog for the picks on a request that takes several; null when there is
+ * nothing to send.
+ */
+function sendTargetOf(item: QuickItem, picks: readonly number[]): { title: string; target: string } | null {
+  if (item.request.multiple) return picks.length ? { title: "Send", target: picksLabel(item.request.options, picks) } : null;
+  const choice = choiceOf(item);
+  return choice && { title: swipeChoiceLabel(choice), target: `“${truncate(choice.option, 40)}”` };
 }
 
-/** What a swipe right sends, in words: "Send “Okafor LLP”", "Send Blog + Changelog"; null when there is nothing to send. */
+/** What a swipe right sends, in words: "Send recommended: “Okafor LLP”", "Send Blog + Changelog"; null when there is nothing to send. */
 function sendLabelOf(item: QuickItem, picks: readonly number[]): string | null {
-  const target = sendTargetOf(item, picks);
-  return target === null ? null : `Send ${target}`;
+  const send = sendTargetOf(item, picks);
+  if (!send) return null;
+  return send.title === "Send" ? `Send ${send.target}` : `Send ${send.title.toLowerCase()} ${send.target}`;
 }
 
 /**
@@ -295,8 +302,8 @@ export function QuickDecisions({ slug, userId, items, view, requestId, tab, file
         submit(item, { choices: chosen }, picksLabel(item.request.options, chosen, Infinity), gesture, false);
         return;
       }
-      const recommended = item.request.recommended?.[0];
-      if (recommended !== undefined) ctl.answerOption(item, recommended, gesture);
+      const choice = choiceOf(item);
+      if (choice) ctl.answerOption(item, choice.index, gesture);
     },
     answerOption: (item, index, gesture) => {
       const option = item.request.options[index];
@@ -486,7 +493,7 @@ export function QuickDecisions({ slug, userId, items, view, requestId, tab, file
   if (current && shown === "file" && file) return <FileView item={current} file={file} ctl={ctl} />;
 
   const sendTarget = current ? sendTargetOf(current, picksOf(current)) : null;
-  const sendLabel = sendTarget === null ? null : `Send ${sendTarget}`;
+  const sendLabel = current ? sendLabelOf(current, picksOf(current)) : null;
   const header = <QueueHeader slug={slug} answered={answered.length} remaining={resting ? 0 : queue.length} />;
   if (!current) {
     return (
@@ -561,12 +568,12 @@ export function QuickDecisions({ slug, userId, items, view, requestId, tab, file
               size="touch"
               className="min-w-0"
               disabled={!sendLabel}
-              aria-label={sendLabel ?? "No recommendation"}
+              aria-label={sendLabel ?? undefined}
               aria-keyshortcuts="ArrowRight"
               onClick={() => ctl.send(current, "tap")}
             >
               <Check aria-hidden />
-              <span className="truncate">{recommendedOption(current) ?? "No recommendation"}</span>
+              <span className="truncate">{choiceOf(current)?.option}</span>
             </Button>
           ))}
       </div>

@@ -102,13 +102,13 @@ Keys never fire while you are typing in a field.
 - Pipeline decisions come first, then the rest longest waiting first; snoozed ones wait at the back. A pipeline decision that names someone else (another person, or owners and admins) is left out of your queue; it stays on the Decisions page, which says who it waits on.
 - A card that has just arrived ignores taps and keys for a moment, so a double tap or a held key never answers the next one.
 - Tap an option to answer it. The option the agent recommends is filled and marked **Recommended**; on a request that takes several, its recommendations start ticked and marked **Recommended**, and **Send** under the card counts your picks.
-- **Swipe right** sends the recommended answer (or your picks); **swipe left** snoozes. The card follows your finger either way, and what lies behind it says what letting go will do; past the point where letting go acts, its mark fills and your phone taps once. The **Snooze**, **Context** and named answer buttons under the card do the same without a swipe.
+- **Swipe right** sends the agent's recommended answer, or the first option when it recommends none (or your picks); the colour behind the card says which, "Recommended:" or "First option:", above the answer; **swipe left** snoozes. The card follows your finger either way, and what lies behind it says what letting go will do; past the point where letting go acts, its mark fills and your phone taps once. The **Snooze**, **Context** and named answer buttons under the card do the same without a swipe.
 - **Read full context** opens the agent's context, the task's files and the request's links, with the answers pinned at the bottom so you can answer while reading. A file opens in place, with a way back to the decision.
 - **Write another answer** opens a short reply with a few phrases to start from; a question with no options has its field right on the card.
 - When only requests you snoozed are left, the queue rests and says so, with **Show snoozed again**. Your progress is kept for the day, so closing and coming back carries on where you were, and the end says how many goals still wait for your approval.
 - After each answer the status region offers **Undo**, as on the Decisions page; a pipeline's answer cannot be taken back. When nothing is left, the last card lists what you answered, each with Undo.
 
-With a keyboard: `→` sends the recommended answer, `←` or `S` snoozes, `1` to `9` pick an option, `C` opens the context, and `Esc` goes back from the context or a file to the card.
+With a keyboard: `→` sends the recommended answer (or the first option), `←` or `S` snoozes, `1` to `9` pick an option, `C` opens the context, and `Esc` goes back from the context or a file to the card.
 
 ## How the agent gets the answer
 

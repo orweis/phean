@@ -159,6 +159,20 @@ export function approvalsLine(count: number): string | null {
   return count === 1 ? "1 goal still needs your approval" : `${count} goals still need your approval`;
 }
 
+/**
+ * What a swipe right (or the bar's send button) answers on a request with one choice: the option the
+ * agent recommends, or the first one when it recommends none, and which of the two it is, so the card
+ * can say "Recommended:" or "First option:". Null when there are no options (a question).
+ */
+export function swipeChoice(request: Pick<InputRequest, "options" | "recommended">): { index: number; recommended: boolean } | null {
+  if (request.options.length === 0) return null;
+  const recommended = request.recommended?.[0];
+  return recommended !== undefined && recommended < request.options.length ? { index: recommended, recommended: true } : { index: 0, recommended: false };
+}
+
+/** The words a swipe right shows above its answer: "Recommended:" or "First option:". */
+export const swipeChoiceLabel = (choice: { recommended: boolean }) => (choice.recommended ? "Recommended:" : "First option:");
+
 /** The send button for a request that takes several, by how many are ticked: "Send 3 picks". */
 export function sendPicksLabel(count: number): string {
   return count === 0 ? "Pick at least one" : `Send ${count} ${count === 1 ? "pick" : "picks"}`;
