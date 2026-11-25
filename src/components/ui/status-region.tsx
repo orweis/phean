@@ -27,6 +27,11 @@ export interface Notice {
   /** Slug of the workspace the undo posts to. */
   workspace?: string;
   tone?: "plain" | "error";
+  /**
+   * One line, cut with an ellipsis (the region still reads it whole), that only its buttons catch:
+   * taps anywhere else on it reach the page beneath, for a page whose own controls sit right there.
+   */
+  compact?: boolean;
 }
 
 interface Shown extends Notice {
@@ -53,6 +58,8 @@ export const NOTICE_MS = 6000;
  * One polite `role="status"` region for the whole workspace. Actions say what they did here,
  * naming the object ("Dropped 'Read the thread'"), and offer Undo where the reverse exists. A
  * notice stays about six seconds, longer while it is hovered or focused; Undo is reachable with Tab.
+ * A page with its own bar along the bottom sets `--status-dock` (the distance from the bottom of the
+ * screen to the top of its bar) so notices sit above the bar rather than over it.
  */
 export function StatusRegion({ children }: { children: ReactNode }) {
   const [notice, setNotice] = useState<Shown | null>(null);
@@ -99,7 +106,7 @@ export function StatusRegion({ children }: { children: ReactNode }) {
         role="status"
         aria-live="polite"
         data-status-region
-        className="pointer-events-none fixed inset-x-3 bottom-3 z-50 flex justify-center sm:bottom-5"
+        className="pointer-events-none fixed inset-x-3 bottom-[var(--status-dock,0.75rem)] z-50 flex justify-center sm:bottom-[var(--status-dock,1.25rem)]"
         onPointerEnter={() => setHeld(true)}
         onPointerLeave={() => setHeld(false)}
         onFocus={() => setHeld(true)}
@@ -112,11 +119,12 @@ export function StatusRegion({ children }: { children: ReactNode }) {
             key={notice.id}
             data-notice
             className={cx(
-              "glass-float pointer-events-auto flex max-w-lg min-w-0 items-center gap-2 rounded-xl py-1.5 pr-1.5 pl-4 text-sm motion-safe:animate-glass-in",
+              "glass-float flex max-w-lg min-w-0 items-center gap-2 rounded-xl py-1.5 pr-1.5 pl-4 text-sm motion-safe:animate-glass-in",
+              notice.compact ? "pointer-events-none [&_button]:pointer-events-auto" : "pointer-events-auto",
               notice.tone === "error" ? "text-late-ink" : "text-ink",
             )}
           >
-            <p className="min-w-0 flex-1 py-1">{notice.message}</p>
+            <p className={cx("min-w-0 flex-1 py-1", notice.compact && "truncate")}>{notice.message}</p>
             {notice.undo && (
               <button type="button" className={buttonClasses("tinted", "sm")} disabled={pending} aria-busy={pending || undefined} onClick={() => undo(notice)}>
                 <Undo2 aria-hidden />
