@@ -8,9 +8,11 @@ import nextConfig from "../next.config";
 import { routes } from "@/lib/routes";
 import { createAuth, type Auth } from "@/server/auth/auth";
 import { decideNativeRequest, findNativeRequest, isLoopbackCallback, NATIVE_CODE_SECONDS, NATIVE_EXCHANGE_LIMIT, NATIVE_REQUEST_SECONDS, NATIVE_START_LIMIT, nativeConfirmRoute } from "@/server/auth/native";
-import { session as sessionTable } from "@/server/db/schema/auth";
+import { reauthWith } from "@/server/auth/reauth";
+import { account as accountTable, session as sessionTable } from "@/server/db/schema/auth";
+import { deleteWorkspace } from "@/server/domain/workspace-deletion";
 
-import { createTestDb, type TestDb } from "./support/db";
+import { addMember, asUser, createTestDb, seedTenant, type TestDb } from "./support/db";
 import { OAUTH_BASE } from "./support/oauth";
 
 const BASE = OAUTH_BASE;
@@ -290,5 +292,54 @@ describe("the desktop's browser sign-in", () => {
     const rules = auth.options.plugins.flatMap((plugin) => ("rateLimit" in plugin ? (plugin.rateLimit ?? []) : []));
     expect(rules.find((rule) => rule.pathMatcher("/native/start"))).toMatchObject(NATIVE_START_LIMIT);
     expect(rules.find((rule) => rule.pathMatcher("/native/exchange"))).toMatchObject(NATIVE_EXCHANGE_LIMIT);
+  });
+});
+
+describe("when a person last signed in (session.signedInAt)", () => {
+  const TWO_HOURS = 2 * 60 * 60_000;
+  const sessionOf = (jar: Map<string, string>) => auth.api.getSession({ headers: new Headers({ cookie: header(jar) }) });
+  const backdate = (userId: string, at: Date) => testDb.db.update(sessionTable).set({ signedInAt: at }).where(eq(sessionTable.userId, userId));
+
+  it("is stamped by a password sign-in, and a desktop handoff carries the browser's over instead of now", async () => {
+    const person = await signedUp();
+    const browser = await sessionOf(person.jar);
+    expect(Date.now() - new Date(browser!.session.signedInAt!).getTime()).toBeLessThan(60_000);
+
+    const twoHoursAgo = new Date(Date.now() - TWO_HOURS);
+    await backdate(person.id, twoHoursAgo);
+    const { requestId, verifier } = await started();
+    const response = await exchange({ requestId, code: await confirmed(person.jar, requestId), codeVerifier: verifier });
+    expect(response.status).toBe(200);
+    const desktop = await sessionOf(cookiesOf(response));
+    // A brand-new row, but no new sign-in: it keeps the browser's time.
+    expect(Date.now() - new Date(desktop!.session.createdAt).getTime()).toBeLessThan(60_000);
+    expect(new Date(desktop!.session.signedInAt!).getTime()).toBe(twoHoursAgo.getTime());
+
+    // So that session cannot stand in for a recent sign-in when deleting a workspace.
+    const tenant = await seedTenant(testDb.db, `desk-${randomBytes(3).toString("hex")}`, "Desk");
+    const owner = { id: person.id, name: "Dana", email: person.email };
+    await addMember(testDb.db, tenant, owner, "owner");
+    // Someone who signs in with GitHub or Google only: no password to ask for.
+    await testDb.db.delete(accountTable).where(eq(accountTable.userId, person.id));
+    const signedInAt = desktop!.session.signedInAt ? new Date(desktop!.session.signedInAt) : null;
+    await expect(deleteWorkspace(asUser(testDb.db, tenant, owner), { confirm: "Desk" }, { reauth: reauthWith(auth, testDb.db), signedInAt })).rejects.toMatchObject({
+      code: "forbidden",
+      message: expect.stringContaining("sign in again"),
+    });
+  });
+
+  it("is carried over when the session rotates, such as when two-factor is turned on", async () => {
+    const person = await signedUp();
+    const before = await sessionOf(person.jar);
+    const twoHoursAgo = new Date(Date.now() - TWO_HOURS);
+    await backdate(person.id, twoHoursAgo);
+    const browserHeaders = { "content-type": "application/json", origin: BASE, cookie: header(person.jar) };
+    const enabled = await post("/two-factor/enable", { password: PASSWORD }, browserHeaders);
+    const { totpURI } = (await enabled.json()) as { totpURI: string };
+    const verified = await post("/two-factor/verify-totp", { code: totpCode(totpURI) }, browserHeaders);
+    expect(verified.status).toBe(200);
+    const rotated = await sessionOf(cookiesOf(verified, new Map(person.jar)));
+    expect(rotated!.session.token).not.toBe(before!.session.token);
+    expect(new Date(rotated!.session.signedInAt!).getTime()).toBe(twoHoursAgo.getTime());
   });
 });

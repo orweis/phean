@@ -62,8 +62,8 @@ export function DeleteWorkspacePopover({ workspace, hasPassword, twoFactor, rece
           )
         )}
         {twoFactor && (
-          <Field label="Two-factor code" htmlFor={id("code")} hint="The 6-digit code from your authenticator app.">
-            <Input id={id("code")} name="code" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9 ]{6,7}" required maxLength={7} />
+          <Field label="Two-factor code" htmlFor={id("code")} hint="The 6-digit code from your authenticator app, or one of your backup codes.">
+            <Input id={id("code")} name="code" autoComplete="one-time-code" autoCapitalize="off" spellCheck={false} required maxLength={16} />
           </Field>
         )}
         <div className="flex flex-wrap items-center gap-2">

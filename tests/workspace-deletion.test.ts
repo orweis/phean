@@ -1,6 +1,9 @@
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 
-import { eq, inArray } from "drizzle-orm";
+import { PGlite } from "@electric-sql/pglite";
+import { eq, inArray, is, sql } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/pglite";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { totpCode } from "../e2e/support/totp";
@@ -10,9 +13,12 @@ import { reauthWith, REAUTH_MAX_FAILURES } from "@/server/auth/reauth";
 import { rollUpUsage } from "@/server/backoffice/rollup";
 import { listAuditLog } from "@/server/backoffice";
 import type { Db } from "@/server/db/client";
+import { migratePgliteClient } from "@/server/db/migrate";
+import * as schema from "@/server/db/schema";
 import {
   documentBlobs,
   invitation,
+  oauthAccessToken,
   oauthConsent,
   oauthRefreshToken,
   oauthResource,
@@ -21,6 +27,8 @@ import {
   realtimeStreams,
   session,
   toolCallsDaily,
+  twoFactor,
+  verification,
   workspaceDeletions,
 } from "@/server/db/schema";
 import { authenticateAgentToken } from "@/server/domain/agents";
@@ -36,13 +44,24 @@ import { answerInput, captureTasks, requestInput, updateTask } from "@/server/do
 import { listMemberships } from "@/server/domain/tenants";
 import { registerWebhook } from "@/server/domain/webhooks";
 import { saveWorkflow } from "@/server/domain/workflow";
-import { deleteWorkspace, KEPT_AFTER_DELETION, workspaceInventory, WORKSPACE_TABLES } from "@/server/domain/workspace-deletion";
+import {
+  AGENT_KEYED_TABLES,
+  clearPendingWorkspaceBlobs,
+  clearWorkspaceBlobs,
+  DELETE_ATTEMPTS_PER_ADDRESS,
+  deleteWorkspace,
+  KEPT_AFTER_DELETION,
+  workspaceInventory,
+  WORKSPACE_TABLES,
+  type BlobStoreFor,
+} from "@/server/domain/workspace-deletion";
+import type { BlobStore } from "@/server/storage/blobs";
 import type { Email } from "@/server/digest/email";
-import { getTableConfig } from "drizzle-orm/pg-core";
+import { getTableConfig, PgTable } from "drizzle-orm/pg-core";
 
 import { ADMIN_EMAIL, seedPlatformAdmin } from "./support/backoffice";
 import { addMember, asUser, connectAgent, createTestDb, seedUser, seedWorkspace, type TestDb } from "./support/db";
-import { freshProof, tablesWithWorkspaceColumn, workspaceRows } from "./support/deletion";
+import { freshProof, tablesWithWorkspaceColumn, trustingReauth, workspaceRows } from "./support/deletion";
 import { connectOAuthAgent, createOAuthServer, jsonPost, refresh, OAUTH_RESOURCE, type Connected, type OAuthServer } from "./support/oauth";
 import { deviceFor } from "./support/push";
 
@@ -163,6 +182,17 @@ describe("deleting a workspace", () => {
       const globexBefore = await workspaceRows(db, globex.tenant.id);
       expect((await initialize(local, acme.connected.accessToken)).status).toBe(200);
 
+      // Better Auth rows keyed by an agent: an access token row and a code not redeemed yet, in both workspaces.
+      const agentRows = async (target: Filled) => {
+        const code = { id: randomUUID(), identifier: `code-${randomUUID()}`, value: JSON.stringify({ type: "authorization_code", referenceId: target.connected.agentId }), expiresAt: new Date(Date.now() + 600_000) };
+        const token = { id: randomUUID(), token: randomUUID(), clientId: target.connected.clientId, userId: target.owner.actor.id, referenceId: target.connected.agentId, expiresAt: new Date(Date.now() + 3_600_000), createdAt: new Date(), scopes: ["phean:write"] };
+        await db.insert(verification).values(code);
+        await db.insert(oauthAccessToken).values(token);
+        return { codeId: code.id, tokenId: token.id };
+      };
+      const acmeRows = await agentRows(acme);
+      const globexRows = await agentRows(globex);
+
       const counts = await workspaceInventory(acme.owner, {});
       // Two captured tasks, the run's and its stop's; the OAuth agent and Scout, not the pipelines agent.
       expect(counts).toEqual({ tasks: 4, goals: 1, decisions: 3, documents: 1, memories: 1, agents: 2, pipelines: 1, webhooks: 1, members: 2 });
@@ -171,7 +201,7 @@ describe("deleting a workspace", () => {
       const deleted = await deleteWorkspace(
         acme.owner,
         { confirm: acme.tenant.name, password: PASSWORD },
-        { reauth: reauthWith(local.auth, db), sessionCreatedAt: new Date(0), send: async (email) => void sent.push(email), baseUrl: "https://phean.test" },
+        { reauth: reauthWith(local.auth, db), signedInAt: null, send: async (email) => void sent.push(email), baseUrl: "https://phean.test" },
       );
       expect(deleted).toMatchObject({ id: acme.tenant.id, slug: acme.tenant.slug, counts });
 
@@ -192,6 +222,11 @@ describe("deleting a workspace", () => {
       const agentIds = [acme.connected.agentId, acme.scout.agentId];
       expect(await db.select().from(oauthRefreshToken).where(inArray(oauthRefreshToken.referenceId, agentIds))).toEqual([]);
       expect(await db.select().from(oauthConsent).where(inArray(oauthConsent.referenceId, agentIds))).toEqual([]);
+      expect(await db.select().from(oauthAccessToken).where(inArray(oauthAccessToken.referenceId, agentIds))).toEqual([]);
+      expect(await db.select().from(verification).where(eq(verification.id, acmeRows.codeId))).toEqual([]);
+      expect(await db.select().from(oauthAccessToken).where(eq(oauthAccessToken.id, acmeRows.tokenId))).toEqual([]);
+      expect(await db.select({ id: verification.id }).from(verification).where(eq(verification.id, globexRows.codeId))).toHaveLength(1);
+      expect(await db.select({ id: oauthAccessToken.id }).from(oauthAccessToken).where(eq(oauthAccessToken.id, globexRows.tokenId))).toHaveLength(1);
       expect((await initialize(local, acme.connected.accessToken)).status).toBe(401);
       expect((await initialize(local, acme.scout.token)).status).toBe(401);
       expect(await authenticateAgentToken(db, acme.scout.token)).toBeNull();
@@ -234,6 +269,43 @@ describe("deleting a workspace", () => {
     for (const name of kept) expect(covered.has(name), name).toBe(false);
   });
 
+  it("knows every table in the schema: a new table must say whether a workspace owns its rows", () => {
+    const names = (tables: readonly PgTable[]) => new Set(tables.map((table) => getTableConfig(table).name));
+    const covered = names(WORKSPACE_TABLES.map(({ table }) => table));
+    const kept = names(KEPT_AFTER_DELETION);
+    const agentKeyed = names(AGENT_KEYED_TABLES);
+    /**
+     * Every other table, and why the lists above leave it out. A table that appears in the schema in none
+     * of these lists fails here, whatever its columns are called.
+     */
+    const OTHER_TABLES: Record<string, string> = {
+      organization: "the workspace itself, deleted last, by id",
+      user: "a person, who may be in other workspaces",
+      session: "a person's; its active workspace is cleared",
+      account: "a person's sign-in methods",
+      verification: "short-lived tokens; agents' pending codes are deleted by agent id",
+      two_factor: "a person's second factor",
+      rate_limit: "counters by address or person",
+      jwks: "the server's signing keys",
+      oauth_client: "registered clients, shared by every workspace; pruned when unused (`reference_id` is unused: create-client is off)",
+      oauth_resource: "MCP URLs; a workspace's own is deleted by its slug",
+      oauth_client_resource: "goes with its client or resource",
+      oauth_client_assertion: "replay guard for client assertions",
+      push_devices: "a person's devices; they stop hearing about the workspace once its mutes and deliveries go",
+      usage_rollup_state: "one row of rollup progress",
+    };
+    const all = (Object.values(schema) as unknown[]).filter((value): value is PgTable => is(value, PgTable)).map((table) => getTableConfig(table));
+    for (const config of all) {
+      const known = covered.has(config.name) || kept.has(config.name) || agentKeyed.has(config.name) || config.name in OTHER_TABLES;
+      expect(known, `${config.name} is new: add it to WORKSPACE_TABLES, KEPT_AFTER_DELETION or AGENT_KEYED_TABLES, or say here why a workspace does not own its rows`).toBe(true);
+      // A column that names a workspace or an agent is a sign the table belongs with the deletion.
+      const columns = config.columns.map((column) => column.name);
+      const naming = columns.filter((column) => ["tenant_id", "organization_id", "workspace_id"].includes(column) || column === "agent_id" || column.endsWith("_agent_id"));
+      if (naming.length) expect(covered.has(config.name) || kept.has(config.name), `${config.name} has ${naming.join(", ")}`).toBe(true);
+      if (columns.includes("reference_id")) expect(agentKeyed.has(config.name) || config.name === "oauth_client", `${config.name} has reference_id`).toBe(true);
+    }
+  });
+
   it("removes the workspace's own MCP resource and leaves the shared one", async () => {
     const acme = await seedWorkspace(shared.db);
     const resource = (path: string) => ({ id: randomUUID(), identifier: `http://localhost:3200${path}`, name: path, createdAt: new Date(), updatedAt: new Date() });
@@ -272,7 +344,7 @@ describe("who may delete a workspace, and how they prove it", () => {
   it("checks the owner's password on the server, and locks after too many wrong ones", async () => {
     const acme = await connectOAuthAgent(shared.db, server, "acme");
     const reauth = reauthWith(server.auth, shared.db);
-    const proof = { reauth, sessionCreatedAt: new Date() };
+    const proof = { reauth, signedInAt: new Date() };
     await expect(deleteWorkspace(acme.ctx, { confirm: "acme" }, proof)).rejects.toMatchObject({ code: "invalid", message: expect.stringContaining("password") });
     for (let attempt = 0; attempt < REAUTH_MAX_FAILURES; attempt += 1) {
       await expect(deleteWorkspace(acme.ctx, { confirm: "acme", password: "wrong-horse-battery" }, proof)).rejects.toMatchObject({ code: "forbidden", message: "That password is not right." });
@@ -291,7 +363,7 @@ describe("who may delete a workspace, and how they prove it", () => {
     const verified = await server.auth.handler(jsonPost(`${server.baseUrl}/api/auth/two-factor/verify-totp`, { code: totpCode(totpURI) }, { cookie: acme.cookie, origin: server.baseUrl }));
     expect(verified.status).toBe(200);
 
-    const proof = { reauth: reauthWith(server.auth, shared.db), sessionCreatedAt: new Date() };
+    const proof = { reauth: reauthWith(server.auth, shared.db), signedInAt: new Date() };
     await expect(deleteWorkspace(acme.ctx, { confirm: "acme", password: PASSWORD }, proof)).rejects.toMatchObject({ code: "invalid", message: expect.stringContaining("6-digit code") });
     const wrong = String((Number(totpCode(totpURI)) + 500_000) % 1_000_000).padStart(6, "0");
     await expect(deleteWorkspace(acme.ctx, { confirm: "acme", password: PASSWORD, code: wrong }, proof)).rejects.toMatchObject({ code: "forbidden" });
@@ -304,10 +376,73 @@ describe("who may delete a workspace, and how they prove it", () => {
 
   it("asks someone without a password for a recent sign-in instead", async () => {
     const acme = await seedWorkspace(shared.db);
-    const proof = (minutesAgo: number) => ({ reauth: reauthWith(server.auth, shared.db), sessionCreatedAt: new Date(Date.now() - minutesAgo * 60_000) });
+    const proof = (minutesAgo: number) => ({ reauth: reauthWith(server.auth, shared.db), signedInAt: new Date(Date.now() - minutesAgo * 60_000) });
     await expect(deleteWorkspace(acme.human, { confirm: acme.tenant.name }, proof(RECENT_SIGN_IN_MINUTES + 1))).rejects.toMatchObject({ code: "forbidden", message: expect.stringContaining("sign in again") });
     expect(isRecentSignIn(new Date(Date.now() - 60_000), new Date())).toBe(true);
     await expect(deleteWorkspace(acme.human, { confirm: acme.tenant.name }, proof(1))).resolves.toMatchObject({ id: acme.tenant.id });
+  });
+
+  it("counts password attempts before checking them, so attempts made at once cannot get past the limit", async () => {
+    const acme = await connectOAuthAgent(shared.db, server, "acme");
+    const proof = { reauth: reauthWith(server.auth, shared.db), signedInAt: new Date() };
+    const attempts = await Promise.allSettled(Array.from({ length: 12 }, () => deleteWorkspace(acme.ctx, { confirm: "acme", password: "wrong-horse-battery" }, proof)));
+    const reasons = attempts.map((attempt) => (attempt.status === "rejected" ? (attempt.reason as Error).message : "deleted"));
+    expect(reasons.filter((reason) => reason === "That password is not right.").length).toBeLessThanOrEqual(REAUTH_MAX_FAILURES);
+    expect(reasons.filter((reason) => reason.startsWith("Too many")).length).toBeGreaterThanOrEqual(12 - REAUTH_MAX_FAILURES);
+    await expect(deleteWorkspace(acme.ctx, { confirm: "acme", password: PASSWORD }, proof)).rejects.toMatchObject({ message: expect.stringContaining("Too many") });
+    expect(await shared.db.select().from(organization).where(eq(organization.id, acme.tenant.id))).toHaveLength(1);
+  });
+
+  it("limits delete attempts per client address, whoever is signed in", async () => {
+    const address = `203.0.113.${Math.floor(Math.random() * 250)}-${randomUUID()}`;
+    const acme = await seedWorkspace(shared.db);
+    for (let attempt = 0; attempt < DELETE_ATTEMPTS_PER_ADDRESS.max; attempt += 1) {
+      await expect(deleteWorkspace(acme.human, { confirm: "not it" }, freshProof(trustingReauth, { clientAddress: address }))).rejects.toMatchObject({ code: "invalid" });
+    }
+    const other = await seedWorkspace(shared.db);
+    await expect(deleteWorkspace(other.human, { confirm: other.tenant.name }, freshProof(trustingReauth, { clientAddress: address }))).rejects.toMatchObject({
+      code: "forbidden",
+      message: expect.stringContaining("Too many attempts"),
+    });
+    await expect(deleteWorkspace(other.human, { confirm: other.tenant.name }, freshProof(trustingReauth, { clientAddress: `${address}-elsewhere` }))).resolves.toMatchObject({ id: other.tenant.id });
+  });
+
+  it("takes an authenticator code once, starts the count afresh when a lock runs out, and takes a backup code through the plugin", async () => {
+    const acme = await connectOAuthAgent(shared.db, server, "acme");
+    const { uri, backupCodes, cookie } = await withTwoFactor(acme);
+    const userId = acme.person.id;
+    const reauth = reauthWith(server.auth, shared.db, { headers: new Headers({ cookie, origin: server.baseUrl }) });
+
+    // The next step's code: the one the enabling step used is already spent.
+    const code = totpCode(uri, { stepOffset: 1 });
+    expect(await reauth.verifySecondFactor(userId, code)).toBe(true);
+    expect(await reauth.verifySecondFactor(userId, code)).toBe(false);
+
+    // A lock that ran out: the next wrong code is the first of a new count, not the tenth.
+    await shared.db.update(twoFactor).set({ failedVerificationCount: 9, lockedUntil: new Date(Date.now() - 1000) }).where(eq(twoFactor.userId, userId));
+    expect(await reauth.verifySecondFactor(userId, "000000" === code ? "111111" : "000000")).toBe(false);
+    const [row] = await shared.db.select({ failures: twoFactor.failedVerificationCount, lockedUntil: twoFactor.lockedUntil }).from(twoFactor).where(eq(twoFactor.userId, userId));
+    expect(row).toEqual({ failures: 1, lockedUntil: null });
+
+    // A backup code works once, through the plugin; without the person's session it is refused.
+    expect(await reauthWith(server.auth, shared.db).verifySecondFactor(userId, backupCodes[0]!)).toBe(false);
+    expect(await reauth.verifySecondFactor(userId, backupCodes[0]!)).toBe(true);
+    expect(await reauth.verifySecondFactor(userId, backupCodes[0]!)).toBe(false);
+    await expect(deleteWorkspace(acme.ctx, { confirm: "acme", password: PASSWORD, code: backupCodes[1]! }, { reauth, signedInAt: null })).resolves.toMatchObject({ id: acme.tenant.id });
+  });
+
+  it("locks the owner's membership row while it deletes", async () => {
+    const client = new PGlite();
+    await migratePgliteClient(client);
+    const queries: string[] = [];
+    const db = drizzle(client, { schema, logger: { logQuery: (query) => void queries.push(query) } }) as unknown as Db;
+    try {
+      const acme = await seedWorkspace(db);
+      await deleteWorkspace(acme.human, { confirm: acme.tenant.name }, freshProof());
+      expect(queries.some((query) => /from "member".* for update of "member"/is.test(query))).toBe(true);
+    } finally {
+      await client.close();
+    }
   });
 
   it("refuses Better Auth's own organization delete endpoint, which would skip all of this", async () => {
@@ -318,3 +453,92 @@ describe("who may delete a workspace, and how they prove it", () => {
   });
 });
 
+
+/** Turns two-factor on for a connected owner through the real endpoints; returns the session cookie after the plugin rotates it. */
+async function withTwoFactor(acme: Connected): Promise<{ uri: string; backupCodes: string[]; cookie: string }> {
+  const enabled = await server.auth.handler(jsonPost(`${server.baseUrl}/api/auth/two-factor/enable`, { password: PASSWORD }, { cookie: acme.cookie, origin: server.baseUrl }));
+  expect(enabled.status).toBe(200);
+  const { totpURI: uri, backupCodes } = (await enabled.json()) as { totpURI: string; backupCodes: string[] };
+  const verified = await server.auth.handler(jsonPost(`${server.baseUrl}/api/auth/two-factor/verify-totp`, { code: totpCode(uri) }, { cookie: acme.cookie, origin: server.baseUrl }));
+  expect(verified.status).toBe(200);
+  const jar = new Map(acme.cookie.split("; ").map((pair) => [pair.slice(0, pair.indexOf("=")), pair.slice(pair.indexOf("=") + 1)] as const));
+  for (const line of verified.headers.getSetCookie()) {
+    const pair = line.split(";")[0]!;
+    jar.set(pair.slice(0, pair.indexOf("=")), pair.slice(pair.indexOf("=") + 1));
+  }
+  return { uri, backupCodes, cookie: [...jar].map(([name, value]) => `${name}=${value}`).join("; ") };
+}
+
+describe("migration 0024", () => {
+  it("runs again over its own table, column and index, as a preview sharing the database may have run it first", async () => {
+    const statements = readFileSync(new URL("../drizzle/0024_workspace_deletions.sql", import.meta.url), "utf8").split("--> statement-breakpoint");
+    for (const statement of statements) await shared.db.execute(sql.raw(statement));
+    const acme = await seedWorkspace(shared.db);
+    await expect(deleteWorkspace(acme.human, { confirm: acme.tenant.name }, freshProof())).resolves.toMatchObject({ id: acme.tenant.id });
+  });
+});
+
+describe("deleting a deleted workspace's files", () => {
+  /** A store that remembers what it was asked to delete, and fails for the tenants in `failing`. */
+  function fakeStores(failing: Set<string>) {
+    const deleted: string[] = [];
+    const storeFor: BlobStoreFor = (_db, tenantId) =>
+      ({
+        driver: "vercel-blob",
+        put: async () => undefined,
+        get: async () => null,
+        delete: async () => undefined,
+        deletePrefix: async (prefix: string) => {
+          if (failing.has(tenantId)) throw new Error("the store is down");
+          deleted.push(prefix);
+        },
+      }) satisfies BlobStore;
+    return { deleted, storeFor };
+  }
+
+  const pending = async (db: Db, tenantId: string, attemptedAt: Date | null) => {
+    const [row] = await db
+      .insert(workspaceDeletions)
+      .values({ tenantId, name: "Gone", slug: "gone", deletedByUserId: "u", deletedByEmail: "u@example.com", deletedByName: "U", counts: {}, blobsAttemptedAt: attemptedAt })
+      .returning({ id: workspaceDeletions.id });
+    return row!.id;
+  };
+  const rowOf = async (db: Db, id: number) => (await db.select().from(workspaceDeletions).where(eq(workspaceDeletions.id, id)))[0]!;
+
+  it("deletes by the tenant's prefix, notes each try, and leaves a failure for the tick", async () => {
+    const testDb = await createTestDb();
+    try {
+      const failing = new Set(["t-down"]);
+      const { deleted, storeFor } = fakeStores(failing);
+      const down = await pending(testDb.db, "t-down", null);
+      expect(await clearWorkspaceBlobs(testDb.db, "t-down", down, storeFor)).toBe(false);
+      expect(await rowOf(testDb.db, down)).toMatchObject({ blobsClearedAt: null, blobsAttemptedAt: expect.any(Date) });
+
+      failing.clear();
+      expect(await clearWorkspaceBlobs(testDb.db, "t-down", down, storeFor)).toBe(true);
+      expect(deleted).toEqual(["tenants/t-down/"]);
+      expect((await rowOf(testDb.db, down)).blobsClearedAt).toBeInstanceOf(Date);
+    } finally {
+      await testDb.close();
+    }
+  });
+
+  it("retries the least recently tried first, so one that keeps failing cannot starve the rest", async () => {
+    const testDb = await createTestDb();
+    try {
+      const { deleted, storeFor } = fakeStores(new Set(["t-stuck"]));
+      // The older row was just tried and keeps failing; the newer one was never tried.
+      const stuck = await pending(testDb.db, "t-stuck", new Date());
+      const waiting = await pending(testDb.db, "t-waiting", null);
+      expect(stuck).toBeLessThan(waiting);
+      expect(await clearPendingWorkspaceBlobs(testDb.db, { limit: 1, storeFor })).toBe(1);
+      expect(deleted).toEqual(["tenants/t-waiting/"]);
+      expect((await rowOf(testDb.db, waiting)).blobsClearedAt).toBeInstanceOf(Date);
+      // Next tick: only the stuck one is left; it is tried, fails, and stays.
+      expect(await clearPendingWorkspaceBlobs(testDb.db, { limit: 1, storeFor })).toBe(0);
+      expect((await rowOf(testDb.db, stuck)).blobsClearedAt).toBeNull();
+    } finally {
+      await testDb.close();
+    }
+  });
+});

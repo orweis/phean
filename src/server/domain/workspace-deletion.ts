@@ -1,4 +1,4 @@
-import { and, count, eq, inArray, isNull, like, ne, sql } from "drizzle-orm";
+import { and, asc, count, eq, inArray, isNull, like, ne, sql } from "drizzle-orm";
 import type { PgColumn, PgTable } from "drizzle-orm/pg-core";
 import type { z } from "zod";
 
@@ -44,7 +44,8 @@ import {
 } from "../db/schema";
 import type { Email, SendEmail } from "../digest/email";
 import { renderWorkspaceDeletedEmail } from "../digest/workspace-deleted";
-import { blobStore, tenantKeyPrefix } from "../storage/blobs";
+import { withinRateLimit } from "../rate-limit";
+import { blobStore, tenantKeyPrefix, type BlobStore } from "../storage/blobs";
 import { inTenant, inTransaction, onCommit, type Ctx } from "./context";
 import { forbidden, invalid, notFound } from "./errors";
 import { assertCan } from "./policy";
@@ -91,6 +92,14 @@ export const WORKSPACE_TABLES: readonly { table: PgTable; column: PgColumn }[] =
  * the backoffice's audit trail and the deletion record itself.
  */
 export const KEPT_AFTER_DELETION: readonly PgTable[] = [backofficeAudit, workspaceDeletions];
+
+/**
+ * Better Auth's OAuth rows that belong to one of the workspace's agents: their `reference_id` is the
+ * agent's id (the consent's `consentReferenceId`, carried onto the tokens). Deleted by agent id, with
+ * the authorization codes still waiting in `verification`. The test fails for a new table with a
+ * `reference_id` that is neither here nor explained in its list of tables that are not the workspace's.
+ */
+export const AGENT_KEYED_TABLES = [oauthAccessToken, oauthRefreshToken, oauthConsent] as const;
 
 /** How many of each thing the workspace holds: the Danger zone's list, and the deletion record's. */
 async function countWorkspace(ctx: Ctx): Promise<DeletionCounts> {
@@ -144,15 +153,27 @@ export interface Reauth {
   factors(userId: string): Promise<{ password: boolean; twoFactor: boolean }>;
   /** Whether this is their password. Throws a forbidden error while too many wrong ones lock it. */
   verifyPassword(userId: string, password: string): Promise<boolean>;
-  /** Whether this is their authenticator's current code. Throws while two-factor is locked. */
-  verifyTotp(userId: string, code: string): Promise<boolean>;
+  /**
+   * Whether this is a two-factor code of theirs: the authenticator's current code (each accepted once),
+   * or one of their backup codes (used up). Throws while two-factor is locked.
+   */
+  verifySecondFactor(userId: string, code: string): Promise<boolean>;
 }
+
+/** Delete attempts one client address may make in a window, whoever is signed in: the brake on guessing across accounts. */
+export const DELETE_ATTEMPTS_PER_ADDRESS = { window: 10 * 60, max: 10 };
 
 /** What only the adapter knows, never the form: how to check the person's factors, and their session. */
 export interface DeletionProof {
   reauth: Reauth;
-  /** When the session the request arrived on was made: a sign-in, for people without a password. */
-  sessionCreatedAt: Date;
+  /**
+   * When the person last signed in, as the session records it (`session.signedInAt`, carried over
+   * from the parent session on rotation and the desktop handoff, never the session's own creation):
+   * the proof for people without a password. Null when unknown.
+   */
+  signedInAt: Date | null;
+  /** The request's client address, for `DELETE_ATTEMPTS_PER_ADDRESS`. */
+  clientAddress?: string;
   /** Emails the other members, when this deployment sends email. */
   send?: SendEmail | null;
   baseUrl?: string;
@@ -176,13 +197,15 @@ async function assertReauthenticated(ctx: Ctx, input: z.output<typeof DeleteWork
     if (!input.password) throw invalid("Enter your password to confirm it is you.");
     if (!(await proof.reauth.verifyPassword(ctx.actor.id, input.password))) throw forbidden("That password is not right.");
   } else {
-    if (!isRecentSignIn(proof.sessionCreatedAt, proof.now ?? new Date())) {
+    if (!proof.signedInAt || !isRecentSignIn(proof.signedInAt, proof.now ?? new Date())) {
       throw forbidden(`Sign out and sign in again to confirm it is you, then delete within ${RECENT_SIGN_IN_MINUTES} minutes.`);
     }
   }
   if (twoFactor) {
-    if (!input.code) throw invalid("Enter the 6-digit code from your authenticator app.");
-    if (!(await proof.reauth.verifyTotp(ctx.actor.id, input.code))) throw forbidden("That code is not right. Codes change every 30 seconds.");
+    if (!input.code) throw invalid("Enter the 6-digit code from your authenticator app, or a backup code.");
+    if (!(await proof.reauth.verifySecondFactor(ctx.actor.id, input.code))) {
+      throw forbidden("That code is not right. Codes change every 30 seconds, and each works once.");
+    }
   }
 }
 
@@ -205,6 +228,9 @@ export const deleteWorkspace = Object.assign(
     assertCan(ctx, "workspace:delete");
     // The matrix keeps it from every agent level already; this says so for any role added later.
     if (ctx.actor.type !== "user") throw forbidden("Only the workspace's owner can delete it, in the Phean web app.");
+    if (proof.clientAddress && !(await withinRateLimit(ctx.db, `workspace-delete:${proof.clientAddress}`, DELETE_ATTEMPTS_PER_ADDRESS))) {
+      throw forbidden("Too many attempts to delete a workspace from here. Try again in a few minutes.");
+    }
     await assertReauthenticated(ctx, input, proof);
 
     const deleted = await inTransaction(ctx, async (tx) => {
@@ -219,7 +245,8 @@ export const deleteWorkspace = Object.assign(
         .select({ email: user.email })
         .from(member)
         .innerJoin(user, eq(user.id, member.userId))
-        .where(and(eq(member.organizationId, workspace.id), eq(member.userId, tx.actor.id), eq(member.role, "owner")));
+        .where(and(eq(member.organizationId, workspace.id), eq(member.userId, tx.actor.id), eq(member.role, "owner")))
+        .for("update", { of: member });
       if (!owner) throw forbidden("Only the workspace's owner can delete it.");
 
       const counts = await countWorkspace(tx);
@@ -248,9 +275,7 @@ export const deleteWorkspace = Object.assign(
       // codes not redeemed yet. Access tokens stop anyway, since /mcp reads the agent's row.
       const agentIds = (await tx.db.select({ id: agents.id }).from(agents).where(inTenant(tx, agents))).map((row) => row.id);
       if (agentIds.length) {
-        await tx.db.delete(oauthAccessToken).where(inArray(oauthAccessToken.referenceId, agentIds));
-        await tx.db.delete(oauthRefreshToken).where(inArray(oauthRefreshToken.referenceId, agentIds));
-        await tx.db.delete(oauthConsent).where(inArray(oauthConsent.referenceId, agentIds));
+        for (const table of AGENT_KEYED_TABLES) await tx.db.delete(table).where(inArray(table.referenceId, agentIds));
         await tx.db.delete(verification).where(pendingCodesFor(agentIds));
       }
       // The workspace's own MCP URL, registered as a resource the first time a client asked for it.
@@ -276,10 +301,18 @@ export const deleteWorkspace = Object.assign(
   { schema: DeleteWorkspaceInput },
 );
 
-/** Deletes a deleted workspace's files from the blob store and notes it done; on failure it stays for the tick to retry. */
-export async function clearWorkspaceBlobs(db: Db, tenantId: string, deletionId: number): Promise<boolean> {
+/** Which store a deleted workspace's files are in; tests hand in a fake. */
+export type BlobStoreFor = (db: Db, tenantId: string) => BlobStore;
+const defaultStoreFor: BlobStoreFor = (db, tenantId) => blobStore({ db, tenant: { id: tenantId } });
+
+/**
+ * Deletes a deleted workspace's files from the blob store and notes it done. Every try is noted
+ * (`blobs_attempted_at`), so the tick retries the longest-waiting first; on failure it stays for it.
+ */
+export async function clearWorkspaceBlobs(db: Db, tenantId: string, deletionId: number, storeFor: BlobStoreFor = defaultStoreFor): Promise<boolean> {
   try {
-    await blobStore({ db, tenant: { id: tenantId } }).deletePrefix(tenantKeyPrefix(tenantId));
+    await db.update(workspaceDeletions).set({ blobsAttemptedAt: new Date() }).where(eq(workspaceDeletions.id, deletionId));
+    await storeFor(db, tenantId).deletePrefix(tenantKeyPrefix(tenantId));
     await db.update(workspaceDeletions).set({ blobsClearedAt: new Date() }).where(eq(workspaceDeletions.id, deletionId));
     return true;
   } catch (error) {
@@ -288,16 +321,20 @@ export async function clearWorkspaceBlobs(db: Db, tenantId: string, deletionId: 
   }
 }
 
-/** The pipelines tick: retries the files of deleted workspaces that the deletion could not clear. */
-export async function clearPendingWorkspaceBlobs(db: Db, limit = 5): Promise<number> {
+/**
+ * The pipelines tick: retries the files of deleted workspaces that the deletion could not clear, the
+ * least recently tried first (never tried before anything), so one that keeps failing cannot hold
+ * back the ones after it.
+ */
+export async function clearPendingWorkspaceBlobs(db: Db, { limit = 5, storeFor = defaultStoreFor }: { limit?: number; storeFor?: BlobStoreFor } = {}): Promise<number> {
   const pending = await db
     .select({ id: workspaceDeletions.id, tenantId: workspaceDeletions.tenantId })
     .from(workspaceDeletions)
     .where(isNull(workspaceDeletions.blobsClearedAt))
-    .orderBy(workspaceDeletions.id)
+    .orderBy(sql`${workspaceDeletions.blobsAttemptedAt} asc nulls first`, asc(workspaceDeletions.id))
     .limit(limit);
   let cleared = 0;
-  for (const row of pending) if (await clearWorkspaceBlobs(db, row.tenantId, row.id)) cleared += 1;
+  for (const row of pending) if (await clearWorkspaceBlobs(db, row.tenantId, row.id, storeFor)) cleared += 1;
   return cleared;
 }
 

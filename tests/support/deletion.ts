@@ -31,10 +31,10 @@ export async function workspaceRows(db: Db, tenantId: string): Promise<Record<st
 export const trustingReauth: Reauth = {
   factors: async () => ({ password: false, twoFactor: false }),
   verifyPassword: async () => true,
-  verifyTotp: async () => true,
+  verifySecondFactor: async () => true,
 };
 
 /** A proof from a session made just now, with `reauth` (trusting by default). */
 export function freshProof(reauth: Reauth = trustingReauth, extra: Partial<DeletionProof> = {}): DeletionProof {
-  return { reauth, sessionCreatedAt: new Date(), ...extra };
+  return { reauth, signedInAt: new Date(), ...extra };
 }

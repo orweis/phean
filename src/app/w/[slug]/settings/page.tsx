@@ -14,6 +14,12 @@ import { workspaceInventory } from "@/server/domain/workspace-deletion";
 
 export const metadata: Metadata = { title: "Settings" };
 
+/**
+ * Deleting a workspace (this page's action) is one transaction, so a big workspace gets five minutes
+ * rather than the default. Cut short, the transaction rolls back and the workspace is as it was.
+ */
+export const maxDuration = 300;
+
 export default async function SettingsPage({ params }: PageProps<"/w/[slug]/settings">) {
   const { slug } = await params;
   const { ctx } = await requireWorkspace(slug);
@@ -51,7 +57,8 @@ async function DangerZone({ slug, name, counts }: { slug: string; name: string; 
   const [signedIn, accounts] = await Promise.all([getSession(), auth.api.listUserAccounts({ headers: await headers() })]);
   const hasPassword = accounts.some((account) => account.providerId === "credential");
   const twoFactor = Boolean((signedIn?.user as { twoFactorEnabled?: boolean | null } | undefined)?.twoFactorEnabled);
-  const recentSignIn = signedIn ? isRecentSignIn(new Date(signedIn.session.createdAt), new Date()) : false;
+  const signedInAt = signedIn?.session.signedInAt;
+  const recentSignIn = signedInAt ? isRecentSignIn(new Date(signedInAt), new Date()) : false;
   return (
     <Card tone="late" className="mt-6 max-w-4xl" aria-labelledby="danger-zone">
       <CardHeader title={<span id="danger-zone">Danger zone</span>} tone="late" />

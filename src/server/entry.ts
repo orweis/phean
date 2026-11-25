@@ -3,6 +3,7 @@ import "server-only";
 import { appUrl, emailConfig } from "./config";
 import { auth, workspaceResourceMetadata } from "./auth/auth";
 import { reauthWith } from "./auth/reauth";
+import { clientAddressOf } from "./rate-limit";
 import { visibleWorkspaces, type Viewer } from "./auth/session";
 import { getDb } from "./db/client";
 import { sendEmail } from "./digest/email";
@@ -78,11 +79,18 @@ export const clearDeletedWorkspaceFilesNow = (): Promise<number> => clearPending
 
 /**
  * What deleting a workspace checks beyond its form: the person's sign-in factors, against Better
- * Auth's records on the shared connection, and when their session was made. Emails the other
- * members when this deployment sends email.
+ * Auth's records on the shared connection (a backup code through the plugin, with the request's
+ * headers), when they last signed in, and the client's address for the per-address limit. Emails
+ * the other members when this deployment sends email.
  */
-export function workspaceDeletionProof(sessionCreatedAt: Date): DeletionProof {
-  return { reauth: reauthWith(auth, getDb()), sessionCreatedAt, send: emailConfig() ? sendEmail : null, baseUrl: appUrl() };
+export function workspaceDeletionProof({ signedInAt, headers }: { signedInAt: Date | null; headers: Headers }): DeletionProof {
+  return {
+    reauth: reauthWith(auth, getDb(), { headers }),
+    signedInAt,
+    clientAddress: clientAddressOf(headers),
+    send: emailConfig() ? sendEmail : null,
+    baseUrl: appUrl(),
+  };
 }
 
 /** A pipeline's inbound webhook, on the shared connection. */

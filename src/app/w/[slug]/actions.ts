@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 import type { ActionState } from "@/lib/action-state";
@@ -164,7 +164,8 @@ export async function deleteWorkspaceAction(_previous: ActionState, formData: Fo
   const { ctx } = await requireWorkspace(slug);
   const signedIn = await getSession();
   if (!signedIn) redirect(routes.signIn());
-  const proof = workspaceDeletionProof(new Date(signedIn.session.createdAt));
+  const signedInAt = signedIn.session.signedInAt ? new Date(signedIn.session.signedInAt) : null;
+  const proof = workspaceDeletionProof({ signedInAt, headers: await headers() });
   const result = await attempt(() => deleteWorkspace(ctx, formToInput(formData, deleteWorkspace.schema) as Parameters<typeof deleteWorkspace>[1], proof));
   if (!result.ok) return result.state;
 

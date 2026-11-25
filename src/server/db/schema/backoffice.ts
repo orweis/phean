@@ -109,6 +109,8 @@ export const workspaceDeletions = pgTable(
      * where the bytes live in Postgres, otherwise after commit, retried by the pipelines tick.
      */
     blobsClearedAt: timestampTz("blobs_cleared_at"),
+    /** When clearing its files was last tried, so the tick retries the longest-waiting first and a failing one cannot starve the rest. */
+    blobsAttemptedAt: timestampTz("blobs_attempted_at"),
   },
   (t) => [index("workspace_deletions_at_idx").on(t.at.desc())],
 );
