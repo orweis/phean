@@ -1,9 +1,13 @@
 import "server-only";
 
+import { appUrl, emailConfig } from "./config";
 import { auth, workspaceResourceMetadata } from "./auth/auth";
+import { reauthWith } from "./auth/reauth";
 import { visibleWorkspaces, type Viewer } from "./auth/session";
 import { getDb } from "./db/client";
+import { sendEmail } from "./digest/email";
 import { sendDueDigests, type DigestRunReport } from "./digest/send";
+import { clearPendingWorkspaceBlobs, type DeletionProof } from "./domain/workspace-deletion";
 import { personContext, type PersonCtx } from "./domain/context";
 import { getWorkspaceOverviews, findInvitation, type InvitationView, type WorkspaceOverview } from "./domain/tenants";
 import { createPheanMcpHandler } from "./mcp/handler";
@@ -68,6 +72,18 @@ export const workspaceMcpMetadata = () => workspaceResourceMetadata(auth, getDb)
 
 /** The cron run that applies pipelines' time limits and starts the runs their schedules call for. */
 export const sweepPipelinesNow = (): Promise<SweepReport> => sweepPipelines(getDb());
+
+/** Retries deleting deleted workspaces' files from the blob store (from the pipelines tick). */
+export const clearDeletedWorkspaceFilesNow = (): Promise<number> => clearPendingWorkspaceBlobs(getDb());
+
+/**
+ * What deleting a workspace checks beyond its form: the person's sign-in factors, against Better
+ * Auth's records on the shared connection, and when their session was made. Emails the other
+ * members when this deployment sends email.
+ */
+export function workspaceDeletionProof(sessionCreatedAt: Date): DeletionProof {
+  return { reauth: reauthWith(auth, getDb()), sessionCreatedAt, send: emailConfig() ? sendEmail : null, baseUrl: appUrl() };
+}
 
 /** A pipeline's inbound webhook, on the shared connection. */
 export const pipelineTrigger = (request: Request, pipelineId: string): Promise<Response> => handlePipelineTrigger(request, { db: getDb(), pipelineId });

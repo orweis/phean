@@ -142,6 +142,9 @@ export function createAuth(database: Db, baseUrl: string) {
       // so no email delivery is configured.
       organization({
         creatorRole: "owner",
+        // Deleting a workspace is Phean's own service (`deleteWorkspace`): the owner re-authenticates,
+        // and it clears what the plugin does not know about (agents' tokens, files, the deletion record).
+        disableOrganizationDeletion: true,
         invitationExpiresIn: SEVEN_DAYS_IN_SECONDS,
         // The plugin writes the workspace and its owner without a transaction, so both are durable here.
         organizationHooks: {

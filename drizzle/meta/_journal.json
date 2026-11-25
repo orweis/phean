@@ -169,6 +169,13 @@
       "when": 1795601052690,
       "tag": "0023_run_names_handoff_retries",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1795615645006,
+      "tag": "0024_workspace_deletions",
+      "breakpoints": true
     }
   ]
 }

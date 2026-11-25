@@ -20,6 +20,7 @@ export const ACTIONS = [
   "notify:subscribe",
   "pipeline:write",
   "pipeline:manage",
+  "workspace:delete",
 ] as const;
 export type Action = (typeof ACTIONS)[number];
 
@@ -33,12 +34,18 @@ export type PolicyRole = "owner" | "admin" | "member" | "platform_admin" | "agen
 const CONTRIBUTE: readonly Action[] = ["workspace:read", "goal:write", "task:write", "memory:write", "document:write", "pipeline:write"];
 
 /**
+ * Admins hold everything but deleting the workspace, which is its owner's alone (and a person's:
+ * no agent level holds it, and it needs a fresh sign-in proof besides, see `deleteWorkspace`).
+ */
+const ADMIN: readonly Action[] = ACTIONS.filter((action) => action !== "workspace:delete");
+
+/**
  * The whole authorization model. `goal:decide` (approve, achieve, abandon) is human-only:
  * this is the server-side enforcement of "the agent proposes, the human disposes".
  */
 export const PERMISSIONS: Record<PolicyRole, readonly Action[]> = {
   owner: ACTIONS,
-  admin: ACTIONS,
+  admin: ADMIN,
   // Members approve agents they connect, up to Write.
   member: [...CONTRIBUTE, "goal:decide", "agent:connect", "digest:subscribe", "notify:subscribe"],
   // A Read agent only looks. A Write agent registers its own webhook and issues tokens for its own
