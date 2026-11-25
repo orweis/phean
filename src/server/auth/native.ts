@@ -82,6 +82,8 @@ interface StoredCode {
   requestId: string;
   userId: string;
   codeChallenge: string;
+  /** The confirming session's sign-in time, which the desktop's session carries over (never "now"). */
+  signedInAt: string | null;
 }
 
 /** The parts of Better Auth's internal adapter this file uses: its `verification` table. */
@@ -181,7 +183,9 @@ export function nativeSignIn() {
         }
         const user = await ctx.context.internalAdapter.findUserById(stored.userId);
         if (!user) throw new APIError("BAD_REQUEST", { error: "invalid_grant" });
-        const session = await ctx.context.internalAdapter.createSession(user.id, false, { userAgent: NATIVE_USER_AGENT });
+        // The browser session's sign-in time, not this moment: a handoff is not a sign-in (signed-in-at.ts).
+        const signedInAt = stored.signedInAt ? new Date(stored.signedInAt) : null;
+        const session = await ctx.context.internalAdapter.createSession(user.id, false, { userAgent: NATIVE_USER_AGENT, signedInAt });
         await setSessionCookie(ctx, { session, user });
         console.info(`[auth] desktop session minted for user ${user.id}`);
         ctx.setHeader("cache-control", "no-store");
@@ -213,7 +217,10 @@ export async function findNativeRequest(provider: Auth, requestId: string): Prom
  * the user and the challenge. Returns the loopback address to send the browser to, or null when the
  * request is unknown, expired or already used.
  */
-export async function decideNativeRequest(provider: Auth, { requestId, userId, allow }: { requestId: string; userId: string; allow: boolean }): Promise<string | null> {
+export async function decideNativeRequest(
+  provider: Auth,
+  { requestId, userId, allow, signedInAt = null }: { requestId: string; userId: string; allow: boolean; signedInAt?: Date | string | null },
+): Promise<string | null> {
   if (!REQUEST_ID.test(requestId)) return null;
   const store = await verificationStore(provider);
   const record = await store.consumeVerificationValue(`${REQUEST_PREFIX}${requestId}`);
@@ -227,7 +234,7 @@ export async function decideNativeRequest(provider: Auth, { requestId, userId, a
     return callback.toString();
   }
   const code = randomBytes(32).toString("base64url");
-  const bound: StoredCode = { requestId, userId, codeChallenge: stored.codeChallenge };
+  const bound: StoredCode = { requestId, userId, codeChallenge: stored.codeChallenge, signedInAt: signedInAt ? new Date(signedInAt).toISOString() : null };
   await store.createVerificationValue({ identifier: `${CODE_PREFIX}${sha256(code)}`, value: JSON.stringify(bound), expiresAt: later(NATIVE_CODE_SECONDS) });
   callback.searchParams.set("code", code);
   callback.searchParams.set("state", stored.state);
@@ -256,7 +263,7 @@ export function nativeConfirmRoute(provider: Auth, baseUrl: string): (request: R
     const session = await provider.api.getSession({ headers: request.headers });
     if (!session) return see(new URL(routes.signIn(routes.nativeAuthorize(requestId)), baseUrl).toString());
     const allow = form?.get("decision") === "allow";
-    const target = await decideNativeRequest(provider, { requestId, userId: session.user.id, allow });
+    const target = await decideNativeRequest(provider, { requestId, userId: session.user.id, allow, signedInAt: session.session.signedInAt ?? null });
     return see(target ?? back);
   };
 }

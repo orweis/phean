@@ -1,14 +1,17 @@
-import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
+import { createHash, timingSafeEqual } from "node:crypto";
 
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 
 import type { Db } from "../db/client";
-import { organization, pipelineTriggers, rateLimit } from "../db/schema";
+import { organization, pipelineTriggers } from "../db/schema";
 import { isDomainError } from "../domain/errors";
 import { beginRun, systemContext } from "../domain/pipeline-engine";
 import { RunOptionsInput } from "../domain/schemas";
 import { parseInput } from "../domain/service";
+import { clientAddressOf, withinRateLimit } from "../rate-limit";
+
+export { withinRateLimit };
 
 /** Calls one client may make to one pipeline's trigger in a window, like the other public endpoints. */
 export const PIPELINE_TRIGGER_LIMIT = { window: 60, max: 30 };
@@ -22,28 +25,8 @@ const TriggerBody = z.object({ inputs: RunOptionsInput.shape.inputs, name: RunOp
 const json = (status: number, body: Record<string, unknown>, headers: Record<string, string> = {}) =>
   Response.json(body, { status, headers: { "Cache-Control": "no-store", ...headers } });
 
-/**
- * Counts a call against a fixed window in the shared `rate_limit` table (the one Better Auth keeps
- * its counters in, under keys of its own): true while the caller is within `max` calls a window.
- */
-export async function withinRateLimit(db: Db, key: string, { window, max }: { window: number; max: number }, now = Date.now()): Promise<boolean> {
-  const windowStart = now - window * 1000;
-  const [row] = await db
-    .insert(rateLimit)
-    .values({ id: randomUUID(), key, count: 1, lastRequest: now })
-    .onConflictDoUpdate({
-      target: rateLimit.key,
-      set: {
-        count: sql`case when ${rateLimit.lastRequest} < ${windowStart} then 1 else ${rateLimit.count} + 1 end`,
-        lastRequest: sql`case when ${rateLimit.lastRequest} < ${windowStart} then ${now} else ${rateLimit.lastRequest} end`,
-      },
-    })
-    .returning({ count: rateLimit.count });
-  return (row?.count ?? 1) <= max;
-}
-
 function clientAddress(request: Request): string {
-  return request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || request.headers.get("x-real-ip") || "unknown";
+  return clientAddressOf(request.headers);
 }
 
 function secretOf(request: Request): string | null {

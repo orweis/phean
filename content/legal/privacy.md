@@ -53,9 +53,10 @@ Phean uses cookies that it needs to work:
 - a session cookie that keeps you signed in;
 - a preference cookie (`phean-appearance`) that remembers whether you chose light, dark or system appearance;
 - preference cookies that remember how you laid out views such as the board;
-- a preference cookie (`phean-consent`) that remembers whether you allowed analytics, for a year.
+- a preference cookie (`phean-consent`) that remembers whether you allowed analytics, for a year;
+- after you delete a workspace, a cookie (`phean-deleted-workspace`) that carries its name to your list of workspaces to say it was deleted, for at most a minute.
 
-With your consent, Phean also uses Google Analytics cookies: `_ga`, which holds a random id for your browser, and `_ga_<id>`, which keeps the state of your visit. Google Analytics loads only after you accept it in the bar that asks when you first visit; until then no Google script runs and nothing is sent to Google. We use it for analytics alone: no advertising, no ad personalization, and Google signals are off. You can change your mind at any time with "Analytics choice" in the site's footer or the Analytics card on your account page. Declining, there or in the bar, stops analytics and deletes the Google Analytics cookies. After you sign up, sign in, create a workspace or accept an invitation, a short-lived cookie (`phean-ga-signal`, ten minutes) tells the next page which of those happened, so it can be counted; it holds only the kind of event, and is set only if you allowed analytics.
+With your consent, Phean also uses Google Analytics cookies: `_ga`, which holds a random id for your browser, and `_ga_<id>`, which keeps the state of your visit. Google Analytics loads only after you accept it in the bar that asks when you first visit; until then no Google script runs and nothing is sent to Google. We use it for analytics alone: no advertising, no ad personalization, and Google signals are off. You can change your mind at any time with "Analytics choice" in the site's footer or the Analytics card on your account page. Declining, there or in the bar, stops analytics and deletes the Google Analytics cookies. After you sign up, sign in, create or delete a workspace or accept an invitation, a short-lived cookie (`phean-ga-signal`, ten minutes) tells the next page which of those happened, so it can be counted; it holds only the kind of event, and is set only if you allowed analytics.
 
 We do not use advertising cookies. You can delete or block cookies in your browser's settings, but you will then have to sign in again, and Phean will not be able to keep you signed in.
 
@@ -63,7 +64,9 @@ We do not use advertising cookies. You can delete or block cookies in your brows
 
 We protect information with encryption in transit, hashed passwords and keys, access checks on every workspace, and limits on repeated sign-in attempts. No system is perfectly secure, so we cannot promise that information will never be accessed without permission.
 
-We keep Account Information while your account exists. We keep Workspace Content until the Customer, or a person or agent with permission, deletes it, or until the workspace is deleted. Webhook delivery logs are kept for 7 days. Google Analytics keeps Usage Information for 14 months. We may keep information longer where we must, to meet legal obligations, resolve disputes, or enforce our agreements.
+We keep Account Information while your account exists. We keep Workspace Content until the Customer, or a person or agent with permission, deletes it, or until the workspace is deleted. Webhook delivery logs are kept for 7 days.
+
+A workspace's owner can delete it from its Settings page. Deleting a workspace deletes all of its Workspace Content at once: its tasks, goals, decisions, documents, memories, activity, agents and their access, pipelines, webhooks and their delivery logs, notification settings, invitations and memberships, and the usage counts we keep about it. Document files held with our file storage provider are deleted within minutes after that, and retried until they are gone. People who were members keep their accounts and their other workspaces. We keep a record that the workspace was deleted, with its name and address, who deleted it, when, and how many items of each kind it held, but none of their content. Copies in our database provider's backups expire on that provider's backup schedule, after which nothing of the workspace's content remains. Google Analytics keeps Usage Information for 14 months. We may keep information longer where we must, to meet legal obligations, resolve disputes, or enforce our agreements.
 
 ## International transfers
 

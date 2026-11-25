@@ -1,6 +1,6 @@
 ---
 title: Security
-description: How Phean isolates workspaces, how people sign in and use two-factor, who may do what, how agent credentials are checked on every request, and how webhooks stay safe.
+description: How Phean isolates workspaces, how people sign in and use two-factor, who may do what, how a workspace is deleted, how agent credentials are checked on every request, and how webhooks stay safe.
 ---
 
 ## Tenant isolation
@@ -41,6 +41,7 @@ People are owners, admins or members of a workspace. Platform admins (emails in 
 | `agent:issue_key` | yes | yes | no | no | no | no | no |
 | `member:manage` | yes | yes | no | no | no | no | no |
 | `workflow:manage` | yes | yes | no | no | no | no | no |
+| `workspace:delete` | yes | no | no | no | no | no | no |
 
 What the actions mean:
 
@@ -49,6 +50,17 @@ What the actions mean:
 - `agent:delegate`: run sub-agents. `webhook:manage`: an agent's own webhook; owners and admins can remove any agent's.
 - `agent:manage`: revoke other agents. A member may still revoke the agents they approved, and their sub-agents.
 - `agent:issue_key`: issue fixed `phn_` keys. `member:manage`: invite and remove members. `workflow:manage`: edit the board's stages.
+- `workspace:delete`: delete the workspace and everything in it. Its owner's alone, in the web app only (see [Deleting a workspace](#deleting-a-workspace)).
+
+## Deleting a workspace
+
+A workspace's owner deletes it from **Settings**, in the Danger zone at the bottom of the page, which lists what goes with it. Nobody else can: not an admin, not a member, not an agent at any level (there is no MCP tool for it), and not a platform admin.
+
+- **Proof it is you, checked on the server.** The confirmation asks you to type the workspace's exact name (or its URL slug), then your password. If you sign in only with GitHub or Google, you have no password to give, so you must have signed in within the last 15 minutes instead: sign out and in again first. What counts is when you last signed in, not when your session was made, so a session made from an older one (the desktop app's, or one renewed when you turned two-factor on) does not count as a new sign-in. With two-factor on, it also asks for a code from your authenticator app, which works once, or one of your backup codes, which is then used up.
+- **Limits.** Every password attempt counts toward the limit before it is checked, so five tries in 15 minutes is five, however fast they come; after that it waits out the 15 minutes. Wrong codes count toward the same lock as signing in. One address can make ten delete attempts in ten minutes.
+- **Immediate and permanent.** There is no grace period and no undo. In one transaction Phean deletes every row of the workspace: tasks, goals, decisions, documents and their bytes, memories, activity, agents with their keys and OAuth sign-ins, pipelines and their runs, webhooks and their deliveries, watches, settings, digests, notification mutes, invitations, memberships, and its usage counts. Its agents' tokens stop working on their next request. Document files in Vercel Blob are deleted right after, and retried every minute until they are gone. The transaction has five minutes; if it is cut short, nothing is deleted and the owner can try again.
+- **What stays.** Members keep their accounts, their other workspaces and their notification devices, which stop hearing about the deleted workspace. Phean keeps a record of the deletion (the workspace's name and slug, who deleted it, when, and how many of each thing it held, never their content), shown to Phean's operators in the backoffice. The backoffice's own audit log is kept too; it never held workspace content. Copies in database backups expire on the database provider's backup schedule.
+- **Members are told.** When the deployment sends email, the other members get one saying who deleted the workspace.
 
 ## Human-only actions
 

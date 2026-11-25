@@ -78,9 +78,11 @@ import { deleteWebhook, registerWebhook, watch } from "@/server/domain/webhooks"
 import { getWorkspaceContent, getWorkspaceDetail, revealContent } from "@/server/backoffice";
 import { toolCallsDaily } from "@/server/db/schema";
 import { countToolCall } from "@/server/domain/usage";
+import { deleteWorkspace } from "@/server/domain/workspace-deletion";
 
 import { ADMIN_EMAIL, seedPlatformAdmin } from "./support/backoffice";
 import { addMember, asUser, createTestDb, seedUser, seedWorkspace, type TestDb, type Workspace } from "./support/db";
+import { freshProof, workspaceRows } from "./support/deletion";
 import { connectMcpClient, dataOf, textOf } from "./support/mcp";
 import { connectOAuthAgent, createOAuthServer, OAUTH_BASE, OAUTH_RESOURCE } from "./support/oauth";
 import { deliveriesOf, deviceFor, fakePushService } from "./support/push";
@@ -507,6 +509,22 @@ describe("tenant isolation", () => {
     } finally {
       await client.close();
     }
+  });
+
+  it("lets an owner delete only their own workspace", async () => {
+    const before = await workspaceRows(testDb.db, globex.tenant.id);
+    // Acme's owner names Globex: only Acme's own name confirms Acme, and nothing reaches Globex.
+    await expect(deleteWorkspace(acmeOwner, { confirm: globex.tenant.name }, freshProof())).rejects.toMatchObject({ code: "invalid" });
+    await expect(deleteWorkspace(acmeOwner, { confirm: globex.tenant.slug }, freshProof())).rejects.toMatchObject({ code: "invalid" });
+    // A context that claims Globex for Acme's owner (no adapter builds one) is refused by the membership read under the lock.
+    const forged: Ctx = { ...acmeOwner, tenant: globex.tenant };
+    await expect(deleteWorkspace(forged, { confirm: globex.tenant.name }, freshProof())).rejects.toMatchObject({ code: "forbidden" });
+    expect(await workspaceRows(testDb.db, globex.tenant.id)).toEqual(before);
+
+    await deleteWorkspace(acmeOwner, { confirm: acme.tenant.name }, freshProof());
+    expect(await workspaceRows(testDb.db, globex.tenant.id)).toEqual(before);
+    expect(await authenticateAgentToken(testDb.db, globex.scout.token)).not.toBeNull();
+    expect(await authenticateAgentToken(testDb.db, acme.scout.token)).toBeNull();
   });
 
   it("shows each user only the workspaces they belong to", async () => {

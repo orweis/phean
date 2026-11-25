@@ -41,6 +41,13 @@ export const session = pgTable(
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
     activeOrganizationId: text("active_organization_id"),
+    /**
+     * When the person last proved who they are (a password, a provider's sign-in, or the two-factor
+     * step): set only then, and copied onto sessions made from this one (rotation, the desktop
+     * handoff), so a fresh session never stands in for a fresh sign-in. Null for sessions from before
+     * it was kept. See `server/auth/signed-in-at.ts`.
+     */
+    signedInAt: timestamp("signed_in_at"),
   },
   (table) => [index("session_userId_idx").on(table.userId)],
 );

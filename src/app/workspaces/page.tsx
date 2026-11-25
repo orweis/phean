@@ -1,5 +1,6 @@
 import { Building2, Gauge } from "lucide-react";
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import Link from "next/link";
 
 import { AnalyticsIdentity } from "@/components/analytics";
@@ -8,6 +9,7 @@ import { AppHeader } from "@/components/app-header";
 import { AutoRefresh } from "@/components/auto-refresh";
 import { FlowBar } from "@/components/charts/flow-bar";
 import { CreateWorkspaceForm } from "@/components/create-workspace-form";
+import { DeletedWorkspaceNotice } from "@/components/deleted-workspace-notice";
 import { PageHeader } from "@/components/page-header";
 import { SkipLink } from "@/components/skip-link";
 import { MetaBadge } from "@/components/ui/badge";
@@ -19,6 +21,7 @@ import { OPEN_TASK_STATUSES, ROLE_META } from "@/lib/domain";
 import { cx } from "@/lib/cx";
 import { timeAgo } from "@/lib/format";
 import { routes } from "@/lib/routes";
+import { DELETED_NOTICE_COOKIE } from "@/lib/workspace-deletion";
 import { analyticsIdentity } from "@/server/analytics";
 import { adminPaths } from "@/server/backoffice/paths";
 import { getViewer } from "@/server/auth/session";
@@ -55,6 +58,7 @@ export default async function WorkspacesPage() {
   const viewer = await getViewer();
   const rows = await workspaceOverviews(viewer);
   const late = sum(rows, (row) => row.overdue);
+  const deleted = (await cookies()).get(DELETED_NOTICE_COOKIE)?.value;
 
   return (
     <>
@@ -80,6 +84,8 @@ export default async function WorkspacesPage() {
               : "Status across every workspace you belong to. Each workspace has its own goals, tasks, memory, and agents."
           }
         />
+
+        {deleted && <DeletedWorkspaceNotice name={deleted.slice(0, 200)} />}
 
         {rows.length > 0 && (
           <StatStrip className="grid-cols-2 sm:grid-cols-4">

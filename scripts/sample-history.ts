@@ -411,7 +411,7 @@ export async function seedSampleHistory(db: Db, tenant: Tenant, owner: { id: str
     });
   }
 
-  const store = blobStore({ db, tenant, actor: { type: "user", id: owner.id, name: owner.name, role: "owner" } });
+  const store = blobStore({ db, tenant });
   for (const doc of DOCUMENTS) {
     const id = documentIds.get(doc.title)!;
     const bytes = new TextEncoder().encode(doc.content);

@@ -86,6 +86,7 @@ const PANELS = [
   ["/w/globex/pipelines", "Start run of"],
   ["/w/globex/agents", "Key for a bot"],
   ["/account", "Change password"],
+  ["/w/globex/settings", "Delete workspace"],
 ] as const;
 
 async function openPanel(page: Page, path: string, trigger: string) {
