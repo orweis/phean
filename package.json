@@ -22,7 +22,7 @@
     "themes": "tsx scripts/themes.ts",
     "sw": "tsx scripts/service-worker.ts",
     "test:e2e": "next build && playwright test",
-    "e2e:serve": "rm -rf .data/e2e && pnpm db:seed && next start --port 3200",
+    "e2e:serve": "rm -rf .data/e2e && pnpm db:seed && next start --port ${PORT:-3200}",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx scripts/migrate.ts",
     "db:seed": "pnpm db:migrate && tsx scripts/seed.ts",
