@@ -1,4 +1,5 @@
-export const PORT = 3200;
+/** 3200 unless `E2E_PORT` says otherwise, so parallel checkouts can each run the suite. */
+export const PORT = Number(process.env.E2E_PORT ?? 3200);
 export const BASE_URL = `http://localhost:${PORT}`;
 
 /** Where the setup project saves the demo account's signed-in session. */

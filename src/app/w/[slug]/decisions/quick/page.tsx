@@ -12,6 +12,7 @@ import { isOneOf } from "@/lib/domain";
 import { queryParam, routes } from "@/lib/routes";
 import { requireWorkspace } from "@/server/auth/session";
 import { getDocument } from "@/server/domain/documents";
+import { getWorkspaceStats } from "@/server/domain/overview";
 import { can } from "@/server/domain/policy";
 import { describePipelineRequests, type PipelineRequestContext } from "@/server/domain/pipelines";
 import { listDecisions, type TaskView } from "@/server/domain/tasks";
@@ -51,7 +52,7 @@ export default async function QuickDecisionsPage({ params, searchParams }: PageP
 
   if (!canAnswer) {
     return (
-      <div className="mx-auto max-w-md py-10 text-center">
+      <div className="mx-auto w-full max-w-md py-10 text-center">
         <h1 className="text-2xl font-bold tracking-display text-ink">Quick Decisions</h1>
         <p className="mt-2 text-sm text-ink-2">You can read this workspace&apos;s decisions, but not answer them.</p>
         <Link href={routes.decisions(slug)} className="mt-4 inline-block text-sm font-semibold text-accent-ink link">
@@ -61,7 +62,7 @@ export default async function QuickDecisionsPage({ params, searchParams }: PageP
     );
   }
 
-  const { open } = await listDecisions(ctx, {});
+  const [{ open }, stats] = await Promise.all([listDecisions(ctx, {}), getWorkspaceStats(ctx.db, [ctx.tenant.id])]);
   const pinned = open.filter((task) => task.inputRequest?.pipeline);
   const contexts = pinned.length
     ? await describePipelineRequests(ctx, { requests: pinned.map((task) => ({ runId: task.inputRequest!.pipeline!.runId, stopId: task.inputRequest!.pipeline!.stopId })) })
@@ -119,6 +120,7 @@ export default async function QuickDecisionsPage({ params, searchParams }: PageP
       file={file}
       entry={entry}
       doneTitle={randomDoneTitle()}
+      approvals={stats.get(ctx.tenant.id)?.pendingApprovals ?? 0}
     />
   );
 }

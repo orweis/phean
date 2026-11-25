@@ -165,6 +165,8 @@ server sends it (**only**); server copies carry `source_side=server`, and key-ev
 | `quick_context_open` | A request's full context opens in Quick Decisions, or another of its tabs is chosen | `tab` (`context`, `files`, `links`) | | |
 | `quick_file_open` | A request's file opens in Quick Decisions' file viewer | | | |
 | `quick_decisions_done` | Quick Decisions runs out of requests and shows its done screen | `answered_bucket` (answered in this session, as `countBucket`) | | |
+| `quick_snoozed_rest` | Quick Decisions comes round to the requests snoozed in this visit, with nothing else waiting, and rests on its snoozed screen | `snoozed_bucket` (snoozed requests left, as `countBucket`) | | |
+| `quick_snoozed_show` | Show snoozed again, on that screen | | | |
 
 ### App: tasks, search, goals
 

@@ -92,23 +92,36 @@ export function swipeIntent(dx: number, canSend: boolean, threshold = SWIPE_THRE
   return null;
 }
 
-/**
- * Where a dragged card is drawn: it follows the finger, except rightward with nothing to send,
- * where it gives a little and stops, so it says "no" without a message.
- */
-export function dragOffset(dx: number, canSend: boolean): number {
-  if (dx > 0 && !canSend) return Math.min(dx * 0.25, 28);
-  return dx;
-}
-
-/** The card's tilt while dragged, in degrees: a little, growing with the distance. */
+/** The card's tilt while dragged, in degrees: a little, growing with the distance, the same either way. */
 export function tiltOf(dx: number): number {
   return Math.max(-MAX_TILT, Math.min(MAX_TILT, dx / 24));
 }
 
-/** How far the drag is toward acting, from 0 to 1, for the colour behind the card. */
+/** How far the drag is toward acting, from 0 to 1. */
 export function swipeProgress(dx: number, threshold = SWIPE_THRESHOLD): number {
   return Math.min(1, Math.abs(dx) / threshold);
+}
+
+/** Whether letting go now would act (or, rightward with nothing to send, would have): the drag is past the threshold. */
+export function isArmed(dx: number, threshold = SWIPE_THRESHOLD): boolean {
+  return Math.abs(dx) >= threshold;
+}
+
+/**
+ * How strongly the words behind the card show, from 0 to 1: legible from the first few pixels,
+ * stronger as the card nears the threshold, and full once letting go would act.
+ */
+export function hintOpacity(dx: number, threshold = SWIPE_THRESHOLD): number {
+  if (dx === 0) return 0;
+  return isArmed(dx, threshold) ? 1 : 0.4 + 0.5 * swipeProgress(dx, threshold);
+}
+
+/**
+ * Whether a page is a focused flow, which takes the whole screen without the workspace's header and
+ * tab rail: Quick Decisions. `segments` are the route's segments below the workspace's layout.
+ */
+export function isFocusedFlow(segments: readonly string[]): boolean {
+  return segments[0] === "decisions" && segments[1] === "quick";
 }
 
 /** Each segment of the progress bar: answered this session, the card on screen, and those still to come. */
@@ -116,14 +129,39 @@ export function progressSegments(answered: number, remaining: number): ("done" |
   return [...Array<"done">(answered).fill("done"), ...(remaining > 0 ? (["current"] as const) : []), ...Array<"rest">(Math.max(0, remaining - 1)).fill("rest")];
 }
 
-/** "3 of 7" and its words for a screen reader: where the person is in this session's queue. */
+/**
+ * "3 of 7 requests" and its words for a screen reader: where the person is in today's queue. The
+ * queue counts requests alone; goals waiting for approval are on the Decisions page.
+ */
 export function progressText(answered: number, remaining: number): { count: string; spoken: string } {
   const total = answered + remaining;
-  if (remaining === 0) return { count: `${answered} of ${total}`, spoken: `All ${total} done` };
+  const noun = total === 1 ? "request" : "requests";
+  if (remaining === 0) return { count: `${answered} of ${total} ${noun}`, spoken: `All ${total} ${noun} done` };
   return {
-    count: `${answered + 1} of ${total}`,
-    spoken: `Decision ${answered + 1} of ${total}: ${answered} answered, ${remaining - 1} after this one`,
+    count: `${answered + 1} of ${total} ${noun}`,
+    spoken: `Request ${answered + 1} of ${total}: ${answered} answered, ${remaining - 1} after this one`,
   };
+}
+
+/** Whether every request left is one snoozed in this visit: the queue has come round to them, so it rests. */
+export function onlySnoozedLeft(queue: readonly { request: { id: string } }[], snoozedHere: Readonly<Record<string, string>>): boolean {
+  return queue.length > 0 && queue.every((item) => item.request.id in snoozedHere);
+}
+
+/** "1 snoozed, nothing else waiting": the end of the queue when only snoozed requests are left. */
+export function snoozedTitle(count: number): string {
+  return `${count} snoozed, nothing else waiting`;
+}
+
+/** What the end of the queue says about goals waiting for approval, which the queue does not hold; null when there are none. */
+export function approvalsLine(count: number): string | null {
+  if (count <= 0) return null;
+  return count === 1 ? "1 goal still needs your approval" : `${count} goals still need your approval`;
+}
+
+/** The send button for a request that takes several, by how many are ticked: "Send 3 picks". */
+export function sendPicksLabel(count: number): string {
+  return count === 0 ? "Pick at least one" : `Send ${count} ${count === 1 ? "pick" : "picks"}`;
 }
 
 /** The picks named on a send button: "Blog + Changelog", or how many when they would not fit. */

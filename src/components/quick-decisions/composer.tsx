@@ -43,7 +43,15 @@ export function Composer({ item, onSend, label, variant = "ghost", size, trigger
   );
 }
 
-function ComposerForm({ item, onSend }: { item: QuickItem; onSend: (answer: string) => void }) {
+/**
+ * A written answer on the card itself, for a question with no options: the field is right there,
+ * one tap to start typing, with the same starter phrases and Send answer as the sheet.
+ */
+export function InlineComposer({ item, onSend }: { item: QuickItem; onSend: (answer: string) => void }) {
+  return <ComposerForm item={item} onSend={onSend} inline />;
+}
+
+function ComposerForm({ item, onSend, inline = false }: { item: QuickItem; onSend: (answer: string) => void; inline?: boolean }) {
   const popover = usePopover();
   const [text, setText] = useState("");
   const field = useRef<HTMLTextAreaElement>(null);
@@ -64,7 +72,7 @@ function ComposerForm({ item, onSend }: { item: QuickItem; onSend: (answer: stri
         onSend(answer);
       }}
     >
-      <p className="line-clamp-3 border-l-2 border-wait pl-2.5 text-xs wrap-anywhere text-ink-2">{item.request.question}</p>
+      {!inline && <p className="line-clamp-3 border-l-2 border-wait pl-2.5 text-xs wrap-anywhere text-ink-2">{item.request.question}</p>}
       <ul aria-label="Start from" className="flex flex-wrap gap-1.5">
         {starters.map((starter) => (
           <li key={starter} className="max-w-full min-w-0">
@@ -89,11 +97,11 @@ function ComposerForm({ item, onSend }: { item: QuickItem; onSend: (answer: stri
         <Textarea ref={field} id={id} name="answer" value={text} maxLength={LIMITS.note} onChange={(event) => setText(event.target.value)} />
       </Field>
       <div className="flex items-center gap-2">
-        <Button type="submit" size="sm" variant="primary" disabled={!text.trim()}>
+        <Button type="submit" size={inline ? "touch" : "sm"} variant="primary" disabled={!text.trim()}>
           <Send aria-hidden />
           Send answer
         </Button>
-        <PopoverCancel />
+        {!inline && <PopoverCancel />}
       </div>
     </form>
   );
